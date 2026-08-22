@@ -19,10 +19,10 @@ nl:
         completed: Voltooid
         created_at: Aangemaakt op
         details: Details
-        discarded: Verworpen
+        failed: Mislukt
         finished_at: Voltooid op
         not_found: Groep niet gevonden
-        on_discard: Bij verwerping
+        on_failure: Bij mislukking
         on_finish: Bij voltooiing
         on_success: Bij succes
         progress: Voortgang

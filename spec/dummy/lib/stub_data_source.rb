@@ -147,7 +147,7 @@ module DummyApp
     def batches(limit: 100) # rubocop:disable Lint/UnusedMethodArgument
       [
         { batch_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890", description: "Import users from CSV",
-          status: "processing", total_jobs: 250, completed_jobs: 180, discarded_jobs: 3, failed_jobs: 0,
+          status: "processing", total_jobs: 250, completed_jobs: 180, discarded_jobs: 3, failed_jobs: 3,
           progress_pct: 73, created_at: 45.minutes.ago, finished_at: nil },
         { batch_id: "b2c3d4e5-f6a7-8901-bcde-f12345678901", description: "Send welcome emails",
           status: "finished", total_jobs: 50, completed_jobs: 50, discarded_jobs: 0, failed_jobs: 0,

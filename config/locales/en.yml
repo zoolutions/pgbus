@@ -19,10 +19,10 @@ en:
         completed: Completed
         created_at: Created At
         details: Details
-        discarded: Discarded
+        failed: Failed
         finished_at: Finished At
         not_found: Batch not found
-        on_discard: On Discard
+        on_failure: On Failure
         on_finish: On Finish
         on_success: On Success
         progress: Progress

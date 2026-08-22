@@ -21,6 +21,7 @@ RSpec.describe "Selective railtie loading" do # rubocop:disable RSpec/DescribeCl
 
     {
       "BatchEntry" => "pgbus_batches",
+      "BatchExecution" => "pgbus_batch_executions",
       "BlockedExecution" => "pgbus_blocked_executions",
       "ProcessEntry" => "pgbus_processes",
       "ProcessedEvent" => "pgbus_processed_events",

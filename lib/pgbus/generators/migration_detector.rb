@@ -78,6 +78,7 @@ module Pgbus
         add_recurring: "pgbus:add_recurring",
         add_failed_events_index: "pgbus:add_failed_events_index",
         add_processed_event_completion: "pgbus:add_processed_event_completion",
+        add_batch_executions: "pgbus:add_batch_executions",
         tune_autovacuum: "pgbus:tune_autovacuum",
         tune_fillfactor: "pgbus:tune_fillfactor"
       }.freeze
@@ -97,6 +98,7 @@ module Pgbus
         add_recurring: "recurring tasks + executions tables",
         add_failed_events_index: "unique index on pgbus_failed_events (queue_name, msg_id)",
         add_processed_event_completion: "completed_at on pgbus_processed_events (two-phase idempotency claim)",
+        add_batch_executions: "batch execution-row tracking (self-healing completion, on_failure rename)",
         tune_autovacuum: "autovacuum tuning for PGMQ queue and archive tables",
         tune_fillfactor: "fillfactor=70 on PGMQ queue tables (reduces page density during update churn)"
       }.freeze
@@ -123,6 +125,7 @@ module Pgbus
           *recurring_migrations,
           *failed_events_index_migrations,
           *processed_event_completion_migrations,
+          *batch_executions_migrations,
           *autovacuum_migrations,
           *fillfactor_migrations
         ]
@@ -221,6 +224,21 @@ module Pgbus
         return [] if column_names("pgbus_processed_events").include?("completed_at")
 
         [:add_processed_event_completion]
+      end
+
+      # Execution-row tracking plus the on_discard → on_failure column rename
+      # ship as one upgrade. Either a missing executions table or leftover
+      # pre-rename columns means this generator still needs to run.
+      def batch_executions_migrations
+        return [] unless table_exists?("pgbus_batches")
+
+        batches_columns = column_names("pgbus_batches")
+        migrated = table_exists?("pgbus_batch_executions") &&
+                   batches_columns.include?("on_failure_class") &&
+                   !batches_columns.include?("discarded_jobs")
+        return [] if migrated
+
+        [:add_batch_executions]
       end
 
       # Autovacuum tuning: check if any PGMQ queue table already has

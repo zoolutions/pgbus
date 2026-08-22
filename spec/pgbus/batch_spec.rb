@@ -38,6 +38,24 @@ RSpec.describe Pgbus::Batch do
       expect(batch.description).to eq("test batch")
       expect(batch.properties[:user_id]).to eq(1)
     end
+
+    it "accepts on_failure: as the canonical failure callback" do
+      callback_class = Class.new
+      batch = described_class.new(on_failure: callback_class)
+      expect(batch.on_failure).to eq(callback_class)
+      expect(batch.on_discard).to eq(callback_class)
+    end
+
+    it "maps deprecated on_discard: onto on_failure and warns" do
+      callback_class = Class.new
+      logger = instance_double(Logger, warn: nil, error: nil, info: nil, debug: nil)
+      allow(Pgbus).to receive(:logger).and_return(logger)
+
+      batch = described_class.new(on_discard: callback_class)
+
+      expect(batch.on_failure).to eq(callback_class)
+      expect(logger).to have_received(:warn)
+    end
   end
 
   describe "#enqueue" do

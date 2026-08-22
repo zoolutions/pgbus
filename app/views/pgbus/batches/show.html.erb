@@ -18,7 +18,7 @@
   <h2 class="text-sm font-semibold text-gray-900 dark:text-white mb-4"><%= t("pgbus.batches.show.progress") %></h2>
 
   <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4 mb-3">
-    <div class="h-4 rounded-full transition-all duration-300 <%= @batch[:discarded_jobs].to_i > 0 ? 'bg-amber-500' : 'bg-green-500' %>"
+    <div class="h-4 rounded-full transition-all duration-300 <%= @batch[:failed_jobs].to_i > 0 ? 'bg-amber-500' : 'bg-green-500' %>"
          style="width: <%= @batch[:progress_pct] %>%"></div>
   </div>
 
@@ -32,12 +32,12 @@
       <dd class="mt-1 text-2xl font-semibold text-green-600 dark:text-green-400 font-mono"><%= @batch[:completed_jobs] %></dd>
     </div>
     <div>
-      <dt class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase"><%= t("pgbus.batches.show.discarded") %></dt>
-      <dd class="mt-1 text-2xl font-semibold <%= @batch[:discarded_jobs].to_i > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white' %> font-mono"><%= @batch[:discarded_jobs] %></dd>
+      <dt class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase"><%= t("pgbus.batches.show.failed") %></dt>
+      <dd class="mt-1 text-2xl font-semibold <%= @batch[:failed_jobs].to_i > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white' %> font-mono"><%= @batch[:failed_jobs] %></dd>
     </div>
     <div>
       <dt class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase"><%= t("pgbus.batches.show.remaining") %></dt>
-      <dd class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white font-mono"><%= @batch[:total_jobs] - @batch[:completed_jobs] - @batch[:discarded_jobs] %></dd>
+      <dd class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white font-mono"><%= @batch[:pending_jobs] || (@batch[:total_jobs] - @batch[:completed_jobs] - @batch[:failed_jobs]) %></dd>
     </div>
   </div>
 </div>
@@ -74,10 +74,10 @@
         <dd class="mt-1 text-sm font-mono text-gray-900 dark:text-white sm:col-span-2 sm:mt-0"><%= @batch[:on_success_class] %></dd>
       </div>
     <% end %>
-    <% if @batch[:on_discard_class] %>
+    <% if @batch[:on_failure_class] || @batch[:on_discard_class] %>
       <div class="px-4 py-3 sm:grid sm:grid-cols-3 sm:gap-4">
-        <dt class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.batches.show.on_discard") %></dt>
-        <dd class="mt-1 text-sm font-mono text-gray-900 dark:text-white sm:col-span-2 sm:mt-0"><%= @batch[:on_discard_class] %></dd>
+        <dt class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.batches.show.on_failure") %></dt>
+        <dd class="mt-1 text-sm font-mono text-gray-900 dark:text-white sm:col-span-2 sm:mt-0"><%= @batch[:on_failure_class] || @batch[:on_discard_class] %></dd>
       </div>
     <% end %>
     <% if @batch[:properties].present? %>

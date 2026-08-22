@@ -44,6 +44,8 @@ Pgbus.configure do |c|
 
   # --- Dispatcher (maintenance tasks) ------------------------------------
   # c.dispatch_interval = 1.0
+  # c.batch_retention = 7.days          # finished-batch cleanup; nil disables
+  # c.batch_sweep_interval = 5.minutes  # stalled-batch repair sweep
 
   # --- Realtime broadcast isolation (turbo-rails) ------------------------
   # Route turbo-rails' async render+broadcast jobs to a dedicated queue so a

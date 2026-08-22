@@ -90,6 +90,20 @@ RSpec.describe "Batch flow (integration)", :integration do
     batch
   end
 
+  def complete_next(batch_id)
+    row = Pgbus::BatchExecution.where(batch_id: batch_id).order(:id).first
+    raise "no execution row for #{batch_id}" unless row
+
+    Pgbus::Batch.job_completed(batch_id, job_id: row.job_id)
+  end
+
+  def discard_next(batch_id)
+    row = Pgbus::BatchExecution.where(batch_id: batch_id).order(:id).first
+    raise "no execution row for #{batch_id}" unless row
+
+    Pgbus::Batch.job_discarded(batch_id, job_id: row.job_id)
+  end
+
   describe "on_success path" do
     it "fires the callback exactly once, only on the final completion" do
       batch = enqueue_batch(on_finish: on_finish_job, on_success: on_success_job)
@@ -100,11 +114,11 @@ RSpec.describe "Batch flow (integration)", :integration do
       expect(record.status).to eq("processing")
 
       # First completion: not finished yet, no callback enqueued.
-      Pgbus::Batch.job_completed(batch.batch_id)
+      complete_next(batch.batch_id)
       expect(Pgbus::BatchEntry.find_by(batch_id: batch.batch_id).status).to eq("processing")
 
       # Final completion: batch finishes and callbacks enqueue.
-      Pgbus::Batch.job_completed(batch.batch_id)
+      complete_next(batch.batch_id)
       finished = Pgbus::BatchEntry.find_by(batch_id: batch.batch_id)
       expect(finished.status).to eq("finished")
       expect(finished.finished_at).not_to be_nil
@@ -119,12 +133,12 @@ RSpec.describe "Batch flow (integration)", :integration do
     it "is idempotent — an extra completion signal fires no second callback" do
       batch = enqueue_batch(on_finish: on_finish_job)
 
-      2.times { Pgbus::Batch.job_completed(batch.batch_id) }
+      2.times { complete_next(batch.batch_id) }
       # Drain the single expected on_finish callback.
       expect(next_callback_job_class).to eq("BatchFlowSpec::OnFinishJob")
 
       # A stray extra completion after finish must not enqueue anything more.
-      Pgbus::Batch.job_completed(batch.batch_id)
+      Pgbus::Batch.job_completed(batch.batch_id, job_id: "already-gone")
       expect(next_callback_job_class).to be_nil
     end
   end
@@ -149,9 +163,9 @@ RSpec.describe "Batch flow (integration)", :integration do
       expect(batch_ids).to eq([batch.batch_id, batch.batch_id])
 
       # The batch finishes only after BOTH bulk jobs complete.
-      Pgbus::Batch.job_completed(batch.batch_id)
+      complete_next(batch.batch_id)
       expect(next_callback_job_class).to be_nil
-      Pgbus::Batch.job_completed(batch.batch_id)
+      complete_next(batch.batch_id)
       expect(next_callback_job_class).to eq("BatchFlowSpec::OnFinishJob")
     end
   end
@@ -166,8 +180,8 @@ RSpec.describe "Batch flow (integration)", :integration do
         # enqueue block is still open, i.e. while total_jobs is still 0. Their
         # completion signals cannot finish the batch (1 != 0, 2 != 0), so the
         # total publish must run the completion check itself.
-        Pgbus::Batch.job_completed(batch.batch_id)
-        Pgbus::Batch.job_completed(batch.batch_id)
+        complete_next(batch.batch_id)
+        complete_next(batch.batch_id)
       end
 
       finished = Pgbus::BatchEntry.find_by(batch_id: batch.batch_id)
@@ -181,14 +195,31 @@ RSpec.describe "Batch flow (integration)", :integration do
       batch = enqueue_batch(on_success: on_success_job, on_discard: on_discard_job)
 
       # One completes, one is discarded (dead-lettered) — batch still finishes.
-      Pgbus::Batch.job_completed(batch.batch_id)
-      Pgbus::Batch.job_discarded(batch.batch_id)
+      complete_next(batch.batch_id)
+      discard_next(batch.batch_id)
 
       finished = Pgbus::BatchEntry.find_by(batch_id: batch.batch_id)
       expect(finished.status).to eq("finished")
+      expect(finished.failed_jobs).to eq(1)
       expect(finished.discarded_jobs).to eq(1)
 
       expect(drain_callback_job_classes).to contain_exactly("BatchFlowSpec::OnDiscardJob")
+    end
+  end
+
+  describe "stalled-execution sweep (issue #414)" do
+    it "finishes a batch whose last message is gone but the execution row remains" do
+      batch = enqueue_batch(on_finish: on_finish_job)
+      complete_next(batch.batch_id)
+
+      row = Pgbus::BatchExecution.find_by!(batch_id: batch.batch_id)
+      client.delete_message(work_queue, row.msg_id.to_i) if row.msg_id
+
+      Pgbus::Batch.sweep_stalled(stalled_for: 0)
+
+      finished = Pgbus::BatchEntry.find_by(batch_id: batch.batch_id)
+      expect(finished.status).to eq("finished")
+      expect(next_callback_job_class).to eq("BatchFlowSpec::OnFinishJob")
     end
   end
 end

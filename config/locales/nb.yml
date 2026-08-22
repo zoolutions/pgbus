@@ -19,10 +19,10 @@ nb:
         completed: Fullført
         created_at: Opprettet den
         details: Detaljer
-        discarded: Forkastet
+        failed: Mislyktes
         finished_at: Avsluttet den
         not_found: Gruppe ikke funnet
-        on_discard: Ved forkastning
+        on_failure: Ved feil
         on_finish: Ved avslutning
         on_success: Ved suksess
         progress: Fremdrift

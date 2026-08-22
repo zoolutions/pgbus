@@ -1,0 +1,50 @@
+class AddPgbusBatchExecutions < ActiveRecord::Migration<%= migration_version %>
+  def up
+    create_table :pgbus_batch_executions do |t|
+      t.string :batch_id, null: false
+      t.string :job_id, null: false
+      t.bigint :msg_id
+      t.string :queue_name
+      t.datetime :created_at, null: false, default: -> { "CURRENT_TIMESTAMP" }
+    end
+
+    add_index :pgbus_batch_executions, :job_id,
+      unique: true, name: "idx_pgbus_batch_executions_job_id"
+    add_index :pgbus_batch_executions, :batch_id,
+      name: "idx_pgbus_batch_executions_batch_id"
+    add_index :pgbus_batch_executions, :created_at,
+      where: "msg_id IS NULL",
+      name: "idx_pgbus_batch_executions_orphans"
+    add_foreign_key :pgbus_batch_executions, :pgbus_batches,
+      column: :batch_id, primary_key: :batch_id, on_delete: :cascade
+
+    if column_exists?(:pgbus_batches, :on_discard_class) && !column_exists?(:pgbus_batches, :on_failure_class)
+      rename_column :pgbus_batches, :on_discard_class, :on_failure_class
+    end
+
+    # Drain/restart pgbus workers after this migration: a process that still
+    # writes discarded_jobs will error once the column is gone.
+    if column_exists?(:pgbus_batches, :discarded_jobs)
+      if column_exists?(:pgbus_batches, :failed_jobs)
+        execute "UPDATE pgbus_batches SET failed_jobs = failed_jobs + discarded_jobs"
+        remove_column :pgbus_batches, :discarded_jobs
+      else
+        rename_column :pgbus_batches, :discarded_jobs, :failed_jobs
+      end
+    end
+  end
+
+  def down
+    unless column_exists?(:pgbus_batches, :discarded_jobs)
+      add_column :pgbus_batches, :discarded_jobs, :integer, null: false, default: 0
+      if column_exists?(:pgbus_batches, :failed_jobs)
+        execute "UPDATE pgbus_batches SET discarded_jobs = failed_jobs"
+        execute "UPDATE pgbus_batches SET failed_jobs = 0"
+      end
+    end
+    if column_exists?(:pgbus_batches, :on_failure_class) && !column_exists?(:pgbus_batches, :on_discard_class)
+      rename_column :pgbus_batches, :on_failure_class, :on_discard_class
+    end
+    drop_table :pgbus_batch_executions if table_exists?(:pgbus_batch_executions)
+  end
+end

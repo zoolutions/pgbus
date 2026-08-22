@@ -339,6 +339,10 @@ module Pgbus
       end
     end
 
+    def target_queue(queue_name, priority = nil)
+      @queue_strategy.target_queue(queue_name, priority)
+    end
+
     def send_message(queue_name, payload, headers: nil, delay: 0, priority: nil)
       target = @queue_strategy.target_queue(queue_name, priority)
       Instrumentation.instrument("pgbus.client.send_message", queue: target) do
@@ -682,6 +686,62 @@ module Pgbus
     #   false — the message definitely does not exist
     #   nil   — could not determine (e.g. queue table missing or unknown error).
     #           Callers MUST treat nil as "exists" for safety.
+    def message_in_queue?(queue_name, msg_id:)
+      message_exists?(queue_name, msg_id: msg_id)
+    end
+
+    # Look up a queue row by ActiveJob job_id in the JSON payload. Used by the
+    # batch sweep: move_to_dead_letter produces a new DLQ msg_id, so the
+    # source msg_id is not a DLQ identity.
+    def message_with_job_id?(queue_name, job_id:)
+      full_name = resolve_full_queue_name(queue_name)
+      sanitized = QueueNameValidator.sanitize!(full_name)
+
+      synchronized do
+        with_raw_connection do |conn|
+          job_id_present?(conn, sanitized, job_id)
+        end
+      end
+    rescue ActiveRecord::StatementInvalid => e
+      raise unless undefined_table_error?(e)
+
+      nil
+    rescue StandardError => e
+      raise unless defined?(PG::UndefinedTable) && e.is_a?(PG::UndefinedTable)
+
+      nil
+    end
+
+    # DLQ companion of a logical or already-physical queue name. Does not
+    # re-prefix a name that resolve_full_queue_name already expanded.
+    def dead_letter_physical_name(queue_name)
+      full = resolve_full_queue_name(queue_name)
+      # Priority sub-queues share the logical queue's DLQ (`pgbus_default_dlq`),
+      # not a per-priority `…_pN_dlq`. Strip `_pN` before appending the suffix.
+      base = full.sub(/_p\d+\z/, "")
+      "#{base}#{Pgbus::DEAD_LETTER_SUFFIX}"
+    end
+
+    # Same tri-state as message_exists?: true / false / nil (unknown).
+    def message_archived?(queue_name, msg_id:)
+      full_name = resolve_full_queue_name(queue_name)
+      sanitized = QueueNameValidator.sanitize!(full_name)
+
+      synchronized do
+        with_raw_connection do |conn|
+          msg_id_archived?(conn, sanitized, msg_id.to_i)
+        end
+      end
+    rescue ActiveRecord::StatementInvalid => e
+      raise unless undefined_table_error?(e)
+
+      nil
+    rescue StandardError => e
+      raise unless defined?(PG::UndefinedTable) && e.is_a?(PG::UndefinedTable)
+
+      nil
+    end
+
     def message_exists?(queue_name, msg_id: nil, uniqueness_key: nil)
       has_msg_id = !msg_id.nil?
       has_uniqueness_key = !uniqueness_key.nil?
@@ -941,11 +1001,28 @@ module Pgbus
       result.ntuples.positive?
     end
 
+    def msg_id_archived?(conn, sanitized, msg_id)
+      result = conn.exec_params(
+        "SELECT 1 FROM pgmq.a_#{sanitized} WHERE msg_id = $1 LIMIT 1",
+        [msg_id]
+      )
+      result.ntuples.positive?
+    end
+
     def uniqueness_key_present?(conn, sanitized, uniqueness_key)
       result = conn.exec_params(
         "SELECT 1 FROM pgmq.q_#{sanitized} " \
         "WHERE message::jsonb ->> 'pgbus_uniqueness_key' = $1 LIMIT 1",
         [uniqueness_key]
+      )
+      result.ntuples.positive?
+    end
+
+    def job_id_present?(conn, sanitized, job_id)
+      result = conn.exec_params(
+        "SELECT 1 FROM pgmq.q_#{sanitized} " \
+        "WHERE message::jsonb ->> 'job_id' = $1 LIMIT 1",
+        [job_id]
       )
       result.ntuples.positive?
     end

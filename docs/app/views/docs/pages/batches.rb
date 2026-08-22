@@ -25,7 +25,7 @@ class Views::Docs::Pages::Batches < DocsUI::Page
         batch = Pgbus::Batch.new(
           on_finish: BatchFinishedJob,
           on_success: BatchSucceededJob,
-          on_discard: BatchFailedJob,
+          on_failure: BatchFailedJob,
           description: "Import users",
           properties: { initiated_by: current_user.id }
         )
@@ -42,9 +42,9 @@ class Views::Docs::Pages::Batches < DocsUI::Page
       DocsUI::Table(
         [ "Callback", "Fired when" ],
         [
-          [ [ :code, "on_finish" ], "All jobs completed (success or discard)." ],
-          [ [ :code, "on_success" ], "All jobs completed successfully (zero discarded)." ],
-          [ [ :code, "on_discard" ], "At least one job was dead-lettered." ]
+          [ [ :code, "on_finish" ], "The batch finished (no outstanding execution rows remain), including after a dispatcher sweep repair." ],
+          [ [ :code, "on_success" ], "The batch finished with zero failed jobs." ],
+          [ [ :code, "on_failure" ], "The batch finished with at least one dead-lettered job. (`on_discard:` is a deprecated alias until 1.0.)" ]
         ]
       )
       md <<~'MD'
@@ -66,20 +66,26 @@ class Views::Docs::Pages::Batches < DocsUI::Page
       md <<~'MD'
         1. `Batch.new(...)` creates a row in `pgbus_batches` with
            `status: "pending"`.
-        2. `batch.enqueue { ... }` tags each enqueued job with the batch id in its
-           payload.
-        3. As each job completes or is dead-lettered, the executor atomically
-           updates the batch counters.
-        4. When `completed + discarded == total`, the status flips to `"finished"`
-           and the callback jobs are enqueued.
-        5. The dispatcher cleans up finished batches older than 7 days.
+        2. `batch.enqueue { ... }` tags each enqueued job with the batch id and
+           inserts a `pgbus_batch_executions` row (identity is the ActiveJob
+           `job_id`) *before* the message is sent.
+        3. As each job is archived or dead-lettered, the executor deletes that
+           execution row. Counters stay as dashboard data.
+        4. The batch finishes when no execution rows remain (single-winner
+           update). A dispatcher sweep repairs crash windows — a worker that
+           dies between archive and row-delete, an enqueue that dies between
+           insert and send, a `pending` batch whose block never returned.
+        5. The dispatcher cleans up finished batches older than
+           `config.batch_retention` (default 7 days).
       MD
       DocsUI::Callout(:note) do
-        plain "The "
-        code { "pgbus_batches" }
-        plain " table comes from the base "
+        plain "Existing installs need "
+        code { "rails generate pgbus:add_batch_executions" }
+        plain " (or "
+        code { "pgbus:update" }
+        plain "). Fresh "
         code { "pgbus:install" }
-        plain " migration — no separate generator is needed for batches."
+        plain " already includes the executions table."
       end
     end
   end

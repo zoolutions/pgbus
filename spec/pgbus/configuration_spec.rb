@@ -101,6 +101,11 @@ RSpec.describe Pgbus::Configuration do
       expect(config.archive_retention).to eq(7 * 24 * 3600)
     end
 
+    it "has default batch retention of 7 days and sweep interval of 5 minutes" do
+      expect(config.batch_retention).to eq(7 * 24 * 3600)
+      expect(config.batch_sweep_interval).to eq(300)
+    end
+
     it "exposes archive compaction tuning as constants on Pgbus::Process::Dispatcher" do
       # The compaction interval and batch size were silent settings; they
       # live on the dispatcher class as constants now.
@@ -897,6 +902,8 @@ RSpec.describe Pgbus::Configuration do
       %i[
         visibility_timeout
         archive_retention
+        batch_retention
+        batch_sweep_interval
         idempotency_ttl
         outbox_retention
         stats_retention
@@ -958,7 +965,9 @@ RSpec.describe Pgbus::Configuration do
     it "accepts nil as a valid sentinel for 'feature disabled'" do
       # archive_retention, idempotency_ttl, recurring_execution_retention all
       # use nil to skip the corresponding maintenance task in the dispatcher.
-      duration_settings.each do |setting|
+      # batch_sweep_interval is required (> 0) — the dispatcher always runs it.
+      nullable = duration_settings - %i[batch_sweep_interval]
+      nullable.each do |setting|
         expect { config.public_send("#{setting}=", nil) }.not_to raise_error
         expect(config.public_send(setting)).to be_nil
       end

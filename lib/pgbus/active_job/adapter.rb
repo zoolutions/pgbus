@@ -63,6 +63,7 @@ module Pgbus
         key = Concurrency.extract_key(payload_hash)
         concurrency = concurrency_config(active_job)
         priority = active_job.try(:priority)
+        msg_id = nil
 
         if key && concurrency
           result = Concurrency::Semaphore.acquire(key, concurrency[:limit], concurrency[:duration])
@@ -70,19 +71,33 @@ module Pgbus
           if result == :acquired
             msg_id = Pgbus.client.send_message(queue, payload_hash, delay: delay, priority: priority)
             active_job.provider_job_id = msg_id
+            Batch.backfill_execution(payload_hash, msg_id, physical_queue(queue, priority))
           else
             handle_conflict(concurrency, active_job, key, queue, payload_hash, priority: priority)
           end
         else
           msg_id = Pgbus.client.send_message(queue, payload_hash, delay: delay, priority: priority)
           active_job.provider_job_id = msg_id
+          Batch.backfill_execution(payload_hash, msg_id, physical_queue(queue, priority))
         end
 
         Thread.current[:pgbus_acquired_uniqueness_key] = nil
         active_job
       rescue StandardError => e
-        rollback_acquired_uniqueness_lock
+        if msg_id.nil?
+          rollback_acquired_uniqueness_lock
+          uncount_batch_job(payload_hash)
+        else
+          # Message is live: drop the thread-local so a later discard on this
+          # thread cannot release that job's uniqueness lock, but do not
+          # DELETE the pgbus_uniqueness_keys row.
+          Thread.current[:pgbus_acquired_uniqueness_key] = nil
+        end
         raise e
+      end
+
+      def physical_queue(queue, priority)
+        Pgbus.client.target_queue(queue, priority)
       end
 
       def concurrency_config(active_job)
@@ -176,6 +191,7 @@ module Pgbus
 
         count = Thread.current[:pgbus_batch_job_count]
         Thread.current[:pgbus_batch_job_count] = count - 1 if count&.positive?
+        Batch.untrack_enqueue(payload_hash)
       end
 
       def inject_batch_metadata(payload_hash)
@@ -183,13 +199,17 @@ module Pgbus
         return payload_hash unless batch_id
 
         Thread.current[:pgbus_batch_job_count] = (Thread.current[:pgbus_batch_job_count] || 0) + 1
-        payload_hash.merge(Batch::METADATA_KEY => batch_id)
+        tagged = payload_hash.merge(Batch::METADATA_KEY => batch_id)
+        Batch.track_enqueue(tagged)
+        tagged
       end
 
       def enqueue_immediate(queue, jobs)
         return if jobs.empty?
 
         payloads = jobs.map { |j| inject_batch_metadata(Serializer.serialize_job_hash(j)) }
+        physical = Pgbus.configuration.queue_name(queue)
+        msg_ids = nil
         msg_ids = Pgbus.client.send_batch(queue, payloads)
 
         unless msg_ids.is_a?(Array) && msg_ids.size == jobs.size
@@ -197,6 +217,12 @@ module Pgbus
         end
 
         jobs.zip(msg_ids).each { |job, id| job.provider_job_id = id }
+        payloads.zip(msg_ids).each { |payload, id| Batch.backfill_execution(payload, id, physical) }
+      rescue Pgbus::EnqueueError
+        Array(payloads).each_with_index do |payload, index|
+          Batch.untrack_enqueue(payload) if msg_ids.nil? || msg_ids[index].nil?
+        end
+        raise
       rescue Pgbus::SchemaNotReady => e
         Pgbus.logger.error { "[Pgbus] #{e.message}" }
         raise

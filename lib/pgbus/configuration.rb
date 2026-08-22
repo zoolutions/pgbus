@@ -75,6 +75,10 @@ module Pgbus
     # Pgbus::Process::Dispatcher.
     attr_reader :archive_retention
 
+    # Batch execution-row sweep + finished-batch cleanup. Retention nil disables
+    # cleanup (same sentinel as archive_retention). Sweep interval is required.
+    attr_reader :batch_retention, :batch_sweep_interval
+
     # Transactional outbox
     attr_accessor :outbox_enabled, :outbox_poll_interval, :outbox_batch_size
     attr_reader :outbox_retention # rubocop:disable Style/AccessorGrouping
@@ -264,6 +268,8 @@ module Pgbus
       @group_mode = nil
 
       @archive_retention = 7 * 24 * 3600 # 7 days
+      @batch_retention = 7 * 24 * 3600 # 7 days
+      @batch_sweep_interval = 300 # 5 minutes
 
       @outbox_enabled = false
       @outbox_poll_interval = 1.0
@@ -818,7 +824,8 @@ module Pgbus
 
       # Interval knobs: positive Numeric, never nil (mirror polling_interval).
       { dispatch_interval: dispatch_interval, outbox_poll_interval: outbox_poll_interval,
-        recurring_schedule_interval: recurring_schedule_interval }.each do |name, value|
+        recurring_schedule_interval: recurring_schedule_interval,
+        batch_sweep_interval: batch_sweep_interval }.each do |name, value|
         raise Pgbus::ConfigurationError, "#{name} must be > 0" unless value.is_a?(Numeric) && value.positive?
       end
 
@@ -1168,6 +1175,14 @@ module Pgbus
 
     def archive_retention=(value)
       @archive_retention = coerce_duration!(value, :archive_retention)
+    end
+
+    def batch_retention=(value)
+      @batch_retention = coerce_duration!(value, :batch_retention)
+    end
+
+    def batch_sweep_interval=(value)
+      @batch_sweep_interval = coerce_duration!(value, :batch_sweep_interval)
     end
 
     def outbox_retention=(value)

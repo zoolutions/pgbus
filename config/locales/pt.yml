@@ -19,10 +19,10 @@ pt:
         completed: Concluídos
         created_at: Criado em
         details: Detalhes
-        discarded: Descartados
+        failed: Falhados
         finished_at: Finalizado em
         not_found: Lote não encontrado
-        on_discard: Ao descartar
+        on_failure: Ao falhar
         on_finish: Ao finalizar
         on_success: Ao ter sucesso
         progress: Progresso

@@ -303,13 +303,13 @@ RSpec.describe Pgbus::ActiveJob::Executor do
 
       it "signals batch completed on success" do
         executor.execute(message, queue_name)
-        expect(Pgbus::Batch).to have_received(:job_completed).with("batch-abc")
+        expect(Pgbus::Batch).to have_received(:job_completed).with("batch-abc", job_id: job_id)
       end
 
       it "signals batch discarded on dead letter" do
         dlq_message = build_message_double(msg_id: 31, message: message_json, read_ct: config.max_retries + 1)
         executor.execute(dlq_message, queue_name)
-        expect(Pgbus::Batch).to have_received(:job_discarded).with("batch-abc")
+        expect(Pgbus::Batch).to have_received(:job_discarded).with("batch-abc", job_id: job_id)
       end
 
       it "does not signal batch on transient failure" do

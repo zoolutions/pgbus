@@ -51,6 +51,7 @@ module Pgbus
       # Enumerated so set_maintenance_timestamp can validate its argument.
       MAINTENANCE_TIMESTAMPS = %i[
         @last_cleanup_at @last_reap_at @last_concurrency_at @last_batch_cleanup_at
+        @last_batch_sweep_at
         @last_recurring_cleanup_at @last_archive_compaction_at @last_stream_archive_compaction_at
         @last_outbox_cleanup_at @last_job_lock_cleanup_at @last_stats_cleanup_at
         @last_orphan_stream_sweep_at @last_table_maintenance_at
@@ -107,7 +108,7 @@ module Pgbus
 
       # Test seam: set one of the @last_*_at maintenance timestamps so a task
       # becomes (or stops being) due on the next run_maintenance. The timestamps
-      # are per-task monotonic clocks with no constructor injection point (all 12
+      # are per-task monotonic clocks with no constructor injection point (all
       # default to monotonic_now at construction), so a post-construction setter
       # is the minimal way to drive the due/not-due logic deterministically.
       # ivar must be one of the recognized @last_*_at names.
@@ -233,6 +234,7 @@ module Pgbus
         results << run_if_due(now, :@last_reap_at, REAP_INTERVAL) { reap_stale_processes }
         results << run_if_due(now, :@last_concurrency_at, CONCURRENCY_INTERVAL) { cleanup_concurrency }
         results << run_if_due(now, :@last_batch_cleanup_at, BATCH_CLEANUP_INTERVAL) { cleanup_batches }
+        results << run_if_due(now, :@last_batch_sweep_at, config.batch_sweep_interval) { sweep_stalled_batches }
         results << run_if_due(now, :@last_recurring_cleanup_at, RECURRING_CLEANUP_INTERVAL) { cleanup_recurring_executions }
         results << run_if_due(now, :@last_archive_compaction_at, ARCHIVE_COMPACTION_INTERVAL) { compact_archives }
         results << run_if_due(now, :@last_stream_archive_compaction_at, ARCHIVE_COMPACTION_INTERVAL) { prune_stream_archives }
@@ -373,10 +375,20 @@ module Pgbus
       end
 
       def cleanup_batches
-        deleted = Batch.cleanup(older_than: Time.current - (7 * 24 * 3600)) # 7 days
+        retention = config.batch_retention
+        return unless retention&.positive?
+
+        deleted = Batch.cleanup(older_than: Time.current - retention)
         Pgbus.logger.debug { "[Pgbus] Cleaned up #{deleted} finished batches" } if deleted.positive?
       rescue StandardError => e
         log_maintenance_failure("Batch cleanup", e)
+        e
+      end
+
+      def sweep_stalled_batches
+        Batch.sweep_stalled
+      rescue StandardError => e
+        log_maintenance_failure("Batch sweep", e)
         e
       end
 

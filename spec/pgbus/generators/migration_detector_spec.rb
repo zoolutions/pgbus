@@ -11,8 +11,9 @@ RSpec.describe Pgbus::Generators::MigrationDetector do
   # Default: every core table exists so fresh_install? is false. Tests
   # override specific tables via stub_table / stub_missing helpers.
   before do
-    stub_tables(described_class::CORE_INSTALL_TABLES + %w[pgbus_uniqueness_keys pgbus_failed_events])
+    stub_tables(described_class::CORE_INSTALL_TABLES + %w[pgbus_uniqueness_keys pgbus_failed_events pgbus_batch_executions])
     allow(connection).to receive_messages(columns: [], indexes: [])
+    stub_columns("pgbus_batches", %w[id batch_id on_failure_class failed_jobs completed_jobs total_jobs status])
 
     # Default: autovacuum already tuned so it doesn't pollute other tests.
     # Tests for autovacuum detection override these stubs explicitly.
@@ -207,6 +208,26 @@ RSpec.describe Pgbus::Generators::MigrationDetector do
       end
     end
 
+    context "with batch executions detection" do
+      it "queues add_batch_executions when the executions table is missing" do
+        remove_table("pgbus_batch_executions")
+
+        expect(detector.missing_migrations).to include(:add_batch_executions)
+      end
+
+      it "does not queue it when the table and renamed columns are present" do
+        stub_columns("pgbus_batches", %w[id batch_id on_failure_class failed_jobs completed_jobs total_jobs status])
+
+        expect(detector.missing_migrations).not_to include(:add_batch_executions)
+      end
+
+      it "queues add_batch_executions when the table exists but pre-rename columns remain" do
+        stub_columns("pgbus_batches", %w[id batch_id on_discard_class discarded_jobs failed_jobs status])
+
+        expect(detector.missing_migrations).to include(:add_batch_executions)
+      end
+    end
+
     context "with outbox detection" do
       it "queues add_outbox when pgbus_outbox_entries is missing" do
         expect(detector.missing_migrations).to include(:add_outbox)
@@ -397,6 +418,7 @@ RSpec.describe Pgbus::Generators::MigrationDetector do
           :add_queue_states,
           :add_outbox,
           :add_processed_event_completion,
+          :add_batch_executions,
           :tune_autovacuum,
           :tune_fillfactor
         )
@@ -427,7 +449,8 @@ RSpec.describe Pgbus::Generators::MigrationDetector do
         uniqueness_keys add_job_stats add_job_stats_latency
         add_job_stats_queue_index add_stream_stats add_presence
         add_queue_states add_outbox add_recurring add_failed_events_index
-        add_processed_event_completion tune_autovacuum tune_fillfactor
+        add_processed_event_completion add_batch_executions add_stream_queues
+        tune_autovacuum tune_fillfactor
       ]
 
       keys.each do |key|

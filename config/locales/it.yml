@@ -19,10 +19,10 @@ it:
         completed: Completati
         created_at: Creato il
         details: Dettagli
-        discarded: Scartati
+        failed: Falliti
         finished_at: Terminato il
         not_found: Lotto non trovato
-        on_discard: Allo scarto
+        on_failure: Al fallimento
         on_finish: Al termine
         on_success: Al successo
         progress: Progresso

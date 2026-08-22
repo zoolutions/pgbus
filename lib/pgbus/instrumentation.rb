@@ -25,6 +25,11 @@ module Pgbus
   #   pgbus.consumer.recycle       — consumer hit a recycle threshold (same payload shape as pgbus.worker.recycle)
   #   pgbus.serializer.serialize   — job/event serialization
   #   pgbus.serializer.deserialize — job/event deserialization
+  #   pgbus.batch_finished         — batch flipped to finished
+  #                                  payload: batch_id, total_jobs, completed_jobs, failed_jobs
+  #   pgbus.batch_sweep            — dispatcher stalled-batch sweep
+  #                                  payload: stalled_for, stale_executions, orphan_rows,
+  #                                  started_batches, finished_batches
   #
   module Instrumentation
     module_function

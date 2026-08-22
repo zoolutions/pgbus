@@ -72,6 +72,18 @@ RSpec.describe Pgbus::Concurrency::BlockedExecution do
 
       expect(promoted).to be false
     end
+
+    it "returns true when post-commit backfill raises" do
+      released = { queue_name: "default", payload: { "job_class" => "TestJob", "job_id" => "j1" } }
+      allow(Pgbus::BlockedExecution).to receive(:release_next!).and_return(released)
+      allow(mock_client).to receive(:send_message).and_return(42)
+      allow(Pgbus::Batch).to receive(:backfill_execution).and_raise(StandardError, "backfill failed")
+      logger = instance_double(Logger, warn: nil, error: nil, info: nil, debug: nil)
+      allow(Pgbus).to receive(:logger).and_return(logger)
+
+      expect(described_class.promote_next("TestJob-42", client: mock_client)).to be true
+      expect(logger).to have_received(:warn)
+    end
   end
 
   describe ".expire_stale" do

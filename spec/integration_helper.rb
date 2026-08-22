@@ -124,8 +124,7 @@ def bootstrap_integration_tables(conn)
   end
 
   # Batch tracking — mirrors the pgbus_batches DDL in
-  # lib/generators/pgbus/templates/migration.rb.erb. BatchEntry.increment_counter!
-  # locks the row and fires callbacks when completed + discarded == total.
+  # lib/generators/pgbus/templates/migration.rb.erb.
   unless conn.table_exists?("pgbus_batches")
     conn.execute(<<~SQL)
       CREATE TABLE pgbus_batches (
@@ -134,17 +133,57 @@ def bootstrap_integration_tables(conn)
         description VARCHAR,
         on_finish_class VARCHAR,
         on_success_class VARCHAR,
-        on_discard_class VARCHAR,
+        on_failure_class VARCHAR,
         properties JSONB DEFAULT '{}',
         total_jobs INTEGER NOT NULL DEFAULT 0,
         completed_jobs INTEGER NOT NULL DEFAULT 0,
         failed_jobs INTEGER NOT NULL DEFAULT 0,
-        discarded_jobs INTEGER NOT NULL DEFAULT 0,
         status VARCHAR NOT NULL DEFAULT 'pending',
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         finished_at TIMESTAMP
       );
       CREATE UNIQUE INDEX idx_pgbus_batches_batch_id ON pgbus_batches (batch_id);
+    SQL
+  end
+
+  if conn.table_exists?("pgbus_batches")
+    cols = conn.columns("pgbus_batches").map(&:name)
+    if cols.include?("on_discard_class") && !cols.include?("on_failure_class")
+      conn.execute("ALTER TABLE pgbus_batches RENAME COLUMN on_discard_class TO on_failure_class")
+    end
+    if cols.include?("discarded_jobs")
+      conn.execute("UPDATE pgbus_batches SET failed_jobs = failed_jobs + discarded_jobs")
+      conn.execute("ALTER TABLE pgbus_batches DROP COLUMN discarded_jobs")
+    end
+  end
+
+  unless conn.table_exists?("pgbus_batch_executions")
+    conn.execute(<<~SQL)
+      CREATE TABLE pgbus_batch_executions (
+        id BIGSERIAL PRIMARY KEY,
+        batch_id VARCHAR NOT NULL,
+        job_id VARCHAR NOT NULL,
+        msg_id BIGINT,
+        queue_name VARCHAR,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE UNIQUE INDEX idx_pgbus_batch_executions_job_id ON pgbus_batch_executions (job_id);
+      CREATE INDEX idx_pgbus_batch_executions_batch_id ON pgbus_batch_executions (batch_id);
+    SQL
+  end
+
+  if conn.table_exists?("pgbus_batch_executions")
+    conn.execute(<<~SQL)
+      CREATE INDEX IF NOT EXISTS idx_pgbus_batch_executions_orphans
+        ON pgbus_batch_executions (created_at) WHERE msg_id IS NULL;
+    SQL
+    conn.execute(<<~SQL)
+      DO $$ BEGIN
+        ALTER TABLE pgbus_batch_executions
+          ADD CONSTRAINT fk_pgbus_batch_executions_batch
+          FOREIGN KEY (batch_id) REFERENCES pgbus_batches (batch_id) ON DELETE CASCADE;
+      EXCEPTION WHEN duplicate_object THEN NULL;
+      END $$;
     SQL
   end
 rescue StandardError => e
@@ -248,7 +287,7 @@ def cleanup_tables
     pgbus_semaphores pgbus_blocked_executions pgbus_uniqueness_keys
     pgbus_processes pgbus_recurring_executions pgbus_failed_events
     pgbus_presence_members pgbus_outbox_entries pgbus_processed_events
-    pgbus_batches pgbus_stream_queues
+    pgbus_batch_executions pgbus_batches pgbus_stream_queues
   ]
   tables.each do |table|
     conn.execute("DELETE FROM #{table}")

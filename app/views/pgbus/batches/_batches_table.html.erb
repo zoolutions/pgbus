@@ -28,7 +28,7 @@
             <td data-label="Progress" class="px-4 py-3 text-sm">
               <div class="flex items-center space-x-2">
                 <div class="w-24 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                  <div class="h-2 rounded-full <%= batch[:discarded_jobs].to_i > 0 ? 'bg-amber-500' : 'bg-green-500' %>"
+                  <div class="h-2 rounded-full <%= batch[:failed_jobs].to_i > 0 ? 'bg-amber-500' : 'bg-green-500' %>"
                        style="width: <%= batch[:progress_pct] %>%"></div>
                 </div>
                 <span class="text-xs text-gray-500 dark:text-gray-400 font-mono"><%= batch[:progress_pct] %>%</span>
@@ -36,8 +36,8 @@
             </td>
             <td data-label="Jobs" class="px-4 py-3 text-sm text-right font-mono text-gray-500 dark:text-gray-400">
               <%= batch[:completed_jobs] %>/<%= batch[:total_jobs] %>
-              <% if batch[:discarded_jobs].to_i > 0 %>
-                <span class="text-red-500">(<%= batch[:discarded_jobs] %> dlq)</span>
+              <% if batch[:failed_jobs].to_i > 0 %>
+                <span class="text-red-500">(<%= batch[:failed_jobs] %> failed)</span>
               <% end %>
             </td>
             <td data-label="Created" class="px-4 py-3 text-sm text-right text-gray-500 dark:text-gray-400">

@@ -631,6 +631,17 @@ RSpec.describe Pgbus::Client do
     end
   end
 
+  describe "#dead_letter_physical_name" do
+    it "appends _dlq to the prefixed logical queue" do
+      expect(client.dead_letter_physical_name("default")).to eq("pgbus_test_default_dlq")
+    end
+
+    it "strips a priority suffix so _pN sub-queues share the logical DLQ" do
+      expect(client.dead_letter_physical_name("pgbus_test_default_p0")).to eq("pgbus_test_default_dlq")
+      expect(client.dead_letter_physical_name("default_p2")).to eq("pgbus_test_default_dlq")
+    end
+  end
+
   describe "#ensure_dead_letter_queue" do
     it "tunes autovacuum when creating a DLQ" do
       client.ensure_dead_letter_queue("jobs")
@@ -1374,6 +1385,35 @@ RSpec.describe Pgbus::Client do
 
       total = client.purge_archive("default", older_than: Time.now, batch_size: 50)
       expect(total).to eq(60) # 50 + 10
+    end
+  end
+
+  describe "#message_in_queue?" do
+    it "delegates to message_exists? by msg_id" do
+      allow(client).to receive(:message_exists?).with("default", msg_id: 7).and_return(true)
+
+      expect(client.message_in_queue?("default", msg_id: 7)).to be true
+    end
+  end
+
+  describe "#message_archived?" do
+    let(:conn) { double("conn") }
+
+    before { allow(client).to receive(:with_raw_connection).and_yield(conn) }
+
+    it "returns true when the row exists in the archive table" do
+      allow(conn).to receive(:exec_params).with(
+        a_string_matching(/SELECT 1 FROM pgmq\.a_pgbus_test_default WHERE msg_id = \$1/),
+        [42]
+      ).and_return(double("result", ntuples: 1))
+
+      expect(client.message_archived?("default", msg_id: 42)).to be true
+    end
+
+    it "returns false when the archive row does not exist" do
+      allow(conn).to receive(:exec_params).and_return(double("result", ntuples: 0))
+
+      expect(client.message_archived?("default", msg_id: 42)).to be false
     end
   end
 

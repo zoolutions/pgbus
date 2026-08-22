@@ -28,12 +28,21 @@ module Pgbus
         # otherwise. This avoids losing a blocked row if enqueue fails.
         def promote_next(concurrency_key, client:, delay: 0)
           released = nil
+          msg_id = nil
           Pgbus::BlockedExecution.transaction do
             released = release_next(concurrency_key)
             raise ActiveRecord::Rollback unless released
 
             actual_delay = resolve_delay(released[:payload], delay)
-            client.send_message(released[:queue_name], released[:payload], delay: actual_delay)
+            msg_id = client.send_message(released[:queue_name], released[:payload], delay: actual_delay)
+          end
+
+          if released && msg_id
+            begin
+              Batch.backfill_execution(released[:payload], msg_id, client.target_queue(released[:queue_name]))
+            rescue StandardError => e
+              Pgbus.logger.warn { "[Pgbus] Batch execution backfill failed after promote: #{e.message}" }
+            end
           end
 
           !!released

@@ -273,12 +273,21 @@ RSpec.describe Pgbus::Process::Dispatcher do
   end
 
   describe "#cleanup_batches (private)" do
-    it "cleans up finished batches older than 7 days" do
+    it "cleans up finished batches older than configured retention" do
       allow(Pgbus::Batch).to receive(:cleanup).and_return(3)
 
       dispatcher.send(:cleanup_batches)
 
       expect(Pgbus::Batch).to have_received(:cleanup).with(older_than: a_kind_of(Time))
+    end
+
+    it "skips cleanup when batch_retention is nil" do
+      allow(dispatcher.config).to receive(:batch_retention).and_return(nil)
+      allow(Pgbus::Batch).to receive(:cleanup)
+
+      dispatcher.send(:cleanup_batches)
+
+      expect(Pgbus::Batch).not_to have_received(:cleanup)
     end
 
     it "rescues errors gracefully" do
@@ -683,6 +692,7 @@ RSpec.describe Pgbus::Process::Dispatcher do
         "@last_reap_at": :reap_stale_processes,
         "@last_concurrency_at": :cleanup_concurrency,
         "@last_batch_cleanup_at": :cleanup_batches,
+        "@last_batch_sweep_at": :sweep_stalled_batches,
         "@last_recurring_cleanup_at": :cleanup_recurring_executions,
         "@last_archive_compaction_at": :compact_archives,
         "@last_stream_archive_compaction_at": :prune_stream_archives,

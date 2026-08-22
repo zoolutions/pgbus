@@ -104,12 +104,11 @@ class CreatePgbusTables < ActiveRecord::Migration<%= migration_version %>
       t.string :description
       t.string :on_finish_class
       t.string :on_success_class
-      t.string :on_discard_class
+      t.string :on_failure_class
       t.jsonb :properties, default: {}
       t.integer :total_jobs, null: false, default: 0
       t.integer :completed_jobs, null: false, default: 0
       t.integer :failed_jobs, null: false, default: 0
-      t.integer :discarded_jobs, null: false, default: 0
       t.string :status, null: false, default: "pending"
       t.datetime :created_at, null: false, default: -> { "CURRENT_TIMESTAMP" }
       t.datetime :finished_at
@@ -119,6 +118,24 @@ class CreatePgbusTables < ActiveRecord::Migration<%= migration_version %>
       unique: true, name: "idx_pgbus_batches_batch_id"
     add_index :pgbus_batches, :status,
       name: "idx_pgbus_batches_status"
+
+    create_table :pgbus_batch_executions do |t|
+      t.string :batch_id, null: false
+      t.string :job_id, null: false
+      t.bigint :msg_id
+      t.string :queue_name
+      t.datetime :created_at, null: false, default: -> { "CURRENT_TIMESTAMP" }
+    end
+
+    add_index :pgbus_batch_executions, :job_id,
+      unique: true, name: "idx_pgbus_batch_executions_job_id"
+    add_index :pgbus_batch_executions, :batch_id,
+      name: "idx_pgbus_batch_executions_batch_id"
+    add_index :pgbus_batch_executions, :created_at,
+      where: "msg_id IS NULL",
+      name: "idx_pgbus_batch_executions_orphans"
+    add_foreign_key :pgbus_batch_executions, :pgbus_batches,
+      column: :batch_id, primary_key: :batch_id, on_delete: :cascade
 
     # Recurring task definitions (synced from config/recurring.yml)
     create_table :pgbus_recurring_tasks do |t|
@@ -186,6 +203,7 @@ class CreatePgbusTables < ActiveRecord::Migration<%= migration_version %>
     drop_table :pgbus_stream_queues
     drop_table :pgbus_recurring_executions
     drop_table :pgbus_recurring_tasks
+    drop_table :pgbus_batch_executions
     drop_table :pgbus_batches
     drop_table :pgbus_blocked_executions
     drop_table :pgbus_semaphores

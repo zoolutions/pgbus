@@ -19,10 +19,10 @@ ja:
         completed: 完了
         created_at: 作成日時
         details: 詳細
-        discarded: 破棄済み
+        failed: 失敗
         finished_at: 完了日時
         not_found: バッチが見つかりません
-        on_discard: 破棄時
+        on_failure: 失敗時
         on_finish: 完了時
         on_success: 成功時
         progress: 進捗

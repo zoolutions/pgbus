@@ -669,7 +669,9 @@ module Pgbus
 
       # Batches
       def batches(limit: 100)
-        BatchEntry.order(created_at: :desc).limit(limit).map { |r| format_batch(r) }
+        records = BatchEntry.order(created_at: :desc).limit(limit).to_a
+        pending = pending_jobs_by_batch(records.map(&:batch_id))
+        records.map { |r| format_batch(r, pending_jobs: pending[r.batch_id]) }
       rescue StandardError => e
         Pgbus.logger.debug { "[Pgbus::Web] Error fetching batches: #{e.message}" }
         []
@@ -679,11 +681,13 @@ module Pgbus
         record = BatchEntry.find_by(batch_id: batch_id)
         return nil unless record
 
-        format_batch(record).merge(
+        pending = pending_jobs_by_batch([batch_id])
+        format_batch(record, pending_jobs: pending[batch_id]).merge(
           properties: record.properties,
           on_finish_class: record.on_finish_class,
           on_success_class: record.on_success_class,
-          on_discard_class: record.on_discard_class
+          on_failure_class: failure_callback_class(record),
+          on_discard_class: failure_callback_class(record)
         )
       rescue StandardError => e
         Pgbus.logger.debug { "[Pgbus::Web] Error fetching batch #{batch_id}: #{e.message}" }
@@ -1351,10 +1355,12 @@ module Pgbus
         end
       end
 
-      def format_batch(record)
+      def format_batch(record, pending_jobs: nil)
         total = record.total_jobs
-        done = record.completed_jobs + record.discarded_jobs
+        failed = failure_job_count(record)
+        done = record.completed_jobs + failed
         pct = total.positive? ? ((done * 100) / total) : 100
+        pending = pending_jobs || [total - done, 0].max
 
         {
           batch_id: record.batch_id,
@@ -1362,12 +1368,34 @@ module Pgbus
           status: record.status,
           total_jobs: total,
           completed_jobs: record.completed_jobs,
-          discarded_jobs: record.discarded_jobs,
-          failed_jobs: record.failed_jobs,
+          failed_jobs: failed,
+          discarded_jobs: failed,
+          pending_jobs: pending,
           progress_pct: pct,
           created_at: record.created_at,
           finished_at: record.finished_at
         }
+      end
+
+      def failure_job_count(record)
+        record.respond_to?(:discarded_jobs) ? record.discarded_jobs.to_i : record.failed_jobs.to_i
+      end
+
+      def failure_callback_class(record)
+        if record.respond_to?(:on_failure_class) && record.on_failure_class.present?
+          record.on_failure_class
+        elsif record.respond_to?(:on_discard_class)
+          record.on_discard_class
+        end
+      end
+
+      def pending_jobs_by_batch(batch_ids)
+        return {} unless Batch.executions_migrated?
+        return {} if batch_ids.empty?
+
+        BatchExecution.where(batch_id: batch_ids).group(:batch_id).count
+      rescue StandardError
+        {}
       end
 
       def sanitize_name(name)

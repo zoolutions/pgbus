@@ -19,10 +19,10 @@ fi:
         completed: Valmiit
         created_at: Luotu
         details: Tiedot
-        discarded: Hylätyt
+        failed: Epäonnistuneet
         finished_at: Valmistunut
         not_found: Erää ei löytynyt
-        on_discard: Hylkäyksessä
+        on_failure: Epäonnistumisessa
         on_finish: Valmistumisessa
         on_success: Onnistumisessa
         progress: Edistyminen
