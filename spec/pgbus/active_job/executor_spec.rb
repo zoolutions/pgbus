@@ -514,7 +514,7 @@ RSpec.describe Pgbus::ActiveJob::Executor do
         it "releases the lock after a successful run" do
           executor.execute(message, queue_name)
 
-          expect(Pgbus::Uniqueness).to have_received(:release_lock).with("TestJob:user-42")
+          expect(Pgbus::Uniqueness).to have_received(:release_lock).with("TestJob:user-42").once
         end
 
         it "does not release the lock if archive_from fails (retry path)" do
@@ -543,6 +543,35 @@ RSpec.describe Pgbus::ActiveJob::Executor do
 
           expect(Pgbus::Uniqueness).to have_received(:release_lock).with("TestJob:user-42")
         end
+
+        it "releases the lock after archive and before job_completed (issue #418)" do
+          order = []
+          allow(mock_client).to receive(:archive_message) do
+            order << :archive
+            true
+          end
+          allow(Pgbus::Uniqueness).to receive(:release_lock) { order << :release }
+          allow(ActiveSupport::Notifications).to receive(:instrument).and_wrap_original do |method, *args, &block|
+            order << :completed if args.first == "pgbus.job_completed"
+            method.call(*args, &block)
+          end
+
+          executor.execute(message, queue_name)
+
+          expect(order.index(:archive)).to be < order.index(:release)
+          expect(order.index(:release)).to be < order.index(:completed)
+        end
+
+        it "returns :success when release_lock raises after archive" do
+          allow(Pgbus::Uniqueness).to receive(:release_lock).and_raise(StandardError, "pooler timeout")
+          allow(Pgbus.logger).to receive(:warn)
+
+          result = executor.execute(message, queue_name)
+
+          expect(result).to eq(:success)
+          expect(mock_client).to have_received(:archive_message)
+          expect(Pgbus::Uniqueness).to have_received(:release_lock).with("TestJob:user-42").once
+        end
       end
 
       context "with the while_executing strategy" do
@@ -557,7 +586,7 @@ RSpec.describe Pgbus::ActiveJob::Executor do
             "TestJob:user-42", uniqueness_payload
           )
           expect(job_double).to have_received(:perform_now)
-          expect(Pgbus::Uniqueness).to have_received(:release_lock).with("TestJob:user-42")
+          expect(Pgbus::Uniqueness).to have_received(:release_lock).with("TestJob:user-42").once
         end
 
         it "returns :skipped without performing if another worker already holds the lock" do

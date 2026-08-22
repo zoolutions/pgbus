@@ -446,34 +446,46 @@ module Pgbus
         # younger could be a freshly-acquired lock whose send_message hasn't
         # committed yet.
         threshold = Time.current - (config.visibility_timeout * 2)
+        candidates = keys.select { |key| key.created_at && key.created_at < threshold && key.queue_name }
+        return 0 if candidates.empty?
 
-        orphaned = keys.select do |key|
-          next false unless key.created_at && key.created_at < threshold
-          next false unless key.queue_name
-
-          message_gone?(key)
-        end
+        bound, unbound = candidates.partition { |key| bound_lock?(key) }
+        orphaned = bound.select { |key| message_gone?(key) }
+        orphaned.concat(gone_unbound_locks(unbound))
 
         return 0 if orphaned.empty?
 
         UniquenessKey.where(lock_key: orphaned.map(&:lock_key)).delete_all
       end
 
-      # Returns true if the message referenced by this lock is definitely gone
-      # from the queue. Returns false otherwise (message present, or unknown).
+      def bound_lock?(key)
+        !Uniqueness.placeholder?(queue_name: key.queue_name, msg_id: key.msg_id)
+      end
+
+      # Unbound rows (synthetic "pending" queue and/or msg_id=0) must not probe
+      # pgmq.q_<prefix>_pending — that table does not exist, message_exists?
+      # returns nil, and the reaper would keep the lock forever (issue #418).
+      # Scan every live queue for the payload key instead.
+      def gone_unbound_locks(unbound)
+        return [] if unbound.empty?
+
+        present = Pgbus.client.uniqueness_keys_present(unbound.map(&:lock_key))
+        unbound.reject { |key| present.include?(key.lock_key) }
+      end
+
+      # Returns true if the message referenced by this bound lock is definitely
+      # gone from the queue. Returns false otherwise (message present, or unknown).
       #
       # Routes through Pgbus::Client#message_exists? so all PGMQ access stays
       # behind the client interface. The client returns nil when it can't
       # determine the answer (queue table missing, etc.); we treat that as
       # "still here" — the reaper must NEVER delete a lock when in doubt.
       def message_gone?(key)
-        msg_id = key.msg_id.to_i
-        result = if msg_id.positive?
-                   Pgbus.client.message_exists?(key.queue_name, msg_id: msg_id)
-                 else
-                   Pgbus.client.message_exists?(key.queue_name, uniqueness_key: key.lock_key)
-                 end
-
+        result = Pgbus.client.message_exists?(
+          key.queue_name,
+          msg_id: key.msg_id.to_i,
+          uniqueness_key: key.lock_key
+        )
         result == false
       rescue StandardError => e
         Pgbus.logger.warn { "[Pgbus] Reap check failed for #{key.lock_key}: #{e.message}" }

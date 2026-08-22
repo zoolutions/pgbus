@@ -147,6 +147,8 @@ RSpec.describe Pgbus::Recurring::Schedule do
     before do
       allow(Pgbus::RecurringExecution).to receive(:record).and_yield
       allow(Pgbus::UniquenessKey).to receive(:acquire!).and_return(true)
+      allow(Pgbus::UniquenessKey).to receive(:bind!)
+      allow(mock_client).to receive(:send_message).and_return(11)
 
       stub_const("MaintenanceBaseJob", Class.new(ActiveJob::Base) do
         include Pgbus::Uniqueness
@@ -197,6 +199,8 @@ RSpec.describe Pgbus::Recurring::Schedule do
     before do
       allow(Pgbus::RecurringExecution).to receive(:record).and_yield
       allow(Pgbus::UniquenessKey).to receive(:acquire!).and_return(true)
+      allow(Pgbus::UniquenessKey).to receive(:bind!)
+      allow(mock_client).to receive(:send_message).and_return(12)
 
       stub_const("SiteSyncJob", Class.new(ActiveJob::Base) do
         include Pgbus::Uniqueness
@@ -287,7 +291,8 @@ RSpec.describe Pgbus::Recurring::Schedule do
     before do
       allow(Pgbus::RecurringExecution).to receive(:record).and_yield
       uniqueness_key_class
-      allow(Pgbus::UniquenessKey).to receive_messages(acquire!: true, release!: 1, locked?: false)
+      allow(Pgbus::UniquenessKey).to receive_messages(acquire!: true, release!: 1, locked?: false, bind!: 1)
+      allow(mock_client).to receive(:send_message).and_return(77)
     end
 
     context "when job class has ensures_uniqueness" do
@@ -327,6 +332,24 @@ RSpec.describe Pgbus::Recurring::Schedule do
         expect(Pgbus::UniquenessKey).to have_received(:acquire!).with(
           "CleanupJob", queue_name: "maintenance", msg_id: 0
         )
+      end
+
+      it "binds the lock to the produced msg_id after send (issue #418)" do
+        allow(Pgbus::UniquenessKey).to receive(:acquire!).and_return(true)
+
+        schedule.enqueue_task(task, run_at: run_at)
+
+        expect(Pgbus::UniquenessKey).to have_received(:bind!).with(
+          "CleanupJob", queue_name: "maintenance", msg_id: 77
+        )
+      end
+
+      it "does not bind when the uniqueness lock is already held" do
+        allow(Pgbus::UniquenessKey).to receive(:acquire!).and_return(false)
+
+        schedule.enqueue_task(task, run_at: run_at)
+
+        expect(Pgbus::UniquenessKey).not_to have_received(:bind!)
       end
 
       it "releases the lock when send_message raises" do

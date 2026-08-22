@@ -1383,13 +1383,16 @@ RSpec.describe Pgbus::Client do
     before { allow(client).to receive(:with_raw_connection).and_yield(conn) }
 
     it "raises ArgumentError when neither msg_id nor uniqueness_key is given" do
-      expect { client.message_exists?("default") }.to raise_error(ArgumentError, /exactly one/)
+      expect { client.message_exists?("default") }.to raise_error(ArgumentError, /msg_id, uniqueness_key, or both/)
     end
 
-    it "raises ArgumentError when both msg_id and uniqueness_key are given" do
-      expect do
-        client.message_exists?("default", msg_id: 1, uniqueness_key: "MyJob")
-      end.to raise_error(ArgumentError, /exactly one/)
+    it "filters msg_id lookup by uniqueness_key when both are given" do
+      allow(conn).to receive(:exec_params).with(
+        a_string_matching(/msg_id = \$1.*pgbus_uniqueness_key/m),
+        [1, "MyJob"]
+      ).and_return(double("result", ntuples: 1))
+
+      expect(client.message_exists?("default", msg_id: 1, uniqueness_key: "MyJob")).to be(true)
     end
 
     it "accepts a symbol queue name" do
@@ -1409,6 +1412,31 @@ RSpec.describe Pgbus::Client do
         ).and_return(double("result", ntuples: 1))
 
         expect(client.message_exists?("default", msg_id: 42)).to be(true)
+      end
+
+      context "when priority sub-queues are enabled" do
+        before do
+          config.priority_levels = 3
+          # Parent before already constructed the client with StandardStrategy.
+          client.instance_variable_set(:@queue_strategy, Pgbus::QueueFactory.for(config))
+        end
+
+        after { config.priority_levels = nil }
+
+        it "returns true when the msg_id lives in a priority sub-queue" do
+          allow(conn).to receive(:exec_params) do |sql, _binds|
+            ntuples = sql.include?("q_pgbus_test_default_p1") ? 1 : 0
+            double("result", ntuples: ntuples)
+          end
+
+          expect(client.message_exists?("default", msg_id: 42)).to be(true)
+        end
+
+        it "returns false when no physical sub-queue holds the msg_id" do
+          allow(conn).to receive(:exec_params).and_return(double("result", ntuples: 0))
+
+          expect(client.message_exists?("default", msg_id: 42)).to be(false)
+        end
       end
 
       it "returns false when the row does not exist" do
@@ -1457,6 +1485,71 @@ RSpec.describe Pgbus::Client do
 
         expect { client.message_exists?("default", msg_id: 1) }.to raise_error(ActiveRecord::StatementInvalid)
       end
+    end
+  end
+
+  describe "#uniqueness_keys_present" do
+    let(:conn) { double("conn") }
+
+    before { allow(client).to receive(:with_raw_connection).and_yield(conn) }
+
+    it "returns an empty Set without querying when given no keys" do
+      allow(conn).to receive(:exec)
+      allow(conn).to receive(:exec_params)
+
+      expect(client.uniqueness_keys_present([])).to eq(Set.new)
+      expect(client.uniqueness_keys_present(nil)).to eq(Set.new)
+      expect(conn).not_to have_received(:exec)
+      expect(conn).not_to have_received(:exec_params)
+    end
+
+    it "unions keys found across live pgmq.meta queue tables" do
+      allow(conn).to receive(:exec)
+        .with("SELECT queue_name FROM pgmq.meta ORDER BY queue_name")
+        .and_return(
+          [
+            { "queue_name" => "pgbus_test_default" },
+            { "queue_name" => "pgbus_test_critical" }
+          ]
+        )
+      allow(conn).to receive(:exec_params).with(
+        a_string_matching(/pgmq\.q_pgbus_test_default.*IN \(\$1, \$2\)/m),
+        ["ERP::Manager", "Gone"]
+      ).and_return([{ "k" => "ERP::Manager" }])
+      allow(conn).to receive(:exec_params).with(
+        a_string_matching(/pgmq\.q_pgbus_test_critical.*IN \(\$1, \$2\)/m),
+        ["ERP::Manager", "Gone"]
+      ).and_return([])
+
+      expect(client.uniqueness_keys_present(["ERP::Manager", "Gone"])).to eq(Set["ERP::Manager"])
+    end
+
+    it "skips a missing queue table and keeps keys found in other queues" do
+      stub_const("PG::UndefinedTable", Class.new(StandardError))
+      allow(conn).to receive(:exec)
+        .with("SELECT queue_name FROM pgmq.meta ORDER BY queue_name")
+        .and_return(
+          [
+            { "queue_name" => "pgbus_test_stale" },
+            { "queue_name" => "pgbus_test_critical" }
+          ]
+        )
+      allow(conn).to receive(:exec_params).with(
+        a_string_matching(/pgmq\.q_pgbus_test_stale/),
+        anything
+      ).and_raise(PG::UndefinedTable.new("relation does not exist"))
+      allow(conn).to receive(:exec_params).with(
+        a_string_matching(/pgmq\.q_pgbus_test_critical/),
+        anything
+      ).and_return([{ "k" => "ERP::Manager" }])
+
+      expect(client.uniqueness_keys_present(["ERP::Manager"])).to eq(Set["ERP::Manager"])
+    end
+
+    it "raises when pgmq.meta cannot be read" do
+      allow(conn).to receive(:exec).and_raise(StandardError, "connection refused")
+
+      expect { client.uniqueness_keys_present(["ERP::Manager"]) }.to raise_error(StandardError, "connection refused")
     end
   end
 

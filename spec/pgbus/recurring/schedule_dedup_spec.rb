@@ -132,6 +132,7 @@ RSpec.describe Pgbus::Recurring::Schedule do # deduplication
       # but the execution record already exists. Release our orphaned lock.
       allow(Pgbus::UniquenessKey).to receive(:acquire!).and_return(true)
       allow(Pgbus::UniquenessKey).to receive(:release!)
+      allow(Pgbus::UniquenessKey).to receive(:bind!)
       allow(Pgbus::RecurringExecution).to receive(:record)
         .and_raise(Pgbus::Recurring::AlreadyRecorded)
 

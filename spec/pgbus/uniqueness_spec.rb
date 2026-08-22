@@ -8,7 +8,7 @@ RSpec.describe Pgbus::Uniqueness do
 
   before do
     uniqueness_key_class
-    allow(Pgbus::UniquenessKey).to receive_messages(acquire!: true, release!: 1, locked?: false)
+    allow(Pgbus::UniquenessKey).to receive_messages(acquire!: true, release!: 1, locked?: false, bind!: 1)
   end
 
   describe ".ensures_uniqueness" do
@@ -253,7 +253,23 @@ RSpec.describe Pgbus::Uniqueness do
       result = described_class.acquire_enqueue_lock("test-key", job)
       expect(result).to eq(:acquired)
       expect(Pgbus::UniquenessKey).to have_received(:acquire!).with(
-        "test-key", queue_name: "pending", msg_id: 0
+        "test-key", queue_name: described_class::PLACEHOLDER_QUEUE, msg_id: 0
+      )
+    end
+
+    it "uses the provided queue_name and leaves msg_id as 0 before produce" do
+      job_class = Class.new(ActiveJob::Base) do
+        include Pgbus::Uniqueness
+
+        ensures_uniqueness strategy: :until_executed, key: ->(*) { "k" }
+      end
+      stub_const("QueuedLockJob", job_class)
+      job = QueuedLockJob.new
+
+      result = described_class.acquire_enqueue_lock("test-key", job, queue_name: "critical")
+      expect(result).to eq(:acquired)
+      expect(Pgbus::UniquenessKey).to have_received(:acquire!).with(
+        "test-key", queue_name: "critical", msg_id: 0
       )
     end
 
@@ -294,6 +310,40 @@ RSpec.describe Pgbus::Uniqueness do
     it "does nothing for nil key" do
       described_class.release_lock(nil)
       expect(Pgbus::UniquenessKey).not_to have_received(:release!)
+    end
+  end
+
+  describe ".bind_lock" do
+    it "binds the lock to the produced queue and msg_id" do
+      described_class.bind_lock("test-key", queue_name: "critical", msg_id: 42)
+      expect(Pgbus::UniquenessKey).to have_received(:bind!).with(
+        "test-key", queue_name: "critical", msg_id: 42
+      )
+    end
+
+    it "does nothing for nil key" do
+      described_class.bind_lock(nil, queue_name: "critical", msg_id: 42)
+      expect(Pgbus::UniquenessKey).not_to have_received(:bind!)
+    end
+
+    it "does nothing when msg_id is not positive" do
+      described_class.bind_lock("test-key", queue_name: "critical", msg_id: 0)
+      expect(Pgbus::UniquenessKey).not_to have_received(:bind!)
+    end
+  end
+
+  describe ".placeholder?" do
+    it "is true for the synthetic pending queue regardless of msg_id" do
+      expect(described_class.placeholder?(queue_name: "pending", msg_id: 0)).to be(true)
+      expect(described_class.placeholder?(queue_name: "pending", msg_id: 9)).to be(true)
+    end
+
+    it "is true for msg_id 0 on a real queue" do
+      expect(described_class.placeholder?(queue_name: "default", msg_id: 0)).to be(true)
+    end
+
+    it "is false for a bound lock" do
+      expect(described_class.placeholder?(queue_name: "default", msg_id: 42)).to be(false)
     end
   end
 

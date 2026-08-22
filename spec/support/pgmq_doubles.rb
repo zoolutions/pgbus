@@ -65,6 +65,8 @@ module PgmqDoubles
         metrics: nil,
         pool_stats: { size: 5, available: 5, pool_timeout: 5 },
         list_queues: [],
+        uniqueness_keys_present: Set.new,
+        message_exists?: nil,
         purge_queue: nil,
         drop_queue: true,
         bind_topic: nil,

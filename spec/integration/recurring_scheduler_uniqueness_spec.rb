@@ -41,10 +41,12 @@ RSpec.describe "Recurring scheduler uniqueness (integration)", :integration do
       key = Pgbus::UniquenessKey.find_by(lock_key: "UniqueRecurringJob")
       expect(key).to be_present
       expect(key.queue_name).to eq("maintenance")
+      expect(key.msg_id).to be_positive
 
       # Message should be in the queue
       messages = Pgbus.client.read_batch("maintenance", qty: 10)
       expect(messages.size).to eq(1)
+      expect(key.msg_id).to eq(messages.first.msg_id.to_i)
 
       payload = JSON.parse(messages.first.message)
       expect(payload["job_class"]).to eq("UniqueRecurringJob")

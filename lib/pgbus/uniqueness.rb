@@ -10,9 +10,10 @@ module Pgbus
   # at any time — from enqueue through completion.
   #
   # Lock lifecycle (advisory lock + thin lookup table):
-  #   1. Enqueue: pg_advisory_xact_lock serializes concurrent attempts,
-  #      then INSERT INTO pgbus_uniqueness_keys ON CONFLICT DO NOTHING.
-  #      The lock row lives as long as the job is in the queue or executing.
+  #   1. Enqueue: INSERT INTO pgbus_uniqueness_keys ON CONFLICT DO NOTHING
+  #      (logical queue, msg_id=0). After send_message, bind! writes the
+  #      real msg_id. The lock row lives as long as the job is in the queue
+  #      or executing.
   #   2. Execution: PGMQ's visibility timeout is the execution lock —
   #      no separate claim_for_execution step needed.
   #   3. Completion/DLQ: DELETE FROM pgbus_uniqueness_keys WHERE lock_key = ?.
@@ -43,6 +44,10 @@ module Pgbus
 
     METADATA_KEY = "pgbus_uniqueness_key"
     STRATEGY_KEY = "pgbus_uniqueness_strategy"
+    # Synthetic queue stored before produce when the caller does not know the
+    # real queue yet. Never a live PGMQ queue — the reaper must not probe
+    # pgmq.q_<prefix>_pending for these rows (issue #418).
+    PLACEHOLDER_QUEUE = "pending"
 
     VALID_STRATEGIES = %i[until_executed while_executing].freeze
     VALID_CONFLICTS = %i[reject discard log].freeze
@@ -174,7 +179,7 @@ module Pgbus
                      UniquenessKey.acquire!(key, queue_name: queue_name, msg_id: msg_id)
                    else
                      # Pre-produce check: use advisory lock + ON CONFLICT
-                     UniquenessKey.acquire!(key, queue_name: queue_name || "pending", msg_id: msg_id || 0)
+                     UniquenessKey.acquire!(key, queue_name: queue_name || PLACEHOLDER_QUEUE, msg_id: msg_id || 0)
                    end
         acquired ? :acquired : :locked
       end
@@ -194,6 +199,23 @@ module Pgbus
         return unless key
 
         UniquenessKey.release!(key)
+      end
+
+      # Point a pre-produce lock at the real queue + PGMQ msg_id after send.
+      # No-op when key is nil or msg_id is not a positive integer (the reaper
+      # treats those rows as unbound and scans live queues instead).
+      def bind_lock(key, queue_name:, msg_id:)
+        return unless key
+        return unless msg_id.to_i.positive?
+
+        UniquenessKey.bind!(key, queue_name: queue_name, msg_id: msg_id)
+      end
+
+      # True when the uniqueness row is not yet bound to a real PGMQ message.
+      # Covers the synthetic pending queue and any msg_id=0 placeholder
+      # (recurring scheduler, bind-not-yet-run, bind failure).
+      def placeholder?(queue_name:, msg_id:)
+        msg_id.to_i <= 0 || queue_name.to_s == PLACEHOLDER_QUEUE
       end
     end
   end

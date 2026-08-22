@@ -29,7 +29,8 @@ module Pgbus
           payload = inject_uniqueness_metadata(task, payload)
 
           Pgbus.client.ensure_queue(queue)
-          Pgbus.client.send_message(queue, payload, headers: headers)
+          msg_id = Pgbus.client.send_message(queue, payload, headers: headers)
+          bind_uniqueness_lock(acquired_key, queue, msg_id)
 
           Pgbus.logger.info do
             "[Pgbus] Enqueued recurring task #{task.key} (#{task.class_name || task.command}) " \
@@ -157,6 +158,16 @@ module Pgbus
         end
         ErrorReporter.report(e, { action: "recurring_uniqueness_lock", task: task.key })
         :already_locked # Fail closed — skip enqueue when lock check errors
+      end
+
+      # Point the pre-produce lock at the real PGMQ msg_id. Fail-soft: a bind
+      # error must not roll back an already-produced message (issue #418).
+      def bind_uniqueness_lock(key, queue, msg_id)
+        return unless key.is_a?(String)
+
+        Uniqueness.bind_lock(key, queue_name: queue, msg_id: msg_id)
+      rescue StandardError => e
+        Pgbus.logger.warn { "[Pgbus] Uniqueness bind failed: #{e.message}" }
       end
 
       # Release a uniqueness lock. Safe to call with nil or :already_locked.

@@ -910,4 +910,88 @@ RSpec.describe Pgbus::Process::Dispatcher do
       end
     end
   end
+
+  describe "#reap_orphaned_uniqueness_keys (issue #418)" do
+    let(:delete_scope) { double("scope", delete_all: 1) }
+    let(:keys) { [] }
+
+    def lock(lock_key:, queue_name:, msg_id:, created_at: 10.minutes.ago)
+      double("UniquenessKey", lock_key: lock_key, queue_name: queue_name, msg_id: msg_id, created_at: created_at)
+    end
+
+    before do
+      allow(Pgbus::UniquenessKey).to receive_messages(all: keys, where: delete_scope)
+      allow(mock_client).to receive(:message_exists?)
+      allow(mock_client).to receive(:uniqueness_keys_present).and_return(Set.new)
+    end
+
+    it "reaps an aged pending/msg_id=0 lock when no live queue holds the key" do
+      orphan = lock(lock_key: "ERP::Manager", queue_name: "pending", msg_id: 0)
+      allow(Pgbus::UniquenessKey).to receive(:all).and_return([orphan])
+      allow(delete_scope).to receive(:delete_all).and_return(1)
+
+      reaped = dispatcher.send(:reap_orphaned_uniqueness_keys)
+
+      expect(reaped).to eq(1)
+      expect(mock_client).to have_received(:uniqueness_keys_present).with(["ERP::Manager"])
+      expect(mock_client).not_to have_received(:message_exists?)
+      expect(Pgbus::UniquenessKey).to have_received(:where).with(lock_key: ["ERP::Manager"])
+    end
+
+    it "does not reap an aged pending/msg_id=0 lock whose key is still in a real queue" do
+      inflight = lock(lock_key: "ERP::Manager", queue_name: "pending", msg_id: 0)
+      allow(Pgbus::UniquenessKey).to receive(:all).and_return([inflight])
+      allow(mock_client).to receive(:uniqueness_keys_present).and_return(Set["ERP::Manager"])
+
+      reaped = dispatcher.send(:reap_orphaned_uniqueness_keys)
+
+      expect(reaped).to eq(0)
+      expect(mock_client).not_to have_received(:message_exists?)
+      expect(Pgbus::UniquenessKey).not_to have_received(:where)
+    end
+
+    it "does not query the synthetic pending queue for msg_id=0 recurring locks" do
+      recurring = lock(lock_key: "RecurringJob", queue_name: "default", msg_id: 0)
+      allow(Pgbus::UniquenessKey).to receive(:all).and_return([recurring])
+      allow(mock_client).to receive(:uniqueness_keys_present).and_return(Set["RecurringJob"])
+
+      dispatcher.send(:reap_orphaned_uniqueness_keys)
+
+      expect(mock_client).to have_received(:uniqueness_keys_present).with(["RecurringJob"])
+      expect(mock_client).not_to have_received(:message_exists?)
+    end
+
+    it "uses msg_id lookup for bound locks and reaps when the message is gone" do
+      bound = lock(lock_key: "Orphan:gone", queue_name: "default", msg_id: 99)
+      allow(Pgbus::UniquenessKey).to receive(:all).and_return([bound])
+      allow(mock_client).to receive(:message_exists?)
+        .with("default", msg_id: 99, uniqueness_key: "Orphan:gone").and_return(false)
+      allow(delete_scope).to receive(:delete_all).and_return(1)
+
+      reaped = dispatcher.send(:reap_orphaned_uniqueness_keys)
+
+      expect(reaped).to eq(1)
+      expect(mock_client).not_to have_received(:uniqueness_keys_present)
+      expect(Pgbus::UniquenessKey).to have_received(:where).with(lock_key: ["Orphan:gone"])
+    end
+
+    it "keeps a bound lock when message_exists? returns nil (unknown)" do
+      bound = lock(lock_key: "Maybe", queue_name: "default", msg_id: 99)
+      allow(Pgbus::UniquenessKey).to receive(:all).and_return([bound])
+      allow(mock_client).to receive(:message_exists?)
+        .with("default", msg_id: 99, uniqueness_key: "Maybe").and_return(nil)
+
+      expect(dispatcher.send(:reap_orphaned_uniqueness_keys)).to eq(0)
+      expect(Pgbus::UniquenessKey).not_to have_received(:where)
+    end
+
+    it "does not reap locks newer than visibility_timeout * 2" do
+      recent = lock(lock_key: "Recent", queue_name: "pending", msg_id: 0, created_at: Time.current)
+      allow(Pgbus::UniquenessKey).to receive(:all).and_return([recent])
+
+      expect(dispatcher.send(:reap_orphaned_uniqueness_keys)).to eq(0)
+      expect(mock_client).not_to have_received(:uniqueness_keys_present)
+      expect(mock_client).not_to have_received(:message_exists?)
+    end
+  end
 end

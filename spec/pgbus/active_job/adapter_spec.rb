@@ -185,8 +185,14 @@ RSpec.describe Pgbus::ActiveJob::Adapter do
     before do
       allow(Pgbus::Uniqueness).to receive_messages(inject_metadata: uniqueness_payload, extract_key: "UniqJob-42")
       allow(Pgbus::Uniqueness).to receive(:uniqueness_config).and_return(uniqueness_config)
+      allow(Pgbus::Uniqueness).to receive(:bind_lock)
+      allow(Pgbus::Uniqueness).to receive(:release_lock)
       allow(job).to receive(:class).and_return(job_class_double)
       allow(mock_client).to receive(:send_message).and_return(42)
+    end
+
+    after do
+      Thread.current[:pgbus_acquired_uniqueness_key] = nil
     end
 
     it "rejects a FRESH duplicate (executions == 0) whose key is already held" do
@@ -206,6 +212,45 @@ RSpec.describe Pgbus::ActiveJob::Adapter do
 
       expect(mock_client).to have_received(:send_message)
       expect(Pgbus::Uniqueness).not_to have_received(:acquire_enqueue_lock)
+      expect(Pgbus::Uniqueness).not_to have_received(:bind_lock)
+    end
+
+    it "acquires against the logical queue and binds msg_id after send (issue #418)" do
+      allow(job).to receive(:executions).and_return(0)
+      allow(Pgbus::Uniqueness).to receive(:acquire_enqueue_lock).and_return(:acquired)
+
+      adapter.enqueue(job)
+
+      expect(Pgbus::Uniqueness).to have_received(:acquire_enqueue_lock).with(
+        "UniqJob-42", job, queue_name: "default"
+      )
+      expect(Pgbus::Uniqueness).to have_received(:bind_lock).with(
+        "UniqJob-42", queue_name: "default", msg_id: 42
+      )
+      expect(job).to have_received(:provider_job_id=).with(42)
+    end
+
+    it "does not bind when send_message fails, and rolls back the lock" do
+      allow(job).to receive(:executions).and_return(0)
+      allow(Pgbus::Uniqueness).to receive(:acquire_enqueue_lock).and_return(:acquired)
+      allow(mock_client).to receive(:send_message).and_raise(StandardError, "connection refused")
+
+      expect { adapter.enqueue(job) }.to raise_error(StandardError, "connection refused")
+      expect(Pgbus::Uniqueness).to have_received(:release_lock).with("UniqJob-42")
+      expect(Pgbus::Uniqueness).not_to have_received(:bind_lock)
+    end
+
+    it "still enqueues when bind_lock raises" do
+      allow(job).to receive(:executions).and_return(0)
+      allow(Pgbus::Uniqueness).to receive(:acquire_enqueue_lock).and_return(:acquired)
+      allow(Pgbus::Uniqueness).to receive(:bind_lock).and_raise(StandardError, "pooler timeout")
+      allow(Pgbus.logger).to receive(:warn)
+
+      result = adapter.enqueue(job)
+
+      expect(Pgbus::Uniqueness).to have_received(:bind_lock)
+      expect(result).to eq(job)
+      expect(job).to have_received(:provider_job_id=).with(42)
     end
 
     context "when inside a batch context" do

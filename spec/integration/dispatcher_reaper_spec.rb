@@ -26,7 +26,11 @@ RSpec.describe "Dispatcher uniqueness key reaper (integration)", :integration do
   describe "#reap_orphaned_uniqueness_keys" do
     context "when the message is still in the queue" do
       it "does NOT reap the lock even when older than visibility_timeout * 2" do
-        msg_id = Pgbus.client.send_message(queue_name, { "job_class" => "TestJob" })
+        msg_id = Pgbus.client.send_message(
+          queue_name,
+          { "job_class" => "TestJob",
+            Pgbus::Uniqueness::METADATA_KEY => "TestJob:still-running" }
+        )
         Pgbus::UniquenessKey.acquire!("TestJob:still-running", queue_name: queue_name, msg_id: msg_id)
 
         # Backdate the lock to simulate a long-running/failing job
@@ -62,6 +66,42 @@ RSpec.describe "Dispatcher uniqueness key reaper (integration)", :integration do
 
         # Cleanup
         Pgbus.client.archive_message(queue_name, msg_id)
+      end
+    end
+
+    context "when the lock is the synthetic pending/msg_id=0 shape (issue #418)" do
+      it "reaps an aged pending lock when no live queue carries the uniqueness key" do
+        Pgbus::UniquenessKey.acquire!("ERP::Manager", queue_name: "pending", msg_id: 0)
+        Pgbus::UniquenessKey.where(lock_key: "ERP::Manager")
+                            .update_all(created_at: 10.minutes.ago)
+
+        reaped = dispatcher.send(:reap_orphaned_uniqueness_keys)
+
+        expect(reaped).to eq(1)
+        expect(Pgbus::UniquenessKey.exists?(lock_key: "ERP::Manager")).to be(false)
+      end
+
+      it "does NOT reap an aged pending lock while a message on a real queue still holds the key" do
+        # In-flight :until_executed jobs currently look identical to leaked
+        # rows (pending/0). The message lives on the real queue (e.g. critical),
+        # not on pgmq.q_<prefix>_pending — treating UndefinedTable on that
+        # synthetic table as "gone" would unlock a running job.
+        Pgbus.client.ensure_queue("critical")
+        msg_id = Pgbus.client.send_message(
+          "critical",
+          { "job_class" => "HeartbeatJob",
+            Pgbus::Uniqueness::METADATA_KEY => "ERP::Manager" }
+        )
+        Pgbus::UniquenessKey.acquire!("ERP::Manager", queue_name: "pending", msg_id: 0)
+        Pgbus::UniquenessKey.where(lock_key: "ERP::Manager")
+                            .update_all(created_at: 10.minutes.ago)
+
+        reaped = dispatcher.send(:reap_orphaned_uniqueness_keys)
+
+        expect(reaped).to eq(0)
+        expect(Pgbus::UniquenessKey.exists?(lock_key: "ERP::Manager")).to be(true)
+
+        Pgbus.client.archive_message("critical", msg_id)
       end
     end
 
