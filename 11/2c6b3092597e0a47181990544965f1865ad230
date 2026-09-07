@@ -1,0 +1,21 @@
+spec/system/batches_spec.rb
+  s_8f8c3a5b2e257f::t_1d03ecf97083b3 54-80
+app/views/pgbus/batches/_progress.html.erb
+  s_8f8c3a5b2e257f::t_ca4906be4e0736 10,25,27
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "112c6b3092597e0a47181990544965f1865ad230",
+  "prompts": {},
+  "sessions": {
+    "s_8f8c3a5b2e257f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "71e63dce-1d86-44fb-8a03-54eaea3cb7aa",
+        "model": "claude-opus-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
