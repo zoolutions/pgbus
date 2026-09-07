@@ -332,6 +332,22 @@ task :release, %i[version force] do |_t, args|
   puts "    • Upload assets to the release"
 end
 
+namespace :frontend do
+  # app/frontend/pgbus/style.css is a committed build artifact — the engine ships
+  # it so host apps need no Node toolchain. Nothing rebuilds it automatically, so
+  # run this after adding a Tailwind class to a view; spec/pgbus/web/
+  # compiled_css_coverage_spec.rb fails the build if you forget.
+  desc "Recompile app/frontend/pgbus/style.css from the dashboard views"
+  task :css do
+    version = File.read("bun.lock")[/"tailwindcss@([\d.]+)"/, 1] or
+      abort "Could not read the tailwindcss version from bun.lock"
+
+    sh("bunx @tailwindcss/cli@#{version} " \
+       "-i app/frontend/pgbus/tailwind.css " \
+       "-o app/frontend/pgbus/style.css --minify")
+  end
+end
+
 namespace :dummy do
   desc "Start dummy app with stub data for dashboard QA (PORT=3003, no database required)"
   task :server do

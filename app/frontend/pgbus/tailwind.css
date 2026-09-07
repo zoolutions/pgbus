@@ -1,4 +1,13 @@
-@import "tailwindcss";
+@import "tailwindcss" source(none);
+
+/* Explicit sources. Automatic detection would walk the whole repo (docs/ is a
+   nested Rails app with its own Tailwind build), so the dashboard names exactly
+   the files whose classes belong in style.css. Paths are relative to this file.
+   Rebuild with `bundle exec rake frontend:css` after touching any of them. */
+@source "../../views/**/*.erb";
+@source "../../helpers/**/*.rb";
+@source "./application.js";
+@source "./modules/**/*.js";
 
 @custom-variant dark (&:where(.dark, .dark *));
 

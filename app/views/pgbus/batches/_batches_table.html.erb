@@ -1,4 +1,4 @@
-<turbo-frame id="batches-list">
+<turbo-frame id="batches-list" data-auto-refresh data-src="<%= pgbus.batches_path(frame: 'list') %>">
   <div class="overflow-hidden rounded-lg bg-white dark:bg-gray-800 shadow ring-1 ring-gray-200 dark:ring-gray-700">
     <table class="pgbus-table min-w-full divide-y divide-gray-200 dark:divide-gray-700">
       <thead class="bg-gray-50 dark:bg-gray-900">

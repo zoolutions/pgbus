@@ -9,7 +9,9 @@ module Pgbus
 
     def show
       @batch = data_source.batch_detail(params[:id])
-      redirect_to batches_path, alert: t("pgbus.batches.show.not_found") unless @batch
+      return redirect_to batches_path, alert: t("pgbus.batches.show.not_found") unless @batch
+
+      render_frame("pgbus/batches/progress") if params[:frame] == "progress"
     end
   end
 end
