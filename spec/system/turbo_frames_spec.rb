@@ -37,6 +37,38 @@ RSpec.describe "Turbo Frames", type: :system do
     expect(page).to have_css("turbo-frame#dlq-messages")
   end
 
+  it "batches index has an auto-refreshing turbo-frame" do
+    visit "/pgbus/batches"
+
+    expect(page).to have_css("turbo-frame#batches-list[data-auto-refresh]")
+  end
+
+  # A batch detail page is watched while the batch drains, so the counters and
+  # the progress bar have to move without a manual reload.
+  context "with a batch in flight" do
+    before do
+      @stub_data_source.batch_detail_hash = {
+        batch_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890", description: "Backfill",
+        status: "processing", total_jobs: 807, completed_jobs: 483, failed_jobs: 0,
+        pending_jobs: 324, progress_pct: 59, properties: nil,
+        created_at: Time.current, finished_at: nil
+      }
+    end
+
+    it "batch show has an auto-refreshing progress turbo-frame" do
+      visit "/pgbus/batches/a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+
+      expect(page).to have_css("turbo-frame#batch-progress[data-auto-refresh]")
+    end
+
+    it "batch progress frame endpoint returns only the partial" do
+      visit "/pgbus/batches/a1b2c3d4-e5f6-7890-abcd-ef1234567890?frame=progress"
+
+      expect(page).to have_css("turbo-frame#batch-progress")
+      expect(page).to have_no_css("nav")
+    end
+  end
+
   it "dashboard frame endpoint returns only the partial" do
     visit "/pgbus?frame=stats"
 
