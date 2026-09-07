@@ -51,6 +51,33 @@ RSpec.describe "Batches", type: :system do
     end
   end
 
+  # dt/dd are only valid inside a dl. The Details card below already does this;
+  # the progress cells were carried over from show.html.erb without it.
+  it "wraps the stat cells in a description list" do
+    visit "/pgbus/batches/#{in_flight[:batch_id]}"
+
+    expect(page).to have_css("turbo-frame#batch-progress dl > div > dt")
+    expect(page).to have_no_css("turbo-frame#batch-progress dt:not(dl dt)")
+  end
+
+  # config.web_data_source is a public extension point and the dummy QA source
+  # already omits :pending_jobs, so the view's fallback is live code — it just
+  # has to clamp the way Web::DataSource#format_batch does. Counters can exceed
+  # total_jobs while an open batch is still publishing total_jobs (issue #423).
+  context "with a data source that omits pending_jobs" do
+    before do
+      @stub_data_source.batch_detail_hash = in_flight.except(:pending_jobs).merge(
+        total_jobs: 2, completed_jobs: 3, failed_jobs: 0
+      )
+    end
+
+    it "never renders a negative remainder" do
+      visit "/pgbus/batches/#{in_flight[:batch_id]}"
+
+      within("turbo-frame#batch-progress") { expect(page).to have_no_content("-1") }
+    end
+  end
+
   it "shows the job counters" do
     visit "/pgbus/batches/#{in_flight[:batch_id]}"
 

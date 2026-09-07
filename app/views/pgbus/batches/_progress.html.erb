@@ -7,7 +7,7 @@
            style="width: <%= @batch[:progress_pct] %>%"></div>
     </div>
 
-    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+    <dl class="grid grid-cols-2 sm:grid-cols-4 gap-4">
       <div>
         <dt class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase"><%= t("pgbus.batches.show.total_jobs") %></dt>
         <dd class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white font-mono"><%= @batch[:total_jobs] %></dd>
@@ -22,8 +22,8 @@
       </div>
       <div>
         <dt class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase"><%= t("pgbus.batches.show.remaining") %></dt>
-        <dd class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white font-mono"><%= @batch[:pending_jobs] || (@batch[:total_jobs] - @batch[:completed_jobs] - @batch[:failed_jobs]) %></dd>
+        <dd class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white font-mono"><%= @batch[:pending_jobs] || [@batch[:total_jobs] - @batch[:completed_jobs] - @batch[:failed_jobs], 0].max %></dd>
       </div>
-    </div>
+    </dl>
   </div>
 </turbo-frame>
