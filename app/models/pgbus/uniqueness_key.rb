@@ -70,6 +70,22 @@ module Pgbus
       )
     end
 
+    # Release a lock only while it still points at this message. Used by the
+    # executor when it finds its message already archived by another worker:
+    # the :while_executing lock it took belongs to this attempt and has to go
+    # back, but an unconditional key-only DELETE could drop a successor that
+    # has since acquired the same key.
+    # PGMQ message ids are per-queue sequences, so a msg_id alone is not an
+    # identity: the same number addresses a different message on every other
+    # queue. The queue is part of the match.
+    def self.release_if_bound!(lock_key, queue_name:, msg_id:)
+      Thread.current[:pgbus_uniqueness_created_at]&.delete(lock_key)
+      connection.exec_delete(
+        "DELETE FROM #{table_name} WHERE lock_key = $1 AND queue_name = $2 AND msg_id = $3",
+        "UniquenessKey Release If Bound", [lock_key, queue_name.to_s, msg_id.to_i]
+      )
+    end
+
     # Check if a key is currently locked.
     def self.locked?(lock_key)
       result = connection.select_value(

@@ -94,24 +94,17 @@ RSpec.describe "Timezone handling (integration)", :integration do
   describe "Blocked execution expiration" do
     before { Pgbus::BlockedExecution.delete_all }
 
-    it "correctly identifies expired blocked executions" do
+    # A parked job never ages out: `expires_at` orders the sweep, it does
+    # not drop rows. Whatever the clock says, the row is still released.
+    it "still releases a blocked execution whose expires_at is in the past" do
       Pgbus::Concurrency::BlockedExecution.insert(
         concurrency_key: "tz-key", queue_name: "default",
         payload: { "job_class" => "TestJob" }, duration: -1
       )
 
-      count = Pgbus::Concurrency::BlockedExecution.expire_stale
-      expect(count).to eq(1)
-    end
-
-    it "does not prematurely expire active blocked executions" do
-      Pgbus::Concurrency::BlockedExecution.insert(
-        concurrency_key: "tz-active", queue_name: "default",
-        payload: { "job_class" => "TestJob" }, duration: 300
-      )
-
-      count = Pgbus::Concurrency::BlockedExecution.expire_stale
-      expect(count).to eq(0)
+      released = Pgbus::BlockedExecution.release_next!("tz-key")
+      expect(released).not_to be_nil
+      expect(Pgbus::BlockedExecution.where(concurrency_key: "tz-key").count).to eq(0)
     end
 
     it "round-trips expires_at correctly through AR" do

@@ -96,6 +96,48 @@ RSpec.describe Pgbus::VisibilityHeartbeat do
       expect(client).to have_received(:set_visibility_timeout).with("pgbus_default_p1", 7, vt: 30, prefixed: false)
     end
 
+    it "keeps a concurrency-limited job's semaphore alive on every extension" do
+      allow(Pgbus::Concurrency::Semaphore).to receive(:touch)
+
+      track(concurrency: ["ImportJob-42", 600]) do
+        described_class.tick!(now: Process.clock_gettime(Process::CLOCK_MONOTONIC) + 10, config: config)
+      end
+
+      expect(Pgbus::Concurrency::Semaphore).to have_received(:touch).with("ImportJob-42", 600).once
+    end
+
+    # The touch runs between the VT extension and the instrumentation, and
+    # extend!'s outer rescue would swallow an escaping raise — so asserting
+    # only "set_visibility_timeout ran" passes even with the containment
+    # removed. Assert what actually distinguishes the two paths: the
+    # semaphore-specific warn, and that the beat still completes.
+    it "contains a failing semaphore touch instead of aborting the beat" do
+      allow(Pgbus::Concurrency::Semaphore).to receive(:touch).and_raise(StandardError, "pooler timeout")
+      logger = instance_double(Logger, warn: nil, debug: nil, info: nil, error: nil)
+      allow(Pgbus).to receive(:logger).and_return(logger)
+      allow(ActiveSupport::Notifications).to receive(:instrument).and_call_original
+
+      track(concurrency: ["ImportJob-42", 600]) do
+        described_class.tick!(now: Process.clock_gettime(Process::CLOCK_MONOTONIC) + 10, config: config)
+      end
+
+      expect(client).to have_received(:set_visibility_timeout).once
+      expect(logger).to have_received(:warn) do |&block|
+        expect(block.call).to include("could not touch semaphore ImportJob-42")
+      end
+      # The beat ran to completion: instrumentation is emitted after the touch.
+      expect(ActiveSupport::Notifications).to have_received(:instrument)
+        .with("pgbus.job_visibility_extended", hash_including(extensions: 1))
+    end
+
+    it "does not touch any semaphore for a job without a concurrency key" do
+      allow(Pgbus::Concurrency::Semaphore).to receive(:touch)
+
+      track { described_class.tick!(now: Process.clock_gettime(Process::CLOCK_MONOTONIC) + 10, config: config) }
+
+      expect(Pgbus::Concurrency::Semaphore).not_to have_received(:touch)
+    end
+
     it "instruments every extension" do
       allow(ActiveSupport::Notifications).to receive(:instrument).and_call_original
 

@@ -24,8 +24,10 @@ module Pgbus
   # cadence with `config.visibility_heartbeat_interval`, or opt a job class
   # out with `pgbus_visibility_heartbeat false`.
   module VisibilityHeartbeat
+    # `concurrency` is `[key, duration]` for a concurrency-limited job, else
+    # nil — one member, so the struct stays inside an 80-byte slot.
     Entry = Struct.new(:client, :queue_name, :prefixed, :msg_id, :job_class, :extended_at, :extensions,
-                       keyword_init: true)
+                       :concurrency, keyword_init: true)
 
     # Per-job opt-out, included on ActiveJob::Base by the engine:
     #
@@ -55,11 +57,15 @@ module Pgbus
       # @param prefixed [Boolean] whether queue_name still needs the prefix
       # @param job_class [String, nil] for logging and instrumentation
       # @param config [Pgbus::Configuration]
-      def track(client:, queue_name:, msg_id:, prefixed: true, job_class: nil, config: Pgbus.configuration)
+      # @param concurrency [Array(String, Numeric), nil] semaphore key to keep alive alongside
+      #   the message and how far to push its expiry on each beat
+      def track(client:, queue_name:, msg_id:, prefixed: true, job_class: nil, config: Pgbus.configuration,
+                concurrency: nil)
         return yield unless config.visibility_heartbeat
 
         entry = Entry.new(client: client, queue_name: queue_name, prefixed: prefixed, msg_id: msg_id.to_i,
-                          job_class: job_class, extended_at: monotonic_now, extensions: 0)
+                          job_class: job_class, extended_at: monotonic_now, extensions: 0,
+                          concurrency: concurrency)
         register(entry, config)
         begin
           yield
@@ -123,6 +129,7 @@ module Pgbus
         entry.client.set_visibility_timeout(entry.queue_name, entry.msg_id, vt: vt, prefixed: entry.prefixed)
         entry.extended_at = now
         entry.extensions += 1
+        touch_semaphore(entry)
         Instrumentation.instrument(
           "pgbus.job_visibility_extended",
           queue: entry.queue_name, job_class: entry.job_class, msg_id: entry.msg_id, vt: vt,
@@ -165,6 +172,20 @@ module Pgbus
 
       # Entries registered before a fork belong to the parent's jobs; the
       # thread did not survive the fork either.
+      # A live holder keeps its semaphore from being swept, so `duration`
+      # bounds heartbeat silence rather than run time. Its own rescue: a
+      # failed touch must not cost the message its visibility extension.
+      def touch_semaphore(entry)
+        key, duration = entry.concurrency
+        return unless key
+
+        Concurrency::Semaphore.touch(key, duration || Concurrency::DEFAULT_DURATION)
+      rescue StandardError => e
+        Pgbus.logger.warn do
+          "[Pgbus::VisibilityHeartbeat] could not touch semaphore #{key}: #{e.class}: #{e.message}"
+        end
+      end
+
       def forget_parent_entries!
         return if @pid == ::Process.pid
 

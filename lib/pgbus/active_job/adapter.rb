@@ -70,17 +70,40 @@ module Pgbus
         priority = active_job.try(:priority)
         msg_id = nil
         blocked = false
+        # Only a failure raised from inside the produce can be ambiguous.
+        # Everything before it — taking the slot, parking the job — proves no
+        # message exists, however database-shaped the error looks. Never
+        # reset: once the send returns, msg_id is set and the rescue routes
+        # on that instead.
+        sending = false
 
         if key && concurrency
-          result = Concurrency::Semaphore.acquire(key, concurrency[:limit], concurrency[:duration])
+          # The check and the park commit together, under the semaphore row
+          # lock the upsert holds even when it reports :blocked — so a holder
+          # signalling right now waits and then sees the parked row instead
+          # of stranding it (rails/solid_queue#712).
+          acquired = false
+          Pgbus::Semaphore.transaction(requires_new: true) do
+            acquired = Concurrency::Semaphore.acquire(key, concurrency[:limit], slot_lease(concurrency, delay)) ==
+                       :acquired
+            blocked = handle_conflict(concurrency, active_job, key, queue, payload_hash, priority: priority) unless
+              acquired
+          end
 
-          if result == :acquired
-            msg_id = Pgbus.client.send_message(queue, payload_hash, delay: delay, priority: priority)
+          if acquired
+            # Deliberately AFTER the commit. PGMQ has its own connection, so
+            # the send can never join this transaction; sending first would
+            # mean a failed commit leaves the message live with the slot
+            # rolled back, and the next enqueue runs beside it. This way the
+            # only crash window leaves a slot held with no message — the
+            # sweep reclaims it, and until then the key is under-admitted,
+            # never over-admitted.
+            sending = true
+            msg_id = send_holding_slot(key, queue, payload_hash, delay: delay, priority: priority)
             active_job.provider_job_id = msg_id
-          else
-            blocked = handle_conflict(concurrency, active_job, key, queue, payload_hash, priority: priority)
           end
         else
+          sending = true
           msg_id = Pgbus.client.send_message(queue, payload_hash, delay: delay, priority: priority)
           active_job.provider_job_id = msg_id
         end
@@ -97,16 +120,67 @@ module Pgbus
         Thread.current[:pgbus_acquired_uniqueness_key] = nil
         active_job
       rescue StandardError => e
-        if msg_id.nil?
+        # An ambiguous send is treated exactly like a live message: the
+        # produce may have committed with only its reply lost, and undoing
+        # the bookkeeping for a message that is in fact live is the worse
+        # error — it would leave that job running with no uniqueness lock and
+        # uncounted by its batch. A batch left waiting for a job that never
+        # existed is recovered by the stalled-batch sweep; a batch that
+        # finishes early and fires its callback is not recoverable. The
+        # `sending` guard keeps that reprieve to the produce itself: a
+        # database error from the slot upsert or the park is not ambiguous.
+        if msg_id.nil? && !(sending && ambiguous_delivery?(e))
           rollback_acquired_uniqueness_lock
           uncount_batch_job(payload_hash)
         else
-          # Message is live: drop the thread-local so a later discard on this
-          # thread cannot release that job's uniqueness lock, but do not
-          # DELETE the pgbus_uniqueness_keys row.
+          # Drop the thread-local so a later discard on this thread cannot
+          # release that job's uniqueness lock, but do not DELETE the
+          # pgbus_uniqueness_keys row.
           Thread.current[:pgbus_acquired_uniqueness_key] = nil
         end
         raise e
+      end
+
+      # True when a failure raised from inside the produce reached the
+      # database, so the message may have been written even though the reply
+      # did not come back. Deliberately an over-approximation: the client's
+      # pre-produce queue setup is inside the same call, so its connection
+      # errors are counted as ambiguous too. That errs toward keeping a lock
+      # and a batch count the reapers can reclaim, rather than dropping
+      # bookkeeping for a message that turns out to be live.
+      def ambiguous_delivery?(error)
+        (defined?(PGMQ::Errors::ConnectionError) && error.is_a?(PGMQ::Errors::ConnectionError)) ||
+          (defined?(PG::Error) && error.is_a?(PG::Error))
+      end
+
+      # A slot is leased for `duration` of silence, but the visibility
+      # heartbeat that renews it only starts once a worker picks the message
+      # up. A scheduled job waits in PGMQ until then, so its lease has to
+      # cover the delay as well or the sweep expires it mid-wait and promotes
+      # a second job for the same key.
+      def slot_lease(concurrency, delay)
+        Concurrency.effective_duration(concurrency[:duration]) + delay.to_i
+      end
+
+      # Hand the slot back only when the failure proves nothing was
+      # produced. On an ambiguous outcome the message may well be live, and
+      # releasing would admit a second job beside it — so the hold stands
+      # and the lease expiry plus the dispatcher's sweep reclaim it.
+      def send_holding_slot(key, queue, payload_hash, delay:, priority:)
+        Pgbus.client.send_message(queue, payload_hash, delay: delay, priority: priority)
+      rescue StandardError => e
+        if ambiguous_delivery?(e)
+          Pgbus.logger.warn do
+            "[Pgbus] Send outcome unknown for #{key}; holding its concurrency slot until the lease expires: #{e.message}"
+          end
+        else
+          begin
+            Concurrency::Semaphore.release(key)
+          rescue StandardError => release_error
+            Pgbus.logger.warn { "[Pgbus] Could not release concurrency slot after failed send: #{release_error.message}" }
+          end
+        end
+        raise
       end
 
       def physical_queue(queue, priority)

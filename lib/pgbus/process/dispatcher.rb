@@ -355,23 +355,16 @@ module Pgbus
       end
 
       def cleanup_concurrency
-        expired_keys = Concurrency::Semaphore.expire_stale
-        expired_keys.each do |row|
-          release_blocked_for_key(row["key"])
-        end
+        expired = Concurrency::Semaphore.expire_stale
+        Pgbus.logger.debug { "[Pgbus] Swept #{expired.size} expired semaphores" } if expired.any?
 
-        orphaned = Concurrency::BlockedExecution.expire_stale
-        Pgbus.logger.debug { "[Pgbus] Expired #{orphaned} orphaned blocked executions" } if orphaned.positive?
+        # A parked job is never dropped: the sweep only promotes what can take
+        # a slot now — behind a swept semaphore or a promote that failed.
+        promoted = Concurrency::BlockedExecution.promote_pending(client: Pgbus.client)
+        Pgbus.logger.debug { "[Pgbus] Promoted #{promoted} blocked executions" } if promoted.positive?
       rescue StandardError => e
         log_maintenance_failure("Concurrency cleanup", e)
         e
-      end
-
-      def release_blocked_for_key(key)
-        promoted = Concurrency::BlockedExecution.promote_next(key, client: Pgbus.client)
-        Pgbus.logger.debug { "[Pgbus] Released blocked execution for key: #{key}" } if promoted
-      rescue StandardError => e
-        log_maintenance_failure("Releasing blocked execution for #{key}", e)
       end
 
       def cleanup_batches

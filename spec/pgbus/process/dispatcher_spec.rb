@@ -232,24 +232,32 @@ RSpec.describe Pgbus::Process::Dispatcher do
   end
 
   describe "#cleanup_concurrency (private)" do
-    it "expires stale semaphores and promotes blocked executions" do
+    it "sweeps expired semaphores and promotes every parked job that can take a slot" do
       allow(Pgbus::Concurrency::Semaphore).to receive(:expire_stale).and_return([{ "key" => "TestJob-42" }])
-      allow(Pgbus::Concurrency::BlockedExecution).to receive_messages(expire_stale: 0, promote_next: false)
+      allow(Pgbus::Concurrency::BlockedExecution).to receive(:promote_pending).and_return(1)
 
       dispatcher.send(:cleanup_concurrency)
 
       expect(Pgbus::Concurrency::Semaphore).to have_received(:expire_stale)
-      expect(Pgbus::Concurrency::BlockedExecution).to have_received(:promote_next).with("TestJob-42", client: mock_client)
-      expect(Pgbus::Concurrency::BlockedExecution).to have_received(:expire_stale)
+      expect(Pgbus::Concurrency::BlockedExecution).to have_received(:promote_pending).with(client: mock_client)
     end
 
-    it "promotes blocked executions atomically" do
+    # A parked job is never dropped on a timer: the only way out of
+    # pgbus_blocked_executions is promotion. Assert the invariant on the
+    # model itself — no deletion of any shape — not merely that the old
+    # expire_stale helper is gone.
+    it "never deletes parked jobs, whatever shape the deletion would take" do
       allow(Pgbus::Concurrency::Semaphore).to receive(:expire_stale).and_return([{ "key" => "TestJob-42" }])
-      allow(Pgbus::Concurrency::BlockedExecution).to receive_messages(expire_stale: 0, promote_next: true)
+      allow(Pgbus::Concurrency::BlockedExecution).to receive(:promote_pending).and_return(0)
+      %i[delete_all destroy_all delete_by destroy_by].each do |deletion|
+        allow(Pgbus::BlockedExecution).to receive(deletion).and_return(0)
+      end
 
       dispatcher.send(:cleanup_concurrency)
 
-      expect(Pgbus::Concurrency::BlockedExecution).to have_received(:promote_next).with("TestJob-42", client: mock_client)
+      %i[delete_all destroy_all delete_by destroy_by].each do |deletion|
+        expect(Pgbus::BlockedExecution).not_to have_received(deletion)
+      end
     end
 
     it "rescues errors gracefully" do

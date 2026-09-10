@@ -103,11 +103,53 @@ class Views::Docs::Pages::ConcurrencyUniqueness < DocsUI::Page
       DocsUI::Table(
         [ "on_conflict", "Behavior" ],
         [
-          [ [ :code, ":block" ], "Hold in a blocked queue; released when a slot opens or the semaphore expires." ],
+          [ [ :code, ":block" ], "Park the job; promoted the moment a slot frees. Never dropped, however long it waits." ],
           [ [ :code, ":discard" ], "Silently drop the job." ],
           [ [ :code, ":raise" ], [ :md, "Raise `Pgbus::ConcurrencyLimitExceeded`." ] ]
         ]
       )
+      md <<~'MD'
+        `:block` is the option to reach for when a job must be **constrained
+        without being lost** — a per-record pipeline that may only run one
+        at a time but must run for every enqueue. Uniqueness cannot do that:
+        every `ensures_uniqueness` conflict drops or rejects the duplicate.
+
+        The guarantees behind `:block`:
+
+        - **A parked job never ages out.** The only way out of
+          `pgbus_blocked_executions` is promotion, so a park that outlives
+          `duration` is still promoted when its slot frees.
+        - **A promotion always takes a real slot.** The finishing job
+          releases its slot and hands it to the next parked job in one
+          transaction; the dispatcher's sweep promotes behind a dead holder
+          the same way. Neither can push a key past `to:`.
+        - **A job parked while the holder is finishing is promoted, not
+          stranded.** The semaphore check and the park commit together under
+          the semaphore's row lock, so a concurrent release waits and then
+          sees the parked row.
+        - **A duplicate delivery never releases a slot twice.** Archiving the
+          message is the exact-once claim; a worker whose message was already
+          archived elsewhere (its heartbeat lapsed) skips the release.
+      MD
+      DocsUI::Callout(:info) do
+        plain "`duration` bounds silence, not run time. A slot is taken at enqueue "
+        plain "and its lease is renewed by the visibility heartbeat once a worker "
+        plain "picks the message up, so a job that runs for an hour keeps its slot "
+        plain "for an hour, and a holder whose process died is presumed dead "
+        plain "`duration` after its last beat. A scheduled job's lease covers its "
+        plain "delay too. `duration` is floored at twice the heartbeat interval, so "
+        plain "a lease can never expire before the first beat."
+      end
+      DocsUI::Callout(:warning) do
+        plain "One window the lease cannot cover: nothing renews it between enqueue "
+        plain "and the moment a worker picks the message up. A scheduled job's delay "
+        plain "is added to its lease, but a queue backed up for longer than "
+        plain "`duration` — or, at the very edge, a produce that stalls that long — "
+        plain "can leave a waiting holder presumed dead and a second job promoted for "
+        plain "the same key. The produce is bounded well under any sane `duration` by "
+        plain "the client's statement and TCP timeouts; the queue wait is yours to "
+        plain "size. Set `duration` above the worst queue wait you tolerate."
+      end
     end
   end
 

@@ -7,11 +7,20 @@ module Pgbus
     module BlockedExecution
       class << self
         # Insert a blocked execution for a job that hit the concurrency limit.
+        #
+        # `expires_at` is a re-check hint for the sweep's ordering only — a
+        # parked job is never deleted for being old. The only way out of the
+        # table is promotion.
+        #
+        # The payload goes in as a Hash: the jsonb attribute serializes it
+        # once. Handing it a pre-serialized String stored a JSON *string*
+        # (double-encoded), which every document reader of the column —
+        # `payload->>'job_id'`, the job-class lookup, `scheduled_at` — misread.
         def insert(concurrency_key:, queue_name:, payload:, duration:, priority: 0)
           Pgbus::BlockedExecution.create!(
             concurrency_key: concurrency_key,
             queue_name: queue_name,
-            payload: JSON.generate(payload),
+            payload: payload,
             priority: priority,
             expires_at: Time.current + duration
           )
@@ -23,42 +32,53 @@ module Pgbus
           Pgbus::BlockedExecution.release_next!(concurrency_key)
         end
 
-        # Atomically promote the next blocked execution: delete the row and enqueue
-        # the job in a single transaction. Returns true if a job was promoted, false
-        # otherwise. This avoids losing a blocked row if enqueue fails.
+        # Atomically promote the next blocked execution: delete the row, take a
+        # semaphore slot for it and enqueue the job in a single transaction.
+        # Returns true if a job was promoted, false otherwise.
+        #
+        # The slot is taken through the same guarded upsert an enqueue uses,
+        # so a promotion can never push the key past its limit; when no slot
+        # is free the savepoint rolls back and the row stays parked. Runs as a
+        # savepoint so `Semaphore.signal` can wrap it with the release.
         def promote_next(concurrency_key, client:, delay: 0)
           released = nil
           msg_id = nil
-          Pgbus::BlockedExecution.transaction do
+          Pgbus::BlockedExecution.transaction(requires_new: true) do
             released = release_next(concurrency_key)
             raise ActiveRecord::Rollback unless released
 
+            # Resolve the delay first: a parked scheduled job goes back into
+            # PGMQ invisible, and nothing renews its lease until a worker
+            # picks it up, so the wait has to be part of the lease.
             actual_delay = resolve_delay(released[:payload], delay)
+            raise ActiveRecord::Rollback unless slot_taken?(concurrency_key, released[:payload], actual_delay)
+
             # Carry the enqueuer's priority through: under priority routing it
             # picks the _pN sub-queue, not just the release order (issue #423).
             msg_id = client.send_message(released[:queue_name], released[:payload],
                                          delay: actual_delay, priority: released[:priority])
           end
 
-          if released && msg_id
-            begin
-              Batch.backfill_execution(released[:payload], msg_id,
-                                       client.target_queue(released[:queue_name], released[:priority]))
-            rescue StandardError => e
-              Pgbus.logger.warn { "[Pgbus] Batch execution backfill failed after promote: #{e.message}" }
-            end
-          end
+          return false unless released && msg_id
 
-          !!released
+          backfill(released, msg_id, client)
+          true
         rescue StandardError => e
           Pgbus.logger.warn { "[Pgbus] Promote blocked execution failed for #{concurrency_key}: #{e.message}" }
           false
         end
 
-        # Delete blocked executions that have expired.
-        # Returns the count of deleted rows.
-        def expire_stale
-          Pgbus::BlockedExecution.expired(Time.current).delete_all
+        # Sweep: promote every parked job that can take a slot right now.
+        # Covers what the completion-time signal cannot — a holder that died
+        # (its semaphore expired and was swept) or a promote that failed.
+        # Returns the number of jobs promoted.
+        def promote_pending(client:, per_key: 100)
+          Pgbus::BlockedExecution.repair_double_encoded!
+          Pgbus::BlockedExecution.promotable_keys.sum do |key|
+            promoted = 0
+            promoted += 1 while promoted < per_key && promote_next(key, client: client)
+            promoted
+          end
         end
 
         # Count blocked executions for a given key. Useful for testing/monitoring.
@@ -67,6 +87,27 @@ module Pgbus
         end
 
         private
+
+        # The batch execution row is bookkeeping, not the promotion. Give it
+        # its own savepoint: `Semaphore.signal` calls promote_next inside a
+        # transaction, and a database error out here would poison that
+        # transaction — the commit then fails, un-deleting the parked row and
+        # un-taking the slot while the message is already live, so the job
+        # runs a second time.
+        def backfill(released, msg_id, client)
+          Pgbus::BlockedExecution.transaction(requires_new: true) do
+            Batch.backfill_execution(released[:payload], msg_id,
+                                     client.target_queue(released[:queue_name], released[:priority]))
+          end
+        rescue StandardError => e
+          Pgbus.logger.warn { "[Pgbus] Batch execution backfill failed after promote: #{e.message}" }
+        end
+
+        def slot_taken?(concurrency_key, payload, delay = 0)
+          config = Concurrency.config_for_payload(payload)
+          expires_at = Time.current + Concurrency.effective_duration(config[:duration]) + delay.to_i
+          Pgbus::Semaphore.acquire!(concurrency_key, config[:limit], expires_at) == :acquired
+        end
 
         def resolve_delay(payload, default_delay)
           scheduled_at = payload["scheduled_at"]

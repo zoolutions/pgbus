@@ -25,6 +25,7 @@ RSpec.describe Pgbus::ActiveJob::Adapter do
 
   before do
     allow(Pgbus).to receive(:client).and_return(mock_client)
+    allow(Pgbus::Semaphore).to receive(:transaction).and_yield
     allow(Pgbus::Serializer).to receive(:serialize_job_hash).and_return(serialized_hash)
   end
 
@@ -195,6 +196,122 @@ RSpec.describe Pgbus::ActiveJob::Adapter do
         duration: 900
       )
       expect(mock_client).not_to have_received(:send_message)
+    end
+
+    # rails/solid_queue#712: the semaphore check and the park must commit
+    # together, holding the semaphore row lock in between, so a holder that
+    # signals concurrently waits and then sees the parked job.
+    it "parks the job inside the transaction that saw the semaphore full" do
+      allow(Pgbus::Concurrency::Semaphore).to receive(:acquire).and_return(:blocked)
+      allow(Pgbus::Concurrency::BlockedExecution).to receive(:insert)
+      allow(job).to receive(:try).with(:priority).and_return(0)
+      in_transaction = []
+      allow(Pgbus::Semaphore).to receive(:transaction) do |&block|
+        in_transaction << :open
+        block.call.tap { in_transaction << :closed }
+      end
+      allow(Pgbus::Concurrency::BlockedExecution).to receive(:insert) { in_transaction << :parked }
+
+      adapter.enqueue(job)
+
+      expect(in_transaction).to eq(%i[open parked closed])
+    end
+
+    # A crash between COMMIT and the PGMQ produce leaks a slot (recovered by
+    # the sweep); a crash the other way round — message live, slot rolled
+    # back — would let the next enqueue run beside it. Send after commit, so
+    # the only reachable failure is the safe one.
+    it "sends the message only after the slot transaction has committed" do
+      allow(Pgbus::Concurrency::Semaphore).to receive(:acquire).and_return(:acquired)
+      allow(mock_client).to receive(:send_message).and_return(42)
+      order = []
+      allow(Pgbus::Semaphore).to receive(:transaction) do |&block|
+        order << :begin
+        block.call
+        order << :commit
+      end
+      allow(Pgbus::Concurrency::Semaphore).to receive(:acquire) {
+        order << :acquire
+        :acquired
+      }
+      allow(mock_client).to receive(:send_message) {
+        order << :send
+        42
+      }
+
+      adapter.enqueue(job)
+
+      expect(order).to eq(%i[begin acquire commit send])
+    end
+
+    it "releases the acquired slot when the send fails before reaching the database" do
+      allow(Pgbus::Concurrency::Semaphore).to receive_messages(acquire: :acquired, release: nil)
+      allow(mock_client).to receive(:send_message).and_raise(ArgumentError, "bad payload")
+
+      expect { adapter.enqueue(job) }.to raise_error(ArgumentError, "bad payload")
+
+      expect(Pgbus::Concurrency::Semaphore).to have_received(:release).with("TestJob-42")
+    end
+
+    # A connection error can arrive after the produce has already committed.
+    # Releasing the slot then admits a second job beside a live message, and
+    # rolling the uniqueness lock back leaves that message unguarded — so an
+    # ambiguous outcome keeps everything and lets the lease expire instead.
+    it "keeps the slot and the uniqueness lock when the send outcome is ambiguous" do
+      stub_const("PGMQ::Errors::ConnectionError", Class.new(StandardError)) unless defined?(PGMQ::Errors::ConnectionError)
+      allow(Pgbus::Concurrency::Semaphore).to receive_messages(acquire: :acquired, release: nil)
+      allow(mock_client).to receive(:send_message).and_raise(PGMQ::Errors::ConnectionError, "server closed")
+      allow(Pgbus::Uniqueness).to receive(:release_lock)
+      Thread.current[:pgbus_acquired_uniqueness_key] = "TestJob:u"
+
+      expect { adapter.enqueue(job) }.to raise_error(PGMQ::Errors::ConnectionError)
+
+      expect(Pgbus::Concurrency::Semaphore).not_to have_received(:release)
+      expect(Pgbus::Uniqueness).not_to have_received(:release_lock)
+    ensure
+      Thread.current[:pgbus_acquired_uniqueness_key] = nil
+    end
+
+    # The ambiguity only applies to the produce. A database error raised
+    # BEFORE any send — taking the slot, parking the job — proves no message
+    # exists, so the bookkeeping must still be undone or the uniqueness lock
+    # and batch count are stranded on a job that will never run.
+    it "still rolls back the uniqueness lock when the failure came before any send" do
+      stub_const("PG::Error", Class.new(StandardError)) unless defined?(PG::Error)
+      allow(Pgbus::Concurrency::Semaphore).to receive(:acquire).and_raise(PG::Error, "connection reset")
+      allow(Pgbus::Uniqueness).to receive(:release_lock)
+      allow(Pgbus::Batch).to receive(:untrack_enqueue)
+      Thread.current[:pgbus_acquired_uniqueness_key] = "TestJob:u"
+
+      expect { adapter.enqueue(job) }.to raise_error(PG::Error)
+
+      expect(Pgbus::Uniqueness).to have_received(:release_lock).with("TestJob:u")
+    ensure
+      Thread.current[:pgbus_acquired_uniqueness_key] = nil
+    end
+
+    it "does not release any slot when the job was parked rather than sent" do
+      allow(Pgbus::Concurrency::Semaphore).to receive_messages(acquire: :blocked, release: nil)
+      allow(Pgbus::Concurrency::BlockedExecution).to receive(:insert)
+      allow(job).to receive(:try).with(:priority).and_return(0)
+
+      adapter.enqueue(job)
+
+      expect(Pgbus::Concurrency::Semaphore).not_to have_received(:release)
+    end
+
+    # A delayed job holds its slot from enqueue, but the visibility heartbeat
+    # only starts at dequeue — so the lease has to cover the delay too, or the
+    # sweep expires it mid-wait and promotes a second job for the same key.
+    it "covers the scheduled delay in the slot's lease" do
+      allow(Pgbus::Concurrency::Semaphore).to receive(:acquire).and_return(:acquired)
+      allow(mock_client).to receive(:send_message).and_return(42)
+
+      adapter.enqueue_at(job, Time.current.to_f + 3600)
+
+      expect(Pgbus::Concurrency::Semaphore).to have_received(:acquire) do |_key, _limit, duration|
+        expect(duration).to be >= 900 + 3600
+      end
     end
 
     it "discards when at concurrency limit with on_conflict: :discard" do
