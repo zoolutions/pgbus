@@ -17,7 +17,7 @@ RSpec.describe "pgbus:pgmq rake task logic" do # rubocop:disable RSpec/DescribeC
         "  #{v}#{marker}"
       end
 
-      expect(lines).to eq(["  1.11.0", "  1.11.1", "  1.12.0 (latest)"])
+      expect(lines).to eq(["  1.11.0", "  1.11.1", "  1.12.0", "  1.13.0 (latest)"])
     end
   end
 
