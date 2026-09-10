@@ -79,14 +79,25 @@ module Pgbus
         payload[METADATA_KEY]
       end
 
-      # Limit and duration for a job class, or the defaults when the class
-      # has no concurrency config or no longer resolves (a parked job must
-      # still be promoted; the executor dead-letters a missing class).
+      # Limit and duration for a job class. A class with no concurrency
+      # config — or one that no longer resolves — gets `limit: nil`, meaning
+      # "whatever limit the semaphore row already records". Forcing 1 here
+      # would refuse every promotion for a `to: 3` key that still holds two
+      # slots, so its parked jobs could never reach the executor (which is
+      # what dead-letters a missing class).
       def config_for(job_class)
         config = job_class.respond_to?(:pgbus_concurrency) && job_class.pgbus_concurrency
-        return { limit: 1, duration: DEFAULT_DURATION } unless config
+        return { limit: nil, duration: DEFAULT_DURATION } unless config
 
         { limit: config[:limit], duration: config[:duration] }
+      end
+
+      # A slot's lease is only renewed by the visibility heartbeat, which
+      # first beats one interval after the job starts. A `duration` shorter
+      # than that would expire before the first touch and let the sweep
+      # promote beside a running job, so it is floored at two intervals.
+      def effective_duration(duration, config: Pgbus.configuration)
+        [duration, config.effective_visibility_heartbeat_interval * 2].max
       end
 
       def config_for_payload(payload)

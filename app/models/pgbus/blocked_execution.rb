@@ -45,9 +45,22 @@ module Pgbus
       where("jsonb_typeof(payload) = 'string'").update_all("payload = (payload #>> '{}')::jsonb")
     end
 
-    # Keys with parked jobs, longest-waiting key first.
-    def self.pending_keys(limit: 1000)
-      group(:concurrency_key).order(Arel.sql("MIN(created_at)")).limit(limit).pluck(:concurrency_key)
+    # Keys with parked jobs that could take a slot right now — no semaphore
+    # row, or one with room — longest-waiting first.
+    #
+    # Filtering in SQL rather than skipping in Ruby is what keeps the scan's
+    # cap honest: a plain oldest-first list would fill with keys whose slots
+    # are held (their holders promote for themselves on completion anyway)
+    # and starve a key behind them whose holder died.
+    def self.promotable_keys(limit: 1000)
+      joins(<<~SQL)
+        LEFT JOIN pgbus_semaphores ON pgbus_semaphores.key = pgbus_blocked_executions.concurrency_key
+      SQL
+        .where("pgbus_semaphores.key IS NULL OR pgbus_semaphores.value < pgbus_semaphores.max_value")
+        .group(:concurrency_key)
+        .order(Arel.sql("MIN(pgbus_blocked_executions.created_at)"))
+        .limit(limit)
+        .pluck(:concurrency_key)
     end
   end
 end

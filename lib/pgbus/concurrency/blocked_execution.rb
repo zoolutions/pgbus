@@ -57,13 +57,7 @@ module Pgbus
 
           return false unless released && msg_id
 
-          begin
-            Batch.backfill_execution(released[:payload], msg_id,
-                                     client.target_queue(released[:queue_name], released[:priority]))
-          rescue StandardError => e
-            Pgbus.logger.warn { "[Pgbus] Batch execution backfill failed after promote: #{e.message}" }
-          end
-
+          backfill(released, msg_id, client)
           true
         rescue StandardError => e
           Pgbus.logger.warn { "[Pgbus] Promote blocked execution failed for #{concurrency_key}: #{e.message}" }
@@ -76,7 +70,7 @@ module Pgbus
         # Returns the number of jobs promoted.
         def promote_pending(client:, per_key: 100)
           Pgbus::BlockedExecution.repair_double_encoded!
-          Pgbus::BlockedExecution.pending_keys.sum do |key|
+          Pgbus::BlockedExecution.promotable_keys.sum do |key|
             promoted = 0
             promoted += 1 while promoted < per_key && promote_next(key, client: client)
             promoted
@@ -90,9 +84,25 @@ module Pgbus
 
         private
 
+        # The batch execution row is bookkeeping, not the promotion. Give it
+        # its own savepoint: `Semaphore.signal` calls promote_next inside a
+        # transaction, and a database error out here would poison that
+        # transaction — the commit then fails, un-deleting the parked row and
+        # un-taking the slot while the message is already live, so the job
+        # runs a second time.
+        def backfill(released, msg_id, client)
+          Pgbus::BlockedExecution.transaction(requires_new: true) do
+            Batch.backfill_execution(released[:payload], msg_id,
+                                     client.target_queue(released[:queue_name], released[:priority]))
+          end
+        rescue StandardError => e
+          Pgbus.logger.warn { "[Pgbus] Batch execution backfill failed after promote: #{e.message}" }
+        end
+
         def slot_taken?(concurrency_key, payload)
           config = Concurrency.config_for_payload(payload)
-          Pgbus::Semaphore.acquire!(concurrency_key, config[:limit], Time.current + config[:duration]) == :acquired
+          expires_at = Time.current + Concurrency.effective_duration(config[:duration])
+          Pgbus::Semaphore.acquire!(concurrency_key, config[:limit], expires_at) == :acquired
         end
 
         def resolve_delay(payload, default_delay)

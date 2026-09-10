@@ -243,14 +243,21 @@ RSpec.describe Pgbus::Process::Dispatcher do
     end
 
     # A parked job is never dropped on a timer: the only way out of
-    # pgbus_blocked_executions is promotion.
-    it "never deletes parked jobs" do
-      allow(Pgbus::Concurrency::Semaphore).to receive(:expire_stale).and_return([])
+    # pgbus_blocked_executions is promotion. Assert the invariant on the
+    # model itself — no deletion of any shape — not merely that the old
+    # expire_stale helper is gone.
+    it "never deletes parked jobs, whatever shape the deletion would take" do
+      allow(Pgbus::Concurrency::Semaphore).to receive(:expire_stale).and_return([{ "key" => "TestJob-42" }])
       allow(Pgbus::Concurrency::BlockedExecution).to receive(:promote_pending).and_return(0)
+      %i[delete_all destroy_all delete_by destroy_by].each do |deletion|
+        allow(Pgbus::BlockedExecution).to receive(deletion).and_return(0)
+      end
 
       dispatcher.send(:cleanup_concurrency)
 
-      expect(Pgbus::Concurrency::BlockedExecution).not_to respond_to(:expire_stale)
+      %i[delete_all destroy_all delete_by destroy_by].each do |deletion|
+        expect(Pgbus::BlockedExecution).not_to have_received(deletion)
+      end
     end
 
     it "rescues errors gracefully" do

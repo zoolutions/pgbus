@@ -111,6 +111,45 @@ RSpec.describe "Concurrency :block durability (integration)", :integration do
     end
   end
 
+  describe "the sweep's key scan" do
+    # pending_keys was capped at 1000 keys ordered by age. A thousand keys
+    # whose slots are held sat at the head of that window forever, so a key
+    # behind them whose holder had died was never serviced.
+    it "skips keys whose slots are all held, so a promotable key behind them is still serviced" do
+      held = "held-#{SecureRandom.hex(4)}"
+      Pgbus::Concurrency::Semaphore.acquire(held, 1, 900)
+      Pgbus::Concurrency::BlockedExecution.insert(concurrency_key: held, queue_name: "default",
+                                                  payload: payload.merge("job_id" => "starved"), duration: 900)
+      park(job_id: "promotable")
+
+      expect(Pgbus::BlockedExecution.promotable_keys).to eq([key])
+
+      expect(Pgbus::Concurrency::BlockedExecution.promote_pending(client: client)).to eq(1)
+      expect(queued_job_ids).to include("promotable")
+      expect(Pgbus::BlockedExecution.where(concurrency_key: held).count).to eq(1)
+    end
+  end
+
+  describe "a parked job whose class no longer resolves" do
+    # Forcing limit 1 for an unresolved class refused every promotion while
+    # a `to: 3` semaphore still held 2 slots, so the parked jobs could never
+    # reach the executor — which is what dead-letters a missing class.
+    it "is promoted against the limit the semaphore row already records" do
+      Pgbus::Concurrency::Semaphore.acquire(key, 3, 900)
+      Pgbus::Concurrency::Semaphore.acquire(key, 3, 900)
+      Pgbus::Concurrency::BlockedExecution.insert(
+        concurrency_key: key, queue_name: "default",
+        payload: payload.merge("job_class" => "NoSuchJobAnyMore", "job_id" => "orphan"), duration: 900
+      )
+
+      expect(Pgbus::Concurrency::BlockedExecution.promote_pending(client: client)).to eq(1)
+
+      expect(queued_job_ids).to include("orphan")
+      expect(value).to eq(3)
+      expect(Pgbus::Semaphore.find_by(key: key).max_value).to eq(3)
+    end
+  end
+
   describe "a job parked while the holder is releasing (rails/solid_queue#712)" do
     it "is promoted by that release instead of being stranded" do
       Pgbus::Concurrency::Semaphore.acquire(key, 1, 900)

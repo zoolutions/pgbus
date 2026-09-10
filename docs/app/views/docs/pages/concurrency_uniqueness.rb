@@ -132,12 +132,20 @@ class Views::Docs::Pages::ConcurrencyUniqueness < DocsUI::Page
           archived elsewhere (its heartbeat lapsed) skips the release.
       MD
       DocsUI::Callout(:info) do
-        plain "`duration` bounds heartbeat silence, not run time: the visibility "
-        plain "heartbeat re-arms the semaphore alongside the message, so a job that "
-        plain "runs for an hour keeps its slot for an hour. A holder whose process "
-        plain "died is presumed dead `duration` after its last beat, and its parked "
-        plain "jobs are promoted on the next sweep. Only if you disable the heartbeat "
-        plain "does `duration` need to exceed your longest run."
+        plain "`duration` bounds silence, not run time. A slot is taken at enqueue "
+        plain "and its lease is renewed by the visibility heartbeat once a worker "
+        plain "picks the message up, so a job that runs for an hour keeps its slot "
+        plain "for an hour, and a holder whose process died is presumed dead "
+        plain "`duration` after its last beat. A scheduled job's lease covers its "
+        plain "delay too. `duration` is floored at twice the heartbeat interval, so "
+        plain "a lease can never expire before the first beat."
+      end
+      DocsUI::Callout(:warning) do
+        plain "One window the lease cannot cover: nothing renews it between enqueue "
+        plain "and the moment a worker picks the message up. If a queue is backed up "
+        plain "for longer than `duration`, a waiting holder can be presumed dead and "
+        plain "a second job promoted for the same key. Set `duration` above the worst "
+        plain "queue wait you tolerate, or disable the sweep's promotion for that key."
       end
     end
   end

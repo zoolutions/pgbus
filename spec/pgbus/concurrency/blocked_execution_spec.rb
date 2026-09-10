@@ -56,9 +56,36 @@ RSpec.describe Pgbus::Concurrency::BlockedExecution do
       promoted = described_class.promote_next("TestJob-42", client: mock_client)
 
       expect(promoted).to be true
-      expect(Pgbus::BlockedExecution).to have_received(:transaction).with(requires_new: true)
-      expect(Pgbus::Semaphore).to have_received(:acquire!).with("TestJob-42", 1, a_kind_of(Time))
+      # A savepoint, so Semaphore.signal can wrap release + promote in one
+      # transaction. (The batch backfill opens a second one of its own.)
+      expect(Pgbus::BlockedExecution).to have_received(:transaction).with(requires_new: true).at_least(:once)
+      # nil limit: this payload's class carries no concurrency config, so the
+      # promotion is judged against the limit the semaphore row records.
+      expect(Pgbus::Semaphore).to have_received(:acquire!).with("TestJob-42", nil, a_kind_of(Time))
       expect(mock_client).to have_received(:send_message).with("default", released[:payload], delay: 0, priority: nil)
+    end
+
+    # A backfill failure must not poison the transaction the caller may have
+    # opened around promote_next (Semaphore.signal does): a poisoned
+    # transaction fails to commit, un-deletes the parked row and un-takes the
+    # slot while the message is already live — the job runs twice.
+    it "isolates a failing batch backfill in its own savepoint" do
+      allow(Pgbus::BlockedExecution).to receive(:release_next!).and_return(released)
+      allow(mock_client).to receive(:send_message).and_return(42)
+      savepoints = 0
+      allow(Pgbus::BlockedExecution).to receive(:transaction) do |**opts, &block|
+        savepoints += 1 if opts[:requires_new]
+        begin
+          block.call
+        rescue ActiveRecord::Rollback
+          nil
+        end
+      end
+      allow(Pgbus::Batch).to receive(:backfill_execution).and_raise(StandardError, "deadlock")
+      allow(Pgbus).to receive(:logger).and_return(instance_double(Logger, warn: nil, debug: nil, info: nil, error: nil))
+
+      expect(described_class.promote_next("TestJob-42", client: mock_client)).to be true
+      expect(savepoints).to eq(2)
     end
 
     it "takes the slot with the limit and duration the job class declares" do
@@ -145,16 +172,24 @@ RSpec.describe Pgbus::Concurrency::BlockedExecution do
     before { allow(Pgbus::BlockedExecution).to receive(:repair_double_encoded!).and_return(0) }
 
     it "heals double-encoded rows before looking for parked keys" do
-      allow(Pgbus::BlockedExecution).to receive(:pending_keys).and_return([])
+      allow(Pgbus::BlockedExecution).to receive(:promotable_keys).and_return([])
 
       described_class.promote_pending(client: mock_client)
 
       expect(Pgbus::BlockedExecution).to have_received(:repair_double_encoded!).ordered
-      expect(Pgbus::BlockedExecution).to have_received(:pending_keys).ordered
+      expect(Pgbus::BlockedExecution).to have_received(:promotable_keys).ordered
+    end
+
+    it "only looks at keys whose semaphore has room, so a full key cannot starve the rest" do
+      allow(Pgbus::BlockedExecution).to receive(:promotable_keys).and_return(%w[b])
+      allow(described_class).to receive(:promote_next).and_return(true, false)
+
+      expect(described_class.promote_pending(client: mock_client)).to eq(1)
+      expect(Pgbus::BlockedExecution).to have_received(:promotable_keys)
     end
 
     it "promotes for every parked key until its slots are full and returns the total" do
-      allow(Pgbus::BlockedExecution).to receive(:pending_keys).and_return(%w[a b])
+      allow(Pgbus::BlockedExecution).to receive(:promotable_keys).and_return(%w[a b])
       allow(described_class).to receive(:promote_next).with("a", client: mock_client).and_return(true, true, false)
       allow(described_class).to receive(:promote_next).with("b", client: mock_client).and_return(false)
 
@@ -162,7 +197,7 @@ RSpec.describe Pgbus::Concurrency::BlockedExecution do
     end
 
     it "bounds the promotions per key" do
-      allow(Pgbus::BlockedExecution).to receive(:pending_keys).and_return(%w[a])
+      allow(Pgbus::BlockedExecution).to receive(:promotable_keys).and_return(%w[a])
       allow(described_class).to receive(:promote_next).and_return(true)
 
       expect(described_class.promote_pending(client: mock_client, per_key: 5)).to eq(5)

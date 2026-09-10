@@ -189,4 +189,44 @@ RSpec.describe Pgbus::Concurrency do
       expect(described_class.extract_key({})).to be_nil
     end
   end
+
+  describe ".config_for" do
+    it "returns the class's declared limit and duration" do
+      klass = Class.new do
+        include Pgbus::Concurrency
+
+        limits_concurrency to: 3, key: ->(*) { "k" }, duration: 60
+      end
+
+      expect(described_class.config_for(klass)).to eq(limit: 3, duration: 60)
+    end
+
+    # A class that no longer resolves must not be forced to limit 1: with a
+    # `to: 3` semaphore still holding 2 slots, limit 1 would refuse every
+    # promotion and the parked jobs could never reach the executor (which is
+    # what dead-letters a missing class). A nil limit means "keep the limit
+    # the semaphore row already records".
+    it "leaves the limit to the semaphore row when the class does not resolve" do
+      expect(described_class.config_for(nil)).to eq(limit: nil, duration: Pgbus::Concurrency::DEFAULT_DURATION)
+    end
+  end
+
+  describe ".effective_duration" do
+    # The semaphore is only kept alive by the visibility heartbeat, which
+    # first beats one interval in. A duration shorter than that expires
+    # before the first touch and the sweep promotes beside a running job.
+    it "floors a duration shorter than two heartbeat intervals" do
+      config = Pgbus::Configuration.new
+      config.visibility_timeout = 30
+
+      expect(described_class.effective_duration(5, config: config)).to eq(20)
+    end
+
+    it "leaves a duration longer than the floor alone" do
+      config = Pgbus::Configuration.new
+      config.visibility_timeout = 30
+
+      expect(described_class.effective_duration(900, config: config)).to eq(900)
+    end
+  end
 end

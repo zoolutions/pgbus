@@ -102,13 +102,16 @@ module Pgbus
           # message carries the batch tag and signals on its own outcome.
           retried = Batch.retry_reenqueued?(payload["job_id"])
           Pgbus.logger.debug { "[Pgbus::Executor] perform_returned #{tag} job_class=#{job_class}" }
-          # Archiving is the exact-once claim on this execution. `false` means
-          # another worker already archived the message (our heartbeat lapsed
-          # and it was redelivered): that worker owns the completion signals,
-          # and signalling again here would release the concurrency slot a
-          # second time (rails/solid_queue#761).
-          if archive_from(queue_name, msg_id, source_queue: source_queue) == false
-            Pgbus.logger.warn { "[Pgbus::Executor] already archived elsewhere, skipping signals #{tag} job_class=#{job_class}" }
+          # Archiving is the exact-once claim on this execution.
+          # :already_archived means another worker archived the message (our
+          # heartbeat lapsed and it was redelivered): that worker owns the
+          # completion signals, and signalling again here would release the
+          # concurrency slot a second time (rails/solid_queue#761).
+          if archive_from(queue_name, msg_id, source_queue: source_queue) == :already_archived
+            Pgbus.logger.warn do
+              "[Pgbus::Executor] already archived elsewhere, skipping signals #{tag} job_class=#{job_class}"
+            end
+            release_duplicate_execution_lock(uniqueness_key, uniqueness_strategy, msg_id)
             return :duplicate
           end
           Pgbus.logger.debug { "[Pgbus::Executor] archived #{tag} job_class=#{job_class}" }
@@ -366,14 +369,26 @@ module Pgbus
       # that succeeded but failed to archive redelivers after VT expiry and
       # runs twice. If the retry also fails, fall through to the normal
       # failure path (recorded failure + VT-based redelivery).
+      # Returns :archived, :already_archived, or :ambiguous.
+      #
+      # A `false` reported after our OWN retry is ambiguous, not a duplicate:
+      # the first archive may well have committed with only its reply lost to
+      # the connection error that triggered the retry. Claiming it is the
+      # safe reading — the alternative strands this job's concurrency slot,
+      # batch and uniqueness state on every such blip, whereas a genuine
+      # duplicate would additionally require another worker to have taken and
+      # finished the same message inside the retry window.
       def archive_from(queue_name, msg_id, source_queue: nil)
         attempts = 0
         begin
-          if source_queue
-            client.archive_message(source_queue, msg_id, prefixed: false)
-          else
-            client.archive_message(queue_name, msg_id)
-          end
+          archived = if source_queue
+                       client.archive_message(source_queue, msg_id, prefixed: false)
+                     else
+                       client.archive_message(queue_name, msg_id)
+                     end
+          return :archived unless archived == false
+
+          attempts.positive? ? :ambiguous : :already_archived
         rescue StandardError => e
           attempts += 1
           raise unless attempts == 1 && connection_error?(e)
@@ -383,6 +398,19 @@ module Pgbus
           end
           retry
         end
+      end
+
+      # A :while_executing lock is bound to THIS message, so an execution
+      # that loses the archive race still has to hand its own lock back —
+      # conditionally, so it can never delete a successor's row. An
+      # :until_executed lock belongs to the job as a whole and is released by
+      # the worker that actually archived it.
+      def release_duplicate_execution_lock(uniqueness_key, uniqueness_strategy, msg_id)
+        return unless uniqueness_key && uniqueness_strategy == :while_executing
+
+        UniquenessKey.release_if_bound!(uniqueness_key, msg_id: msg_id)
+      rescue StandardError => e
+        Pgbus.logger.warn { "[Pgbus] Duplicate-execution lock release failed: #{e.message}" }
       end
 
       def connection_error?(error)

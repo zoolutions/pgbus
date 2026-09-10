@@ -442,6 +442,31 @@ RSpec.describe Pgbus::ActiveJob::Executor do
       # rails/solid_queue#761: a stale duplicate execution (heartbeat lapsed,
       # the message was redelivered and finished elsewhere) must not release
       # the slot a second time — that is how a limit of 1 runs 2, then 3.
+      # The :while_executing lock is bound to THIS message, so a duplicate
+      # return must still hand it back — but only if the row is still ours.
+      it "releases its own :while_executing lock when the message was archived elsewhere" do
+        allow(Pgbus::Uniqueness).to receive_messages(extract_key: "TestJob:u", extract_strategy: :while_executing,
+                                                     acquire_execution_lock: true)
+        allow(Pgbus::UniquenessKey).to receive(:release_if_bound!)
+        allow(mock_client).to receive(:archive_message).and_return(false)
+
+        expect(executor.execute(message, queue_name)).to eq(:duplicate)
+
+        expect(Pgbus::UniquenessKey).to have_received(:release_if_bound!).with("TestJob:u", msg_id: 20)
+      end
+
+      it "leaves an :until_executed lock alone when the message was archived elsewhere" do
+        allow(Pgbus::Uniqueness).to receive_messages(extract_key: "TestJob:u", extract_strategy: :until_executed)
+        allow(Pgbus::UniquenessKey).to receive(:release_if_bound!)
+        allow(Pgbus::Uniqueness).to receive(:release_lock)
+        allow(mock_client).to receive(:archive_message).and_return(false)
+
+        expect(executor.execute(message, queue_name)).to eq(:duplicate)
+
+        expect(Pgbus::UniquenessKey).not_to have_received(:release_if_bound!)
+        expect(Pgbus::Uniqueness).not_to have_received(:release_lock)
+      end
+
       it "does not signal when another worker already archived the message" do
         allow(mock_client).to receive(:archive_message).and_return(false)
         allow(Pgbus::Batch).to receive(:job_completed)
@@ -451,6 +476,26 @@ RSpec.describe Pgbus::ActiveJob::Executor do
         expect(result).to eq(:duplicate)
         expect(Pgbus::Concurrency::Semaphore).not_to have_received(:signal)
         expect(Pgbus::Batch).not_to have_received(:job_completed)
+      end
+
+      # archive_from retries once on a connection error. If our first archive
+      # actually committed and only the reply was lost, the retry reports
+      # "already archived" — that is OUR archive, not another worker's, and
+      # treating it as a duplicate would strand the slot until expiry.
+      it "signals normally when an already-archived result follows our own retried archive" do
+        stub_const("PGMQ::Errors::ConnectionError", Class.new(StandardError)) unless defined?(PGMQ::Errors::ConnectionError)
+        calls = 0
+        allow(mock_client).to receive(:archive_message) do
+          calls += 1
+          raise PGMQ::Errors::ConnectionError, "socket gone" if calls == 1
+
+          false
+        end
+
+        result = executor.execute(message, queue_name)
+
+        expect(result).to eq(:success)
+        expect(Pgbus::Concurrency::Semaphore).to have_received(:signal).with("TestJob-42", client: mock_client)
       end
 
       it "keeps the semaphore alive through the visibility heartbeat while the job runs" do

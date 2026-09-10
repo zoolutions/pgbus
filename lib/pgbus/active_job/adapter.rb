@@ -72,20 +72,28 @@ module Pgbus
         blocked = false
 
         if key && concurrency
-          # One transaction from the semaphore check to the send or the park:
-          # the upsert holds the semaphore row lock until commit, so a holder
+          # The check and the park commit together, under the semaphore row
+          # lock the upsert holds even when it reports :blocked — so a holder
           # signalling right now waits and then sees the parked row instead
-          # of stranding it (rails/solid_queue#712). A send that raises rolls
-          # the acquired slot back instead of leaking it until expiry.
+          # of stranding it (rails/solid_queue#712).
+          acquired = false
           Pgbus::Semaphore.transaction(requires_new: true) do
-            result = Concurrency::Semaphore.acquire(key, concurrency[:limit], concurrency[:duration])
+            acquired = Concurrency::Semaphore.acquire(key, concurrency[:limit], slot_lease(concurrency, delay)) ==
+                       :acquired
+            blocked = handle_conflict(concurrency, active_job, key, queue, payload_hash, priority: priority) unless
+              acquired
+          end
 
-            if result == :acquired
-              msg_id = Pgbus.client.send_message(queue, payload_hash, delay: delay, priority: priority)
-              active_job.provider_job_id = msg_id
-            else
-              blocked = handle_conflict(concurrency, active_job, key, queue, payload_hash, priority: priority)
-            end
+          if acquired
+            # Deliberately AFTER the commit. PGMQ has its own connection, so
+            # the send can never join this transaction; sending first would
+            # mean a failed commit leaves the message live with the slot
+            # rolled back, and the next enqueue runs beside it. This way the
+            # only crash window leaves a slot held with no message — the
+            # sweep reclaims it, and until then the key is under-admitted,
+            # never over-admitted.
+            msg_id = send_holding_slot(key, queue, payload_hash, delay: delay, priority: priority)
+            active_job.provider_job_id = msg_id
           end
         else
           msg_id = Pgbus.client.send_message(queue, payload_hash, delay: delay, priority: priority)
@@ -114,6 +122,28 @@ module Pgbus
           Thread.current[:pgbus_acquired_uniqueness_key] = nil
         end
         raise e
+      end
+
+      # A slot is leased for `duration` of silence, but the visibility
+      # heartbeat that renews it only starts once a worker picks the message
+      # up. A scheduled job waits in PGMQ until then, so its lease has to
+      # cover the delay as well or the sweep expires it mid-wait and promotes
+      # a second job for the same key.
+      def slot_lease(concurrency, delay)
+        Concurrency.effective_duration(concurrency[:duration]) + delay.to_i
+      end
+
+      # A send that raises is a deterministic failure, so hand the slot back
+      # now rather than leaving the key short until the lease expires.
+      def send_holding_slot(key, queue, payload_hash, delay:, priority:)
+        Pgbus.client.send_message(queue, payload_hash, delay: delay, priority: priority)
+      rescue StandardError
+        begin
+          Concurrency::Semaphore.release(key)
+        rescue StandardError => e
+          Pgbus.logger.warn { "[Pgbus] Could not release concurrency slot after failed send: #{e.message}" }
+        end
+        raise
       end
 
       def physical_queue(queue, priority)

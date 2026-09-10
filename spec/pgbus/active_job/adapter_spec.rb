@@ -217,6 +217,66 @@ RSpec.describe Pgbus::ActiveJob::Adapter do
       expect(in_transaction).to eq(%i[open parked closed])
     end
 
+    # A crash between COMMIT and the PGMQ produce leaks a slot (recovered by
+    # the sweep); a crash the other way round — message live, slot rolled
+    # back — would let the next enqueue run beside it. Send after commit, so
+    # the only reachable failure is the safe one.
+    it "sends the message only after the slot transaction has committed" do
+      allow(Pgbus::Concurrency::Semaphore).to receive(:acquire).and_return(:acquired)
+      allow(mock_client).to receive(:send_message).and_return(42)
+      order = []
+      allow(Pgbus::Semaphore).to receive(:transaction) do |&block|
+        order << :begin
+        block.call
+        order << :commit
+      end
+      allow(Pgbus::Concurrency::Semaphore).to receive(:acquire) {
+        order << :acquire
+        :acquired
+      }
+      allow(mock_client).to receive(:send_message) {
+        order << :send
+        42
+      }
+
+      adapter.enqueue(job)
+
+      expect(order).to eq(%i[begin acquire commit send])
+    end
+
+    it "releases the acquired slot when the send raises, instead of leaking it until expiry" do
+      allow(Pgbus::Concurrency::Semaphore).to receive_messages(acquire: :acquired, release: nil)
+      allow(mock_client).to receive(:send_message).and_raise(StandardError, "pgmq down")
+
+      expect { adapter.enqueue(job) }.to raise_error(StandardError, "pgmq down")
+
+      expect(Pgbus::Concurrency::Semaphore).to have_received(:release).with("TestJob-42")
+    end
+
+    it "does not release any slot when the job was parked rather than sent" do
+      allow(Pgbus::Concurrency::Semaphore).to receive_messages(acquire: :blocked, release: nil)
+      allow(Pgbus::Concurrency::BlockedExecution).to receive(:insert)
+      allow(job).to receive(:try).with(:priority).and_return(0)
+
+      adapter.enqueue(job)
+
+      expect(Pgbus::Concurrency::Semaphore).not_to have_received(:release)
+    end
+
+    # A delayed job holds its slot from enqueue, but the visibility heartbeat
+    # only starts at dequeue — so the lease has to cover the delay too, or the
+    # sweep expires it mid-wait and promotes a second job for the same key.
+    it "covers the scheduled delay in the slot's lease" do
+      allow(Pgbus::Concurrency::Semaphore).to receive(:acquire).and_return(:acquired)
+      allow(mock_client).to receive(:send_message).and_return(42)
+
+      adapter.enqueue_at(job, Time.current.to_f + 3600)
+
+      expect(Pgbus::Concurrency::Semaphore).to have_received(:acquire) do |_key, _limit, duration|
+        expect(duration).to be >= 900 + 3600
+      end
+    end
+
     it "discards when at concurrency limit with on_conflict: :discard" do
       allow(job_class_double).to receive(:pgbus_concurrency).and_return(
         concurrency_config.merge(on_conflict: :discard)
