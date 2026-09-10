@@ -74,6 +74,28 @@ RSpec.describe Pgbus::Concurrency::Semaphore do
       end
     end
 
+    # Waiting on a busy pool must not eat the lease: computing the expiry
+    # before the checkout means the UPDATE writes a lease that has already
+    # been partly consumed.
+    it "starts the lease when the connection is in hand, not when the wait began" do
+      scope = double("scope", update_all: 1)
+      pool = double("pool")
+      yielded_at = nil
+      allow(pool).to receive(:with_connection) do |&block|
+        sleep 0.2
+        yielded_at = Time.current
+        block.call
+      end
+      allow(Pgbus::Semaphore).to receive_messages(connection_pool: pool)
+      allow(Pgbus::Semaphore).to receive(:where).with(key: "TestJob-42").and_return(scope)
+
+      described_class.touch("TestJob-42", 600)
+
+      expect(scope).to have_received(:update_all) do |(_sql, expires_at)|
+        expect(expires_at).to be >= yielded_at + 600 - 0.05
+      end
+    end
+
     it "pushes the expiry out from now, never pulling it in" do
       scope = double("scope", update_all: 1)
       pool = double("pool")

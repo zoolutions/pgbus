@@ -70,6 +70,12 @@ module Pgbus
         priority = active_job.try(:priority)
         msg_id = nil
         blocked = false
+        # Only a failure raised from inside the produce can be ambiguous.
+        # Everything before it — taking the slot, parking the job — proves no
+        # message exists, however database-shaped the error looks. Never
+        # reset: once the send returns, msg_id is set and the rescue routes
+        # on that instead.
+        sending = false
 
         if key && concurrency
           # The check and the park commit together, under the semaphore row
@@ -92,10 +98,12 @@ module Pgbus
             # only crash window leaves a slot held with no message — the
             # sweep reclaims it, and until then the key is under-admitted,
             # never over-admitted.
+            sending = true
             msg_id = send_holding_slot(key, queue, payload_hash, delay: delay, priority: priority)
             active_job.provider_job_id = msg_id
           end
         else
+          sending = true
           msg_id = Pgbus.client.send_message(queue, payload_hash, delay: delay, priority: priority)
           active_job.provider_job_id = msg_id
         end
@@ -118,8 +126,10 @@ module Pgbus
         # error — it would leave that job running with no uniqueness lock and
         # uncounted by its batch. A batch left waiting for a job that never
         # existed is recovered by the stalled-batch sweep; a batch that
-        # finishes early and fires its callback is not recoverable.
-        if msg_id.nil? && !ambiguous_delivery?(e)
+        # finishes early and fires its callback is not recoverable. The
+        # `sending` guard keeps that reprieve to the produce itself: a
+        # database error from the slot upsert or the park is not ambiguous.
+        if msg_id.nil? && !(sending && ambiguous_delivery?(e))
           rollback_acquired_uniqueness_lock
           uncount_batch_job(payload_hash)
         else
@@ -131,10 +141,13 @@ module Pgbus
         raise e
       end
 
-      # True when the failure reached the database, so the produce may have
-      # committed even though the reply did not come back. Everything else —
-      # a serialization or argument error, a bad queue name — is raised
-      # before anything could have been written.
+      # True when a failure raised from inside the produce reached the
+      # database, so the message may have been written even though the reply
+      # did not come back. Deliberately an over-approximation: the client's
+      # pre-produce queue setup is inside the same call, so its connection
+      # errors are counted as ambiguous too. That errs toward keeping a lock
+      # and a batch count the reapers can reclaim, rather than dropping
+      # bookkeeping for a message that turns out to be live.
       def ambiguous_delivery?(error)
         (defined?(PGMQ::Errors::ConnectionError) && error.is_a?(PGMQ::Errors::ConnectionError)) ||
           (defined?(PG::Error) && error.is_a?(PG::Error))

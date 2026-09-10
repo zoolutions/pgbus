@@ -272,6 +272,24 @@ RSpec.describe Pgbus::ActiveJob::Adapter do
       Thread.current[:pgbus_acquired_uniqueness_key] = nil
     end
 
+    # The ambiguity only applies to the produce. A database error raised
+    # BEFORE any send — taking the slot, parking the job — proves no message
+    # exists, so the bookkeeping must still be undone or the uniqueness lock
+    # and batch count are stranded on a job that will never run.
+    it "still rolls back the uniqueness lock when the failure came before any send" do
+      stub_const("PG::Error", Class.new(StandardError)) unless defined?(PG::Error)
+      allow(Pgbus::Concurrency::Semaphore).to receive(:acquire).and_raise(PG::Error, "connection reset")
+      allow(Pgbus::Uniqueness).to receive(:release_lock)
+      allow(Pgbus::Batch).to receive(:untrack_enqueue)
+      Thread.current[:pgbus_acquired_uniqueness_key] = "TestJob:u"
+
+      expect { adapter.enqueue(job) }.to raise_error(PG::Error)
+
+      expect(Pgbus::Uniqueness).to have_received(:release_lock).with("TestJob:u")
+    ensure
+      Thread.current[:pgbus_acquired_uniqueness_key] = nil
+    end
+
     it "does not release any slot when the job was parked rather than sent" do
       allow(Pgbus::Concurrency::Semaphore).to receive_messages(acquire: :blocked, release: nil)
       allow(Pgbus::Concurrency::BlockedExecution).to receive(:insert)
