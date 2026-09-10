@@ -14,6 +14,7 @@ module Pgbus
     class VersionNotFoundError < Pgbus::Error; end
 
     SCHEMA_DIR = File.expand_path("pgmq_schema", __dir__).freeze
+    FIXUPS_DIR = File.join(SCHEMA_DIR, "fixups").freeze
 
     class << self
       # Returns the latest vendored PGMQ version string.
@@ -26,6 +27,38 @@ module Pgbus
         Dir.glob(File.join(SCHEMA_DIR, "pgmq_v*.sql"))
            .map { |f| File.basename(f).match(/pgmq_v(.+)\.sql/)[1] }
            .sort_by { |v| Gem::Version.new(v) }
+      end
+
+      # Versions that ship a table fixup, in version order.
+      #
+      # An upgrade drops every pgmq function and composite type and re-runs the
+      # target version's schema, which recreates both — but never touches an
+      # existing table. An upstream hop that ALTERs one (1.13.0 moves
+      # partitioned queues' msg_id from GENERATED ALWAYS to BY DEFAULT) needs
+      # its own step, and that is what these files are.
+      def fixup_versions
+        Dir.glob(File.join(FIXUPS_DIR, "pgmq_v*.sql"))
+           .map { |f| File.basename(f).match(/pgmq_v(.+)\.sql/)[1] }
+           .sort_by { |v| Gem::Version.new(v) }
+      end
+
+      # Concatenated fixups for every version in (after, upto], in version
+      # order. Returns "" when the hop crosses none.
+      #
+      # @param after [String, nil] the installed version; nil (no recorded
+      #   version) applies every fixup up to the target, which is safe because
+      #   each one is idempotent.
+      # @param upto [String] the version being upgraded to
+      def fixups_sql(after:, upto: latest_version)
+        ceiling = Gem::Version.new(upto)
+        floor = after && Gem::Version.new(after)
+
+        applicable = fixup_versions.select do |version|
+          candidate = Gem::Version.new(version)
+          candidate <= ceiling && (floor.nil? || candidate > floor)
+        end
+
+        applicable.map { |version| File.read(File.join(FIXUPS_DIR, "pgmq_v#{version}.sql")) }.join("\n")
       end
 
       # Returns the filesystem path to the vendored SQL file for a given version.

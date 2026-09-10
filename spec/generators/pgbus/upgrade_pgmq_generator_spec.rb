@@ -29,6 +29,26 @@ RSpec.describe "Pgbus upgrade PGMQ generator migration template" do # rubocop:di
       expect(content.index("install_sql")).to be < content.index("reinstall_notify_triggers_sql")
     end
 
+    it "applies the table fixups the function drop-and-reapply cannot carry" do
+      content = File.read(template_path)
+      expect(content).to include("fixups_sql")
+    end
+
+    # Order matters twice over: install_sql must run first because the fixups
+    # call pgmq.format_table_name, which the drop step removed; and the
+    # NOTIFY repair is last so it sees the final schema.
+    it "runs the fixups after the schema is re-installed and before the NOTIFY repair" do
+      content = File.read(template_path)
+      expect(content.index("install_sql")).to be < content.index("fixups_sql")
+      expect(content.index("fixups_sql")).to be < content.index("reinstall_notify_triggers_sql")
+    end
+
+    it "reads the installed version to decide which fixups apply, tolerating no tracking table" do
+      content = File.read(template_path)
+      expect(content).to include("table_exists?")
+      expect(content).to include("ORDER BY installed_at DESC")
+    end
+
     it "tracks the version in pgbus_pgmq_schema_versions" do
       content = File.read(template_path)
       expect(content).to include("pgbus_pgmq_schema_versions")

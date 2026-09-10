@@ -15,16 +15,23 @@ require_relative "../integration_helper"
 # Guarded by :integration — skipped cleanly when PGBUS_DATABASE_URL is unset.
 RSpec.describe "PGMQ schema upgrade path (integration)", :integration do
   let(:conn) { ActiveRecord::Base.connection }
-  let(:from_version) { "1.11.1" }
-  let(:to_version)   { "1.12.0" }
+  let(:from_version) { "1.12.0" }
+  let(:to_version)   { "1.13.0" }
   let(:queue_name)   { "pgbus_int_upgrade_probe" }
+  # A stand-in for a partitioned queue. pg_partman is not installed in CI, so
+  # the fixup is exercised against a plain table registered as partitioned in
+  # pgmq.meta — which is exactly what the fixup's loop selects on.
+  let(:partitioned_probe) { "pgbus_int_fixup_probe" }
 
   # Mirrors lib/generators/pgbus/templates/upgrade_pgmq.rb.erb: drop functions,
   # re-create at the target version, re-install the NOTIFY triggers the drop
   # cascaded away, record the upgrade in the tracking table.
   def run_upgrade_migration_sql(version)
+    installed = installed_version
     conn.execute(Pgbus::PgmqSchema.drop_pgmq_functions_sql)
     conn.execute(Pgbus::PgmqSchema.install_sql(version))
+    fixups = Pgbus::PgmqSchema.fixups_sql(after: installed, upto: version)
+    conn.execute(fixups) unless fixups.empty?
     conn.execute(Pgbus::PgmqSchema.reinstall_notify_triggers_sql)
     conn.execute(<<~SQL)
       CREATE TABLE IF NOT EXISTS pgbus_pgmq_schema_versions (
@@ -58,6 +65,42 @@ RSpec.describe "PGMQ schema upgrade path (integration)", :integration do
     SQL
   end
 
+  def installed_version
+    return nil unless conn.table_exists?("pgbus_pgmq_schema_versions")
+
+    conn.select_value("SELECT version FROM pgbus_pgmq_schema_versions ORDER BY installed_at DESC LIMIT 1")
+  end
+
+  def msg_id_identity(table)
+    conn.select_value(<<~SQL)
+      SELECT identity_generation FROM information_schema.columns
+      WHERE table_schema = 'pgmq' AND table_name = '#{table}' AND column_name = 'msg_id'
+    SQL
+  end
+
+  # A partitioned-queue stand-in whose msg_id still carries the pre-1.13.0
+  # GENERATED ALWAYS identity, registered in pgmq.meta so the fixup's loop
+  # finds it.
+  def seed_partitioned_probe
+    conn.execute("DROP TABLE IF EXISTS pgmq.q_#{partitioned_probe}")
+    conn.execute(<<~SQL)
+      CREATE TABLE pgmq.q_#{partitioned_probe} (
+        msg_id BIGINT GENERATED ALWAYS AS IDENTITY,
+        read_ct INT DEFAULT 0 NOT NULL,
+        enqueued_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+        last_read_at TIMESTAMP WITH TIME ZONE,
+        vt TIMESTAMP WITH TIME ZONE NOT NULL,
+        message JSONB,
+        headers JSONB
+      )
+    SQL
+    conn.execute(<<~SQL)
+      INSERT INTO pgmq.meta (queue_name, is_partitioned, is_unlogged)
+      VALUES ('#{partitioned_probe}', true, false)
+      ON CONFLICT DO NOTHING
+    SQL
+  end
+
   # Install a clean function/type set for a version on top of whatever pgmq
   # objects already exist. Dropping the functions and the composite types first
   # keeps install_sql (which uses bare CREATE TYPE / CREATE FUNCTION) idempotent.
@@ -82,6 +125,7 @@ RSpec.describe "PGMQ schema upgrade path (integration)", :integration do
     conn.execute("SELECT pgmq.enable_notify_insert('#{queue_name}', throttle_interval_ms => 350)")
     conn.execute("SELECT pgmq.send('#{queue_name}', '{\"probe\": 1}'::jsonb)")
     conn.execute("SELECT pgmq.send('#{queue_name}', '{\"probe\": 2}'::jsonb)")
+    seed_partitioned_probe
   end
 
   after do
@@ -93,18 +137,20 @@ RSpec.describe "PGMQ schema upgrade path (integration)", :integration do
     # the latest version so subsequent integration specs run against an
     # up-to-date schema.
     conn.execute("SELECT pgmq.drop_queue('#{queue_name}')") rescue nil # rubocop:disable Style/RescueModifier
+    conn.execute("DROP TABLE IF EXISTS pgmq.q_#{partitioned_probe}")
+    conn.execute("DELETE FROM pgmq.meta WHERE queue_name = '#{partitioned_probe}'")
     conn.execute("DROP TABLE IF EXISTS pgbus_pgmq_schema_versions")
     install_pgmq(Pgbus::PgmqSchema.latest_version)
   end
 
-  it "records v1.11.1 before the upgrade" do
+  it "records v1.12.0 before the upgrade" do
     latest = conn.select_value(
       "SELECT version FROM pgbus_pgmq_schema_versions ORDER BY installed_at DESC LIMIT 1"
     )
     expect(latest).to eq(from_version)
   end
 
-  it "advances the tracking table to v1.12.0 after the upgrade" do
+  it "advances the tracking table to v1.13.0 after the upgrade" do
     run_upgrade_migration_sql(to_version)
 
     latest = conn.select_value(
@@ -134,10 +180,55 @@ RSpec.describe "PGMQ schema upgrade path (integration)", :integration do
     expect(message_count).to eq(2)
   end
 
-  it "makes the new read_grouped_head_with_poll function available after the upgrade" do
+  it "replaces create_partitioned with the premake-carrying signature" do
     run_upgrade_migration_sql(to_version)
 
-    expect(function_exists?("read_grouped_head_with_poll")).to be(true)
+    expect(conn.select_value("SELECT to_regprocedure('pgmq.create_partitioned(text,text,text,integer)')"))
+      .not_to be_nil
+    expect(conn.select_value("SELECT to_regprocedure('pgmq.create_partitioned(text,text,text)')"))
+      .to be_nil
+  end
+
+  it "reports the new default_partition_length column from metrics" do
+    run_upgrade_migration_sql(to_version)
+
+    row = conn.select_one("SELECT * FROM pgmq.metrics('#{queue_name}')")
+
+    expect(row).to have_key("default_partition_length")
+    # A non-partitioned queue has no default partition, so the column is NULL.
+    expect(row["default_partition_length"]).to be_nil
+  end
+
+  describe "the partitioned-queue msg_id fixup" do
+    it "is not carried by dropping and re-creating the functions alone" do
+      expect(msg_id_identity("q_#{partitioned_probe}")).to eq("ALWAYS")
+
+      conn.execute(Pgbus::PgmqSchema.drop_pgmq_functions_sql)
+      conn.execute(Pgbus::PgmqSchema.install_sql(to_version))
+
+      expect(msg_id_identity("q_#{partitioned_probe}")).to eq("ALWAYS")
+    end
+
+    it "moves an existing partitioned queue to GENERATED BY DEFAULT" do
+      run_upgrade_migration_sql(to_version)
+
+      expect(msg_id_identity("q_#{partitioned_probe}")).to eq("BY DEFAULT")
+    end
+
+    # The loop selects on pgmq.meta.is_partitioned, so an ordinary queue —
+    # which pgmq.create() still builds with GENERATED ALWAYS — is untouched.
+    it "leaves a non-partitioned queue's msg_id alone" do
+      run_upgrade_migration_sql(to_version)
+
+      expect(msg_id_identity("q_#{queue_name}")).to eq("ALWAYS")
+    end
+
+    it "is safe to replay" do
+      run_upgrade_migration_sql(to_version)
+
+      expect { run_upgrade_migration_sql(to_version) }.not_to raise_error
+      expect(msg_id_identity("q_#{partitioned_probe}")).to eq("BY DEFAULT")
+    end
   end
 
   it "keeps the core pgmq functions callable after the upgrade" do
