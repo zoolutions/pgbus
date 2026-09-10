@@ -1,0 +1,39 @@
+lib/pgbus/active_job/executor.rb
+  s_a6c2e7c63feac9::t_52825feac3d2dd 114,408,411-413
+spec/pgbus/active_job/adapter_spec.rb
+  s_a6c2e7c63feac9::t_da006af64223be 247,249,251,256-272
+lib/pgbus/concurrency/blocked_execution.rb
+  s_a6c2e7c63feac9::t_52825feac3d2dd 50-52,54-55,106,108
+CHANGELOG.md
+  s_a6c2e7c63feac9::t_053a28dc520ffb 25-31
+spec/pgbus/concurrency/blocked_execution_spec.rb
+  s_a6c2e7c63feac9::t_da006af64223be 91-106,199-202
+docs/app/views/docs/pages/concurrency_uniqueness.rb
+  s_a6c2e7c63feac9::t_053a28dc520ffb 145-151
+app/models/pgbus/uniqueness_key.rb
+  s_a6c2e7c63feac9::t_8e852628af7c1f 78-81,84-85
+spec/pgbus/active_job/executor_spec.rb
+  s_a6c2e7c63feac9::t_da006af64223be 455-459
+lib/pgbus/concurrency/semaphore.rb
+  s_a6c2e7c63feac9::t_52825feac3d2dd 41-44,46
+spec/pgbus/concurrency/semaphore_spec.rb
+  s_a6c2e7c63feac9::t_da006af64223be 59-76
+lib/pgbus/active_job/adapter.rb
+  s_a6c2e7c63feac9::t_8e852628af7c1f 115-122,126-128,134-142,152-155,158-168
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "6e75634bd0c03b541ae5bb4eb1619115f37edc2c",
+  "prompts": {},
+  "sessions": {
+    "s_a6c2e7c63feac9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3b770da0-d44f-4208-9314-02d972844592",
+        "model": "claude-opus-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
