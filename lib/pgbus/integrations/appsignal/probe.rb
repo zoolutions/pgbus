@@ -116,6 +116,11 @@ module Pgbus
             gauge "total_dead_tuples", stats[:total_dead_tuples]
             gauge "tables_needing_vacuum", stats[:tables_needing_vacuum]
             gauge "oldest_transaction_age_seconds", stats[:oldest_transaction_age_sec]
+            # Unlabelled, same rationale as the /pgbus/api/metrics family:
+            # concurrency keys are per-record and would be unbounded as tags.
+            gauge "concurrency_blocked_executions", stats[:parked_total]
+            gauge "concurrency_blocked_oldest_age_seconds", stats[:oldest_parked_age_sec]
+            gauge "concurrency_slots_held", stats[:slots_held]
           rescue StandardError => e
             log_failure("summary metrics", e)
           end

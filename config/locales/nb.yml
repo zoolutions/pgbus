@@ -86,6 +86,8 @@ nb:
         enqueued: I kø
         failed_dlq: Mislyktes / DLQ
         failed_dlq_labels: Mislyktes / Dead Lettered
+        parked_jobs: Parkerte jobber
+        parked_jobs_oldest: eldst %{age}
         processes: Prosesser
         queues: Køer
         recurring: Gjentakende
@@ -404,6 +406,43 @@ nb:
       toggle_dark_mode: Bytt til mørk modus
       toggle_menu: Veksle meny
     locks:
+      concurrency:
+        cards:
+          keys_at_limit: Nøkler ved grensen
+          keys_at_limit_hint: ingen ledig plass
+          oldest_wait: Lengste venting
+          oldest_wait_hint: lengst en jobb har ventet
+          parked_jobs: Parkerte jobber
+          parked_jobs_hint: venter på en plass
+          slots_held: Holdte plasser
+          slots_held_hint: på tvers av alle nøkler
+        description: Nøkler deklarert med limits_concurrency, plassene de holder og jobbene som er parkert bak dem
+        discard_parked: Forkast parkerte
+        discard_parked_confirm:
+          one: Forkast den 1 jobben som er parkert bak denne nøkkelen? Den vil aldri kjøre.
+          other: Forkast de %{count} jobbene som er parkert bak denne nøkkelen? De vil aldri kjøre.
+        empty: Ingen samtidighetsnøkler i bruk
+        headers:
+          in_use: I bruk
+          key: Nøkkel
+          lease: Leie
+          oldest_wait: Lengste venting
+          parked: Parkerte
+        key_released:
+          one: Frigjorde %{key} og forfremmet 1 jobb.
+          other: Frigjorde %{key} og forfremmet %{count} jobber.
+        lease:
+          expired: Utløpt
+          live: Aktiv
+          none: Ingen innehaver
+        no_key: Ingen samtidighetsnøkkel oppgitt.
+        parked_discarded:
+          one: Forkastet 1 parkert jobb.
+          other: Forkastet %{count} parkerte jobber.
+        release: Frigi
+        release_confirm: Frigi %{key} og forfremme dens parkerte jobber?
+        release_confirm_live: Leien på %{key} er fortsatt fersk, så en jobb kjører trolig ennå. Å frigi lar en annen starte ved siden av den. Fortsette?
+        title: Samtidighet
       index:
         all_locks_discarded:
           one: Forkastet 1 lås.
@@ -427,7 +466,9 @@ nb:
           one: Forkastet 1 lås.
           other: Forkastet %{count} låser.
         none_selected: Ingen låser valgt.
-        title: Unikhetsnøkler
+        page_description: Unikhetsnøkler og samtidighetsplasser som holder jobber tilbake
+        title: Låser
+        uniqueness_title: Unikhetsnøkler
     outbox:
       index:
         description: Transaksjonelle utgående postkasseoppføringer som venter på publisering til PGMQ

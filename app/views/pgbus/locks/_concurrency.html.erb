@@ -1,0 +1,94 @@
+<turbo-frame id="locks-concurrency" data-auto-refresh data-src="<%= pgbus.locks_path(frame: 'concurrency') %>">
+  <div class="mb-8">
+    <h2 class="text-lg font-semibold text-gray-900 dark:text-white"><%= t("pgbus.locks.concurrency.title") %></h2>
+    <p class="mt-1 mb-3 text-sm text-gray-500 dark:text-gray-400"><%= t("pgbus.locks.concurrency.description") %></p>
+
+    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-4">
+      <div class="rounded-lg bg-white dark:bg-gray-800 p-5 shadow ring-1 ring-gray-200 dark:ring-gray-700">
+        <p class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.locks.concurrency.cards.parked_jobs") %></p>
+        <p class="mt-1 text-3xl font-semibold <%= @concurrency[:parked_total] > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-900 dark:text-white' %>">
+          <%= pgbus_number(@concurrency[:parked_total]) %>
+        </p>
+        <p class="text-xs text-gray-400 dark:text-gray-500"><%= t("pgbus.locks.concurrency.cards.parked_jobs_hint") %></p>
+      </div>
+
+      <div class="rounded-lg bg-white dark:bg-gray-800 p-5 shadow ring-1 ring-gray-200 dark:ring-gray-700">
+        <p class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.locks.concurrency.cards.oldest_wait") %></p>
+        <p class="mt-1 text-3xl font-semibold text-gray-900 dark:text-white"><%= pgbus_duration(@concurrency[:oldest_parked_age_sec]) %></p>
+        <p class="text-xs text-gray-400 dark:text-gray-500"><%= t("pgbus.locks.concurrency.cards.oldest_wait_hint") %></p>
+      </div>
+
+      <div class="rounded-lg bg-white dark:bg-gray-800 p-5 shadow ring-1 ring-gray-200 dark:ring-gray-700">
+        <p class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.locks.concurrency.cards.slots_held") %></p>
+        <p class="mt-1 text-3xl font-semibold text-gray-900 dark:text-white"><%= pgbus_number(@concurrency[:slots_held]) %></p>
+        <p class="text-xs text-gray-400 dark:text-gray-500"><%= t("pgbus.locks.concurrency.cards.slots_held_hint") %></p>
+      </div>
+
+      <div class="rounded-lg bg-white dark:bg-gray-800 p-5 shadow ring-1 ring-gray-200 dark:ring-gray-700">
+        <p class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.locks.concurrency.cards.keys_at_limit") %></p>
+        <p class="mt-1 text-3xl font-semibold text-gray-900 dark:text-white"><%= pgbus_number(@concurrency[:keys_at_limit]) %></p>
+        <p class="text-xs text-gray-400 dark:text-gray-500"><%= t("pgbus.locks.concurrency.cards.keys_at_limit_hint") %></p>
+      </div>
+    </div>
+
+    <div class="overflow-hidden rounded-lg bg-white dark:bg-gray-800 shadow ring-1 ring-gray-200 dark:ring-gray-700">
+      <table class="pgbus-table min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+        <thead class="bg-gray-50 dark:bg-gray-900">
+          <tr>
+            <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.locks.concurrency.headers.key") %></th>
+            <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.locks.concurrency.headers.in_use") %></th>
+            <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.locks.concurrency.headers.lease") %></th>
+            <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.locks.concurrency.headers.parked") %></th>
+            <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.locks.concurrency.headers.oldest_wait") %></th>
+            <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400"></th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+          <% @concurrency[:keys].each do |row| %>
+            <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+              <td data-label="Key" class="px-4 py-3 text-sm font-mono text-gray-700 dark:text-gray-300 max-w-xs truncate"><%= row[:key] %></td>
+              <td data-label="In use" class="px-4 py-3 text-sm text-right font-mono text-gray-700 dark:text-gray-300">
+                <% if row[:value] %>
+                  <%= row[:value] %> / <%= row[:max_value] %>
+                <% else %>
+                  —
+                <% end %>
+              </td>
+              <td data-label="Lease" class="px-4 py-3 text-sm">
+                <% if row[:value].nil? %>
+                  <span class="text-gray-400 dark:text-gray-500"><%= t("pgbus.locks.concurrency.lease.none") %></span>
+                <% elsif row[:lease_fresh] %>
+                  <span class="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800"><%= t("pgbus.locks.concurrency.lease.live") %></span>
+                  <span class="ml-1 text-xs text-gray-400 dark:text-gray-500"><%= pgbus_time_ago_future(row[:expires_at]) %></span>
+                <% else %>
+                  <span class="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-800"><%= t("pgbus.locks.concurrency.lease.expired") %></span>
+                <% end %>
+              </td>
+              <td data-label="Parked" class="px-4 py-3 text-sm text-right <%= row[:parked_count] > 0 ? 'text-amber-600 dark:text-amber-400 font-semibold' : 'text-gray-500 dark:text-gray-400' %>"><%= pgbus_number(row[:parked_count]) %></td>
+              <td data-label="Oldest wait" class="px-4 py-3 text-sm text-right text-gray-500 dark:text-gray-400"><%= pgbus_duration(row[:oldest_parked_age_sec]) %></td>
+              <td class="px-4 py-3 text-sm text-right">
+                <div class="flex items-center justify-end space-x-3">
+                  <%= button_to t("pgbus.locks.concurrency.release"), pgbus.release_key_locks_path,
+                        method: :post, params: { key: row[:key] },
+                        class: "text-xs text-indigo-600 hover:text-indigo-800 font-medium",
+                        data: { turbo_frame: "_top",
+                                turbo_confirm: row[:lease_fresh] ? t("pgbus.locks.concurrency.release_confirm_live", key: row[:key]) : t("pgbus.locks.concurrency.release_confirm", key: row[:key]) } %>
+                  <% if row[:parked_count] > 0 %>
+                    <%= button_to t("pgbus.locks.concurrency.discard_parked"), pgbus.discard_parked_locks_path,
+                          method: :post, params: { key: row[:key] },
+                          class: "text-xs text-red-600 hover:text-red-800 font-medium",
+                          data: { turbo_frame: "_top",
+                                  turbo_confirm: t("pgbus.locks.concurrency.discard_parked_confirm", count: row[:parked_count]) } %>
+                  <% end %>
+                </div>
+              </td>
+            </tr>
+          <% end %>
+          <% if @concurrency[:keys].empty? %>
+            <tr><td colspan="6" class="px-4 py-8 text-center text-sm text-gray-400 dark:text-gray-500"><%= t("pgbus.locks.concurrency.empty") %></td></tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</turbo-frame>

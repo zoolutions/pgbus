@@ -86,6 +86,8 @@ nl:
         enqueued: In de wachtrij geplaatst
         failed_dlq: Mislukt / DLQ
         failed_dlq_labels: Mislukt / Dead Lettered
+        parked_jobs: Geparkeerde jobs
+        parked_jobs_oldest: oudste %{age}
         processes: Processen
         queues: Wachtrijen
         recurring: Terugkerend
@@ -404,6 +406,43 @@ nl:
       toggle_dark_mode: Donkere modus schakelen
       toggle_menu: Menu wisselen
     locks:
+      concurrency:
+        cards:
+          keys_at_limit: Sleutels op de limiet
+          keys_at_limit_hint: geen plek vrij
+          oldest_wait: Langste wachttijd
+          oldest_wait_hint: job die het langst wacht
+          parked_jobs: Geparkeerde jobs
+          parked_jobs_hint: wachten op een plek
+          slots_held: Bezette plekken
+          slots_held_hint: over alle sleutels
+        description: Sleutels gedeclareerd met limits_concurrency, de plekken die ze bezetten en de jobs die erachter geparkeerd staan
+        discard_parked: Geparkeerde verwijderen
+        discard_parked_confirm:
+          one: De 1 job die achter deze sleutel geparkeerd staat verwijderen? Hij draait nooit meer.
+          other: De %{count} jobs die achter deze sleutel geparkeerd staan verwijderen? Ze draaien nooit meer.
+        empty: Geen gelijktijdigheidssleutels in gebruik
+        headers:
+          in_use: In gebruik
+          key: Sleutel
+          lease: Lease
+          oldest_wait: Langste wachttijd
+          parked: Geparkeerd
+        key_released:
+          one: "%{key} vrijgegeven en 1 job gepromoveerd."
+          other: "%{key} vrijgegeven en %{count} jobs gepromoveerd."
+        lease:
+          expired: Verlopen
+          live: Actief
+          none: Geen houder
+        no_key: Geen gelijktijdigheidssleutel opgegeven.
+        parked_discarded:
+          one: 1 geparkeerde job verwijderd.
+          other: "%{count} geparkeerde jobs verwijderd."
+        release: Vrijgeven
+        release_confirm: "%{key} vrijgeven en de geparkeerde jobs promoveren?"
+        release_confirm_live: De lease op %{key} is nog vers, dus er draait waarschijnlijk nog een job. Vrijgeven laat er een naast starten. Doorgaan?
+        title: Gelijktijdigheid
       index:
         all_locks_discarded:
           one: 1 slot verwijderd.
@@ -427,7 +466,9 @@ nl:
           one: 1 slot verwijderd.
           other: "%{count} sloten verwijderd."
         none_selected: Geen sloten geselecteerd.
-        title: Uniciteitsleutels
+        page_description: Uniciteitssleutels en gelijktijdigheidsplekken die jobs tegenhouden
+        title: Locks
+        uniqueness_title: Uniciteitsleutels
     outbox:
       index:
         description: Transactionele uitgaande berichten wachten op publicatie naar PGMQ

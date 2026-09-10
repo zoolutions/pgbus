@@ -15,7 +15,7 @@ module Pgbus
                     :insights_latency_trend, :insights_throughput, :insights_status_counts,
                     :stream_stats_available, :stream_summary, :top_streams_list,
                     :pending_events_list, :outbox_stats_hash, :outbox_entries_list,
-                    :batches_list, :batch_detail_hash
+                    :batches_list, :batch_detail_hash, :concurrency_stats_hash
       attr_reader :calls
 
       def initialize
@@ -44,6 +44,7 @@ module Pgbus
         @outbox_entries_list = []
         @batches_list = []
         @batch_detail_hash = nil
+        @concurrency_stats_hash = default_concurrency_stats
         @calls = Hash.new { |h, k| h[k] = [] }
       end
 
@@ -72,6 +73,7 @@ module Pgbus
       def batches_count = @batches_list.size
       def active_batches_count = 0
       def job_locks = @locks_list
+      def concurrency_stats = @concurrency_stats_hash
       def queue_paused?(name) = @paused_queues.include?(name)
       def recurring_tasks = @recurring_tasks_list
 
@@ -127,6 +129,8 @@ module Pgbus
       def discard_lock(key)          = record(:discard_lock, key) && 1
       def discard_locks(keys)        = record(:discard_locks, keys) && keys.size
       def discard_all_locks          = record(:discard_all_locks) && @locks_list.size
+      def release_concurrency_key(key) = record(:release_concurrency_key, key) && @concurrency_stats_hash[:parked_total]
+      def discard_parked_jobs(key) = record(:discard_parked_jobs, key) && @concurrency_stats_hash[:parked_total]
 
       def called?(method_name) = @calls.key?(method_name)
 
@@ -168,7 +172,8 @@ module Pgbus
           active_processes: 1, failed_count: 3, dlq_depth: 2,
           recurring_count: 0, throughput_rate: 0.0,
           total_dead_tuples: 0, tables_needing_vacuum: 0,
-          oldest_transaction_age_sec: nil }
+          oldest_transaction_age_sec: nil,
+          parked_total: 0, oldest_parked_age_sec: nil, slots_held: 0, keys_at_limit: 0 }
       end
 
       def default_insights_summary
@@ -190,6 +195,10 @@ module Pgbus
 
       def default_outbox_stats
         { unpublished: 0, total: 0, oldest_unpublished_age: nil }
+      end
+
+      def default_concurrency_stats
+        { parked_total: 0, oldest_parked_age_sec: nil, slots_held: 0, keys_at_limit: 0, keys: [] }
       end
 
       def default_health_stats

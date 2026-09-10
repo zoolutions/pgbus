@@ -195,6 +195,8 @@ RSpec.describe Pgbus::Web::DataSource do
                                "oldest_msg_age_sec" => nil, "newest_msg_age_sec" => nil, "total_messages" => 5 }
                            ]))
       allow(mock_connection).to receive(:select_all).with(anything, "Pgbus All Table Health").and_return([])
+      allow(mock_connection).to receive(:select_all)
+        .with(anything, "Pgbus Concurrency Summary").and_return(double(to_a: []))
       allow(mock_connection).to receive(:select_one).with(anything, "Pgbus Oldest Transaction").and_return(nil)
       allow(data_source).to receive_messages(failed_events_count: 3, processes: [{ id: 1 }, { id: 2 }])
     end
@@ -551,6 +553,238 @@ RSpec.describe Pgbus::Web::DataSource do
       allow(Pgbus::UniquenessKey).to receive(:delete_all).and_raise(StandardError)
 
       expect(data_source.discard_all_locks).to eq(0)
+    end
+  end
+
+  describe "#concurrency_stats" do
+    let(:summary_row) do
+      { "parked_total" => 7, "oldest_parked_age_sec" => 812, "slots_held" => 3, "keys_at_limit" => 2 }
+    end
+
+    let(:key_rows) do
+      [
+        { "key" => "ProcessOrder-42", "value" => 1, "max_value" => 1,
+          "expires_at" => Time.now + 300, "lease_fresh" => true,
+          "parked_count" => 5, "oldest_parked_age_sec" => 812 },
+        { "key" => "SyncUser-7", "value" => 2, "max_value" => 3,
+          "expires_at" => Time.now - 300, "lease_fresh" => false,
+          "parked_count" => 0, "oldest_parked_age_sec" => nil }
+      ]
+    end
+
+    # summary_stats also walks the queue/health/process reads; those have their
+    # own coverage, so quiet them down to isolate the concurrency merge.
+    def stub_health_queries
+      allow(mock_connection).to receive(:select_all).with(anything, "Pgbus All Table Health").and_return([])
+      allow(mock_connection).to receive(:select_one).with(anything, "Pgbus Oldest Transaction").and_return(nil)
+      allow(data_source).to receive_messages(failed_events_count: 0, processes: [])
+    end
+
+    before do
+      allow(mock_connection).to receive(:select_all)
+        .with(anything, "Pgbus Concurrency Summary").and_return(double(to_a: [summary_row]))
+      allow(mock_connection).to receive(:select_all)
+        .with(anything, "Pgbus Concurrency Keys").and_return(double(to_a: key_rows))
+    end
+
+    it "returns the aggregate numbers" do
+      stats = data_source.concurrency_stats
+
+      expect(stats).to include(parked_total: 7, oldest_parked_age_sec: 812,
+                               slots_held: 3, keys_at_limit: 2)
+    end
+
+    it "returns one row per key, ordered as the query returned them" do
+      keys = data_source.concurrency_stats[:keys]
+
+      expect(keys.map { |k| k[:key] }).to eq(%w[ProcessOrder-42 SyncUser-7])
+      expect(keys.first).to include(value: 1, max_value: 1, parked_count: 5, oldest_parked_age_sec: 812)
+    end
+
+    it "carries lease_fresh straight from the query" do
+      keys = data_source.concurrency_stats[:keys]
+
+      expect(keys.first[:lease_fresh]).to be(true)
+      expect(keys.last[:lease_fresh]).to be(false)
+    end
+
+    it "reads a postgres boolean string as lease_fresh" do
+      allow(mock_connection).to receive(:select_all)
+        .with(anything, "Pgbus Concurrency Keys")
+        .and_return(double(to_a: [key_rows.first.merge("lease_fresh" => "t")]))
+
+      expect(data_source.concurrency_stats[:keys].first[:lease_fresh]).to be(true)
+    end
+
+    it "falls back to zeros and an empty key list when the tables are absent" do
+      allow(mock_connection).to receive(:select_all).and_raise(StandardError, "no such table")
+
+      expect(data_source.concurrency_stats).to eq(
+        parked_total: 0, oldest_parked_age_sec: nil, slots_held: 0, keys_at_limit: 0, keys: []
+      )
+    end
+
+    it "merges the aggregate numbers into summary_stats" do
+      allow(mock_connection).to receive(:select_values).and_return([])
+      stub_health_queries
+
+      expect(data_source.summary_stats).to include(parked_total: 7, oldest_parked_age_sec: 812,
+                                                   slots_held: 3, keys_at_limit: 2)
+    end
+
+    it "runs the summary query once per instance" do
+      allow(mock_connection).to receive(:select_values).and_return([])
+      stub_health_queries
+
+      data_source.summary_stats
+      data_source.concurrency_stats
+
+      expect(mock_connection).to have_received(:select_all)
+        .with(anything, "Pgbus Concurrency Summary").once
+    end
+  end
+
+  describe "#release_concurrency_key" do
+    before do
+      allow(Pgbus::Semaphore).to receive(:where).and_return(double(delete_all: 1))
+    end
+
+    it "deletes the semaphore row and promotes until nothing is left" do
+      allow(Pgbus::Concurrency::BlockedExecution).to receive(:promote_next)
+        .and_return(true, true, false)
+
+      expect(data_source.release_concurrency_key("ProcessOrder-42")).to eq(2)
+      expect(Pgbus::Semaphore).to have_received(:where).with(key: "ProcessOrder-42")
+      expect(Pgbus::Concurrency::BlockedExecution).to have_received(:promote_next)
+        .with("ProcessOrder-42", client: mock_client).exactly(3).times
+    end
+
+    it "returns 0 when nothing was parked" do
+      allow(Pgbus::Concurrency::BlockedExecution).to receive(:promote_next).and_return(false)
+
+      expect(data_source.release_concurrency_key("ProcessOrder-42")).to eq(0)
+    end
+
+    it "stops after the promotion cap" do
+      allow(Pgbus::Concurrency::BlockedExecution).to receive(:promote_next).and_return(true)
+
+      expect(data_source.release_concurrency_key("ProcessOrder-42")).to eq(100)
+    end
+
+    it "does nothing for a blank key" do
+      expect(data_source.release_concurrency_key("")).to eq(0)
+      expect(Pgbus::Semaphore).not_to have_received(:where)
+    end
+
+    it "returns 0 on error" do
+      allow(Pgbus::Semaphore).to receive(:where).and_raise(StandardError)
+
+      expect(data_source.release_concurrency_key("ProcessOrder-42")).to eq(0)
+    end
+  end
+
+  describe "#discard_parked_jobs" do
+    let(:plain_payload) { { "job_class" => "PlainJob", "job_id" => "j1" } }
+    let(:batch_payload) do
+      { "job_class" => "BatchedJob", "job_id" => "j2", Pgbus::Batch::METADATA_KEY => "batch-1" }
+    end
+    let(:unique_payload) do
+      { "job_class" => "UniqueJob", "job_id" => "j3",
+        Pgbus::Uniqueness::METADATA_KEY => "import-42",
+        Pgbus::Uniqueness::STRATEGY_KEY => "until_executed" }
+    end
+
+    let(:rows) do
+      [plain_payload, batch_payload, unique_payload].each_with_index.map do |payload, i|
+        double("BlockedExecution", id: i + 1, concurrency_key: "ProcessOrder-42", payload: payload)
+      end
+    end
+
+    let(:relation) { double("Relation", lock: double(to_a: rows)) }
+
+    before do
+      allow(Pgbus::BlockedExecution).to receive(:transaction).and_yield
+      allow(Pgbus::BlockedExecution).to receive(:for_key).with("ProcessOrder-42").and_return(relation)
+      allow(Pgbus::BlockedExecution).to receive(:where).and_return(double(delete_all: 3))
+      allow(Pgbus::Batch).to receive(:job_discarded)
+      allow(Pgbus::Uniqueness).to receive(:release_lock)
+    end
+
+    it "deletes the locked rows and returns the count" do
+      expect(data_source.discard_parked_jobs("ProcessOrder-42")).to eq(3)
+      expect(Pgbus::BlockedExecution).to have_received(:where).with(id: [1, 2, 3])
+    end
+
+    it "resolves a parked batch child as failed" do
+      data_source.discard_parked_jobs("ProcessOrder-42")
+
+      expect(Pgbus::Batch).to have_received(:job_discarded).with("batch-1", job_id: "j2").once
+    end
+
+    it "releases an until_executed uniqueness lock" do
+      data_source.discard_parked_jobs("ProcessOrder-42")
+
+      expect(Pgbus::Uniqueness).to have_received(:release_lock).with("import-42").once
+    end
+
+    it "leaves a plain payload alone" do
+      data_source.discard_parked_jobs("ProcessOrder-42")
+
+      expect(Pgbus::Batch).to have_received(:job_discarded).once
+      expect(Pgbus::Uniqueness).to have_received(:release_lock).once
+    end
+
+    it "keeps an until_start lock held" do
+      allow(relation).to receive(:lock).and_return(
+        double(to_a: [double("BlockedExecution", id: 9, concurrency_key: "k",
+                                                 payload: unique_payload.merge(Pgbus::Uniqueness::STRATEGY_KEY => "until_start"))])
+      )
+
+      data_source.discard_parked_jobs("ProcessOrder-42")
+
+      expect(Pgbus::Uniqueness).not_to have_received(:release_lock)
+    end
+
+    it "instruments one event per discarded row" do
+      events = []
+      subscriber = ActiveSupport::Notifications.subscribe("pgbus.blocked_execution_discarded") do |*args|
+        events << ActiveSupport::Notifications::Event.new(*args)
+      end
+
+      data_source.discard_parked_jobs("ProcessOrder-42")
+      ActiveSupport::Notifications.unsubscribe(subscriber)
+
+      expect(events.size).to eq(3)
+      expect(events.first.payload).to include(concurrency_key: "ProcessOrder-42", job_class: "PlainJob")
+    end
+
+    it "reads a double-encoded legacy payload" do
+      allow(relation).to receive(:lock).and_return(
+        double(to_a: [double("BlockedExecution", id: 4, concurrency_key: "k",
+                                                 payload: batch_payload.to_json)])
+      )
+
+      data_source.discard_parked_jobs("ProcessOrder-42")
+
+      expect(Pgbus::Batch).to have_received(:job_discarded).with("batch-1", job_id: "j2")
+    end
+
+    it "returns 0 when nothing is parked" do
+      allow(relation).to receive(:lock).and_return(double(to_a: []))
+
+      expect(data_source.discard_parked_jobs("ProcessOrder-42")).to eq(0)
+      expect(Pgbus::BlockedExecution).not_to have_received(:where)
+    end
+
+    it "does nothing for a blank key" do
+      expect(data_source.discard_parked_jobs(nil)).to eq(0)
+      expect(Pgbus::BlockedExecution).not_to have_received(:for_key)
+    end
+
+    it "returns 0 on error" do
+      allow(Pgbus::BlockedExecution).to receive(:for_key).and_raise(StandardError)
+
+      expect(data_source.discard_parked_jobs("ProcessOrder-42")).to eq(0)
     end
   end
 

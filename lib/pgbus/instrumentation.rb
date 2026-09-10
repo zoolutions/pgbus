@@ -29,6 +29,9 @@ module Pgbus
   #   pgbus.serializer.deserialize — job/event deserialization
   #   pgbus.batch_finished         — batch flipped to finished
   #                                  payload: batch_id, total_jobs, completed_jobs, failed_jobs
+  #   pgbus.blocked_execution_discarded — a parked job was discarded from the
+  #                                  dashboard; it will never run
+  #                                  payload: concurrency_key, job_class, job_id
   #   pgbus.batch_sweep            — dispatcher stalled-batch sweep
   #                                  payload: stalled_for, stale_executions, orphan_rows,
   #                                  started_batches, finished_batches

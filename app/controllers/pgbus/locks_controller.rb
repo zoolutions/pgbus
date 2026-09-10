@@ -3,6 +3,9 @@
 module Pgbus
   class LocksController < ApplicationController
     def index
+      @concurrency = data_source.concurrency_stats
+      return render_frame("pgbus/locks/concurrency") if params[:frame] == "concurrency"
+
       @locks = data_source.job_locks
     end
 
@@ -29,6 +32,27 @@ module Pgbus
     def discard_all
       count = data_source.discard_all_locks
       redirect_to locks_path, notice: t("pgbus.locks.index.all_locks_discarded", count: count)
+    end
+
+    # Drop a concurrency key's semaphore and promote whatever can now run.
+    # The promotion goes through the guarded upsert inside the data source, so
+    # this is an escape hatch, never a way past the limit.
+    def release_key
+      key = params[:key].to_s.strip
+      return redirect_to(locks_path, alert: t("pgbus.locks.concurrency.no_key")) if key.empty?
+
+      count = data_source.release_concurrency_key(key)
+      redirect_to locks_path, notice: t("pgbus.locks.concurrency.key_released", key: key, count: count)
+    end
+
+    # Drop every job parked behind a concurrency key. They never run, so the
+    # data source resolves their batch and uniqueness bookkeeping.
+    def discard_parked
+      key = params[:key].to_s.strip
+      return redirect_to(locks_path, alert: t("pgbus.locks.concurrency.no_key")) if key.empty?
+
+      count = data_source.discard_parked_jobs(key)
+      redirect_to locks_path, notice: t("pgbus.locks.concurrency.parked_discarded", count: count)
     end
   end
 end

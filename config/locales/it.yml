@@ -86,6 +86,8 @@ it:
         enqueued: In coda
         failed_dlq: Falliti / DLQ
         failed_dlq_labels: Falliti / Dead Lettered
+        parked_jobs: Job parcheggiati
+        parked_jobs_oldest: il più vecchio %{age}
         processes: Processi
         queues: Code
         recurring: Ricorrente
@@ -404,6 +406,43 @@ it:
       toggle_dark_mode: Attiva/disattiva modalità scura
       toggle_menu: Attiva/disattiva menu
     locks:
+      concurrency:
+        cards:
+          keys_at_limit: Chiavi al limite
+          keys_at_limit_hint: nessuno slot libero
+          oldest_wait: Attesa più lunga
+          oldest_wait_hint: il job che attende da più tempo
+          parked_jobs: Job parcheggiati
+          parked_jobs_hint: in attesa di uno slot
+          slots_held: Slot occupati
+          slots_held_hint: su tutte le chiavi
+        description: Chiavi dichiarate con limits_concurrency, gli slot che occupano e i job parcheggiati dietro di esse
+        discard_parked: Scarta parcheggiati
+        discard_parked_confirm:
+          one: Scartare l'unico job parcheggiato dietro questa chiave? Non verrà mai eseguito.
+          other: Scartare i %{count} job parcheggiati dietro questa chiave? Non verranno mai eseguiti.
+        empty: Nessuna chiave di concorrenza in uso
+        headers:
+          in_use: In uso
+          key: Chiave
+          lease: Lease
+          oldest_wait: Attesa più lunga
+          parked: Parcheggiati
+        key_released:
+          one: Rilasciata %{key} e promosso 1 job.
+          other: Rilasciata %{key} e promossi %{count} job.
+        lease:
+          expired: Scaduto
+          live: Attivo
+          none: Nessun detentore
+        no_key: Nessuna chiave di concorrenza indicata.
+        parked_discarded:
+          one: Scartato 1 job parcheggiato.
+          other: Scartati %{count} job parcheggiati.
+        release: Rilascia
+        release_confirm: Rilasciare %{key} e promuovere i suoi job parcheggiati?
+        release_confirm_live: Il lease di %{key} è ancora valido, quindi probabilmente un job è ancora in esecuzione. Rilasciarlo consente a un altro di partire accanto. Continuare?
+        title: Concorrenza
       index:
         all_locks_discarded:
           one: 1 blocco scartato.
@@ -427,7 +466,9 @@ it:
           one: 1 blocco scartato.
           other: "%{count} blocchi scartati."
         none_selected: Nessun blocco selezionato.
-        title: Chiavi di unicità
+        page_description: Chiavi di unicità e slot di concorrenza che trattengono i job
+        title: Lock
+        uniqueness_title: Chiavi di unicità
     outbox:
       index:
         description: Voci dell'outbox transazionali in attesa di pubblicazione su PGMQ

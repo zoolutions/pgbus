@@ -86,6 +86,8 @@ es:
         enqueued: Encolado
         failed_dlq: Fallidos / DLQ
         failed_dlq_labels: Fallidos / Dead Lettered
+        parked_jobs: Trabajos aparcados
+        parked_jobs_oldest: más antiguo %{age}
         processes: Procesos
         queues: Colas
         recurring: Recurrente
@@ -404,6 +406,43 @@ es:
       toggle_dark_mode: Alternar modo oscuro
       toggle_menu: Alternar menú
     locks:
+      concurrency:
+        cards:
+          keys_at_limit: Claves al límite
+          keys_at_limit_hint: sin ranura libre
+          oldest_wait: Espera más larga
+          oldest_wait_hint: lo que más ha esperado un trabajo
+          parked_jobs: Trabajos aparcados
+          parked_jobs_hint: esperando una ranura
+          slots_held: Ranuras ocupadas
+          slots_held_hint: en todas las claves
+        description: Claves declaradas con limits_concurrency, las ranuras que ocupan y los trabajos aparcados detrás
+        discard_parked: Descartar aparcados
+        discard_parked_confirm:
+          one: "¿Descartar el trabajo aparcado detrás de esta clave? Nunca se ejecutará."
+          other: "¿Descartar los %{count} trabajos aparcados detrás de esta clave? Nunca se ejecutarán."
+        empty: No hay claves de concurrencia en uso
+        headers:
+          in_use: En uso
+          key: Clave
+          lease: Concesión
+          oldest_wait: Espera más larga
+          parked: Aparcados
+        key_released:
+          one: Se liberó %{key} y se promovió 1 trabajo.
+          other: Se liberó %{key} y se promovieron %{count} trabajos.
+        lease:
+          expired: Expirada
+          live: Activa
+          none: Sin titular
+        no_key: No se indicó ninguna clave de concurrencia.
+        parked_discarded:
+          one: Se descartó 1 trabajo aparcado.
+          other: Se descartaron %{count} trabajos aparcados.
+        release: Liberar
+        release_confirm: "¿Liberar %{key} y promover sus trabajos aparcados?"
+        release_confirm_live: La concesión de %{key} sigue vigente, así que probablemente aún se esté ejecutando un trabajo. Liberarla permite que otro arranque junto a él. ¿Continuar?
+        title: Concurrencia
       index:
         all_locks_discarded:
           one: Se descartó 1 bloqueo.
@@ -427,7 +466,9 @@ es:
           one: Se descartó 1 bloqueo.
           other: Se descartaron %{count} bloqueos.
         none_selected: No hay bloqueos seleccionados.
-        title: Claves de unicidad
+        page_description: Claves de unicidad y ranuras de concurrencia que retienen trabajos
+        title: Bloqueos
+        uniqueness_title: Claves de unicidad
     outbox:
       index:
         description: Entradas de bandeja de salida transaccional pendientes de publicación en PGMQ

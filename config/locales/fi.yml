@@ -86,6 +86,8 @@ fi:
         enqueued: Lisätty jonoon
         failed_dlq: Epäonnistuneet / DLQ
         failed_dlq_labels: Epäonnistuneet / Dead Lettered
+        parked_jobs: Pysäköidyt työt
+        parked_jobs_oldest: vanhin %{age}
         processes: Prosessit
         queues: Jonot
         recurring: Toistuva
@@ -404,6 +406,43 @@ fi:
       toggle_dark_mode: Vaihda tumma tila
       toggle_menu: Vaihda valikko
     locks:
+      concurrency:
+        cards:
+          keys_at_limit: Avaimet rajalla
+          keys_at_limit_hint: ei vapaata paikkaa
+          oldest_wait: Pisin odotus
+          oldest_wait_hint: pisimpään odottanut työ
+          parked_jobs: Pysäköidyt työt
+          parked_jobs_hint: odottavat paikkaa
+          slots_held: Varatut paikat
+          slots_held_hint: kaikkien avainten yli
+        description: limits_concurrency-määrityksellä julistetut avaimet, niiden varaamat paikat ja niiden taakse pysäköidyt työt
+        discard_parked: Hylkää pysäköidyt
+        discard_parked_confirm:
+          one: Hylätäänkö tämän avaimen taakse pysäköity 1 työ? Se ei koskaan suoritu.
+          other: Hylätäänkö tämän avaimen taakse pysäköidyt %{count} työtä? Ne eivät koskaan suoritu.
+        empty: Ei rinnakkaisuusavaimia käytössä
+        headers:
+          in_use: Käytössä
+          key: Avain
+          lease: Varaus
+          oldest_wait: Pisin odotus
+          parked: Pysäköidyt
+        key_released:
+          one: Vapautettiin %{key} ja edistettiin 1 työ.
+          other: Vapautettiin %{key} ja edistettiin %{count} työtä.
+        lease:
+          expired: Vanhentunut
+          live: Voimassa
+          none: Ei haltijaa
+        no_key: Rinnakkaisuusavainta ei annettu.
+        parked_discarded:
+          one: Hylättiin 1 pysäköity työ.
+          other: Hylättiin %{count} pysäköityä työtä.
+        release: Vapauta
+        release_confirm: Vapautetaanko %{key} ja edistetäänkö sen pysäköidyt työt?
+        release_confirm_live: Avaimen %{key} varaus on yhä voimassa, joten jokin työ on todennäköisesti yhä käynnissä. Vapauttaminen sallii toisen käynnistyä sen rinnalle. Jatketaanko?
+        title: Rinnakkaisuus
       index:
         all_locks_discarded:
           one: Hylättiin 1 lukko.
@@ -427,7 +466,9 @@ fi:
           one: Hylättiin 1 lukko.
           other: Hylättiin %{count} lukkoa.
         none_selected: Ei valittuja lukkoja.
-        title: Yksikäsitteisyysavaimet
+        page_description: Yksilöllisyysavaimet ja rinnakkaisuuspaikat, jotka pidättelevät töitä
+        title: Lukot
+        uniqueness_title: Yksikäsitteisyysavaimet
     outbox:
       index:
         description: Transaktionaaliset lähetyslaatikon merkinnät odottavat julkaisua PGMQ:lle

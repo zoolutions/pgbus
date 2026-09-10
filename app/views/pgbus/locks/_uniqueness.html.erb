@@ -1,0 +1,80 @@
+<div class="mb-8">
+  <div class="flex items-center justify-between mb-3">
+    <div>
+      <h2 class="text-lg font-semibold text-gray-900 dark:text-white"><%= t("pgbus.locks.index.uniqueness_title") %></h2>
+      <p class="mt-1 text-sm text-gray-500 dark:text-gray-400"><%= t("pgbus.locks.index.description") %></p>
+    </div>
+    <% if @locks.any? %>
+      <div class="flex items-center space-x-2">
+        <div data-bulk-actions class="hidden flex items-center space-x-2">
+          <span class="text-sm text-gray-500 dark:text-gray-400"><span data-bulk-count>0</span> <%= t("pgbus.helpers.bulk_selected") %></span>
+          <button type="submit" form="bulk-discard-locks-form"
+                  class="rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-500"
+                  data-turbo-confirm="<%= t("pgbus.locks.index.discard_selected_confirm") %>">
+            <%= t("pgbus.locks.index.discard_selected") %>
+          </button>
+        </div>
+        <%= button_to t("pgbus.locks.index.discard_all"), pgbus.discard_all_locks_path, method: :post,
+              class: "rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-500",
+              data: { turbo_confirm: t("pgbus.locks.index.discard_all_confirm") } %>
+      </div>
+    <% end %>
+  </div>
+
+  <%# Bulk form lives outside the table to avoid nested form issues with button_to %>
+  <form id="bulk-discard-locks-form" action="<%= pgbus.discard_selected_locks_path %>" method="post" data-turbo-frame="_top" class="hidden">
+    <%= hidden_field_tag :authenticity_token, form_authenticity_token %>
+  </form>
+
+  <div class="overflow-hidden rounded-lg bg-white dark:bg-gray-800 shadow ring-1 ring-gray-200 dark:ring-gray-700" data-bulk-scope="locks">
+    <table class="pgbus-table min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+      <thead class="bg-gray-50 dark:bg-gray-900">
+        <tr>
+          <% if @locks.any? %>
+            <th class="w-10 px-4 py-3">
+              <input type="checkbox" data-bulk-select-all
+                     aria-label="<%= t("pgbus.helpers.bulk_select_all") %>"
+                     class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600">
+            </th>
+          <% end %>
+          <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.locks.index.headers.lock_key") %></th>
+          <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.locks.index.headers.queue_name", default: "Queue") %></th>
+          <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.locks.index.headers.msg_id", default: "Message ID") %></th>
+          <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.locks.index.headers.age") %></th>
+          <% if @locks.any? %>
+            <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400"></th>
+          <% end %>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+        <% @locks.each do |lock| %>
+          <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+            <td class="w-10 px-4 py-3">
+              <input type="checkbox" name="lock_keys[]" value="<%= lock[:lock_key] %>"
+                     aria-label="<%= t("pgbus.helpers.bulk_select_row", id: lock[:lock_key]) %>"
+                     form="bulk-discard-locks-form" data-bulk-item
+                     class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600">
+            </td>
+            <td data-label="Lock Key" class="px-4 py-3 text-sm font-mono text-gray-700 dark:text-gray-300 max-w-xs truncate"><%= lock[:lock_key] %></td>
+            <td data-label="Queue" class="px-4 py-3 text-sm text-gray-700 dark:text-gray-300"><%= lock[:queue_name] %></td>
+            <td data-label="Message ID" class="px-4 py-3 text-sm text-right font-mono text-gray-500 dark:text-gray-400"><%= lock[:msg_id] %></td>
+            <td data-label="Age" class="px-4 py-3 text-sm text-right text-gray-500 dark:text-gray-400">
+              <% if lock[:age_seconds] %>
+                <%= pgbus_duration(lock[:age_seconds]) %>
+              <% end %>
+            </td>
+            <td class="px-4 py-3 text-sm text-right">
+              <%= button_to t("pgbus.locks.index.discard"), pgbus.discard_lock_path(lock[:lock_key]),
+                    method: :post,
+                    class: "text-xs text-red-600 hover:text-red-800 font-medium",
+                    data: { turbo_confirm: t("pgbus.locks.index.discard_confirm"), turbo_frame: "_top" } %>
+            </td>
+          </tr>
+        <% end %>
+        <% if @locks.empty? %>
+          <tr><td colspan="5" class="px-4 py-8 text-center text-sm text-gray-400 dark:text-gray-500"><%= t("pgbus.locks.index.empty") %></td></tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+</div>

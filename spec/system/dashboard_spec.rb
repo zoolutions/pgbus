@@ -17,6 +17,21 @@ RSpec.describe "Dashboard", type: :system do
     expect(page).to have_text("3 / 2") # failed / dlq
   end
 
+  context "with parked jobs" do
+    before do
+      @stub_data_source.stats[:parked_total] = 7
+      @stub_data_source.stats[:oldest_parked_age_sec] = 812
+    end
+
+    it "shows the parked jobs card with the oldest wait, linking to the locks page" do
+      visit "/pgbus"
+
+      card = find("a[href$='/pgbus/locks']", text: "Parked jobs")
+      expect(card).to have_text("7")
+      expect(card).to have_text("oldest 13m 32s")
+    end
+  end
+
   it "shows queues table with metrics" do
     visit "/pgbus"
 
