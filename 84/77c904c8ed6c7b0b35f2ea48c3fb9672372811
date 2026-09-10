@@ -1,0 +1,19 @@
+spec/integration/batch_concurrency_spec.rb
+  s_a6c2e7c63feac9::t_5d939366e17f3e 1-123
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "8477c904c8ed6c7b0b35f2ea48c3fb9672372811",
+  "prompts": {},
+  "sessions": {
+    "s_a6c2e7c63feac9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3b770da0-d44f-4208-9314-02d972844592",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
