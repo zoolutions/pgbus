@@ -12,6 +12,7 @@ class Views::Docs::Pages::Observability < DocsUI::Page
     error_reporting
     instrumentation
     metrics
+    dashboard_gauges
     pool_metrics
     appsignal
     logging
@@ -110,6 +111,34 @@ class Views::Docs::Pages::Observability < DocsUI::Page
         `pgbus_worker_recycled` (tagged `reason` and `kind` — `worker` or
         `consumer`), and `pgbus_pool_size` / `pgbus_pool_available` (tagged
         `hostname`).
+      MD
+    end
+  end
+
+  def dashboard_gauges
+    DocsUI::Section("Dashboard gauges", description: "Point-in-time table state, sampled on scrape.") do
+      md <<~'MD'
+        The metrics adapter above is event-driven — it counts things as they happen.
+        Some numbers are not events but *state*: how many jobs are parked behind a
+        concurrency key right now, how long the oldest has waited, how many slots
+        are held. Those are sampled instead, and served from the dashboard's own
+        data source on two surfaces: the `/pgbus/api/metrics` endpoint (gated by
+        `config.metrics_enabled`) and the AppSignal probe.
+
+        | Gauge | Means |
+        |---|---|
+        | `pgbus_concurrency_blocked_executions` | Jobs parked behind a concurrency key, waiting for a slot |
+        | `pgbus_concurrency_blocked_oldest_age_seconds` | How long the longest-waiting parked job has waited |
+        | `pgbus_concurrency_slots_held` | Concurrency slots held across all keys |
+
+        They carry no labels. Concurrency keys are per-record — one per order, one
+        per sync group — so a per-key label would be an unbounded series. Alert on
+        the oldest wait, then read the Locks page to tell the two causes apart: a
+        growing backlog whose key still holds a *fresh* lease is simply demand
+        above the limit, while a growing backlog behind a *stale* lease means a
+        holder died without releasing its slot. The per-key detail, lease state
+        included, is on the dashboard's Locks page and in the `pgbus_concurrency`
+        MCP tool.
       MD
     end
   end

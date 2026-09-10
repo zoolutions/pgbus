@@ -86,6 +86,8 @@ de:
         enqueued: Eingereiht
         failed_dlq: Fehlgeschlagen / DLQ
         failed_dlq_labels: Fehlgeschlagen / Dead Lettered
+        parked_jobs: Geparkte Jobs
+        parked_jobs_oldest: ältester %{age}
         processes: Prozesse
         queues: Warteschlangen
         recurring: Wiederkehrend
@@ -404,6 +406,43 @@ de:
       toggle_dark_mode: Dunkelmodus umschalten
       toggle_menu: Menü umschalten
     locks:
+      concurrency:
+        cards:
+          keys_at_limit: Schlüssel am Limit
+          keys_at_limit_hint: kein Slot frei
+          oldest_wait: Längste Wartezeit
+          oldest_wait_hint: am längsten wartender Job
+          parked_jobs: Geparkte Jobs
+          parked_jobs_hint: warten auf einen Slot
+          slots_held: Belegte Slots
+          slots_held_hint: über alle Schlüssel
+        description: Mit limits_concurrency deklarierte Schlüssel, die von ihnen gehaltenen Slots und die dahinter geparkten Jobs
+        discard_parked: Geparkte verwerfen
+        discard_parked_confirm:
+          one: Den 1 hinter diesem Schlüssel geparkten Job verwerfen? Er wird nie ausgeführt.
+          other: Die %{count} hinter diesem Schlüssel geparkten Jobs verwerfen? Sie werden nie ausgeführt.
+        empty: Keine Nebenläufigkeitsschlüssel in Verwendung
+        headers:
+          in_use: Belegt
+          key: Schlüssel
+          lease: Lease
+          oldest_wait: Längste Wartezeit
+          parked: Geparkt
+        key_released:
+          one: "%{key} freigegeben und 1 Job gestartet."
+          other: "%{key} freigegeben und %{count} Jobs gestartet."
+        lease:
+          expired: Abgelaufen
+          live: Aktiv
+          none: Kein Halter
+        no_key: Kein Nebenläufigkeitsschlüssel angegeben.
+        parked_discarded:
+          one: 1 geparkten Job verworfen.
+          other: "%{count} geparkte Jobs verworfen."
+        release: Freigeben
+        release_confirm: "%{key} freigeben und die geparkten Jobs starten?"
+        release_confirm_live: Die Lease auf %{key} ist noch frisch, es läuft also wahrscheinlich noch ein Job. Eine Freigabe lässt einen weiteren daneben starten. Fortfahren?
+        title: Nebenläufigkeit
       index:
         all_locks_discarded:
           one: 1 Sperre verworfen.
@@ -427,7 +466,9 @@ de:
           one: 1 Sperre verworfen.
           other: "%{count} Sperren verworfen."
         none_selected: Keine Sperren ausgewählt.
-        title: Eindeutigkeitsschlüssel
+        page_description: Eindeutigkeitsschlüssel und Nebenläufigkeits-Slots, die Jobs zurückhalten
+        title: Sperren
+        uniqueness_title: Eindeutigkeitsschlüssel
     outbox:
       index:
         description: Transaktionale Postausgangseinträge ausstehend zur Veröffentlichung an PGMQ

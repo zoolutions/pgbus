@@ -22,9 +22,14 @@ module Pgbus
         append_queue_metrics(lines)
         append_job_metrics(lines)
         append_process_metrics(lines)
-        append_summary_metrics(lines)
+        # One summary read, shared: summary_stats is not memoized, so calling it
+        # per family would repeat the queue/health/process queries and advance
+        # the throughput snapshot a second time within one scrape.
+        summary = summary_stats
+        append_summary_metrics(lines, summary)
         append_stream_metrics(lines)
         append_health_metrics(lines)
+        append_concurrency_metrics(lines, summary)
         "#{lines.join("\n")}\n"
       end
 
@@ -147,8 +152,18 @@ module Pgbus
         Pgbus.logger.debug { "[Pgbus::Metrics] Error serializing process metrics: #{e.message}" }
       end
 
-      def append_summary_metrics(lines)
-        stats = @data_source.summary_stats
+      # nil when the read raised — each family then skips rather than blanking
+      # the whole scrape.
+      def summary_stats
+        @data_source.summary_stats
+      rescue StandardError => e
+        Pgbus.logger.debug { "[Pgbus::Metrics] Error reading summary stats: #{e.message}" }
+        nil
+      end
+
+      def append_summary_metrics(lines, stats)
+        return unless stats
+
         gauge(lines, "pgbus_failed_events_total", "Total failed events") do
           [[stats[:failed_count]]]
         end
@@ -217,6 +232,39 @@ module Pgbus
         end
       rescue StandardError => e
         Pgbus.logger.debug { "[Pgbus::Metrics] Error serializing health metrics: #{e.message}" }
+      end
+
+      # Concurrency slot pressure: how many jobs are parked, how long the oldest
+      # has waited, how many slots are held right now. Unlabelled on purpose —
+      # concurrency keys are per-record (one per order, one per sync group), so a
+      # per-key label would make an unbounded series. The per-key detail lives on
+      # the Locks page and in the pgbus_concurrency MCP tool, both bounded.
+      #
+      # Omitted entirely when neither table holds anything: an install that does
+      # not use limits_concurrency reports nothing rather than a flat zero line.
+      def append_concurrency_metrics(lines, stats)
+        return unless stats
+        return if stats[:parked_total].to_i.zero? && stats[:slots_held].to_i.zero? &&
+                  stats[:keys_at_limit].to_i.zero? && stats[:oldest_parked_age_sec].nil?
+
+        gauge(lines, "pgbus_concurrency_blocked_executions",
+              "Jobs parked behind a concurrency key, waiting for a slot") do
+          [[stats[:parked_total].to_i]]
+        end
+
+        if stats[:oldest_parked_age_sec]
+          gauge(lines, "pgbus_concurrency_blocked_oldest_age_seconds",
+                "How long the longest-waiting parked job has waited") do
+            [[stats[:oldest_parked_age_sec]]]
+          end
+        end
+
+        gauge(lines, "pgbus_concurrency_slots_held",
+              "Concurrency slots currently held across all keys") do
+          [[stats[:slots_held].to_i]]
+        end
+      rescue StandardError => e
+        Pgbus.logger.debug { "[Pgbus::Metrics] Error serializing concurrency metrics: #{e.message}" }
       end
 
       # Emits a Prometheus gauge metric family. The block must return an array

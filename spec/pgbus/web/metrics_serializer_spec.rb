@@ -50,7 +50,8 @@ RSpec.describe Pgbus::Web::MetricsSerializer do
   let(:summary_stats) do
     { total_queues: 3, total_depth: 45, total_visible: 43,
       active_processes: 2, failed_count: 8, dlq_depth: 3,
-      recurring_count: 4, throughput_rate: 10.5 }
+      recurring_count: 4, throughput_rate: 10.5,
+      parked_total: 7, oldest_parked_age_sec: 812, slots_held: 3, keys_at_limit: 2 }
   end
 
   let(:health_stats) do
@@ -245,6 +246,51 @@ RSpec.describe Pgbus::Web::MetricsSerializer do
 
     it "includes oldest transaction age" do
       expect(output).to include("pgbus_oldest_transaction_age_seconds 12")
+    end
+
+    it "includes the concurrency gauges, unlabelled" do
+      expect(output).to include("pgbus_concurrency_blocked_executions 7")
+      expect(output).to include("pgbus_concurrency_blocked_oldest_age_seconds 812")
+      expect(output).to include("pgbus_concurrency_slots_held 3")
+    end
+
+    context "when nothing is parked and no slot is held" do
+      let(:summary_stats) do
+        { total_queues: 3, total_depth: 45, total_visible: 43,
+          active_processes: 2, failed_count: 8, dlq_depth: 3,
+          recurring_count: 4, throughput_rate: 10.5,
+          parked_total: 0, oldest_parked_age_sec: nil, slots_held: 0, keys_at_limit: 0 }
+      end
+
+      it "omits the concurrency family entirely" do
+        expect(output).not_to include("pgbus_concurrency_blocked_executions")
+        expect(output).not_to include("pgbus_concurrency_slots_held")
+      end
+    end
+
+    context "when a key is at its limit with nothing parked" do
+      let(:summary_stats) do
+        { total_queues: 3, total_depth: 45, total_visible: 43,
+          active_processes: 2, failed_count: 8, dlq_depth: 3,
+          recurring_count: 4, throughput_rate: 10.5,
+          parked_total: 0, oldest_parked_age_sec: nil, slots_held: 1, keys_at_limit: 1 }
+      end
+
+      it "still reports the slot count and a zero backlog" do
+        expect(output).to include("pgbus_concurrency_slots_held 1")
+        expect(output).to include("pgbus_concurrency_blocked_executions 0")
+        expect(output).not_to include("pgbus_concurrency_blocked_oldest_age_seconds")
+      end
+    end
+
+    context "when summary_stats raises" do
+      before { allow(data_source).to receive(:summary_stats).and_raise(StandardError, "db error") }
+
+      it "drops only the concurrency and summary families" do
+        expect { output }.not_to raise_error
+        expect(output).not_to include("pgbus_concurrency_blocked_executions")
+        expect(output).to include("pgbus_queue_depth")
+      end
     end
 
     context "when health stats have no tables and no transactions" do

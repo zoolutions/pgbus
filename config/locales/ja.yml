@@ -86,6 +86,8 @@ ja:
         enqueued: キューに追加済み
         failed_dlq: 失敗 / DLQ
         failed_dlq_labels: 失敗 / Dead Lettered
+        parked_jobs: 待機中のジョブ
+        parked_jobs_oldest: 最古 %{age}
         processes: プロセス
         queues: キュー
         recurring: 繰り返し
@@ -404,6 +406,43 @@ ja:
       toggle_dark_mode: ダークモード切替
       toggle_menu: メニュー切替
     locks:
+      concurrency:
+        cards:
+          keys_at_limit: 上限に達したキー
+          keys_at_limit_hint: 空きスロットなし
+          oldest_wait: 最長待ち時間
+          oldest_wait_hint: 最も長く待っているジョブ
+          parked_jobs: 待機中のジョブ
+          parked_jobs_hint: スロット待ち
+          slots_held: 保持中のスロット
+          slots_held_hint: 全キー合計
+        description: limits_concurrency で宣言されたキー、保持中のスロット、その背後で待機中のジョブ
+        discard_parked: 待機中を破棄
+        discard_parked_confirm:
+          one: このキーの背後で待機中の1件のジョブを破棄しますか？二度と実行されません。
+          other: このキーの背後で待機中の%{count}件のジョブを破棄しますか？二度と実行されません。
+        empty: 使用中の同時実行キーはありません
+        headers:
+          in_use: 使用中
+          key: キー
+          lease: リース
+          oldest_wait: 最長待ち時間
+          parked: 待機中
+        key_released:
+          one: "%{key} を解放し、1件のジョブを昇格しました。"
+          other: "%{key} を解放し、%{count}件のジョブを昇格しました。"
+        lease:
+          expired: 期限切れ
+          live: 有効
+          none: 保持者なし
+        no_key: 同時実行キーが指定されていません。
+        parked_discarded:
+          one: 1件の待機中ジョブを破棄しました。
+          other: "%{count}件の待機中ジョブを破棄しました。"
+        release: 解放
+        release_confirm: "%{key} を解放し、待機中のジョブを昇格しますか？"
+        release_confirm_live: "%{key} のリースはまだ有効なため、ジョブが実行中の可能性があります。解放すると別のジョブが並行して開始します。続行しますか？"
+        title: 同時実行
       index:
         all_locks_discarded:
           one: 1件のロックを破棄しました。
@@ -427,7 +466,9 @@ ja:
           one: 1件のロックを破棄しました。
           other: "%{count}件のロックを破棄しました。"
         none_selected: ロックが選択されていません。
-        title: 一意性キー
+        page_description: ジョブを止めている一意性キーと同時実行スロット
+        title: ロック
+        uniqueness_title: 一意性キー
     outbox:
       index:
         description: PGMQへの公開待ちのトランザクショナルアウトボックスエントリ

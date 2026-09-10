@@ -86,6 +86,8 @@ da:
         enqueued: Sat i kø
         failed_dlq: Mislykkedes / DLQ
         failed_dlq_labels: Fejlet / Dead Lettered
+        parked_jobs: Parkerede job
+        parked_jobs_oldest: ældst %{age}
         processes: Processer
         queues: Køer
         recurring: Gentagende
@@ -404,6 +406,43 @@ da:
       toggle_dark_mode: Skift til mørk tilstand
       toggle_menu: Skift menu
     locks:
+      concurrency:
+        cards:
+          keys_at_limit: Nøgler ved grænsen
+          keys_at_limit_hint: ingen ledig plads
+          oldest_wait: Længste ventetid
+          oldest_wait_hint: længst et job har ventet
+          parked_jobs: Parkerede job
+          parked_jobs_hint: venter på en plads
+          slots_held: Holdte pladser
+          slots_held_hint: på tværs af alle nøgler
+        description: Nøgler erklæret med limits_concurrency, pladserne de holder, og de job der er parkeret bag dem
+        discard_parked: Kassér parkerede
+        discard_parked_confirm:
+          one: Kassér det 1 job der er parkeret bag denne nøgle? Det vil aldrig køre.
+          other: Kassér de %{count} job der er parkeret bag denne nøgle? De vil aldrig køre.
+        empty: Ingen samtidighedsnøgler i brug
+        headers:
+          in_use: I brug
+          key: Nøgle
+          lease: Lease
+          oldest_wait: Længste ventetid
+          parked: Parkerede
+        key_released:
+          one: Frigav %{key} og fremrykkede 1 job.
+          other: Frigav %{key} og fremrykkede %{count} job.
+        lease:
+          expired: Udløbet
+          live: Aktiv
+          none: Ingen indehaver
+        no_key: Ingen samtidighedsnøgle angivet.
+        parked_discarded:
+          one: Kasserede 1 parkeret job.
+          other: Kasserede %{count} parkerede job.
+        release: Frigiv
+        release_confirm: Frigiv %{key} og fremryk dens parkerede job?
+        release_confirm_live: Leasen på %{key} er stadig frisk, så et job kører sandsynligvis stadig. Frigivelse lader et andet starte ved siden af. Fortsæt?
+        title: Samtidighed
       index:
         all_locks_discarded:
           one: Kasserede 1 lås.
@@ -427,7 +466,9 @@ da:
           one: Kasserede 1 lås.
           other: Kasserede %{count} låse.
         none_selected: Ingen låse valgt.
-        title: Unikhedsnøgler
+        page_description: Unikhedsnøgler og samtidighedspladser der holder job tilbage
+        title: Låse
+        uniqueness_title: Unikhedsnøgler
     outbox:
       index:
         description: Transaktionelle udbakke-poster, der venter på publicering til PGMQ

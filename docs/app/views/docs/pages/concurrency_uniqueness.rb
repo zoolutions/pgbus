@@ -12,6 +12,7 @@ class Views::Docs::Pages::ConcurrencyUniqueness < DocsUI::Page
     uniqueness
     strategies
     concurrency
+    seeing_it
     choosing
   end
 
@@ -149,6 +150,56 @@ class Views::Docs::Pages::ConcurrencyUniqueness < DocsUI::Page
         plain "the same key. The produce is bounded well under any sane `duration` by "
         plain "the client's statement and TCP timeouts; the queue wait is yours to "
         plain "size. Set `duration` above the worst queue wait you tolerate."
+      end
+    end
+  end
+
+  def seeing_it
+    DocsUI::Section("Seeing it", description: "A blocked key is invisible until you look at it.") do
+      md <<~'MD'
+        A key at its limit is indistinguishable from a stalled pipeline from the
+        outside: nothing fails, nothing is in the queue, the jobs are simply parked.
+        Four places show it.
+
+        The dashboard **home** carries a **Parked jobs** card — the count and the
+        oldest wait, linking straight to Locks. It is usually the first sign.
+
+        The **Locks** page has a **Concurrency** section: parked jobs, the oldest
+        wait, slots held and keys at their limit, then up to 100 key rows — busiest
+        first — each with its value / limit, lease state, parked count and oldest
+        wait. The cards carry the true totals, so a key missing from the table is
+        not absent, only outside the 100 busiest. A stale lease next to a parked
+        backlog is the shape to look for — the slot's holder died before releasing
+        it.
+
+        Three of those four totals are exported to `/pgbus/api/metrics` and the
+        AppSignal probe: `pgbus_concurrency_blocked_executions`,
+        `pgbus_concurrency_blocked_oldest_age_seconds` and
+        `pgbus_concurrency_slots_held`. Alert on the oldest wait. *Keys at limit*
+        has no gauge — it is a Locks card (and an MCP field) only.
+
+        The read-only `pgbus_concurrency` MCP tool returns the same data, so an
+        agent can answer "why is this order stuck?" without SQL.
+      MD
+      md <<~'MD'
+        Each key row on the Locks page carries two escape hatches:
+
+        - **Release** drops the key's semaphore row and promotes what can run. The
+          promotion goes through the same guarded upsert an enqueue uses, so it can
+          never push the key past its limit. Use it when a holder died and its lease
+          outlives it. Do *not* use it while the lease is still fresh — a job is
+          probably still running, and releasing lets another start beside it. The
+          page warns you with different confirm text in that case.
+        - **Discard parked** drops every job parked behind the key. They never run.
+          A parked batch child is resolved as failed so its batch stops waiting, and
+          an `:until_executed` uniqueness lock is released rather than orphaned. Use
+          it only when the parked work is genuinely obsolete — `:block` exists
+          precisely so that work is not lost.
+      MD
+      DocsUI::Callout(:note) do
+        plain "Both actions are per key. There is no bulk \"discard every parked job\" — "
+        plain "losing a queue's worth of parked work to one click is the failure "
+        plain "mode :block was built to avoid."
       end
     end
   end

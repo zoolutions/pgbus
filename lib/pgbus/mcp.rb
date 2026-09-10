@@ -24,6 +24,7 @@ module Pgbus
       pgbus/mcp/tools/dlq_tool
       pgbus/mcp/tools/dlq_detail_tool
       pgbus/mcp/tools/locks_tool
+      pgbus/mcp/tools/concurrency_tool
       pgbus/mcp/tools/throughput_tool
       pgbus/mcp/tools/stats_tool
       pgbus/mcp/tools/recurring_tool
