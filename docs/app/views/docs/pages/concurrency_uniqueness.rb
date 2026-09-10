@@ -103,11 +103,42 @@ class Views::Docs::Pages::ConcurrencyUniqueness < DocsUI::Page
       DocsUI::Table(
         [ "on_conflict", "Behavior" ],
         [
-          [ [ :code, ":block" ], "Hold in a blocked queue; released when a slot opens or the semaphore expires." ],
+          [ [ :code, ":block" ], "Park the job; promoted the moment a slot frees. Never dropped, however long it waits." ],
           [ [ :code, ":discard" ], "Silently drop the job." ],
           [ [ :code, ":raise" ], [ :md, "Raise `Pgbus::ConcurrencyLimitExceeded`." ] ]
         ]
       )
+      md <<~'MD'
+        `:block` is the option to reach for when a job must be **constrained
+        without being lost** — a per-record pipeline that may only run one
+        at a time but must run for every enqueue. Uniqueness cannot do that:
+        every `ensures_uniqueness` conflict drops or rejects the duplicate.
+
+        The guarantees behind `:block`:
+
+        - **A parked job never ages out.** The only way out of
+          `pgbus_blocked_executions` is promotion, so a park that outlives
+          `duration` is still promoted when its slot frees.
+        - **A promotion always takes a real slot.** The finishing job
+          releases its slot and hands it to the next parked job in one
+          transaction; the dispatcher's sweep promotes behind a dead holder
+          the same way. Neither can push a key past `to:`.
+        - **A job parked while the holder is finishing is promoted, not
+          stranded.** The semaphore check and the park commit together under
+          the semaphore's row lock, so a concurrent release waits and then
+          sees the parked row.
+        - **A duplicate delivery never releases a slot twice.** Archiving the
+          message is the exact-once claim; a worker whose message was already
+          archived elsewhere (its heartbeat lapsed) skips the release.
+      MD
+      DocsUI::Callout(:info) do
+        plain "`duration` bounds heartbeat silence, not run time: the visibility "
+        plain "heartbeat re-arms the semaphore alongside the message, so a job that "
+        plain "runs for an hour keeps its slot for an hour. A holder whose process "
+        plain "died is presumed dead `duration` after its last beat, and its parked "
+        plain "jobs are promoted on the next sweep. Only if you disable the heartbeat "
+        plain "does `duration` need to exceed your longest run."
+      end
     end
   end
 

@@ -72,13 +72,20 @@ module Pgbus
         blocked = false
 
         if key && concurrency
-          result = Concurrency::Semaphore.acquire(key, concurrency[:limit], concurrency[:duration])
+          # One transaction from the semaphore check to the send or the park:
+          # the upsert holds the semaphore row lock until commit, so a holder
+          # signalling right now waits and then sees the parked row instead
+          # of stranding it (rails/solid_queue#712). A send that raises rolls
+          # the acquired slot back instead of leaking it until expiry.
+          Pgbus::Semaphore.transaction(requires_new: true) do
+            result = Concurrency::Semaphore.acquire(key, concurrency[:limit], concurrency[:duration])
 
-          if result == :acquired
-            msg_id = Pgbus.client.send_message(queue, payload_hash, delay: delay, priority: priority)
-            active_job.provider_job_id = msg_id
-          else
-            blocked = handle_conflict(concurrency, active_job, key, queue, payload_hash, priority: priority)
+            if result == :acquired
+              msg_id = Pgbus.client.send_message(queue, payload_hash, delay: delay, priority: priority)
+              active_job.provider_job_id = msg_id
+            else
+              blocked = handle_conflict(concurrency, active_job, key, queue, payload_hash, priority: priority)
+            end
           end
         else
           msg_id = Pgbus.client.send_message(queue, payload_hash, delay: delay, priority: priority)

@@ -96,13 +96,21 @@ module Pgbus
           # `batch` (and `batch.enqueue` for open batches) work inside a job.
           assign_batch_id(job, payload)
           Pgbus.logger.debug { "[Pgbus::Executor] running #{tag} job_class=#{job_class}" }
-          with_visibility_heartbeat(job, queue_name, msg_id, source_queue) { execute_job(job) }
+          with_visibility_heartbeat(job, queue_name, msg_id, source_queue, payload) { execute_job(job) }
           # retry_on re-enqueues from inside perform_now and returns normally:
           # this attempt is done (archive it) but the job is not — the retry
           # message carries the batch tag and signals on its own outcome.
           retried = Batch.retry_reenqueued?(payload["job_id"])
           Pgbus.logger.debug { "[Pgbus::Executor] perform_returned #{tag} job_class=#{job_class}" }
-          archive_from(queue_name, msg_id, source_queue: source_queue)
+          # Archiving is the exact-once claim on this execution. `false` means
+          # another worker already archived the message (our heartbeat lapsed
+          # and it was redelivered): that worker owns the completion signals,
+          # and signalling again here would release the concurrency slot a
+          # second time (rails/solid_queue#761).
+          if archive_from(queue_name, msg_id, source_queue: source_queue) == false
+            Pgbus.logger.warn { "[Pgbus::Executor] already archived elsewhere, skipping signals #{tag} job_class=#{job_class}" }
+            return :duplicate
+          end
           Pgbus.logger.debug { "[Pgbus::Executor] archived #{tag} job_class=#{job_class}" }
           job_succeeded = true
           release_uniqueness_lock(uniqueness_key)
@@ -177,14 +185,18 @@ module Pgbus
       # Keep the message invisible while perform runs (see VisibilityHeartbeat).
       # Wraps only the perform: the heartbeat must be gone before archive or
       # the retry backoff touches the same message's VT.
-      def with_visibility_heartbeat(job, queue_name, msg_id, source_queue, &)
+      def with_visibility_heartbeat(job, queue_name, msg_id, source_queue, payload, &)
         klass = job.class
         per_job = klass.respond_to?(:pgbus_visibility_heartbeat_enabled) ? klass.pgbus_visibility_heartbeat_enabled : nil
         return yield if per_job == false
 
+        # The heartbeat also keeps the job's semaphore alive, so `duration`
+        # bounds silence, not run time.
+        concurrency_key = Concurrency.extract_key(payload)
         VisibilityHeartbeat.track(
           client: client, queue_name: source_queue || queue_name, prefixed: source_queue.nil?,
-          msg_id: msg_id, job_class: klass.name, config: config, &
+          msg_id: msg_id, job_class: klass.name, config: config,
+          concurrency: concurrency_key && [concurrency_key, Concurrency.config_for(klass)[:duration]], &
         )
       end
 
@@ -322,12 +334,10 @@ module Pgbus
         key = Concurrency.extract_key(payload)
         return unless key
 
-        # Atomic permit handoff: try to promote a blocked job first.
-        # promote_next wraps delete + enqueue in a transaction so neither is lost.
-        # If promoted, the slot stays occupied (no release needed).
-        # Only release the semaphore if there's nothing to promote.
-        promoted = Concurrency::BlockedExecution.promote_next(key, client: client)
-        Concurrency::Semaphore.release(key) unless promoted
+        # Release the slot and hand it to the next parked job in one
+        # transaction; the semaphore row lock orders this against a
+        # concurrent enqueue that is parking a job.
+        Concurrency::Semaphore.signal(key, client: client)
       rescue StandardError => e
         Pgbus.logger.warn { "[Pgbus] Concurrency signal failed: #{e.message}" }
       end

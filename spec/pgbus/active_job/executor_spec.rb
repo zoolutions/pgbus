@@ -52,15 +52,14 @@ RSpec.describe Pgbus::ActiveJob::Executor do
       it "skips the completion signal when the job re-enqueued itself for retry" do
         allow(job_double).to receive(:perform_now) { Pgbus::Batch.note_retry_reenqueued(job_id) }
         allow(Pgbus::Concurrency).to receive(:extract_key).and_return("k")
-        allow(Pgbus::Concurrency::BlockedExecution).to receive(:promote_next).and_return(false)
-        allow(Pgbus::Concurrency::Semaphore).to receive(:release)
+        allow(Pgbus::Concurrency::Semaphore).to receive(:signal)
 
         result = executor.execute(message, queue_name)
 
         expect(result).to eq(:success)
         expect(mock_client).to have_received(:archive_message)
         expect(Pgbus::Batch).not_to have_received(:job_completed)
-        expect(Pgbus::Concurrency::Semaphore).to have_received(:release).with("k")
+        expect(Pgbus::Concurrency::Semaphore).to have_received(:signal).with("k", client: mock_client)
         expect(Pgbus::Batch.retry_reenqueued?(job_id)).to be(false)
       end
 
@@ -407,32 +406,21 @@ RSpec.describe Pgbus::ActiveJob::Executor do
       before do
         allow(Pgbus::Concurrency).to receive(:extract_key).and_call_original
         allow(ActiveJob::Base).to receive(:deserialize).with(concurrency_payload).and_return(job_double)
-        allow(Pgbus::Concurrency::Semaphore).to receive(:release)
-        allow(Pgbus::Concurrency::BlockedExecution).to receive(:promote_next).and_return(false)
+        allow(Pgbus::Concurrency::Semaphore).to receive(:signal)
       end
 
-      it "releases semaphore when no blocked jobs to promote" do
+      it "signals the semaphore once the message is archived (release + promote in one transaction)" do
         executor.execute(message, queue_name)
 
-        expect(Pgbus::Concurrency::BlockedExecution).to have_received(:promote_next).with("TestJob-42", client: mock_client)
-        expect(Pgbus::Concurrency::Semaphore).to have_received(:release).with("TestJob-42")
+        expect(Pgbus::Concurrency::Semaphore).to have_received(:signal).with("TestJob-42", client: mock_client).once
       end
 
-      it "skips semaphore release when promote_next succeeds (atomic handoff)" do
-        allow(Pgbus::Concurrency::BlockedExecution).to receive(:promote_next).and_return(true)
-
-        executor.execute(message, queue_name)
-
-        expect(Pgbus::Concurrency::BlockedExecution).to have_received(:promote_next).with("TestJob-42", client: mock_client)
-        expect(Pgbus::Concurrency::Semaphore).not_to have_received(:release)
-      end
-
-      it "releases semaphore on dead letter when no blocked jobs" do
+      it "signals the semaphore on dead letter" do
         dlq_message = build_message_double(msg_id: 21, message: message_json, read_ct: config.max_retries + 1)
 
         executor.execute(dlq_message, queue_name)
 
-        expect(Pgbus::Concurrency::Semaphore).to have_received(:release).with("TestJob-42")
+        expect(Pgbus::Concurrency::Semaphore).to have_received(:signal).with("TestJob-42", client: mock_client).once
       end
 
       it "does not signal concurrency on transient failure" do
@@ -440,8 +428,7 @@ RSpec.describe Pgbus::ActiveJob::Executor do
 
         executor.execute(message, queue_name)
 
-        expect(Pgbus::Concurrency::Semaphore).not_to have_received(:release)
-        expect(Pgbus::Concurrency::BlockedExecution).not_to have_received(:promote_next)
+        expect(Pgbus::Concurrency::Semaphore).not_to have_received(:signal)
       end
 
       it "does not signal concurrency if archive_message fails (message will be retried)" do
@@ -449,8 +436,30 @@ RSpec.describe Pgbus::ActiveJob::Executor do
 
         executor.execute(message, queue_name)
 
-        expect(Pgbus::Concurrency::Semaphore).not_to have_received(:release)
-        expect(Pgbus::Concurrency::BlockedExecution).not_to have_received(:promote_next)
+        expect(Pgbus::Concurrency::Semaphore).not_to have_received(:signal)
+      end
+
+      # rails/solid_queue#761: a stale duplicate execution (heartbeat lapsed,
+      # the message was redelivered and finished elsewhere) must not release
+      # the slot a second time — that is how a limit of 1 runs 2, then 3.
+      it "does not signal when another worker already archived the message" do
+        allow(mock_client).to receive(:archive_message).and_return(false)
+        allow(Pgbus::Batch).to receive(:job_completed)
+
+        result = executor.execute(message, queue_name)
+
+        expect(result).to eq(:duplicate)
+        expect(Pgbus::Concurrency::Semaphore).not_to have_received(:signal)
+        expect(Pgbus::Batch).not_to have_received(:job_completed)
+      end
+
+      it "keeps the semaphore alive through the visibility heartbeat while the job runs" do
+        allow(Pgbus::VisibilityHeartbeat).to receive(:track).and_yield
+
+        executor.execute(message, queue_name)
+
+        expect(Pgbus::VisibilityHeartbeat).to have_received(:track)
+          .with(hash_including(concurrency: ["TestJob-42", 900]))
       end
     end
 
@@ -785,7 +794,7 @@ RSpec.describe Pgbus::ActiveJob::Executor do
 
         expect(Pgbus::VisibilityHeartbeat).to have_received(:track).with(
           client: mock_client, queue_name: queue_name, prefixed: true, msg_id: 60,
-          job_class: job_double.class.name, config: config
+          job_class: job_double.class.name, config: config, concurrency: nil
         )
         expect(job_double).to have_received(:perform_now)
       end

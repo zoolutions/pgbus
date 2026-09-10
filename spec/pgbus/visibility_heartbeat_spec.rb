@@ -96,6 +96,34 @@ RSpec.describe Pgbus::VisibilityHeartbeat do
       expect(client).to have_received(:set_visibility_timeout).with("pgbus_default_p1", 7, vt: 30, prefixed: false)
     end
 
+    it "keeps a concurrency-limited job's semaphore alive on every extension" do
+      allow(Pgbus::Concurrency::Semaphore).to receive(:touch)
+
+      track(concurrency: ["ImportJob-42", 600]) do
+        described_class.tick!(now: Process.clock_gettime(Process::CLOCK_MONOTONIC) + 10, config: config)
+      end
+
+      expect(Pgbus::Concurrency::Semaphore).to have_received(:touch).with("ImportJob-42", 600).once
+    end
+
+    it "still re-arms the visibility timeout when the semaphore touch fails" do
+      allow(Pgbus::Concurrency::Semaphore).to receive(:touch).and_raise(StandardError, "pooler timeout")
+
+      track(concurrency: ["ImportJob-42", 600]) do
+        described_class.tick!(now: Process.clock_gettime(Process::CLOCK_MONOTONIC) + 10, config: config)
+      end
+
+      expect(client).to have_received(:set_visibility_timeout).once
+    end
+
+    it "does not touch any semaphore for a job without a concurrency key" do
+      allow(Pgbus::Concurrency::Semaphore).to receive(:touch)
+
+      track { described_class.tick!(now: Process.clock_gettime(Process::CLOCK_MONOTONIC) + 10, config: config) }
+
+      expect(Pgbus::Concurrency::Semaphore).not_to have_received(:touch)
+    end
+
     it "instruments every extension" do
       allow(ActiveSupport::Notifications).to receive(:instrument).and_call_original
 

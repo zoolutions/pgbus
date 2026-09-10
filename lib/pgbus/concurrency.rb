@@ -7,6 +7,10 @@ module Pgbus
     extend ActiveSupport::Concern
 
     METADATA_KEY = "pgbus_concurrency_key"
+    # How long a slot holder may go silent (no visibility heartbeat) before
+    # its slot is presumed dead. Also the limit/duration used to promote a
+    # parked job whose class no longer resolves.
+    DEFAULT_DURATION = 15 * 60
 
     class_methods do
       # Limit concurrent execution of jobs with the same key.
@@ -20,9 +24,12 @@ module Pgbus
       #                Default: the ENQUEUED job's class name (resolved at
       #                resolve time, so an inherited declaration keys each
       #                subclass separately — issue #357).
-      #   duration:    Safety expiry for semaphore (default: 15 minutes)
+      #   duration:    How long a running holder may go without a visibility
+      #                heartbeat before its slot is presumed dead and swept
+      #                (default: 15 minutes). Not a cap on run time: the
+      #                heartbeat keeps the semaphore alive while the job runs.
       #   on_conflict: What to do when limit is reached — :block, :discard, or :raise (default: :block)
-      def limits_concurrency(to:, key: nil, duration: 15 * 60, on_conflict: :block) # rubocop:disable Naming/MethodParameterName
+      def limits_concurrency(to:, key: nil, duration: DEFAULT_DURATION, on_conflict: :block) # rubocop:disable Naming/MethodParameterName
         raise ArgumentError, "to: must be a positive integer" unless to.is_a?(Integer) && to.positive?
         raise ArgumentError, "on_conflict must be :block, :discard, or :raise" unless %i[block discard raise].include?(on_conflict)
         raise ArgumentError, "duration must be a positive number" unless duration.is_a?(Numeric) && duration.positive?
@@ -70,6 +77,22 @@ module Pgbus
       # Extract the concurrency key from a deserialized payload.
       def extract_key(payload)
         payload[METADATA_KEY]
+      end
+
+      # Limit and duration for a job class, or the defaults when the class
+      # has no concurrency config or no longer resolves (a parked job must
+      # still be promoted; the executor dead-letters a missing class).
+      def config_for(job_class)
+        config = job_class.respond_to?(:pgbus_concurrency) && job_class.pgbus_concurrency
+        return { limit: 1, duration: DEFAULT_DURATION } unless config
+
+        { limit: config[:limit], duration: config[:duration] }
+      end
+
+      def config_for_payload(payload)
+        config_for(Object.const_get(payload["job_class"].to_s))
+      rescue NameError
+        config_for(nil)
       end
     end
   end

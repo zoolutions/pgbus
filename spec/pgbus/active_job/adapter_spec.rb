@@ -25,6 +25,7 @@ RSpec.describe Pgbus::ActiveJob::Adapter do
 
   before do
     allow(Pgbus).to receive(:client).and_return(mock_client)
+    allow(Pgbus::Semaphore).to receive(:transaction).and_yield
     allow(Pgbus::Serializer).to receive(:serialize_job_hash).and_return(serialized_hash)
   end
 
@@ -195,6 +196,25 @@ RSpec.describe Pgbus::ActiveJob::Adapter do
         duration: 900
       )
       expect(mock_client).not_to have_received(:send_message)
+    end
+
+    # rails/solid_queue#712: the semaphore check and the park must commit
+    # together, holding the semaphore row lock in between, so a holder that
+    # signals concurrently waits and then sees the parked job.
+    it "parks the job inside the transaction that saw the semaphore full" do
+      allow(Pgbus::Concurrency::Semaphore).to receive(:acquire).and_return(:blocked)
+      allow(Pgbus::Concurrency::BlockedExecution).to receive(:insert)
+      allow(job).to receive(:try).with(:priority).and_return(0)
+      in_transaction = []
+      allow(Pgbus::Semaphore).to receive(:transaction) do |&block|
+        in_transaction << :open
+        block.call.tap { in_transaction << :closed }
+      end
+      allow(Pgbus::Concurrency::BlockedExecution).to receive(:insert) { in_transaction << :parked }
+
+      adapter.enqueue(job)
+
+      expect(in_transaction).to eq(%i[open parked closed])
     end
 
     it "discards when at concurrency limit with on_conflict: :discard" do
