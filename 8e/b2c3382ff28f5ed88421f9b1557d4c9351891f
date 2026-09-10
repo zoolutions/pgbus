@@ -1,0 +1,58 @@
+docs/app/views/docs/pages/concurrency_uniqueness.rb
+  s_a1cf7b024de76e::t_3c3a384525d649 162,164-165,167-176,178-179
+lib/pgbus/web/metrics_serializer.rb
+  s_a1cf7b024de76e::t_16c5733d8e220e 25-29,32,155-166,245-246
+spec/support/pgbus/stub_data_source.rb
+  s_a1cf7b024de76e::t_2291b63c2b9b2d 18-19,49,54,135-138
+app/views/pgbus/dashboard/_stats_cards.html.erb
+  s_a1cf7b024de76e::t_16c5733d8e220e 43-46
+lib/pgbus/web/data_source.rb
+  s_a1cf7b024de76e::t_9b68e6cd04635f 738-747
+  s_a1cf7b024de76e::t_db8f1b210efee6 1197-1198
+  s_a1cf7b024de76e::t_fa747a482b82fe 46-56,705-711,1153,1192-1195
+spec/pgbus/web/data_source_spec.rb
+  s_a1cf7b024de76e::t_822d3693dda641 635-653,667-668,670,673,679,706-713,740,754,757-759,766,777
+spec/system/dashboard_spec.rb
+  s_a1cf7b024de76e::t_9f6d06f603f6bd 33-44
+config/locales/fi.yml
+  s_a1cf7b024de76e::t_21d368927ebca7 423
+app/models/pgbus/uniqueness_key.rb
+  s_a1cf7b024de76e::t_8bbbf68e432bdb 89-103
+lib/pgbus/integrations/appsignal/probe.rb
+  s_a1cf7b024de76e::t_2291b63c2b9b2d 63-67
+config/locales/es.yml
+  s_a1cf7b024de76e::t_21d368927ebca7 414
+CHANGELOG.md
+  s_a1cf7b024de76e::t_df08ae51b2bf90 11
+app/views/pgbus/locks/_uniqueness.html.erb
+  s_a1cf7b024de76e::t_16c5733d8e220e 75
+config/locales/nl.yml
+  s_a1cf7b024de76e::t_21d368927ebca7 470
+lib/pgbus/mcp/base_tool.rb
+  s_a1cf7b024de76e::t_2291b63c2b9b2d 39-41,43-45
+config/locales/it.yml
+  s_a1cf7b024de76e::t_21d368927ebca7 470
+app/controllers/pgbus/locks_controller.rb
+  s_a1cf7b024de76e::t_9b68e6cd04635f 38-40,44-45,54-55
+spec/integration/dashboard_concurrency_spec.rb
+  s_a1cf7b024de76e::t_4341d2a4a9a78a 105,109-127
+  s_a1cf7b024de76e::t_7033434c6f6913 170-184
+docs/app/views/docs/pages/observability.rb
+  s_a1cf7b024de76e::t_3c3a384525d649 136-141
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "8eb2c3382ff28f5ed88421f9b1557d4c9351891f",
+  "prompts": {},
+  "sessions": {
+    "s_a1cf7b024de76e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "42e0a07f-b217-4b19-a6b8-b85fe2ab37ab",
+        "model": "claude-opus-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
