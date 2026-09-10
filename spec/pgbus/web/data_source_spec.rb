@@ -687,6 +687,15 @@ RSpec.describe Pgbus::Web::DataSource do
       expect(data_source.release_concurrency_key("ProcessOrder-42")).to eq(0)
     end
 
+    it "expires the emptied row so the dispatcher's expires_at-only sweep reaps it" do
+      allow(Pgbus::Concurrency::BlockedExecution).to receive(:promote_next).and_return(false)
+
+      data_source.release_concurrency_key("ProcessOrder-42")
+
+      expect(Pgbus::Semaphore).to have_received(:where).with(key: "ProcessOrder-42", value: 0)
+      expect(semaphore_relation).to have_received(:update_all).with(hash_including(:expires_at))
+    end
+
     it "stops after the promotion cap" do
       allow(Pgbus::Concurrency::BlockedExecution).to receive(:promote_next).and_return(true)
 
@@ -724,9 +733,12 @@ RSpec.describe Pgbus::Web::DataSource do
         Pgbus::Uniqueness::STRATEGY_KEY => "until_executed" }
     end
 
+    let(:parked_at) { Time.now - 60 }
+
     let(:rows) do
       [plain_payload, batch_payload, unique_payload].each_with_index.map do |payload, i|
-        double("BlockedExecution", id: i + 1, concurrency_key: "ProcessOrder-42", payload: payload)
+        double("BlockedExecution", id: i + 1, concurrency_key: "ProcessOrder-42",
+                                   payload: payload, created_at: parked_at)
       end
     end
 
@@ -754,9 +766,10 @@ RSpec.describe Pgbus::Web::DataSource do
     it "releases an until_executed uniqueness lock, but only while it is unbound" do
       data_source.discard_parked_jobs("ProcessOrder-42")
 
-      # Scoped to the parked job's own unbound row: if the reaper dropped it and
-      # a successor bound the same key to a live message, that lock must survive.
-      expect(Pgbus::UniquenessKey).to have_received(:release_if_unbound!).with("import-42").once
+      # Scoped to the parked job's own row: msg_id = 0 excludes a successor that
+      # was sent, and the created_at ceiling excludes one acquired afterwards.
+      expect(Pgbus::UniquenessKey).to have_received(:release_if_unbound!)
+        .with("import-42", acquired_before: parked_at).once
     end
 
     it "leaves a plain payload alone" do
@@ -768,7 +781,7 @@ RSpec.describe Pgbus::Web::DataSource do
 
     it "keeps an until_start lock held" do
       allow(relation).to receive(:lock).and_return(
-        double(to_a: [double("BlockedExecution", id: 9, concurrency_key: "k",
+        double(to_a: [double("BlockedExecution", id: 9, concurrency_key: "k", created_at: parked_at,
                                                  payload: unique_payload.merge(Pgbus::Uniqueness::STRATEGY_KEY => "until_start"))])
       )
 
@@ -792,7 +805,7 @@ RSpec.describe Pgbus::Web::DataSource do
 
     it "reads a double-encoded legacy payload" do
       allow(relation).to receive(:lock).and_return(
-        double(to_a: [double("BlockedExecution", id: 4, concurrency_key: "k",
+        double(to_a: [double("BlockedExecution", id: 4, concurrency_key: "k", created_at: parked_at,
                                                  payload: batch_payload.to_json)])
       )
 

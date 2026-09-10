@@ -107,10 +107,14 @@ RSpec.describe "Dashboard concurrency section (integration)", :integration do
 
       expect(data_source.release_concurrency_key(key)).to eq(0)
 
-      # Zeroed, not deleted: the row is where the limit is recorded, and the
-      # dispatcher's expired-semaphore sweep reaps a value <= 0 row.
+      # Zeroed, not deleted: the row is where the limit is recorded. It is also
+      # marked expired, because the dispatcher's expire_stale matches on
+      # expires_at ALONE — asserting the `Semaphore.expired` model scope here
+      # would pass while the real sweep left the row in place for a full
+      # `duration`.
       expect(Pgbus::Semaphore.find_by(key: key).value).to eq(0)
-      expect(Pgbus::Semaphore.expired).to include(Pgbus::Semaphore.find_by(key: key))
+      expect(Pgbus::Concurrency::Semaphore.expire_stale.map { |r| r["key"] }).to include(key)
+      expect(Pgbus::Semaphore.where(key: key).count).to eq(0)
     end
 
     it "keeps the key's recorded limit so a payload with no resolvable class is judged against it" do
@@ -176,6 +180,26 @@ RSpec.describe "Dashboard concurrency section (integration)", :integration do
       Pgbus::UniquenessKey.acquire!(lock_key, queue_name: "default", msg_id: 4242)
       park(extra: { Pgbus::Uniqueness::METADATA_KEY => lock_key,
                     Pgbus::Uniqueness::STRATEGY_KEY => "until_executed" })
+
+      data_source.discard_parked_jobs(key)
+
+      expect(Pgbus::UniquenessKey.locked?(lock_key)).to be(true)
+    end
+
+    it "leaves a still-parked successor's lock alone when the reaper took the original's" do
+      # The successor's lock is ALSO unbound (it is parked too), so msg_id
+      # cannot separate the two. What does: it was acquired an hour after the
+      # row being discarded was parked, and a lock cannot belong to a row that
+      # predates it. Without the created_at ceiling this lock is dropped and a
+      # duplicate is admitted.
+      lock_key = "unique-#{key}"
+      original = Pgbus::Concurrency::BlockedExecution.insert(
+        concurrency_key: key, queue_name: "default", duration: 900,
+        payload: payload(extra: { Pgbus::Uniqueness::METADATA_KEY => lock_key,
+                                  Pgbus::Uniqueness::STRATEGY_KEY => "until_executed" })
+      )
+      original.update!(created_at: 1.hour.ago)
+      Pgbus::UniquenessKey.acquire!(lock_key, queue_name: "default", msg_id: 0)
 
       data_source.discard_parked_jobs(key)
 

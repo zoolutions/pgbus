@@ -712,6 +712,14 @@ module Pgbus
         promoted = 0
         promoted += 1 while promoted < PROMOTE_CAP &&
                             Concurrency::BlockedExecution.promote_next(key, client: @client)
+
+        # Nothing took the freed slot, so mark the empty row expired: the
+        # dispatcher's `Concurrency::Semaphore.expire_stale` matches on
+        # expires_at ALONE, so a zeroed row would otherwise sit on the Locks
+        # page as a phantom 0/N key until its original lease ran out — up to
+        # the key's whole `duration`. Guarded on value = 0 so a row a promotion
+        # just filled is never expired out from under its holder.
+        Pgbus::Semaphore.where(key: key, value: 0).update_all(expires_at: Time.current)
         promoted
       rescue StandardError => e
         Pgbus.logger.debug { "[Pgbus::Web] Error releasing concurrency key #{key}: #{e.message}" }
@@ -1189,13 +1197,7 @@ module Pgbus
         batch_id = payload[Batch::METADATA_KEY]
         Batch.job_discarded(batch_id, job_id: payload["job_id"]) if batch_id
 
-        # release_if_unbound!, not release_lock: a parked job's lock is unbound
-        # (it never got a msg_id). If the reaper already removed it and a
-        # successor took the same key and was sent, that successor's lock IS
-        # bound — dropping it would admit a duplicate beside the running job.
-        uniqueness_key = payload[Uniqueness::METADATA_KEY]
-        until_executed = payload[Uniqueness::STRATEGY_KEY].to_s == "until_executed"
-        UniquenessKey.release_if_unbound!(uniqueness_key) if uniqueness_key && until_executed
+        release_parked_uniqueness_lock(payload, row.created_at)
 
         Pgbus.logger.warn do
           "[Pgbus::Web] Discarded parked job #{payload["job_class"]} (#{payload["job_id"]}) " \
@@ -1209,6 +1211,18 @@ module Pgbus
         )
       rescue StandardError => e
         Pgbus.logger.warn { "[Pgbus::Web] Parked job cleanup failed: #{e.class}: #{e.message}" }
+      end
+
+      # release_if_unbound!, not release_lock: a parked job's lock is unbound (it
+      # never got a msg_id). If the reaper already removed it and a successor
+      # took the same key, that successor's lock must survive — msg_id = 0
+      # excludes one that was sent, and the parked row's own created_at excludes
+      # one acquired after this row was parked.
+      def release_parked_uniqueness_lock(payload, parked_at)
+        key = payload[Uniqueness::METADATA_KEY]
+        return unless key && payload[Uniqueness::STRATEGY_KEY].to_s == "until_executed"
+
+        UniquenessKey.release_if_unbound!(key, acquired_before: parked_at)
       end
 
       # A row parked before the double-encoding fix stores a jsonb *string*
