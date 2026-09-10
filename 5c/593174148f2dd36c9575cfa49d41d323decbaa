@@ -1,0 +1,53 @@
+spec/pgbus/visibility_heartbeat_spec.rb
+  s_a6c2e7c63feac9::t_5091c5470b2ce7 126
+  s_a6c2e7c63feac9::t_0b363134c27836 109-114,116-118,125,127-130
+spec/pgbus/concurrency_spec.rb
+  s_a6c2e7c63feac9::t_6ffed2c8e2f08c 192-231
+lib/pgbus/active_job/adapter.rb
+  s_a6c2e7c63feac9::t_9a689572f8487a 75-76,78-79,81-96,127-146
+spec/pgbus/concurrency/blocked_execution_spec.rb
+  s_a6c2e7c63feac9::t_743ff9d24a8df1 59-61
+  s_a6c2e7c63feac9::t_c5adc0dc75ee4d 62-64
+  s_a6c2e7c63feac9::t_6ffed2c8e2f08c 68-90,175,180-188,192,200
+spec/integration/concurrency_block_durability_spec.rb
+  s_a6c2e7c63feac9::t_0b363134c27836 114-152
+app/models/pgbus/blocked_execution.rb
+  s_a6c2e7c63feac9::t_22723f0bcaa5fa 48-63
+app/models/pgbus/semaphore.rb
+  s_a6c2e7c63feac9::t_22723f0bcaa5fa 10-14,19,22,24
+lib/pgbus/concurrency/blocked_execution.rb
+  s_a6c2e7c63feac9::t_e5ebdafd304e2a 60,73,87-101,104-105
+docs/app/views/docs/pages/concurrency_uniqueness.rb
+  s_a6c2e7c63feac9::t_a57c04a5c2cdd8 135-148
+CHANGELOG.md
+  s_a6c2e7c63feac9::t_50aeefd6294fb7 17-25
+spec/pgbus/process/dispatcher_spec.rb
+  s_a6c2e7c63feac9::t_0b363134c27836 246-250,252-254,258-260
+spec/pgbus/active_job/adapter_spec.rb
+  s_a6c2e7c63feac9::t_53ce6b9c03e126 220-232,241-279
+  s_a6c2e7c63feac9::t_5091c5470b2ce7 233-240
+lib/pgbus/concurrency.rb
+  s_a6c2e7c63feac9::t_22723f0bcaa5fa 82-87,90,95-100
+lib/pgbus/active_job/executor.rb
+  s_a6c2e7c63feac9::t_9a689572f8487a 105-114,372-380,384-391,403-413
+spec/pgbus/active_job/executor_spec.rb
+  s_a6c2e7c63feac9::t_53ce6b9c03e126 445-469,481-498
+app/models/pgbus/uniqueness_key.rb
+  s_a6c2e7c63feac9::t_e5ebdafd304e2a 73-85
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "5c593174148f2dd36c9575cfa49d41d323decbaa",
+  "prompts": {},
+  "sessions": {
+    "s_a6c2e7c63feac9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3b770da0-d44f-4208-9314-02d972844592",
+        "model": "claude-opus-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
