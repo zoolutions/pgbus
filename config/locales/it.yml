@@ -467,7 +467,7 @@ it:
           other: "%{count} blocchi scartati."
         none_selected: Nessun blocco selezionato.
         page_description: Chiavi di unicità e slot di concorrenza che trattengono i job
-        title: Lock
+        title: Blocchi
         uniqueness_title: Chiavi di unicità
     outbox:
       index:

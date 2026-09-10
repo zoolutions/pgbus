@@ -411,7 +411,7 @@ es:
           keys_at_limit: Claves al límite
           keys_at_limit_hint: sin ranura libre
           oldest_wait: Espera más larga
-          oldest_wait_hint: lo que más ha esperado un trabajo
+          oldest_wait_hint: tiempo máximo de espera de un trabajo
           parked_jobs: Trabajos aparcados
           parked_jobs_hint: esperando una ranura
           slots_held: Ranuras ocupadas

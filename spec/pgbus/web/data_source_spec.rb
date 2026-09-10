@@ -632,6 +632,25 @@ RSpec.describe Pgbus::Web::DataSource do
                                                    slots_held: 3, keys_at_limit: 2)
     end
 
+    it "asks postgres for a held slot as well as a live expiry" do
+      data_source.concurrency_stats
+
+      expect(mock_connection).to have_received(:select_all)
+        .with(a_string_including("s.value > 0 AND s.expires_at > now()"), "Pgbus Concurrency Keys")
+    end
+
+    it "re-runs the summary query after reset_cache!" do
+      allow(mock_connection).to receive(:select_values).and_return([])
+      stub_health_queries
+
+      data_source.concurrency_stats
+      data_source.reset_cache!
+      data_source.concurrency_stats
+
+      expect(mock_connection).to have_received(:select_all)
+        .with(anything, "Pgbus Concurrency Summary").twice
+    end
+
     it "runs the summary query once per instance" do
       allow(mock_connection).to receive(:select_values).and_return([])
       stub_health_queries
@@ -645,16 +664,19 @@ RSpec.describe Pgbus::Web::DataSource do
   end
 
   describe "#release_concurrency_key" do
+    let(:semaphore_relation) { double("Relation", update_all: 1) }
+
     before do
-      allow(Pgbus::Semaphore).to receive(:where).and_return(double(delete_all: 1))
+      allow(Pgbus::Semaphore).to receive(:where).and_return(semaphore_relation)
     end
 
-    it "deletes the semaphore row and promotes until nothing is left" do
+    it "zeroes the held slots and promotes until nothing is left" do
       allow(Pgbus::Concurrency::BlockedExecution).to receive(:promote_next)
         .and_return(true, true, false)
 
       expect(data_source.release_concurrency_key("ProcessOrder-42")).to eq(2)
       expect(Pgbus::Semaphore).to have_received(:where).with(key: "ProcessOrder-42")
+      expect(semaphore_relation).to have_received(:update_all).with(value: 0)
       expect(Pgbus::Concurrency::BlockedExecution).to have_received(:promote_next)
         .with("ProcessOrder-42", client: mock_client).exactly(3).times
     end
@@ -680,6 +702,14 @@ RSpec.describe Pgbus::Web::DataSource do
       allow(Pgbus::Semaphore).to receive(:where).and_raise(StandardError)
 
       expect(data_source.release_concurrency_key("ProcessOrder-42")).to eq(0)
+    end
+
+    it "passes a key with surrounding whitespace through verbatim" do
+      allow(Pgbus::Concurrency::BlockedExecution).to receive(:promote_next).and_return(false)
+
+      data_source.release_concurrency_key(" spaced key ")
+
+      expect(Pgbus::Semaphore).to have_received(:where).with(key: " spaced key ")
     end
   end
 
@@ -707,7 +737,7 @@ RSpec.describe Pgbus::Web::DataSource do
       allow(Pgbus::BlockedExecution).to receive(:for_key).with("ProcessOrder-42").and_return(relation)
       allow(Pgbus::BlockedExecution).to receive(:where).and_return(double(delete_all: 3))
       allow(Pgbus::Batch).to receive(:job_discarded)
-      allow(Pgbus::Uniqueness).to receive(:release_lock)
+      allow(Pgbus::UniquenessKey).to receive(:release_if_unbound!)
     end
 
     it "deletes the locked rows and returns the count" do
@@ -721,17 +751,19 @@ RSpec.describe Pgbus::Web::DataSource do
       expect(Pgbus::Batch).to have_received(:job_discarded).with("batch-1", job_id: "j2").once
     end
 
-    it "releases an until_executed uniqueness lock" do
+    it "releases an until_executed uniqueness lock, but only while it is unbound" do
       data_source.discard_parked_jobs("ProcessOrder-42")
 
-      expect(Pgbus::Uniqueness).to have_received(:release_lock).with("import-42").once
+      # Scoped to the parked job's own unbound row: if the reaper dropped it and
+      # a successor bound the same key to a live message, that lock must survive.
+      expect(Pgbus::UniquenessKey).to have_received(:release_if_unbound!).with("import-42").once
     end
 
     it "leaves a plain payload alone" do
       data_source.discard_parked_jobs("ProcessOrder-42")
 
       expect(Pgbus::Batch).to have_received(:job_discarded).once
-      expect(Pgbus::Uniqueness).to have_received(:release_lock).once
+      expect(Pgbus::UniquenessKey).to have_received(:release_if_unbound!).once
     end
 
     it "keeps an until_start lock held" do
@@ -742,7 +774,7 @@ RSpec.describe Pgbus::Web::DataSource do
 
       data_source.discard_parked_jobs("ProcessOrder-42")
 
-      expect(Pgbus::Uniqueness).not_to have_received(:release_lock)
+      expect(Pgbus::UniquenessKey).not_to have_received(:release_if_unbound!)
     end
 
     it "instruments one event per discarded row" do

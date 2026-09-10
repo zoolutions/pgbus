@@ -40,8 +40,10 @@
       <p class="text-xs text-gray-400"><%= t("pgbus.dashboard.stats_cards.throughput_unit") %></p>
     </div>
 
-    <%# The whole card links to the Locks page: parked jobs are only actionable there. %>
-    <%= link_to pgbus.locks_path, class: "rounded-lg bg-white dark:bg-gray-800 p-5 shadow ring-1 ring-gray-200 dark:ring-gray-700 block hover:ring-gray-300 dark:hover:ring-gray-600" do %>
+    <%# The whole card links to the Locks page: parked jobs are only actionable
+        there. turbo_frame: "_top" because this card sits inside the
+        dashboard-stats frame, and /locks has no frame of that id to render into. %>
+    <%= link_to pgbus.locks_path, data: { turbo_frame: "_top" }, class: "rounded-lg bg-white dark:bg-gray-800 p-5 shadow ring-1 ring-gray-200 dark:ring-gray-700 block hover:ring-gray-300 dark:hover:ring-gray-600" do %>
       <p class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.stats_cards.parked_jobs") %></p>
       <p class="mt-1 text-3xl font-semibold <%= @stats[:parked_total].to_i > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-900 dark:text-white' %>">
         <%= pgbus_number(@stats[:parked_total]) %>

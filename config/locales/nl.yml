@@ -467,7 +467,7 @@ nl:
           other: "%{count} sloten verwijderd."
         none_selected: Geen sloten geselecteerd.
         page_description: Uniciteitssleutels en gelijktijdigheidsplekken die jobs tegenhouden
-        title: Locks
+        title: Vergrendelingen
         uniqueness_title: Uniciteitsleutels
     outbox:
       index:

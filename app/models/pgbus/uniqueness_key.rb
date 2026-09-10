@@ -86,6 +86,21 @@ module Pgbus
       )
     end
 
+    # Release a lock only while it is still UNBOUND (msg_id = 0). Used when
+    # discarding a parked job: a parked job never got a msg_id, so its lock was
+    # never bound. If the unbound-lock reaper has already removed that row and a
+    # successor acquired the same key and was actually sent, the successor's row
+    # IS bound — an unconditional key-only DELETE would drop it and admit a
+    # duplicate beside the running job. Mirror of release_if_bound!, for the
+    # side of the lock lifecycle that has no message to match on.
+    def self.release_if_unbound!(lock_key)
+      Thread.current[:pgbus_uniqueness_created_at]&.delete(lock_key)
+      connection.exec_delete(
+        "DELETE FROM #{table_name} WHERE lock_key = $1 AND msg_id = 0",
+        "UniquenessKey Release If Unbound", [lock_key]
+      )
+    end
+
     # Check if a key is currently locked.
     def self.locked?(lock_key)
       result = connection.select_value(

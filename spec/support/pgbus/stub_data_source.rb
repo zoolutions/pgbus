@@ -15,7 +15,8 @@ module Pgbus
                     :insights_latency_trend, :insights_throughput, :insights_status_counts,
                     :stream_stats_available, :stream_summary, :top_streams_list,
                     :pending_events_list, :outbox_stats_hash, :outbox_entries_list,
-                    :batches_list, :batch_detail_hash, :concurrency_stats_hash
+                    :batches_list, :batch_detail_hash, :concurrency_stats_hash,
+                    :promoted_count
       attr_reader :calls
 
       def initialize
@@ -45,10 +46,12 @@ module Pgbus
         @batches_list = []
         @batch_detail_hash = nil
         @concurrency_stats_hash = default_concurrency_stats
+        @promoted_count = 0
         @calls = Hash.new { |h, k| h[k] = [] }
       end
 
       def summary_stats = @stats
+      def reset_cache! = self
       def queues_with_metrics = @queues
       def queue_detail(name) = @queues.find { |q| q[:name].include?(name) }
       def processes = @processes_list
@@ -129,7 +132,10 @@ module Pgbus
       def discard_lock(key)          = record(:discard_lock, key) && 1
       def discard_locks(keys)        = record(:discard_locks, keys) && keys.size
       def discard_all_locks          = record(:discard_all_locks) && @locks_list.size
-      def release_concurrency_key(key) = record(:release_concurrency_key, key) && @concurrency_stats_hash[:parked_total]
+      # The real method returns the number of jobs PROMOTED (bounded by the
+      # promote cap and slot availability), not the parked total — discard is
+      # the one that drops every parked job.
+      def release_concurrency_key(key) = record(:release_concurrency_key, key) && @promoted_count
       def discard_parked_jobs(key) = record(:discard_parked_jobs, key) && @concurrency_stats_hash[:parked_total]
 
       def called?(method_name) = @calls.key?(method_name)

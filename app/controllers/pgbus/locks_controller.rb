@@ -35,11 +35,14 @@ module Pgbus
     end
 
     # Drop a concurrency key's semaphore and promote whatever can now run.
+    # The key is passed through verbatim — a `key:` proc may produce a string
+    # with surrounding whitespace, and stripping it here would address a
+    # different key (or none).
     # The promotion goes through the guarded upsert inside the data source, so
     # this is an escape hatch, never a way past the limit.
     def release_key
-      key = params[:key].to_s.strip
-      return redirect_to(locks_path, alert: t("pgbus.locks.concurrency.no_key")) if key.empty?
+      key = params[:key].to_s
+      return redirect_to(locks_path, alert: t("pgbus.locks.concurrency.no_key")) if key.strip.empty?
 
       count = data_source.release_concurrency_key(key)
       redirect_to locks_path, notice: t("pgbus.locks.concurrency.key_released", key: key, count: count)
@@ -48,8 +51,8 @@ module Pgbus
     # Drop every job parked behind a concurrency key. They never run, so the
     # data source resolves their batch and uniqueness bookkeeping.
     def discard_parked
-      key = params[:key].to_s.strip
-      return redirect_to(locks_path, alert: t("pgbus.locks.concurrency.no_key")) if key.empty?
+      key = params[:key].to_s
+      return redirect_to(locks_path, alert: t("pgbus.locks.concurrency.no_key")) if key.strip.empty?
 
       count = data_source.discard_parked_jobs(key)
       redirect_to locks_path, notice: t("pgbus.locks.concurrency.parked_discarded", count: count)

@@ -420,7 +420,7 @@ fi:
         discard_parked: Hylkää pysäköidyt
         discard_parked_confirm:
           one: Hylätäänkö tämän avaimen taakse pysäköity 1 työ? Se ei koskaan suoritu.
-          other: Hylätäänkö tämän avaimen taakse pysäköidyt %{count} työtä? Ne eivät koskaan suoritu.
+          other: Hylätäänkö tämän avaimen taakse pysäköityä %{count} työtä? Ne eivät koskaan suoritu.
         empty: Ei rinnakkaisuusavaimia käytössä
         headers:
           in_use: Käytössä

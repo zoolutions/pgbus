@@ -102,11 +102,29 @@ RSpec.describe "Dashboard concurrency section (integration)", :integration do
       expect(job_ids).to eq([promoted_id])
     end
 
-    it "drops a stranded semaphore with nothing parked" do
+    it "empties a stranded semaphore and leaves it for the sweep" do
       Pgbus::Concurrency::Semaphore.acquire(key, 1, 900)
 
       expect(data_source.release_concurrency_key(key)).to eq(0)
-      expect(Pgbus::Semaphore.where(key: key).count).to eq(0)
+
+      # Zeroed, not deleted: the row is where the limit is recorded, and the
+      # dispatcher's expired-semaphore sweep reaps a value <= 0 row.
+      expect(Pgbus::Semaphore.find_by(key: key).value).to eq(0)
+      expect(Pgbus::Semaphore.expired).to include(Pgbus::Semaphore.find_by(key: key))
+    end
+
+    it "keeps the key's recorded limit so a payload with no resolvable class is judged against it" do
+      # limit 3 recorded by the holder; the parked payload names a class that no
+      # longer exists, so promotion has no limit of its own to use and must fall
+      # back to the row's max_value rather than a guessed 1.
+      Pgbus::Concurrency::Semaphore.acquire(key, 3, 900)
+      3.times { park(extra: { "job_class" => "LongGoneJob" }) }
+
+      promoted = data_source.release_concurrency_key(key)
+
+      expect(Pgbus::Semaphore.find_by(key: key).max_value).to eq(3)
+      expect(promoted).to eq(3)
+      expect(Pgbus::Concurrency::Semaphore.current_value(key)).to eq(3)
     end
   end
 
@@ -147,6 +165,21 @@ RSpec.describe "Dashboard concurrency section (integration)", :integration do
       data_source.discard_parked_jobs(key)
 
       expect(Pgbus::UniquenessKey.locked?("unique-#{key}")).to be(false)
+    end
+
+    it "leaves a successor's bound lock alone when the reaper already took the parked job's" do
+      # The reaper removed the parked job's own (unbound) lock, then a successor
+      # acquired the same key and was actually sent, binding its lock to a live
+      # msg_id. Discarding the parked job must not drop that — doing so would
+      # admit a duplicate beside the running successor.
+      lock_key = "unique-#{key}"
+      Pgbus::UniquenessKey.acquire!(lock_key, queue_name: "default", msg_id: 4242)
+      park(extra: { Pgbus::Uniqueness::METADATA_KEY => lock_key,
+                    Pgbus::Uniqueness::STRATEGY_KEY => "until_executed" })
+
+      data_source.discard_parked_jobs(key)
+
+      expect(Pgbus::UniquenessKey.locked?(lock_key)).to be(true)
     end
 
     it "returns 0 when nothing is parked" do

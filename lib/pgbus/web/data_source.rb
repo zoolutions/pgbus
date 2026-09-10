@@ -43,6 +43,17 @@ module Pgbus
         }.merge(concurrency_summary)
       end
 
+      # Drop the per-instance memos. The memos assume one instance per web
+      # request; the AppSignal probe and the MCP server both hold ONE DataSource
+      # for the life of the process, so without this their gauges and tool
+      # responses would freeze at the first read. Both call this per iteration
+      # / per tool call.
+      def reset_cache!
+        @queues_with_metrics = nil
+        @concurrency_summary = nil
+        self
+      end
+
       # Queues — query via ActiveRecord for reliability in web processes
       # (avoids PGMQ client connection issues when the web server uses a
       # different connection lifecycle than the worker processes).
@@ -691,7 +702,13 @@ module Pgbus
       def release_concurrency_key(key)
         return 0 if key.to_s.strip.empty?
 
-        Pgbus::Semaphore.where(key: key).delete_all
+        # Zero the held slots rather than DELETE the row: the row is where the
+        # key's limit is recorded, and `Semaphore.acquire!` falls back to a
+        # limit of 1 on a fresh row. Deleting it would silently demote a
+        # `to: 3` key to 1 whenever the parked job's class no longer resolves
+        # (the payload then carries no limit for promotion to use). A row left
+        # at 0 is reaped by the dispatcher's `Semaphore.expired` sweep.
+        Pgbus::Semaphore.where(key: key).update_all(value: 0)
         promoted = 0
         promoted += 1 while promoted < PROMOTE_CAP &&
                             Concurrency::BlockedExecution.promote_next(key, client: @client)
@@ -718,6 +735,16 @@ module Pgbus
           Pgbus::BlockedExecution.where(id: rows.map(&:id)).delete_all if rows.any?
         end
 
+        # Cleanup runs after the claim commits, because the SKIP LOCKED claim
+        # only holds inside the transaction. The residual: a process killed
+        # between the commit and the cleanup leaves a resolved-nothing orphan
+        # that Batch::Sweep un-counts rather than fails. Running the cleanup
+        # inside the transaction would swap that for the failure this codebase
+        # has already judged worse (Concurrency::BlockedExecution#backfill) —
+        # `Batch.job_discarded` can enqueue a batch callback, and a callback
+        # fired for a batch that then rolls back is not recoverable, while an
+        # orphan row is. Each row is cleaned under its own rescue, so one bad
+        # payload never costs the rest.
         rows.each { |row| cleanup_discarded_parked_job(row) }
         rows.size
       rescue StandardError => e
@@ -1123,7 +1150,7 @@ module Pgbus
                  s.value AS value,
                  s.max_value AS max_value,
                  s.expires_at AS expires_at,
-                 (s.expires_at > now()) AS lease_fresh,
+                 (s.value > 0 AND s.expires_at > now()) AS lease_fresh,
                  COALESCE(b.parked_count, 0) AS parked_count,
                  EXTRACT(EPOCH FROM (now() - b.oldest_parked_at))::bigint AS oldest_parked_age_sec
           FROM pgbus_semaphores s
@@ -1162,9 +1189,13 @@ module Pgbus
         batch_id = payload[Batch::METADATA_KEY]
         Batch.job_discarded(batch_id, job_id: payload["job_id"]) if batch_id
 
+        # release_if_unbound!, not release_lock: a parked job's lock is unbound
+        # (it never got a msg_id). If the reaper already removed it and a
+        # successor took the same key and was sent, that successor's lock IS
+        # bound — dropping it would admit a duplicate beside the running job.
         uniqueness_key = payload[Uniqueness::METADATA_KEY]
-        Uniqueness.release_lock(uniqueness_key) if uniqueness_key &&
-                                                   payload[Uniqueness::STRATEGY_KEY].to_s == "until_executed"
+        until_executed = payload[Uniqueness::STRATEGY_KEY].to_s == "until_executed"
+        UniquenessKey.release_if_unbound!(uniqueness_key) if uniqueness_key && until_executed
 
         Pgbus.logger.warn do
           "[Pgbus::Web] Discarded parked job #{payload["job_class"]} (#{payload["job_id"]}) " \

@@ -159,18 +159,24 @@ class Views::Docs::Pages::ConcurrencyUniqueness < DocsUI::Page
       md <<~'MD'
         A key at its limit is indistinguishable from a stalled pipeline from the
         outside: nothing fails, nothing is in the queue, the jobs are simply parked.
-        Three places show it.
+        Four places show it.
 
-        The dashboard's **Locks** page has a **Concurrency** section: parked jobs,
-        the oldest wait, slots held and keys at their limit, then a row per key with
-        its value / limit, lease state, parked count and oldest wait. A stale lease
-        next to a parked backlog is the shape to look for — the slot's holder died
-        before releasing it.
+        The dashboard **home** carries a **Parked jobs** card — the count and the
+        oldest wait, linking straight to Locks. It is usually the first sign.
 
-        Three gauges carry the same totals to `/pgbus/api/metrics` and the AppSignal
-        probe: `pgbus_concurrency_blocked_executions`,
+        The **Locks** page has a **Concurrency** section: parked jobs, the oldest
+        wait, slots held and keys at their limit, then up to 100 key rows — busiest
+        first — each with its value / limit, lease state, parked count and oldest
+        wait. The cards carry the true totals, so a key missing from the table is
+        not absent, only outside the 100 busiest. A stale lease next to a parked
+        backlog is the shape to look for — the slot's holder died before releasing
+        it.
+
+        Three of those four totals are exported to `/pgbus/api/metrics` and the
+        AppSignal probe: `pgbus_concurrency_blocked_executions`,
         `pgbus_concurrency_blocked_oldest_age_seconds` and
-        `pgbus_concurrency_slots_held`. Alert on the oldest wait.
+        `pgbus_concurrency_slots_held`. Alert on the oldest wait. *Keys at limit*
+        has no gauge — it is a Locks card (and an MCP field) only.
 
         The read-only `pgbus_concurrency` MCP tool returns the same data, so an
         agent can answer "why is this order stuck?" without SQL.

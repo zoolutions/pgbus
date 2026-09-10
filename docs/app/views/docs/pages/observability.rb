@@ -133,9 +133,12 @@ class Views::Docs::Pages::Observability < DocsUI::Page
 
         They carry no labels. Concurrency keys are per-record — one per order, one
         per sync group — so a per-key label would be an unbounded series. Alert on
-        the oldest wait: a backlog that keeps growing means a holder died without
-        releasing its slot. The per-key detail is on the dashboard's Locks page and
-        in the `pgbus_concurrency` MCP tool.
+        the oldest wait, then read the Locks page to tell the two causes apart: a
+        growing backlog whose key still holds a *fresh* lease is simply demand
+        above the limit, while a growing backlog behind a *stale* lease means a
+        holder died without releasing its slot. The per-key detail, lease state
+        included, is on the dashboard's Locks page and in the `pgbus_concurrency`
+        MCP tool.
       MD
     end
   end

@@ -30,6 +30,18 @@ RSpec.describe "Dashboard", type: :system do
       expect(card).to have_text("7")
       expect(card).to have_text("oldest 13m 32s")
     end
+
+    it "navigates to the locks page when the card is clicked" do
+      # The card sits inside the dashboard-stats turbo-frame; without
+      # turbo_frame: "_top" Turbo rejects the /locks response for having no
+      # frame of that id and the browser stays on the dashboard.
+      visit "/pgbus"
+
+      find("a[href$='/pgbus/locks']", text: "Parked jobs").click
+
+      expect(page).to have_current_path("/pgbus/locks")
+      expect(page).to have_css("h1", text: "Locks")
+    end
   end
 
   it "shows queues table with metrics" do

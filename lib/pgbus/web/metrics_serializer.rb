@@ -22,10 +22,14 @@ module Pgbus
         append_queue_metrics(lines)
         append_job_metrics(lines)
         append_process_metrics(lines)
-        append_summary_metrics(lines)
+        # One summary read, shared: summary_stats is not memoized, so calling it
+        # per family would repeat the queue/health/process queries and advance
+        # the throughput snapshot a second time within one scrape.
+        summary = summary_stats
+        append_summary_metrics(lines, summary)
         append_stream_metrics(lines)
         append_health_metrics(lines)
-        append_concurrency_metrics(lines)
+        append_concurrency_metrics(lines, summary)
         "#{lines.join("\n")}\n"
       end
 
@@ -148,8 +152,18 @@ module Pgbus
         Pgbus.logger.debug { "[Pgbus::Metrics] Error serializing process metrics: #{e.message}" }
       end
 
-      def append_summary_metrics(lines)
-        stats = @data_source.summary_stats
+      # nil when the read raised — each family then skips rather than blanking
+      # the whole scrape.
+      def summary_stats
+        @data_source.summary_stats
+      rescue StandardError => e
+        Pgbus.logger.debug { "[Pgbus::Metrics] Error reading summary stats: #{e.message}" }
+        nil
+      end
+
+      def append_summary_metrics(lines, stats)
+        return unless stats
+
         gauge(lines, "pgbus_failed_events_total", "Total failed events") do
           [[stats[:failed_count]]]
         end
@@ -228,8 +242,8 @@ module Pgbus
       #
       # Omitted entirely when neither table holds anything: an install that does
       # not use limits_concurrency reports nothing rather than a flat zero line.
-      def append_concurrency_metrics(lines)
-        stats = @data_source.summary_stats
+      def append_concurrency_metrics(lines, stats)
+        return unless stats
         return if stats[:parked_total].to_i.zero? && stats[:slots_held].to_i.zero? &&
                   stats[:keys_at_limit].to_i.zero? && stats[:oldest_parked_age_sec].nil?
 

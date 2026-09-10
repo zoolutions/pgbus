@@ -60,6 +60,11 @@ module Pgbus
           def call
             return unless data_source
 
+            # One Runner lives for the life of the process, so its DataSource
+            # does too — without this, every memoized read (queue metrics, the
+            # concurrency aggregates) would report the first minute's numbers
+            # forever.
+            data_source.reset_cache! if data_source.respond_to?(:reset_cache!)
             track_queues
             track_processes
             track_summary

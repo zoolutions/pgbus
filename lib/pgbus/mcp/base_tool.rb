@@ -36,8 +36,13 @@ module Pgbus
         # Pull the injected DataSource (or build a default one). Kept as a
         # class method because MCP tool entry points (`self.call`) are class
         # methods.
+        # The server injects ONE DataSource for the life of the process, so its
+        # per-request memos have to be dropped per tool call — otherwise every
+        # call after the first replays the first call's snapshot.
         def data_source_from(server_context)
-          (server_context && server_context[:data_source]) || Pgbus::Web::DataSource.new
+          data_source = (server_context && server_context[:data_source]) || Pgbus::Web::DataSource.new
+          data_source.reset_cache! if data_source.respond_to?(:reset_cache!)
+          data_source
         end
 
         # Whether payloads may be returned for this call. Honors a per-call
