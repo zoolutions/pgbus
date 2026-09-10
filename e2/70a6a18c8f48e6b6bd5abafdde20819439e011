@@ -1,0 +1,107 @@
+config/locales/da.yml
+  s_a1cf7b024de76e::t_c465aa050c808e 89-90,409-445,469-471
+spec/pgbus/web/data_source_spec.rb
+  s_a1cf7b024de76e::t_261cf67fdd2269 600,740,764
+  s_a1cf7b024de76e::t_98028c6e2b1e96 575-576,580
+  s_a1cf7b024de76e::t_665896baa05dc6 559-572,581-599,601-628,630-636,638-739,741-763,765-790
+  s_a1cf7b024de76e::t_98fb2bcf2f10ee 198-199,573-574,577-579,629,637
+config/locales/ja.yml
+  s_a1cf7b024de76e::t_c465aa050c808e 89-90,409-445,469-471
+config/locales/de.yml
+  s_a1cf7b024de76e::t_c465aa050c808e 89-90,409-445,469-471
+app/views/pgbus/locks/_uniqueness.html.erb
+  s_a1cf7b024de76e::t_97784dbafd5cea 1-80
+spec/integration/dashboard_concurrency_spec.rb
+  s_a1cf7b024de76e::t_4e477b128a4894 1-125,127,133-135,140-156
+  s_a1cf7b024de76e::t_6a35bf989f90e2 126,128-132,136-139
+config/locales/en.yml
+  s_a1cf7b024de76e::t_c465aa050c808e 89-90,409-445,469-471
+config/locales/fr.yml
+  s_a1cf7b024de76e::t_c465aa050c808e 89-90,409-445,469-471
+config/locales/it.yml
+  s_a1cf7b024de76e::t_c465aa050c808e 89-90,409-445,469-471
+lib/pgbus/integrations/appsignal/probe.rb
+  s_a1cf7b024de76e::t_e3c8c3489a47d7 119-123
+docs/app/views/docs/pages/dashboard.rb
+  s_a1cf7b024de76e::t_90d45a5a2d9fdf 36,43
+spec/system/locks_spec.rb
+  s_a1cf7b024de76e::t_11e45c9b4ade6d 57
+  s_a1cf7b024de76e::t_d648326d45f704 119-197
+  s_a1cf7b024de76e::t_1bc5925e1a4c7b 9-10,12
+lib/pgbus/mcp/server.rb
+  s_a1cf7b024de76e::t_eb747deba63ab4 26,36
+app/views/pgbus/dashboard/_stats_cards.html.erb
+  s_a1cf7b024de76e::t_50232e43995f71 2,42-52
+spec/requests/pgbus/locks_controller_spec.rb
+  s_a1cf7b024de76e::t_ad14e78cfa10e5 36,38,42,46-47,50,54-56,60,65,68
+  s_a1cf7b024de76e::t_261cf67fdd2269 11-35,37,39-41,43-45,48-49,51-53,57-59,61-64,66-67,69-72
+config/locales/es.yml
+  s_a1cf7b024de76e::t_c465aa050c808e 89-90,409-445,469-471
+config/locales/nl.yml
+  s_a1cf7b024de76e::t_c465aa050c808e 89-90,409-445,469-471
+app/controllers/pgbus/locks_controller.rb
+  s_a1cf7b024de76e::t_1ea22bac1735e9 6-8,36-55
+spec/system/dashboard_spec.rb
+  s_a1cf7b024de76e::t_7ff613bd7d9f01 20-34
+lib/pgbus/web/metrics_serializer.rb
+  s_a1cf7b024de76e::t_0fe867cb3dfad8 28,223-253
+config/locales/nb.yml
+  s_a1cf7b024de76e::t_c465aa050c808e 89-90,409-445,469-471
+config/locales/fi.yml
+  s_a1cf7b024de76e::t_c465aa050c808e 89-90,409-445,469-471
+config/routes.rb
+  s_a1cf7b024de76e::t_1ea22bac1735e9 84-88
+app/views/pgbus/locks/_concurrency.html.erb
+  s_a1cf7b024de76e::t_1d3c3d50162310 1-94
+spec/pgbus/mcp/tools_spec.rb
+  s_a1cf7b024de76e::t_462ae9e667c454 222-241
+lib/pgbus/integrations/appsignal/dashboard.json
+  s_a1cf7b024de76e::t_f579814ef7970e 358-395
+spec/pgbus/web/metrics_serializer_spec.rb
+  s_a1cf7b024de76e::t_ea9688a96e6473 53-54,251-293
+app/views/pgbus/locks/index.html.erb
+  s_a1cf7b024de76e::t_e2f632a7a9f5bb 1-3,6-7
+config/locales/pt.yml
+  s_a1cf7b024de76e::t_c465aa050c808e 89-90,409-445,469-471
+docs/app/views/docs/pages/concurrency_uniqueness.rb
+  s_a1cf7b024de76e::t_a08b4fc24702a6 15,157-196
+CHANGELOG.md
+  s_a1cf7b024de76e::t_b41b8b64d72e7e 5-6
+app/frontend/pgbus/style.css
+  s_a1cf7b024de76e::t_4d0e044ad503fd 2
+spec/support/pgbus/stub_data_source.rb
+  s_a1cf7b024de76e::t_2a59b9749e6aa2 18,47,76,132-133,175-176,199-201
+lib/pgbus/web/data_source.rb
+  s_a1cf7b024de76e::t_139ff74b2ddfa7 675-727,1087-1190
+  s_a1cf7b024de76e::t_80abbd5b2e8b6f 8-12,43
+docs/app/views/docs/pages/observability.rb
+  s_a1cf7b024de76e::t_90d45a5a2d9fdf 15,118-138
+config/locales/sv.yml
+  s_a1cf7b024de76e::t_c465aa050c808e 89-90,409-445,469-471
+lib/pgbus/mcp/tools/concurrency_tool.rb
+  s_a1cf7b024de76e::t_eb747deba63ab4 1-32
+spec/pgbus/integrations/appsignal/probe_spec.rb
+  s_a1cf7b024de76e::t_278145a8854f23 53-57,167-170,173-175
+lib/pgbus/mcp.rb
+  s_a1cf7b024de76e::t_331342f9a7be47 27
+spec/requests/pgbus/api/metrics_controller_spec.rb
+  s_a1cf7b024de76e::t_a9b44ab0d20a19 34-45
+lib/pgbus/instrumentation.rb
+  s_a1cf7b024de76e::t_49ad3c870fd242 32-34
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "e270a6a18c8f48e6b6bd5abafdde20819439e011",
+  "prompts": {},
+  "sessions": {
+    "s_a1cf7b024de76e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "42e0a07f-b217-4b19-a6b8-b85fe2ab37ab",
+        "model": "claude-opus-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
