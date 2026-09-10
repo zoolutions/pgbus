@@ -75,11 +75,14 @@ module Pgbus
     # the :while_executing lock it took belongs to this attempt and has to go
     # back, but an unconditional key-only DELETE could drop a successor that
     # has since acquired the same key.
-    def self.release_if_bound!(lock_key, msg_id:)
+    # PGMQ message ids are per-queue sequences, so a msg_id alone is not an
+    # identity: the same number addresses a different message on every other
+    # queue. The queue is part of the match.
+    def self.release_if_bound!(lock_key, queue_name:, msg_id:)
       Thread.current[:pgbus_uniqueness_created_at]&.delete(lock_key)
       connection.exec_delete(
-        "DELETE FROM #{table_name} WHERE lock_key = $1 AND msg_id = $2",
-        "UniquenessKey Release If Bound", [lock_key, msg_id.to_i]
+        "DELETE FROM #{table_name} WHERE lock_key = $1 AND queue_name = $2 AND msg_id = $3",
+        "UniquenessKey Release If Bound", [lock_key, queue_name.to_s, msg_id.to_i]
       )
     end
 

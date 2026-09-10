@@ -111,7 +111,7 @@ module Pgbus
             Pgbus.logger.warn do
               "[Pgbus::Executor] already archived elsewhere, skipping signals #{tag} job_class=#{job_class}"
             end
-            release_duplicate_execution_lock(uniqueness_key, uniqueness_strategy, msg_id)
+            release_duplicate_execution_lock(uniqueness_key, uniqueness_strategy, queue_name, msg_id)
             return :duplicate
           end
           Pgbus.logger.debug { "[Pgbus::Executor] archived #{tag} job_class=#{job_class}" }
@@ -405,10 +405,12 @@ module Pgbus
       # conditionally, so it can never delete a successor's row. An
       # :until_executed lock belongs to the job as a whole and is released by
       # the worker that actually archived it.
-      def release_duplicate_execution_lock(uniqueness_key, uniqueness_strategy, msg_id)
+      def release_duplicate_execution_lock(uniqueness_key, uniqueness_strategy, queue_name, msg_id)
         return unless uniqueness_key && uniqueness_strategy == :while_executing
 
-        UniquenessKey.release_if_bound!(uniqueness_key, msg_id: msg_id)
+        # Same queue the execution lock was acquired under, so the match
+        # cannot land on another queue's message of the same id.
+        UniquenessKey.release_if_bound!(uniqueness_key, queue_name: queue_name, msg_id: msg_id)
       rescue StandardError => e
         Pgbus.logger.warn { "[Pgbus] Duplicate-execution lock release failed: #{e.message}" }
       end

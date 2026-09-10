@@ -56,6 +56,24 @@ RSpec.describe Pgbus::Concurrency::Semaphore do
   end
 
   describe ".touch" do
+    # The acquire path floors the lease, but a raw duration here would renew
+    # it for less than the gap to the next beat — the lease then lapses
+    # mid-run and the sweep promotes beside a running job.
+    it "renews for at least the floored duration, never the raw one" do
+      scope = double("scope", update_all: 1)
+      pool = double("pool")
+      allow(pool).to receive(:with_connection).and_yield
+      allow(Pgbus::Semaphore).to receive_messages(connection_pool: pool)
+      allow(Pgbus::Semaphore).to receive(:where).with(key: "TestJob-42").and_return(scope)
+      allow(Pgbus.configuration).to receive(:effective_visibility_heartbeat_interval).and_return(10)
+
+      described_class.touch("TestJob-42", 5)
+
+      expect(scope).to have_received(:update_all) do |(_sql, expires_at)|
+        expect(expires_at - Time.current).to be_within(2).of(20)
+      end
+    end
+
     it "pushes the expiry out from now, never pulling it in" do
       scope = double("scope", update_all: 1)
       pool = double("pool")

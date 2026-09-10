@@ -112,16 +112,32 @@ module Pgbus
         Thread.current[:pgbus_acquired_uniqueness_key] = nil
         active_job
       rescue StandardError => e
-        if msg_id.nil?
+        # An ambiguous send is treated exactly like a live message: the
+        # produce may have committed with only its reply lost, and undoing
+        # the bookkeeping for a message that is in fact live is the worse
+        # error — it would leave that job running with no uniqueness lock and
+        # uncounted by its batch. A batch left waiting for a job that never
+        # existed is recovered by the stalled-batch sweep; a batch that
+        # finishes early and fires its callback is not recoverable.
+        if msg_id.nil? && !ambiguous_delivery?(e)
           rollback_acquired_uniqueness_lock
           uncount_batch_job(payload_hash)
         else
-          # Message is live: drop the thread-local so a later discard on this
-          # thread cannot release that job's uniqueness lock, but do not
-          # DELETE the pgbus_uniqueness_keys row.
+          # Drop the thread-local so a later discard on this thread cannot
+          # release that job's uniqueness lock, but do not DELETE the
+          # pgbus_uniqueness_keys row.
           Thread.current[:pgbus_acquired_uniqueness_key] = nil
         end
         raise e
+      end
+
+      # True when the failure reached the database, so the produce may have
+      # committed even though the reply did not come back. Everything else —
+      # a serialization or argument error, a bad queue name — is raised
+      # before anything could have been written.
+      def ambiguous_delivery?(error)
+        (defined?(PGMQ::Errors::ConnectionError) && error.is_a?(PGMQ::Errors::ConnectionError)) ||
+          (defined?(PG::Error) && error.is_a?(PG::Error))
       end
 
       # A slot is leased for `duration` of silence, but the visibility
@@ -133,15 +149,23 @@ module Pgbus
         Concurrency.effective_duration(concurrency[:duration]) + delay.to_i
       end
 
-      # A send that raises is a deterministic failure, so hand the slot back
-      # now rather than leaving the key short until the lease expires.
+      # Hand the slot back only when the failure proves nothing was
+      # produced. On an ambiguous outcome the message may well be live, and
+      # releasing would admit a second job beside it — so the hold stands
+      # and the lease expiry plus the dispatcher's sweep reclaim it.
       def send_holding_slot(key, queue, payload_hash, delay:, priority:)
         Pgbus.client.send_message(queue, payload_hash, delay: delay, priority: priority)
-      rescue StandardError
-        begin
-          Concurrency::Semaphore.release(key)
-        rescue StandardError => e
-          Pgbus.logger.warn { "[Pgbus] Could not release concurrency slot after failed send: #{e.message}" }
+      rescue StandardError => e
+        if ambiguous_delivery?(e)
+          Pgbus.logger.warn do
+            "[Pgbus] Send outcome unknown for #{key}; holding its concurrency slot until the lease expires: #{e.message}"
+          end
+        else
+          begin
+            Concurrency::Semaphore.release(key)
+          rescue StandardError => release_error
+            Pgbus.logger.warn { "[Pgbus] Could not release concurrency slot after failed send: #{release_error.message}" }
+          end
         end
         raise
       end

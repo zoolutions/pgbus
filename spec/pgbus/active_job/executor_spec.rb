@@ -452,7 +452,11 @@ RSpec.describe Pgbus::ActiveJob::Executor do
 
         expect(executor.execute(message, queue_name)).to eq(:duplicate)
 
-        expect(Pgbus::UniquenessKey).to have_received(:release_if_bound!).with("TestJob:u", msg_id: 20)
+        # PGMQ message ids are per-queue sequences, so the queue is part of
+        # the row's identity — without it, msg_id 20 on another queue holding
+        # the same key would be deleted instead.
+        expect(Pgbus::UniquenessKey).to have_received(:release_if_bound!)
+          .with("TestJob:u", queue_name: queue_name, msg_id: 20)
       end
 
       it "leaves an :until_executed lock alone when the message was archived elsewhere" do

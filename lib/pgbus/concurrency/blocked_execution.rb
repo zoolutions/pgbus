@@ -46,9 +46,13 @@ module Pgbus
           Pgbus::BlockedExecution.transaction(requires_new: true) do
             released = release_next(concurrency_key)
             raise ActiveRecord::Rollback unless released
-            raise ActiveRecord::Rollback unless slot_taken?(concurrency_key, released[:payload])
 
+            # Resolve the delay first: a parked scheduled job goes back into
+            # PGMQ invisible, and nothing renews its lease until a worker
+            # picks it up, so the wait has to be part of the lease.
             actual_delay = resolve_delay(released[:payload], delay)
+            raise ActiveRecord::Rollback unless slot_taken?(concurrency_key, released[:payload], actual_delay)
+
             # Carry the enqueuer's priority through: under priority routing it
             # picks the _pN sub-queue, not just the release order (issue #423).
             msg_id = client.send_message(released[:queue_name], released[:payload],
@@ -99,9 +103,9 @@ module Pgbus
           Pgbus.logger.warn { "[Pgbus] Batch execution backfill failed after promote: #{e.message}" }
         end
 
-        def slot_taken?(concurrency_key, payload)
+        def slot_taken?(concurrency_key, payload, delay = 0)
           config = Concurrency.config_for_payload(payload)
-          expires_at = Time.current + Concurrency.effective_duration(config[:duration])
+          expires_at = Time.current + Concurrency.effective_duration(config[:duration]) + delay.to_i
           Pgbus::Semaphore.acquire!(concurrency_key, config[:limit], expires_at) == :acquired
         end
 

@@ -38,9 +38,12 @@ module Pgbus
         # holder may go silent before its slot is presumed dead — not a cap on
         # how long a job may run.
         def touch(key, duration)
+          # Floored here as well as at acquire: renewing for a raw duration
+          # shorter than the gap to the next beat would let the lease lapse
+          # mid-run and the sweep promote beside a running job.
+          expires_at = Time.current + Concurrency.effective_duration(duration)
           Pgbus::Semaphore.connection_pool.with_connection do
-            Pgbus::Semaphore.where(key: key)
-                            .update_all(["expires_at = GREATEST(expires_at, ?)", Time.current + duration])
+            Pgbus::Semaphore.where(key: key).update_all(["expires_at = GREATEST(expires_at, ?)", expires_at])
           end
         end
 

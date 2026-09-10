@@ -142,10 +142,13 @@ class Views::Docs::Pages::ConcurrencyUniqueness < DocsUI::Page
       end
       DocsUI::Callout(:warning) do
         plain "One window the lease cannot cover: nothing renews it between enqueue "
-        plain "and the moment a worker picks the message up. If a queue is backed up "
-        plain "for longer than `duration`, a waiting holder can be presumed dead and "
-        plain "a second job promoted for the same key. Set `duration` above the worst "
-        plain "queue wait you tolerate, or disable the sweep's promotion for that key."
+        plain "and the moment a worker picks the message up. A scheduled job's delay "
+        plain "is added to its lease, but a queue backed up for longer than "
+        plain "`duration` — or, at the very edge, a produce that stalls that long — "
+        plain "can leave a waiting holder presumed dead and a second job promoted for "
+        plain "the same key. The produce is bounded well under any sane `duration` by "
+        plain "the client's statement and TCP timeouts; the queue wait is yours to "
+        plain "size. Set `duration` above the worst queue wait you tolerate."
       end
     end
   end

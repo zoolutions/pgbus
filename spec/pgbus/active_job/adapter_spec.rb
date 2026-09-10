@@ -244,13 +244,32 @@ RSpec.describe Pgbus::ActiveJob::Adapter do
       expect(order).to eq(%i[begin acquire commit send])
     end
 
-    it "releases the acquired slot when the send raises, instead of leaking it until expiry" do
+    it "releases the acquired slot when the send fails before reaching the database" do
       allow(Pgbus::Concurrency::Semaphore).to receive_messages(acquire: :acquired, release: nil)
-      allow(mock_client).to receive(:send_message).and_raise(StandardError, "pgmq down")
+      allow(mock_client).to receive(:send_message).and_raise(ArgumentError, "bad payload")
 
-      expect { adapter.enqueue(job) }.to raise_error(StandardError, "pgmq down")
+      expect { adapter.enqueue(job) }.to raise_error(ArgumentError, "bad payload")
 
       expect(Pgbus::Concurrency::Semaphore).to have_received(:release).with("TestJob-42")
+    end
+
+    # A connection error can arrive after the produce has already committed.
+    # Releasing the slot then admits a second job beside a live message, and
+    # rolling the uniqueness lock back leaves that message unguarded — so an
+    # ambiguous outcome keeps everything and lets the lease expire instead.
+    it "keeps the slot and the uniqueness lock when the send outcome is ambiguous" do
+      stub_const("PGMQ::Errors::ConnectionError", Class.new(StandardError)) unless defined?(PGMQ::Errors::ConnectionError)
+      allow(Pgbus::Concurrency::Semaphore).to receive_messages(acquire: :acquired, release: nil)
+      allow(mock_client).to receive(:send_message).and_raise(PGMQ::Errors::ConnectionError, "server closed")
+      allow(Pgbus::Uniqueness).to receive(:release_lock)
+      Thread.current[:pgbus_acquired_uniqueness_key] = "TestJob:u"
+
+      expect { adapter.enqueue(job) }.to raise_error(PGMQ::Errors::ConnectionError)
+
+      expect(Pgbus::Concurrency::Semaphore).not_to have_received(:release)
+      expect(Pgbus::Uniqueness).not_to have_received(:release_lock)
+    ensure
+      Thread.current[:pgbus_acquired_uniqueness_key] = nil
     end
 
     it "does not release any slot when the job was parked rather than sent" do

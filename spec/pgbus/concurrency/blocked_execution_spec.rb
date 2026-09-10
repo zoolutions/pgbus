@@ -88,6 +88,22 @@ RSpec.describe Pgbus::Concurrency::BlockedExecution do
       expect(savepoints).to eq(2)
     end
 
+    # Same rule as a direct scheduled enqueue: the heartbeat that renews a
+    # lease only starts at dequeue, so a parked `wait:` job promoted while
+    # its scheduled time is still far out needs its remaining delay in the
+    # lease or the sweep expires it before the message is even visible.
+    it "adds a promoted scheduled job's remaining delay to its lease" do
+      released[:payload] = released[:payload].merge("scheduled_at" => (Time.current + 1800).iso8601)
+      allow(Pgbus::BlockedExecution).to receive(:release_next!).and_return(released)
+      allow(mock_client).to receive(:send_message).and_return(42)
+
+      described_class.promote_next("TestJob-42", client: mock_client)
+
+      expect(Pgbus::Semaphore).to have_received(:acquire!) do |_key, _limit, expires_at|
+        expect(expires_at - Time.current).to be >= 1800
+      end
+    end
+
     it "takes the slot with the limit and duration the job class declares" do
       stub_const("TestJob", Class.new do
         include Pgbus::Concurrency
@@ -180,7 +196,10 @@ RSpec.describe Pgbus::Concurrency::BlockedExecution do
       expect(Pgbus::BlockedExecution).to have_received(:promotable_keys).ordered
     end
 
-    it "only looks at keys whose semaphore has room, so a full key cannot starve the rest" do
+    # The filtering itself is SQL, pinned by the integration spec "skips keys
+    # whose slots are all held". This only pins that the sweep asks for the
+    # filtered set rather than every parked key.
+    it "asks the model for promotable keys, not for every parked key" do
       allow(Pgbus::BlockedExecution).to receive(:promotable_keys).and_return(%w[b])
       allow(described_class).to receive(:promote_next).and_return(true, false)
 
