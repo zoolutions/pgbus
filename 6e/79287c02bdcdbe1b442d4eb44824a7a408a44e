@@ -1,0 +1,23 @@
+spec/pgbus/event_bus/stale_connection_retry_spec.rb
+  s_0e4e1c4babad41::t_d8872f4909e636 1-35,37-122
+lib/pgbus/event_bus/handler.rb
+  s_0e4e1c4babad41::t_92d741eaab27a8 161-172,176-180
+lib/pgbus/event_bus/stale_connection_retry.rb
+  s_0e4e1c4babad41::t_f19c8afddf2c55 1-73
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "6e79287c02bdcdbe1b442d4eb44824a7a408a44e",
+  "prompts": {},
+  "sessions": {
+    "s_0e4e1c4babad41": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d3e81cc7-8271-4b8b-882a-8f61a545aaa6",
+        "model": "claude-opus-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
