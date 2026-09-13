@@ -245,6 +245,37 @@ RSpec.describe Pgbus::EventBus::Handler do
         expect(relation).to have_received(:update_all).with(completed_at: kind_of(Time))
       end
 
+      # The drop that motivated StaleConnectionRetry: the socket dies between
+      # handle() returning and the stamp landing, so the host app paged for a
+      # message whose handler had already succeeded.
+      context "when the claim stamp hits a stale connection" do
+        before do
+          allow(Pgbus::EventBus::StaleConnectionRetry).to receive(:reconnect_leased!)
+          attempts = 0
+          allow(relation).to receive(:update_all) do
+            attempts += 1
+            raise ActiveRecord::ConnectionFailed, "PQconsumeInput() SSL error: unexpected eof while reading" if attempts == 1
+
+            1
+          end
+        end
+
+        it "reconnects, stamps the claim and still reports :handled" do
+          expect(handler.process(message)).to eq(:handled)
+
+          expect(relation).to have_received(:update_all).twice
+          expect(Pgbus::EventBus::StaleConnectionRetry).to have_received(:reconnect_leased!).once
+        end
+
+        # The recovered stamp must not re-run the handler: retrying `process`
+        # rather than the stamp alone would double every side effect.
+        it "runs handle exactly once" do
+          handler.process(message)
+
+          expect(handler.handled_events.size).to eq(1)
+        end
+      end
+
       it "marks the dedup cache once the claim is completed" do
         handler.process(message)
 

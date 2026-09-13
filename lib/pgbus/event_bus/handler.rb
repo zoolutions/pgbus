@@ -158,12 +158,26 @@ module Pgbus
       # already cached at claim time). If this write fails, process!'s rescue
       # re-raises, the consumer leaves the message for VT redelivery, and the
       # still-pending claim re-runs — at-least-once, never a silent drop.
+      #
+      # Wrapped in StaleConnectionRetry because this is the one AR write that
+      # happens AFTER handle() has already succeeded: a socket dropped here
+      # costs the host app a paging exception for work that was in fact done.
+      # The stamp is an idempotent `SET completed_at = <now>`, so repeating a
+      # statement that may already have committed is safe.
+      #
+      # Phase 1 (claim_idempotency?) is deliberately NOT wrapped. Its INSERT
+      # may have committed before the socket died, and on a legacy schema the
+      # retry's empty `result.rows` would read as "someone else owns this
+      # claim" and return false — turning a recoverable drop into a silently
+      # skipped event. VT redelivery is the correct recovery there.
       def complete_claim!(event_id)
         return unless ProcessedEvent.completion_column?
 
-        ProcessedEvent
-          .where(event_id: event_id, handler_class: self.class.name)
-          .update_all(completed_at: Time.now.utc)
+        StaleConnectionRetry.call(context: self.class.name) do
+          ProcessedEvent
+            .where(event_id: event_id, handler_class: self.class.name)
+            .update_all(completed_at: Time.now.utc)
+        end
         self.class.dedup_cache.mark!(dedup_key(event_id))
       end
 
