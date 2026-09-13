@@ -1,0 +1,19 @@
+spec/support/fake_turbo_stream_helpers.rb
+  s_21a369f309c4da::t_c5ffb0009364cd 27-31,33-37,39
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "4048ba378b4a4824dcb16212503b757b941e363e",
+  "prompts": {},
+  "sessions": {
+    "s_21a369f309c4da": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "247ecb04-21d0-4505-8e13-9b2bf05ea3d7",
+        "model": "claude-opus-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
