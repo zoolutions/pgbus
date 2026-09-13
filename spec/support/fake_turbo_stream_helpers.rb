@@ -24,17 +24,19 @@ module FakeTurboStreamHelpers
   end
 
   # Whatever is left of the kwargs after turbo's own broadcast helpers take
-  # their share is handed to turbo's renderer. pgbus's options must never get
-  # that far, so the fakes reject every keyword they don't themselves render.
+  # their share is handed to turbo's renderer (or, for `broadcast_refresh_to`,
+  # straight onto the tag as HTML attributes). pgbus's options must never get
+  # that far, so the fakes fail loudly the moment one does — otherwise a
+  # permissive `**` swallows the leak and the "does not leak into turbo's
+  # rendering kwargs" specs are vacuous.
   #
-  # This is deliberately STRICTER than turbo: the contract under test is "the
-  # pgbus option was extracted before `super`", not "turbo happened to tolerate
-  # it". A permissive `**` would swallow a leak and make the
-  # "does not leak into turbo's rendering kwargs" specs vacuous.
-  RENDER_KEYS = %i[content html render partial template locals layout formats attributes].freeze
-
+  # This is a DENYLIST of pgbus's own option names, not an allowlist of turbo's,
+  # because that is exactly the invariant under test: "no pgbus option reaches
+  # turbo". An allowlist would be both under-inclusive (turbo's refresh takes
+  # arbitrary keys as HTML attributes, plus `request_id:`, so a legitimate call
+  # would false-fail) and coupled to turbo's evolving kwarg surface.
   def reject_leaked_kwargs!(rendering)
-    leaked = rendering.keys - RENDER_KEYS
+    leaked = rendering.keys & Pgbus::Streams::BroadcastOpts::KEYS
     return if leaked.empty?
 
     raise ArgumentError, "leaked into turbo's rendering kwargs: #{leaked.inspect}"
