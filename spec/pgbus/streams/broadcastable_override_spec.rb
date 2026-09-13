@@ -59,6 +59,8 @@ RSpec.describe Pgbus::Streams::BroadcastableOverride do
 
   let(:fake_turbo_channel) do
     Module.new do
+      extend FakeTurboStreamHelpers
+
       def self.name
         "Turbo::StreamsChannel"
       end
@@ -86,40 +88,31 @@ RSpec.describe Pgbus::Streams::BroadcastableOverride do
           broadcast_action_to(*streamables, action: :remove, render: false, **opts)
         end
 
-        def broadcast_after_to(*streamables, **)
-          broadcast_stream_to(*streamables, content: "<turbo-stream action='after'/>")
+        def broadcast_after_to(*streamables, **opts)
+          broadcast_action_to(*streamables, action: :after, **opts)
         end
 
-        def broadcast_before_to(*streamables, **)
-          broadcast_stream_to(*streamables, content: "<turbo-stream action='before'/>")
+        def broadcast_before_to(*streamables, **opts)
+          broadcast_action_to(*streamables, action: :before, **opts)
         end
 
-        def broadcast_refresh_to(*streamables, **)
+        def broadcast_refresh_to(*streamables, **attributes)
+          reject_leaked_kwargs!(attributes)
           broadcast_stream_to(*streamables, content: "<turbo-stream action='refresh'/>")
         end
 
-        def broadcast_action_to(*streamables, action:, target: nil, targets: nil, **)
+        def broadcast_action_to(*streamables, action:, target: nil, targets: nil, **rendering)
+          reject_leaked_kwargs!(rendering)
+          resolved = convert_to_turbo_stream_dom_id(target) ||
+                     convert_to_turbo_stream_dom_id(targets, include_selector: true)
           broadcast_stream_to(
             *streamables,
-            content: "<turbo-stream action='#{action}' " \
-                     "target='#{convert_to_turbo_stream_dom_id(target) || convert_to_turbo_stream_dom_id(targets)}'/>"
+            content: "<turbo-stream action='#{action}' target='#{resolved}'/>"
           )
         end
 
-        # Mirrors Turbo::Streams::ActionHelper#convert_to_turbo_stream_dom_id
-        def convert_to_turbo_stream_dom_id(target, include_selector: false)
-          target_array = target.is_a?(Array) ? target : [target].compact
-          return target unless target_array.any? { |v| v.respond_to?(:to_key) || v.is_a?(Class) }
-
-          dom_id = target_array.map { |v| fake_dom_id(v) }.join("_")
-          include_selector ? "##{dom_id}" : dom_id
-        end
-
-        def fake_dom_id(value)
-          value.respond_to?(:to_key) ? "#{value.class.name.downcase}_#{value.to_key.first}" : value.to_s
-        end
-
-        def broadcast_render_to(*streamables, **)
+        def broadcast_render_to(*streamables, **rendering)
+          reject_leaked_kwargs!(rendering)
           broadcast_stream_to(*streamables, content: "<turbo-stream/>")
         end
 

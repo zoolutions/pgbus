@@ -9,6 +9,8 @@ RSpec.describe Pgbus::Streams::TurboBroadcastable do
   # integration test in Phase 5 uses the real gem.
   let(:fake_turbo_module) do
     Module.new do
+      extend FakeTurboStreamHelpers
+
       def self.name
         "Turbo::StreamsChannel"
       end
@@ -28,33 +30,23 @@ RSpec.describe Pgbus::Streams::TurboBroadcastable do
         end
 
         def broadcast_refresh_to(*streamables, **attributes)
-          broadcast_stream_to(*streamables, content: "<turbo-stream action='refresh' #{attributes.keys.join}/>")
+          reject_leaked_kwargs!(attributes)
+          broadcast_stream_to(*streamables, content: "<turbo-stream action='refresh'/>")
         end
 
         def broadcast_render_to(*streamables, **rendering)
-          broadcast_stream_to(*streamables, content: "<turbo-stream #{rendering.keys.join}/>")
+          reject_leaked_kwargs!(rendering)
+          broadcast_stream_to(*streamables, content: "<turbo-stream/>")
         end
 
-        def broadcast_action_to(*streamables, action:, target: nil, targets: nil, **)
+        def broadcast_action_to(*streamables, action:, target: nil, targets: nil, **rendering)
+          reject_leaked_kwargs!(rendering)
           resolved = convert_to_turbo_stream_dom_id(target) ||
                      convert_to_turbo_stream_dom_id(targets, include_selector: true)
           broadcast_stream_to(
             *streamables,
             content: "<turbo-stream action='#{action}' target='#{resolved}'/>"
           )
-        end
-
-        # Mirrors Turbo::Streams::ActionHelper#convert_to_turbo_stream_dom_id
-        def convert_to_turbo_stream_dom_id(target, include_selector: false)
-          target_array = target.is_a?(Array) ? target : [target].compact
-          return target unless target_array.any? { |v| v.respond_to?(:to_key) || v.is_a?(Class) }
-
-          dom_id = target_array.map { |v| fake_dom_id(v) }.join("_")
-          include_selector ? "##{dom_id}" : dom_id
-        end
-
-        def fake_dom_id(value)
-          value.respond_to?(:to_key) ? "#{value.class.name.downcase}_#{value.to_key.first}" : value.to_s
         end
 
         def stream_name_from(streamables)
@@ -212,6 +204,17 @@ RSpec.describe Pgbus::Streams::TurboBroadcastable do
       Thread.current[:pgbus_broadcast_coalesce_target] = nil
     end
 
+    # ActionView::RecordIdentifier.dom_id resolves a name through
+    # ActiveModel::Naming and an id through #to_key — exactly what it takes
+    # from a real Active Record object.
+    def build_record_class
+      Class.new do
+        include ActiveModel::Model
+
+        def to_key = [7]
+      end
+    end
+
     it "forwards coalesce: and the resolved target from a direct channel call" do
       Turbo::StreamsChannel.broadcast_replace_to("room:42", target: "count-badge", coalesce: 50)
 
@@ -233,15 +236,30 @@ RSpec.describe Pgbus::Streams::TurboBroadcastable do
     end
 
     it "keys on the dom_id turbo will render, not the raw record" do
-      record_class = Class.new do
-        def to_key = [7]
-      end
-      stub_const("Order", record_class)
+      stub_const("Order", build_record_class)
 
       Turbo::StreamsChannel.broadcast_replace_to("room:42", target: Order.new, coalesce: 50)
 
       expect(stream).to have_received(:broadcast)
         .with(anything, hash_including(coalesce: 50, target: "order_7"))
+    end
+
+    it "keys a namespaced record on its underscored dom_id" do
+      stub_const("Admin::Order", build_record_class)
+
+      Turbo::StreamsChannel.broadcast_replace_to("room:42", target: Admin::Order.new, coalesce: 50)
+
+      expect(stream).to have_received(:broadcast)
+        .with(anything, hash_including(coalesce: 50, target: "admin_order_7"))
+    end
+
+    it "keys a Class target the way turbo does (new_<param_key>)" do
+      stub_const("Order", build_record_class)
+
+      Turbo::StreamsChannel.broadcast_replace_to("room:42", target: Order, coalesce: 50)
+
+      expect(stream).to have_received(:broadcast)
+        .with(anything, hash_including(coalesce: 50, target: "new_order"))
     end
 
     it "falls back to targets: when target: is absent" do
