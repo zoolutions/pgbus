@@ -31,7 +31,8 @@ RSpec.describe Pgbus::EventBus::StaleConnectionRetry do
     [
       "PQconsumeInput() SSL error: unexpected eof while reading",
       "server closed the connection unexpectedly",
-      "SSL error: unexpected eof while reading"
+      "SSL error: unexpected eof while reading",
+      "SSL SYSCALL error: EOF detected"
     ].each do |message|
       it "reconnects and retries once on #{message.split(":").first}" do
         attempts = 0
@@ -117,6 +118,39 @@ RSpec.describe Pgbus::EventBus::StaleConnectionRetry do
   describe ".transient_drop?" do
     it "is false for an error of another class carrying a matching message" do
       expect(described_class.transient_drop?(StandardError.new("PQconsumeInput() SSL error"))).to be false
+    end
+  end
+
+  # Every other example here stubs reconnect_leased!, which is how the first
+  # cut of this file shipped a call to `ConnectionPool#active_connection` — a
+  # `:nodoc:` alias that does not exist before Rails 7.2, under our floor. The
+  # retry would have raised NoMethodError on the one path that exists to
+  # recover from an error. These run the real method against verifying doubles,
+  # so the pool and connection APIs are checked against the classes themselves.
+  describe ".reconnect_leased!" do
+    let(:handler) { instance_double(ActiveRecord::ConnectionAdapters::ConnectionHandler) }
+    let(:leased) { instance_double(ActiveRecord::ConnectionAdapters::AbstractAdapter, reconnect!: true) }
+    let(:leased_pool) { instance_double(ActiveRecord::ConnectionAdapters::ConnectionPool, active_connection?: leased) }
+    let(:idle_pool) { instance_double(ActiveRecord::ConnectionAdapters::ConnectionPool, active_connection?: nil) }
+
+    before do
+      allow(described_class).to receive(:reconnect_leased!).and_call_original
+      allow(ActiveRecord::Base).to receive(:connection_handler).and_return(handler)
+      allow(handler).to receive(:each_connection_pool).with(:all).and_yield(leased_pool).and_yield(idle_pool)
+    end
+
+    it "reconnects a pool this thread holds a lease on" do
+      described_class.reconnect_leased!
+
+      expect(leased).to have_received(:reconnect!)
+    end
+
+    # A pool with no lease belongs to another thread, or to nobody. Reconnecting
+    # it would yank a socket out from under a sibling consumer.
+    it "leaves a pool with no lease alone" do
+      expect { described_class.reconnect_leased! }.not_to raise_error
+
+      expect(idle_pool).to have_received(:active_connection?)
     end
   end
 end

@@ -24,10 +24,16 @@ module Pgbus
       # The socket dying under a statement, not a server refusing us. A refused
       # or timed-out connection is an outage: retrying it in-process buys
       # nothing and hides the outage behind a doubled statement timeout.
+      #
+      # "ssl syscall error" is libpq's wording when the peer vanished without a
+      # TLS close_notify — the same drop as "unexpected eof while reading",
+      # reported from the syscall layer instead. It is in
+      # Client::STALE_CONNECTION_PATTERNS for the same reason.
       TRANSIENT_DROP = /
         PQconsumeInput|
         server\ closed\ the\ connection\ unexpectedly|
-        unexpected\ eof\ while\ reading
+        unexpected\ eof\ while\ reading|
+        ssl\ syscall\ error
       /ix
 
       module_function
@@ -60,9 +66,15 @@ module Pgbus
       # Only the connections this thread has actually leased.
       # `clear_all_connections!` would yank sockets out from under sibling
       # consumers sharing the process, turning one recoverable drop into many.
+      # `active_connection?` returns the lease or nil, and is the accessor this
+      # gem uses everywhere (Streams#current_open_transaction documents why we
+      # never reach for `ActiveRecord::Base.connection`). Its `active_connection`
+      # alias is `:nodoc:` and does not exist at all before Rails 7.2 — below
+      # our floor, so calling it would raise NoMethodError on the one path that
+      # exists to recover from an error.
       def reconnect_leased!
         ActiveRecord::Base.connection_handler.each_connection_pool(:all) do |pool|
-          connection = pool.active_connection
+          connection = pool.active_connection?
           next unless connection
 
           connection.reconnect!
