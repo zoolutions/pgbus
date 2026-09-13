@@ -98,8 +98,25 @@ RSpec.describe Pgbus::Streams::BroadcastableOverride do
           broadcast_stream_to(*streamables, content: "<turbo-stream action='refresh'/>")
         end
 
-        def broadcast_action_to(*streamables, action:, **)
-          broadcast_stream_to(*streamables, content: "<turbo-stream action='#{action}'/>")
+        def broadcast_action_to(*streamables, action:, target: nil, targets: nil, **)
+          broadcast_stream_to(
+            *streamables,
+            content: "<turbo-stream action='#{action}' " \
+                     "target='#{convert_to_turbo_stream_dom_id(target) || convert_to_turbo_stream_dom_id(targets)}'/>"
+          )
+        end
+
+        # Mirrors Turbo::Streams::ActionHelper#convert_to_turbo_stream_dom_id
+        def convert_to_turbo_stream_dom_id(target, include_selector: false)
+          target_array = target.is_a?(Array) ? target : [target].compact
+          return target unless target_array.any? { |v| v.respond_to?(:to_key) || v.is_a?(Class) }
+
+          dom_id = target_array.map { |v| fake_dom_id(v) }.join("_")
+          include_selector ? "##{dom_id}" : dom_id
+        end
+
+        def fake_dom_id(value)
+          value.respond_to?(:to_key) ? "#{value.class.name.downcase}_#{value.to_key.first}" : value.to_s
         end
 
         def broadcast_render_to(*streamables, **)
@@ -157,6 +174,8 @@ RSpec.describe Pgbus::Streams::BroadcastableOverride do
     Thread.current[:pgbus_broadcast_exclude] = nil
     Thread.current[:pgbus_broadcast_visible_to] = nil
     Thread.current[:pgbus_broadcast_event] = nil
+    Thread.current[:pgbus_broadcast_coalesce] = nil
+    Thread.current[:pgbus_broadcast_coalesce_target] = nil
   end
 
   describe "instance-level durable: kwarg" do
@@ -301,6 +320,75 @@ RSpec.describe Pgbus::Streams::BroadcastableOverride do
       expect(Thread.current[:pgbus_broadcast_exclude]).to be_nil
       expect(Thread.current[:pgbus_broadcast_visible_to]).to be_nil
       expect(Thread.current[:pgbus_broadcast_event]).to be_nil
+    end
+  end
+
+  describe "instance-level coalesce: kwarg (issue #465)" do
+    it "forwards coalesce: and the target to Stream#broadcast" do
+      model.broadcast_replace_to("room:42", target: "count-badge", coalesce: 50, html: "<div/>")
+
+      expect(fake_stream).to have_received(:broadcast)
+        .with(anything, hash_including(coalesce: 50, target: "count-badge"))
+    end
+
+    it "forwards coalesce: true" do
+      model.broadcast_replace_to("room:42", target: "count-badge", coalesce: true, html: "<div/>")
+
+      expect(fake_stream).to have_received(:broadcast)
+        .with(anything, hash_including(coalesce: true, target: "count-badge"))
+    end
+
+    it "forwards coalesce: for broadcast_append_to" do
+      model.broadcast_append_to("room:42", target: "list", coalesce: 50, html: "<div/>")
+
+      expect(fake_stream).to have_received(:broadcast)
+        .with(anything, hash_including(coalesce: 50, target: "list"))
+    end
+
+    it "forwards coalesce: for broadcast_action_to" do
+      model.broadcast_action_to("room:42", action: :update, target: "list", coalesce: 50, html: "<div/>")
+
+      expect(fake_stream).to have_received(:broadcast)
+        .with(anything, hash_including(coalesce: 50, target: "list"))
+    end
+
+    it "composes coalesce: with durable: and exclude:" do
+      model.broadcast_replace_to(
+        "room:42", target: "count-badge", coalesce: 50, durable: true, exclude: "conn-9", html: "<div/>"
+      )
+
+      expect(Pgbus).to have_received(:stream).with("room:42", durable: true)
+      expect(fake_stream).to have_received(:broadcast)
+        .with(anything, hash_including(coalesce: 50, target: "count-badge", exclude: "conn-9"))
+    end
+
+    it "does NOT leak coalesce: into turbo-rails rendering kwargs" do
+      expect do
+        model.broadcast_replace_to("room:42", target: "t", coalesce: 50, html: "<div/>")
+      end.not_to raise_error
+    end
+
+    it "coalesces a broadcast wrapped in with_pgbus_broadcast_opts(coalesce:)" do
+      model.send(:with_pgbus_broadcast_opts, coalesce: 50) do
+        model.broadcast_replace_to("room:42", target: "count-badge", html: "<div/>")
+      end
+
+      expect(fake_stream).to have_received(:broadcast)
+        .with(anything, hash_including(coalesce: 50, target: "count-badge"))
+    end
+
+    it "passes coalesce: nil and target: nil when coalesce: is absent" do
+      model.broadcast_replace_to("room:42", target: "count-badge", html: "<div/>")
+
+      expect(fake_stream).to have_received(:broadcast)
+        .with(anything, hash_including(coalesce: nil, target: nil))
+    end
+
+    it "cleans up the coalesce thread-locals after the broadcast" do
+      model.broadcast_replace_to("room:42", target: "t", coalesce: 50, html: "<div/>")
+
+      expect(Thread.current[:pgbus_broadcast_coalesce]).to be_nil
+      expect(Thread.current[:pgbus_broadcast_coalesce_target]).to be_nil
     end
   end
 
