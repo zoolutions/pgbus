@@ -40,7 +40,7 @@ module Pgbus
       # don't understand. We pull them out of kwargs (so they never reach
       # turbo-rails' renderer) and thread them to broadcast_stream_to via
       # thread-locals, mirroring the original durable: shim.
-      PGBUS_BROADCAST_OPTS = %i[durable exclude visible_to event].freeze
+      PGBUS_BROADCAST_OPTS = BroadcastOpts::KEYS
 
       BROADCAST_METHODS.each do |method_name|
         define_method(method_name) do |*streamables, **kwargs|
@@ -128,32 +128,19 @@ module Pgbus
       private
 
       def extract_pgbus_broadcast_opts(kwargs)
-        PGBUS_BROADCAST_OPTS.each_with_object({}) do |key, opts|
-          opts[key] = kwargs.delete(key) if kwargs.key?(key)
-        end
+        BroadcastOpts.extract!(kwargs)
       end
 
       # Set the pgbus broadcast thread-locals for the duration of the block,
       # restoring previous values afterwards (nested/concurrent-safe). Only
       # keys actually passed are touched, so unrelated outer broadcasts keep
       # their values.
-      def with_pgbus_broadcast_opts(durable: :__unset__, exclude: :__unset__, visible_to: :__unset__, event: :__unset__)
-        previous = {}
-        set = lambda do |tl_key, value|
-          next if value == :__unset__
+      def with_pgbus_broadcast_opts(durable: :__unset__, exclude: :__unset__, visible_to: :__unset__,
+                                    event: :__unset__, coalesce: :__unset__, &)
+        opts = { durable: durable, exclude: exclude, visible_to: visible_to, event: event, coalesce: coalesce }
+        opts.reject! { |_key, value| value == :__unset__ }
 
-          previous[tl_key] = Thread.current[tl_key]
-          Thread.current[tl_key] = value
-        end
-
-        set.call(:pgbus_broadcast_durable, durable)
-        set.call(:pgbus_broadcast_exclude, exclude)
-        set.call(:pgbus_broadcast_visible_to, visible_to)
-        set.call(:pgbus_broadcast_event, event)
-
-        yield
-      ensure
-        previous.each { |tl_key, value| Thread.current[tl_key] = value }
+        BroadcastOpts.with(**opts, &)
       end
     end
   end

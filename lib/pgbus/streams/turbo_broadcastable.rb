@@ -34,9 +34,57 @@ module Pgbus
     # long as `Turbo.signed_stream_verifier_key` is set, which the Rails
     # app is already responsible for).
     module TurboBroadcastable
+      # Every targeted broadcast helper (`broadcast_replace_to`,
+      # `broadcast_append_to`, `broadcast_remove_to`, …) funnels through
+      # `broadcast_action_to`, so this is the one place that sees both the
+      # caller's kwargs and the `target:`/`targets:` the frame will carry.
+      #
+      # It does two things the model-level `BroadcastableOverride` can't:
+      #
+      # 1. Extracts the pgbus options from a *direct* channel call —
+      #    `Turbo::StreamsChannel.broadcast_replace_to(..., coalesce: true)` —
+      #    which never passes through `Turbo::Broadcastable` at all (this is
+      #    the path phlex-reactive's `Streamable.broadcast_to` takes).
+      # 2. Records the coalescing key. `coalesce:` dedupes on
+      #    `(stream, target)`, but `broadcast_stream_to` only receives the
+      #    rendered `content:` — the target is gone by then. We resolve it the
+      #    same way turbo will (`convert_to_turbo_stream_dom_id`), so a record
+      #    target keys on its stable dom_id rather than its object id.
+      #
+      # Resolving the key is skipped entirely unless coalescing was actually
+      # requested, so the uncoalesced path stays byte-identical and free.
+      def broadcast_action_to(*streamables, action:, target: nil, targets: nil, **rendering)
+        opts = BroadcastOpts.extract!(rendering)
+
+        coalesce = opts.key?(:coalesce) ? opts[:coalesce] : BroadcastOpts[:coalesce]
+        opts[:coalesce_target] = pgbus_coalesce_target(target, targets) if coalesce
+
+        BroadcastOpts.with(**opts) do
+          super(*streamables, action: action, target: target, targets: targets, **rendering)
+        end
+      end
+
+      # The two helpers that don't pass through `broadcast_action_to`. They
+      # carry no target, so they can't coalesce (`Stream#broadcast` raises an
+      # actionable error, same as `Pgbus.stream(x).broadcast(coalesce:)`
+      # without one) — but they still need their pgbus options pulled out of
+      # the kwargs, or a direct channel call leaks `durable: true` into
+      # turbo's renderer and it ends up as an HTML attribute.
+      def broadcast_refresh_to(*streamables, **attributes)
+        BroadcastOpts.with(**BroadcastOpts.extract!(attributes)) do
+          super(*streamables, **attributes)
+        end
+      end
+
+      def broadcast_render_to(*streamables, **rendering)
+        BroadcastOpts.with(**BroadcastOpts.extract!(rendering)) do
+          super(*streamables, **rendering)
+        end
+      end
+
       def broadcast_stream_to(*streamables, content:)
         name = stream_name_from(streamables)
-        override = Thread.current[:pgbus_broadcast_durable]
+        override = BroadcastOpts[:durable]
         # When no explicit thread-local override is present, let the config
         # resolver decide: it checks `streams_durable_patterns` first (exact
         # string or regex match), then falls back to
@@ -46,10 +94,23 @@ module Pgbus
         durable = override.nil? ? Pgbus.configuration.stream_durable?(name) : override
         Pgbus.stream(name, durable: durable).broadcast(
           content,
-          exclude: Thread.current[:pgbus_broadcast_exclude],
-          visible_to: Thread.current[:pgbus_broadcast_visible_to],
-          event: Thread.current[:pgbus_broadcast_event]
+          exclude: BroadcastOpts[:exclude],
+          visible_to: BroadcastOpts[:visible_to],
+          event: BroadcastOpts[:event],
+          coalesce: BroadcastOpts[:coalesce],
+          target: BroadcastOpts[:coalesce_target]
         )
+      end
+
+      private
+
+      # The coalescing key, resolved exactly as turbo resolves the rendered
+      # `target=`/`targets=` attribute. `targets:` (a CSS selector) is the
+      # fallback turbo itself uses when `target:` is absent; we drop the `#`
+      # selector prefix because the key is never rendered — it only has to be
+      # stable and distinct.
+      def pgbus_coalesce_target(target, targets)
+        convert_to_turbo_stream_dom_id(target) || convert_to_turbo_stream_dom_id(targets)
       end
     end
 

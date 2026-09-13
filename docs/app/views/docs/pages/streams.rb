@@ -333,8 +333,33 @@ class Views::Docs::Pages::Streams < DocsUI::Page
         re-enters the normal broadcast path, so a coalesced frame still composes
         with `visible_to:`, `exclude:`, `event:`, and `durable:`.
       MD
+      md <<~'MD'
+        `coalesce:` works on the `Turbo::Broadcastable` path too — any targeted
+        broadcast helper on a model, or a direct `Turbo::StreamsChannel` call.
+        The frame's own `target:` is the coalescing key (resolved to the same
+        dom id Turbo renders), so a record target keys on `order_7`, not on
+        whichever object happened to carry it:
+      MD
+      DocsUI::Code(<<~'RUBY')
+        @order.broadcast_replace_to :account, coalesce: 100
+
+        Turbo::StreamsChannel.broadcast_replace_to(
+          @account, target: "order-count", coalesce: true, partial: "orders/count"
+        )
+      RUBY
       DocsUI::Callout(:note) do
         plain "Coalescing is process-wide and in-memory. Behind multiple Puma workers or Falcon processes, each process debounces its own submissions independently."
+      end
+      DocsUI::Callout(:note) do
+        plain "The coalescing key is the frame's target, so the helpers that carry no target — "
+        code { "broadcast_refresh_to" }
+        plain " and "
+        code { "broadcast_render_to" }
+        plain " — cannot coalesce; passing "
+        code { "coalesce:" }
+        plain " to one raises. The "
+        code { "_later_to" }
+        plain " variants run in a job, where the thread-local carrying the option cannot follow."
       end
     end
   end
