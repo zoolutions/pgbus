@@ -2,6 +2,12 @@
 
 PostgreSQL-native job processing and event bus for Rails, built on PGMQ.
 
+## Memory
+
+Durable project memory lives in `lode/` (index: `lode/lode-map.md`). Read it
+before exploring. `lode/review/` holds accepted review findings as rules;
+`/lode:gate` enforces them before any push, and `/lode:learn` adds to them.
+
 ## Tech Stack
 
 - **Ruby**: >= 3.3 | **Rails**: >= 7.1
@@ -49,18 +55,29 @@ bin/release [minor|major|X.Y.Z] [-n]      # Cut a release (patch by default) via
 
 ## Slash Commands
 
+The workflow commands come from the shared `lode@zoolutions` plugin and read
+`lode/workflow.md` for everything repo-specific (commands, layers, shapes,
+constraints, CI, conflicts).
+
 | Command | Purpose |
 |---------|---------|
-| `/lfg` | Full autonomous workflow: branch → understand → explore → plan → TDD → verify → PR |
-| `/plan` | Fable-powered planning → GitHub issue or `docs/plans/` markdown (read-only; execute with `/lfg`) |
-| `/github-review-comments` | Process unresolved PR review comments |
-| `/review-pr` | Review a PR for pattern compliance |
-| `/tdd` | Enforce RED → GREEN → REFACTOR cycle |
+| `/lode:lfg` | Full autonomous workflow: branch → understand → explore → plan → TDD → verify → gate → PR |
+| `/lode:plan` | Read-only planning → GitHub issue or a plan file (execute with `/lode:lfg`) |
+| `/lode:tdd` | Enforce RED → GREEN → REFACTOR |
+| `/lode:review-pr` | Full PR pass: merge conflicts, then CI failures, then unresolved review comments |
+| `/lode:finish-prs` | Drive a stack of open PRs to merge-ready, one at a time |
+| `/lode:debug-flaky` | Root-cause an intermittent failure — evidence → repro → stress-proofed fix |
+| `/lode:gate` | Pre-PR gate: fresh-context review against the rules and `lode/review/`, looping until clean |
+| `/lode:learn` | Write accepted review findings into `lode/review/` |
+| `/lode:sync` | Keep `lode/` true to the code after a change |
+| `/review-pr` | Quick pattern-compliance review of a PR (local, narrower than `/lode:review-pr`) |
 | `/security` | Security audit (PGMQ ops, connections, auth, deserialization) |
 | `/architect` | Coordinate multi-layer development |
 | `/perf` | Benchmark current branch against main (before/after with worktree) |
 
-Commands and agents pin a model tier via frontmatter aliases: `sonnet` for pattern-following implementation (the default), `opus` for orchestration, security, and full PR review, `fable` for read-only planning (`/plan`). Use aliases, not full model IDs, so commands track the latest model in each tier. When spawning subagents for mechanical work (file finding, pattern scans), pass a cheaper model explicitly rather than letting them inherit the session model.
+Run `/lode:gate` and paste its report into the PR body before `gh pr create`.
+
+The local commands pin a model tier via frontmatter aliases: `sonnet` for pattern-following implementation (the default), `opus` for orchestration, security, and full PR review, `fable` for read-only planning. Use aliases, not full model IDs, so commands track the latest model in each tier. When spawning subagents for mechanical work (file finding, pattern scans), pass a cheaper model explicitly rather than letting them inherit the session model.
 
 ## Architecture
 
