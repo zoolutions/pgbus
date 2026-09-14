@@ -50,6 +50,7 @@ saying "none".
 | Migrations | `lib/generators/pgbus/templates/*.erb` | owned here; a released migration template is append-only — add a new `add_*` generator rather than editing one apps have run |
 | Vendored PGMQ SQL | `lib/pgbus/pgmq_schema/pgmq_v*.sql` | **vendored — never edit**; add a new version file copied verbatim from upstream |
 | Built asset | `app/frontend/pgbus/style.css` | **generated** — edit the views, then `rake frontend:css` |
+| Vendored JS | `app/frontend/pgbus/vendor/turbo.js`, `vendor/apexcharts.js` | **vendored** — never edit; re-vendor from upstream |
 | Lockfiles | `Gemfile.lock`, `gemfiles/rails_7_1.gemfile.lock`, `docs/Gemfile.lock`, `bun.lock`, `docs/bun.lock` | **generated** — never hand-merge; see Conflicts |
 | Docs site | `docs/**` | separate app, separate bundle, separate lint; see `lode/docs-site/summary.md` |
 
@@ -95,7 +96,7 @@ Reviewer suggestions that are wrong in this repository, with the reason.
 ## Docs
 
 - User-facing docs live in `docs/app/views/docs/pages/` (one `DocsUI::Page` subclass per page, registered in `docs/app/models/doc.rb`). The page-to-behaviour map is in [docs-site/summary.md](docs-site/summary.md)
-- Changelog: `CHANGELOG.md`, entries under `## [Unreleased]` → `### Added` / `### Fixed` / `### Changed` / `### Removed` / `### Breaking Changes`. Entries are long-form prose naming the symptom, the mechanism and the issue
+- Changelog: `CHANGELOG.md`, entries under `## [Unreleased]` → `### Added` / `### Fixed` / `### Changed` / `### Security` / `### Breaking Changes` (the five headings the file actually uses; there is no `### Removed`). Entries are long-form prose naming the symptom, the mechanism and the issue
 - A change to **behaviour** updates its docs page **and** `CHANGELOG.md` in the same PR. A change to a **setting** also updates `docs/app/models/config_reference.rb`. A fact that appears on more than one page changes on all of them — `grep` the subject first
 - Files that pin a version and drift after a release: `Gemfile.lock`, `gemfiles/rails_7_1.gemfile.lock` and `docs/Gemfile.lock` all carry a `pgbus (X.Y.Z)` pin. `rake release` edits the pin lines directly; `spec/pgbus/frozen_lockfile_sync_spec.rb` fails when they drift
 
@@ -127,6 +128,7 @@ Reviewer suggestions that are wrong in this repository, with the reason.
 | `bun.lock`, `docs/bun.lock` | take the base's, then `bun install` in that directory |
 | `lib/pgbus/version.rb` | an ordinary branch never edits it — releases land directly on `main`. Take the base's version unless the branch's own commits show a deliberate, explained bump |
 | `app/frontend/pgbus/style.css` | generated — take either side, then `rake frontend:css` |
+| `app/frontend/pgbus/vendor/turbo.js`, `vendor/apexcharts.js` | vendored upstream builds — never hand-merge; take one side whole (normally the newer vendored version) or re-vendor from upstream; `spec/pgbus/web/vendored_assets_spec.rb` checks them |
 | `config/locales/*.yml` | union; a key must end up defined in all 12 files |
 | `docs/app/models/doc.rb` | append-only registry — keep both `page` lines, base order first |
 | `spec/support/*.rb`, fixtures | add a second double/fixture rather than merging two shapes into one |

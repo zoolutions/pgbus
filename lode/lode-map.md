@@ -35,6 +35,7 @@ the code. `/lode:gate` reads every file here before reviewing a diff;
 - `review/concurrency.md` — slot leases, the heartbeat floor, promotion isolation, orphan limits, the release/discard escape hatches
 - `review/uniqueness.md` — bind stamps, queue-scoped and unbound-scoped releases, the reaper's placeholder rules, DLQ handling
 - `review/batch.md` — the execution-row invariant, conditional cleanup, DLQ identity by job_id, migration column states, schema parity
+- `review/active-job.md` — the archive step as the exact-once claim: a retried `false` is ambiguous, not a duplicate
 - `review/client.md` — connection ownership and mutex order, savepoint bootstrap caching, duplicate-error detection, DDL centralisation
 - `review/process-and-streams.md` — single-owner PG connections, shutdown join budgets, listener lifecycle, notify-lock retries
 - `review/web-and-i18n.md` — DataSource memo lifetime, raw key handling, lease freshness, turbo frame targets, locale parity
