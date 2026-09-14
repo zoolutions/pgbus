@@ -39,7 +39,7 @@ resolution for each collision (`BatchEntry` because `Batch` is the API class,
 
 ## Generators
 
-Twenty-one generators under `lib/generators/pgbus/`. `pgbus:install` writes the
+Twenty generator classes under `lib/generators/pgbus/` (plus `migration_path.rb`, a shared module, not a generator). `pgbus:install` writes the
 initializer, the binstub and the full migration; every `pgbus:add_*` adds one
 later table or column set. `Generators::MigrationDetector` reads the live schema
 and reports which of them are missing, so `pgbus:update` and the doctor can tell

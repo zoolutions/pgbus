@@ -11,8 +11,11 @@ A mountable engine surface: 14 dashboard controllers under
 
 `Web::DataSource` is the only thing in the dashboard that touches the database.
 Controllers call it; no controller writes SQL (CLAUDE.md rule #3). Every public
-method rescues `StandardError`, logs at debug and returns a neutral value — an
+read method rescues `StandardError`, logs at debug and returns a neutral value — an
 empty array, a zeroed Hash, nil — so one broken query never takes the page down.
+The four write methods (`purge_queue`, `drop_queue`, `retry_job`, `discard_job`)
+have no rescue and let a `Client` error reach the controller, by design: a write
+that failed must not look like one that succeeded.
 
 `config.web_data_source` is a documented extension point, so a caller may hand
 in another implementation. That is why the dashboard's own views keep fallbacks

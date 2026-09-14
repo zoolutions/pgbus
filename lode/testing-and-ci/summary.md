@@ -61,8 +61,7 @@ Runs on push to `main` and on every pull request. Seven jobs:
 | `system_test` | Playwright Chromium (cached on `bun.lock`), `rspec spec/system/`, uploads `tmp/capybara/**/*.png` on failure |
 
 RuboCop is always given **explicit paths**. A bare run discovers
-`docs/.rubocop.yml` while scanning — before `AllCops/Exclude` applies — and
-crashes on gems that are not in the gem's bundle. `docs/` lints itself in
+`docs/.rubocop.RuboCop is given explicit paths by the Rakefile and CI. A bare run no longer crashes: `.rubocop.yml` excludes `docs` and `docs/**/*` at `AllCops` (PR #269) so `docs/.rubocop.yml` is never read; the comments in the Rakefile and `main.yml` that still describe a crash predate that exclusion. `docs/` lints itself in
 `docs-ci.yml`.
 
 The other workflows: `docs-ci.yml` (only on `docs/**`), `deploy-docs.yml`,

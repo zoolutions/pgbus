@@ -15,7 +15,7 @@ saying "none".
 | integration suite | `PGBUS_DATABASE_URL=postgres://… bundle exec rspec spec/integration/` | **needs a real PostgreSQL with PGMQ**, creates and truncates real tables — **not** safe in two worktrees against the same database |
 | system suite | `bundle exec rspec spec/system/` | boots `spec/dummy` + Playwright Chromium (`bunx --bun playwright install chromium`); binds a port |
 | everything the default task runs | `bundle exec rake` | `spec` (which is `spec/pgbus/**` only) + `rubocop` + `pgbus:streams:lint_no_live` |
-| lint | `bundle exec rubocop` (or `rake rubocop`) | **always with explicit paths** — the Rakefile passes `app benchmarks config lib spec Gemfile Rakefile pgbus.gemspec`; a bare run discovers `docs/.rubocop.yml` and crashes |
+| lint | `bundle exec rubocop` (or `rake rubocop`) | **with explicit paths by convention** — the Rakefile passes `app benchmarks config lib spec Gemfile Rakefile pgbus.gemspec`. A bare run no longer crashes: `.rubocop.yml`'s `AllCops: Exclude` lists `docs` and `docs/**/*` (PR #269) precisely so `docs/.rubocop.yml` is never read; the Rakefile and CI comments that still say it crashes predate that |
 | ERB lint | `bun run lint:herb` | needs `bun install --frozen-lockfile` first |
 | one CI cell locally | `BUNDLE_GEMFILE=gemfiles/rails_7_1.gemfile bundle install && BUNDLE_GEMFILE=gemfiles/rails_7_1.gemfile bundle exec rspec spec/pgbus/ spec/generators/` | the Rails 7.1 leg |
 | benchmarks | `bundle exec rake bench:all`, `rake bench:one[client_bench]`, `rake bench:memory` | `bench:integration`, `bench:streams`, `bench:fair_read`, `bench:pool_*`, `bench:notify_*`, `bench:job_burst`, `bench:execution_modes`, `bench:streams_hub` all need `PGBUS_DATABASE_URL` |
@@ -88,7 +88,7 @@ Reviewer suggestions that are wrong in this repository, with the reason.
 | A flat 5-second join timeout | budget one full `health_check_ms` wait plus the grace |
 | `clear_all_connections!` to recover a dropped socket | it yanks sockets from sibling consumers in the same process |
 | Run `bundle lock` to fix a lockfile | `docs/Gemfile.lock`'s broad PLATFORMS list makes a full re-resolve fail on platform-only gems; edit the pin line |
-| A bare `rubocop` / a directory glob | it loads `docs/.rubocop.yml` mid-scan and crashes; pass explicit paths |
+| A bare `rubocop` / a directory glob | it works today (615 files, `docs` excluded at `AllCops`), but CI and the Rakefile pass explicit paths and the gem's cops assume that scope; keep the explicit paths |
 | Simplify the batch `pending_jobs` fallback away | `config.web_data_source` is a public extension point and the QA stub omits the key |
 | Strip whitespace from a concurrency key | the key comes from a user proc; whitespace is data |
 | Add a hard CI perf gate | the `bench` job is run-and-report; shared runners are too noisy for a threshold |

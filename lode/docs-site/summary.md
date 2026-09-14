@@ -45,7 +45,7 @@ line and writes the class. Never hand-write HTML or daisyUI markup — compose t
 | Upgrading pgbus | breaking changes and required migrations |
 | From Sidekiq / SolidQueue / GoodJob | migration guides |
 | Configuration reference | every setting, generated from `docs/app/models/config_reference.rb` |
-| CLI & generators | `exe/pgbus`, the 21 generators, the rake tasks |
+| CLI & generators | `exe/pgbus`, the 20 generators, the rake tasks |
 
 A behaviour change updates its page **and** `CHANGELOG.md` in the same PR. A
 fact that appears on more than one page (a flag's scope, a precedence rule, a
