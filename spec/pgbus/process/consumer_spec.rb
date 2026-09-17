@@ -118,7 +118,8 @@ RSpec.describe Pgbus::Process::Consumer do
       consumer.send(:handle_message, message, "q_orders")
 
       expect(registry).to have_received(:handlers_for).with("orders.created", queue_name: "q_orders")
-      expect(handler_instance).to have_received(:process).with(message)
+      expect(handler_instance).to have_received(:process)
+        .with(message, claim_beat: instance_of(Pgbus::EventBus::ClaimBeat))
       expect(mock_client).to have_received(:archive_message).with("q_orders", 7)
     end
 
@@ -141,7 +142,8 @@ RSpec.describe Pgbus::Process::Consumer do
         consumer.send(:handle_message, message, "q_orders")
 
         expect(registry).to have_received(:handlers_for).with("orders.shipped", queue_name: "q_orders")
-        expect(handler_instance).to have_received(:process).with(message)
+        expect(handler_instance).to have_received(:process)
+          .with(message, claim_beat: instance_of(Pgbus::EventBus::ClaimBeat))
         expect(mock_client).to have_received(:archive_message).with("q_orders", 8)
       end
     end
@@ -160,10 +162,10 @@ RSpec.describe Pgbus::Process::Consumer do
       before do
         calls = invocations
         first = Class.new do
-          define_method(:process) { |_message| calls << :first }
+          define_method(:process) { |_message, **| calls << :first }
         end
         second = Class.new do
-          define_method(:process) { |_message| calls << :second }
+          define_method(:process) { |_message, **| calls << :second }
         end
         stub_const("FirstOrdersHandler", first)
         stub_const("SecondOrdersHandler", second)
@@ -178,6 +180,67 @@ RSpec.describe Pgbus::Process::Consumer do
         consumer.send(:handle_message, message, "q_first")
 
         expect(invocations).to eq([:first])
+      end
+    end
+
+    # Issue #470: the consumer never heartbeat the event message's VT, so a
+    # handler slower than visibility_timeout was redelivered *while still
+    # running* — and the second delivery's pending idempotency claim was read as
+    # "the holder crashed". Parity with ActiveJob::Executor#with_visibility_heartbeat.
+    describe "visibility heartbeat" do
+      it "keeps the message invisible while its handlers run" do
+        tracked = nil
+        allow(Pgbus::VisibilityHeartbeat).to receive(:track) do |**kwargs, &blk|
+          tracked = kwargs
+          blk.call
+        end
+
+        consumer.send(:handle_message, message, "q_orders")
+
+        expect(tracked).to include(client: mock_client, queue_name: "q_orders", msg_id: 7)
+        expect(handler_instance).to have_received(:process)
+      end
+
+      # The heartbeat must be gone before the archive, or a beat can re-arm the
+      # VT of a message that no longer exists (see the executor's twin).
+      it "stops tracking before the message is archived" do
+        order = []
+        allow(Pgbus::VisibilityHeartbeat).to receive(:track) do |**_kwargs, &blk|
+          blk.call
+          order << :released
+        end
+        allow(mock_client).to receive(:archive_message) { order << :archived }
+
+        consumer.send(:handle_message, message, "q_orders")
+
+        expect(order).to eq(%i[released archived])
+      end
+
+      it "refreshes the handlers' idempotency claims on every beat" do
+        on_beat = nil
+        allow(Pgbus::VisibilityHeartbeat).to receive(:track) do |**kwargs, &blk|
+          on_beat = kwargs[:on_beat]
+          blk.call
+        end
+        claim_beat = nil
+        allow(handler_instance).to receive(:process) { |_msg, **kw| claim_beat = kw[:claim_beat] }
+
+        consumer.send(:handle_message, message, "q_orders")
+
+        expect(claim_beat).to be_a(Pgbus::EventBus::ClaimBeat)
+        allow(claim_beat).to receive(:touch!)
+        on_beat.call
+        expect(claim_beat).to have_received(:touch!)
+      end
+
+      it "does not track a message no subscriber owns" do
+        allow(registry).to receive(:handlers_for).and_return([])
+        allow(Pgbus.logger).to receive(:warn)
+        allow(Pgbus::VisibilityHeartbeat).to receive(:track)
+
+        consumer.send(:handle_message, message, "q_orders")
+
+        expect(Pgbus::VisibilityHeartbeat).not_to have_received(:track)
       end
     end
 
@@ -716,6 +779,16 @@ RSpec.describe Pgbus::Process::Consumer do
       consumer.notify_listener = fake_listener
       consumer.send(:shutdown)
       expect(fake_listener).to have_received(:stop)
+    end
+
+    # The ticker thread outlives the pool otherwise, re-arming the VT of
+    # messages nobody is handling any more (parity with Worker#shutdown).
+    it "stops the visibility heartbeat ticker after the pool has drained" do
+      allow(Pgbus::VisibilityHeartbeat).to receive(:stop)
+
+      consumer.send(:shutdown)
+
+      expect(Pgbus::VisibilityHeartbeat).to have_received(:stop)
     end
 
     it "bounds the drain wait by config.drain_timeout, not a hardcoded 30s (issue #386)" do

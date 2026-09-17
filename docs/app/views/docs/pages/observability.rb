@@ -70,6 +70,7 @@ class Views::Docs::Pages::Observability < DocsUI::Page
           [ [ :code, "pgbus.job_dead_lettered" ], "A job exceeded max_retries." ],
           [ [ :code, "pgbus.event_processed" ], "An event handler ran." ],
           [ [ :code, "pgbus.event_failed" ], "An event handler raised." ],
+          [ [ :code, "pgbus.event_skipped" ], "An idempotent handler skipped a delivery (already done, or the holder is still running)." ],
           [ [ :code, "pgbus.client.send_message" ], "A message was enqueued." ],
           [ [ :code, "pgbus.client.send_batch" ], "A batch was enqueued." ],
           [ [ :code, "pgbus.client.read_batch" ], "A worker read a batch." ],
