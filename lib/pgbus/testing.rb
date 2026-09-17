@@ -58,7 +58,7 @@ module Pgbus
           event = @mutex.synchronize { @events.first }
           break unless event
 
-          Pgbus::EventBus::Registry.instance.handlers_for(event.routing_key).each do |subscriber|
+          Pgbus::EventBus::Registry.instance.subscribers_matching(event.routing_key).each do |subscriber|
             # Restore the publisher's Current (issue #431) like the consumer does.
             Pgbus::CurrentAttributes.restore(event.context) { subscriber.handler_class.new.handle(event) }
           end

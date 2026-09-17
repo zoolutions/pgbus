@@ -62,7 +62,30 @@ module Pgbus
         end
       end
 
-      def handlers_for(routing_key)
+      # Subscribers a message read from +queue_name+ must be dispatched to
+      # (issue #469). Every subscriber gets its own queue, so a topic with N
+      # matching subscribers produces N queue copies of each event; selecting by
+      # pattern alone fanned every copy out to every match, running each handler
+      # N times per event — and, across hosts, concurrently. Ownership is the
+      # primary filter; the pattern check still applies because a routing key
+      # the owner's pattern does not match means a stale pgmq.topic_bindings
+      # row, and a stale binding must not run the handler.
+      #
+      # +queue_name+ is required on purpose: a keyword-less call would silently
+      # restore the fan-out this closed. Callers that genuinely want the
+      # pattern view (the Testing inline/drain paths, which never touch a
+      # queue) use #subscribers_matching.
+      def handlers_for(routing_key, queue_name:)
+        @subscribers.select do |s|
+          s.queue_name == queue_name && matches?(s.pattern, routing_key)
+        end
+      end
+
+      # Pattern-only selection, with no queue in play. Used by the Testing
+      # inline/drain paths, where the event never reaches PGMQ and each matching
+      # subscriber is invoked exactly once — the same per-subscriber delivery
+      # count owner-only dispatch produces in production.
+      def subscribers_matching(routing_key)
         @subscribers.select { |s| matches?(s.pattern, routing_key) }
       end
 

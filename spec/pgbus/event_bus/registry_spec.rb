@@ -29,24 +29,75 @@ RSpec.describe Pgbus::EventBus::Registry do
     end
   end
 
-  describe "#handlers_for" do
+  describe "#subscribers_matching" do
     before do
       registry.subscribe("orders.#", handler_class)
     end
 
     it "matches exact routing keys" do
-      handlers = registry.handlers_for("orders.created")
+      handlers = registry.subscribers_matching("orders.created")
       expect(handlers.size).to eq(1)
     end
 
     it "matches wildcard patterns" do
-      handlers = registry.handlers_for("orders.updated.shipping")
+      handlers = registry.subscribers_matching("orders.updated.shipping")
       expect(handlers.size).to eq(1)
     end
 
     it "does not match unrelated routing keys" do
-      handlers = registry.handlers_for("users.created")
+      handlers = registry.subscribers_matching("users.created")
       expect(handlers).to be_empty
+    end
+  end
+
+  # Owner-only dispatch (issue #469): each subscriber has its own queue, so a
+  # message read from queue Q belongs to Q's owner(s) alone. Pattern-only
+  # selection fanned every queue copy out to every matching handler, running
+  # each handler once per subscriber on the topic.
+  describe "#handlers_for" do
+    let(:other_handler_class) do
+      klass = Class.new(Pgbus::EventBus::Handler)
+      stub_const("OtherTestHandler", klass)
+      klass
+    end
+    let(:third_handler_class) do
+      klass = Class.new(Pgbus::EventBus::Handler)
+      stub_const("ThirdTestHandler", klass)
+      klass
+    end
+
+    it "returns only the subscriber owning the queue, though other patterns also match" do
+      owner = registry.subscribe("orders.#", handler_class, queue_name: "q_orders")
+      registry.subscribe("#", other_handler_class, queue_name: "q_audit")
+      registry.subscribe("orders.created", third_handler_class, queue_name: "q_billing")
+
+      expect(registry.handlers_for("orders.created", queue_name: "q_orders")).to eq([owner])
+    end
+
+    it "returns both subscribers registered against the same explicit queue_name" do
+      first = registry.subscribe("orders.#", handler_class, queue_name: "q_shared")
+      second = registry.subscribe("orders.created", other_handler_class, queue_name: "q_shared")
+
+      expect(registry.handlers_for("orders.created", queue_name: "q_shared"))
+        .to contain_exactly(first, second)
+    end
+
+    it "returns [] when the owner's pattern does not match the routing key (stale binding)" do
+      registry.subscribe("orders.#", handler_class, queue_name: "q_orders")
+
+      expect(registry.handlers_for("users.created", queue_name: "q_orders")).to be_empty
+    end
+
+    it "returns [] for a queue no subscriber in this process owns" do
+      registry.subscribe("orders.#", handler_class, queue_name: "q_orders")
+
+      expect(registry.handlers_for("orders.created", queue_name: "q_ghost")).to be_empty
+    end
+
+    it "requires the queue name — a keyword-less call must not fall back to fan-out" do
+      registry.subscribe("orders.#", handler_class, queue_name: "q_orders")
+
+      expect { registry.handlers_for("orders.created") }.to raise_error(ArgumentError)
     end
   end
 

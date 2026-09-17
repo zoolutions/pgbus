@@ -92,6 +92,16 @@ class Views::Docs::Pages::EventBus < DocsUI::Page
         # Audit everything under the orders.* namespace, at any depth:
         Pgbus::EventBus::Registry.instance.subscribe("orders.#", OrderAuditHandler)
       RUBY
+      md <<~'MD'
+        Fanout is per queue, and a queue is consumed only by the handler(s)
+        registered against it: one event matching N subscribers becomes N
+        deliveries, one per handler, and each handler runs exactly once per
+        event. Two handlers registered with the same explicit `queue_name:`
+        share a queue and both run on its delivery. A message sitting in a queue
+        no subscriber in this process owns — a stale topic binding from a
+        renamed or removed handler — is archived, logged once per queue, and
+        reported as `pgbus.event_unrouted`.
+      MD
     end
   end
 
