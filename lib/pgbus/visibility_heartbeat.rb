@@ -25,9 +25,15 @@ module Pgbus
   # out with `pgbus_visibility_heartbeat false`.
   module VisibilityHeartbeat
     # `concurrency` is `[key, duration]` for a concurrency-limited job, else
-    # nil — one member, so the struct stays inside an 80-byte slot.
+    # nil. `on_beat` is an optional callable run on every extension — the event
+    # consumer uses it to refresh its handlers' idempotency claims (issue #470).
+    #
+    # The ninth member takes the struct out of the 80-byte slot it used to fit
+    # (measured: 80 → 160). That is paid at most once per in-flight message, so
+    # the whole table is bounded by the execution pool's capacity — a handful of
+    # entries per process, not one per enqueued job.
     Entry = Struct.new(:client, :queue_name, :prefixed, :msg_id, :job_class, :extended_at, :extensions,
-                       :concurrency, keyword_init: true)
+                       :concurrency, :on_beat, keyword_init: true)
 
     # Per-job opt-out, included on ActiveJob::Base by the engine:
     #
@@ -59,13 +65,14 @@ module Pgbus
       # @param config [Pgbus::Configuration]
       # @param concurrency [Array(String, Numeric), nil] semaphore key to keep alive alongside
       #   the message and how far to push its expiry on each beat
+      # @param on_beat [#call, nil] run after each extension; its failures are contained
       def track(client:, queue_name:, msg_id:, prefixed: true, job_class: nil, config: Pgbus.configuration,
-                concurrency: nil)
+                concurrency: nil, on_beat: nil)
         return yield unless config.visibility_heartbeat
 
         entry = Entry.new(client: client, queue_name: queue_name, prefixed: prefixed, msg_id: msg_id.to_i,
                           job_class: job_class, extended_at: monotonic_now, extensions: 0,
-                          concurrency: concurrency)
+                          concurrency: concurrency, on_beat: on_beat)
         register(entry, config)
         begin
           yield
@@ -130,6 +137,7 @@ module Pgbus
         entry.extended_at = now
         entry.extensions += 1
         touch_semaphore(entry)
+        run_on_beat(entry)
         Instrumentation.instrument(
           "pgbus.job_visibility_extended",
           queue: entry.queue_name, job_class: entry.job_class, msg_id: entry.msg_id, vt: vt,
@@ -183,6 +191,17 @@ module Pgbus
       rescue StandardError => e
         Pgbus.logger.warn do
           "[Pgbus::VisibilityHeartbeat] could not touch semaphore #{key}: #{e.class}: #{e.message}"
+        end
+      end
+
+      # Same containment as touch_semaphore: a lease the beat keeps alive
+      # alongside the message must never cost the message its extension.
+      def run_on_beat(entry)
+        entry.on_beat&.call
+      rescue StandardError => e
+        Pgbus.logger.warn do
+          "[Pgbus::VisibilityHeartbeat] on_beat hook failed for msg_id=#{entry.msg_id} " \
+            "queue=#{entry.queue_name}: #{e.class}: #{e.message}"
         end
       end
 

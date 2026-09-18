@@ -104,4 +104,71 @@ RSpec.describe "Event bus flow (integration)", :integration do
       expect(Pgbus::ProcessedEvent.count).to eq(1)
     end
   end
+
+  # Issue #470: a row with completed_at NULL describes both "the holder was
+  # SIGKILLed mid-handler" and "the holder is still running". Against the real
+  # table, the liveness stamp is what separates them.
+  describe "pending claim ownership (issue #470)" do
+    let(:pending_claim) do
+      Pgbus::ProcessedEvent.create!(
+        event_id: event_id, handler_class: "EventBusFlowSpec::RecordingHandler",
+        processed_at: processed_at, completed_at: nil
+      )
+    end
+    let(:event_id) { SecureRandom.uuid }
+    let(:processed_at) { Time.now.utc }
+    let(:message) do
+      Pgbus::EventBus::Publisher.publish("orders.created", { "order_id" => 99 })
+      client.read_message(queue_name, vt: 0)
+    end
+
+    context "when the holder is still heartbeating its claim" do
+      let(:processed_at) { Time.now.utc }
+
+      it "skips rather than running the handler beside the holder" do
+        pending_claim
+        raw = JSON.parse(message.message).merge("event_id" => event_id).to_json
+
+        expect(handler_class.new.process(double(message: raw, msg_id: 1, read_ct: 2))).to eq(:skipped)
+
+        expect(handler_class.handled).to be_empty
+        # The holder's claim is untouched: it still owns the completion stamp.
+        expect(pending_claim.reload.completed_at).to be_nil
+      end
+    end
+
+    context "when the holder has gone quiet past the ownership window" do
+      let(:processed_at) { Time.now.utc - 3600 }
+
+      it "re-runs the handler so a crash mid-handler is not a silent drop" do
+        pending_claim
+        raw = JSON.parse(message.message).merge("event_id" => event_id).to_json
+
+        expect(handler_class.new.process(double(message: raw, msg_id: 1, read_ct: 2))).to eq(:handled)
+
+        expect(handler_class.handled).to eq([event_id])
+        expect(pending_claim.reload.completed_at).not_to be_nil
+      end
+    end
+
+    it "moves a pending claim's processed_at forward on a beat" do
+      pending_claim
+      beat = Pgbus::EventBus::ClaimBeat.new
+      beat.register(event_id, "EventBusFlowSpec::RecordingHandler")
+
+      expect { beat.touch! }.to(change { pending_claim.reload.processed_at })
+    end
+
+    context "with a completed claim" do
+      let(:processed_at) { Time.now.utc - 3600 }
+
+      it "leaves a beat with nothing to refresh" do
+        pending_claim.update!(completed_at: Time.now.utc)
+        beat = Pgbus::EventBus::ClaimBeat.new
+        beat.register(event_id, "EventBusFlowSpec::RecordingHandler")
+
+        expect { beat.touch! }.not_to(change { pending_claim.reload.processed_at })
+      end
+    end
+  end
 end

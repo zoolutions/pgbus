@@ -232,10 +232,7 @@ module Pgbus
         if handlers.empty?
           report_unrouted(queue_name, routing_key)
         else
-          handlers.each do |subscriber|
-            handler = subscriber.handler_class.new
-            handler.process(message)
-          end
+          dispatch(handlers, message, queue_name)
         end
 
         Pgbus.client.archive_message(queue_name, message.msg_id.to_i)
@@ -255,6 +252,37 @@ module Pgbus
         # never trip on a poison/all-failing queue: the exact unbounded-memory
         # scenario recycling exists to bound.
         @jobs_processed.increment
+      end
+
+      # Run every handler that owns this message, with the message's visibility
+      # timeout held open for as long as they take (issue #470).
+      #
+      # Without this the consumer had no equivalent of
+      # ActiveJob::Executor#with_visibility_heartbeat: an event handler slower
+      # than config.visibility_timeout (30s by default) was redelivered *while
+      # still running*, a second consumer read the same envelope, and the
+      # holder's pending idempotency claim was indistinguishable from a claim
+      # left by a crash — so the handler ran twice, concurrently.
+      #
+      # The beat also refreshes the claims the handlers register, which is what
+      # lets Handler tell "holder still running" from "holder died": message
+      # visibility and claim liveness go quiet together when this process does.
+      #
+      # Tracking ends before the caller archives — a beat must never re-arm the
+      # VT of a message that is already gone (same rule as the executor's).
+      def dispatch(handlers, message, queue_name)
+        claim_beat = EventBus::ClaimBeat.new
+
+        VisibilityHeartbeat.track(
+          client: Pgbus.client,
+          queue_name: queue_name,
+          msg_id: message.msg_id.to_i,
+          job_class: "EventConsumer",
+          config: config,
+          on_beat: -> { claim_beat.touch! }
+        ) do
+          handlers.each { |subscriber| subscriber.handler_class.new.process(message, claim_beat: claim_beat) }
+        end
       end
 
       # No subscriber in this process owns +queue_name+ (a stale
@@ -559,6 +587,7 @@ module Pgbus
         # wait IS its drain window — bound it by the same knob workers use
         # instead of a hardcoded 30s (issue #386).
         @pool.wait_for_termination(config.drain_timeout)
+        VisibilityHeartbeat.stop
         @stat_buffer&.stop
         @heartbeat&.stop
         restore_signals

@@ -33,6 +33,7 @@ module Pgbus
             subscribe("pgbus.job_visibility_extended") { |event| on_job_visibility_extended(event) },
             subscribe("pgbus.event_processed") { |event| on_event_processed(event) },
             subscribe("pgbus.event_failed") { |event| on_event_failed(event) },
+            subscribe("pgbus.event_skipped") { |event| on_event_skipped(event) },
             subscribe("pgbus.client.send_message") { |event| on_send_message(event) },
             subscribe("pgbus.client.send_batch") { |event| on_send_batch(event) },
             subscribe("pgbus.client.read_batch") { |event| on_read_batch(event) },
@@ -136,6 +137,19 @@ module Pgbus
           backend.increment(
             "#{METRIC_PREFIX}event_count", 1,
             compact(handler: payload[:handler], routing_key: payload[:routing_key], status: "failed")
+          )
+        end
+
+        # An idempotent handler that did not run this delivery. `reason` is what
+        # makes the skip readable: :completed/:cached is deduplication working,
+        # :owned means a second delivery arrived while the holder was still
+        # running and was deferred to it (issue #470).
+        def on_event_skipped(event)
+          payload = event.payload
+          backend.increment(
+            "#{METRIC_PREFIX}event_count", 1,
+            compact(handler: payload[:handler], routing_key: payload[:routing_key],
+                    status: "skipped", reason: payload[:reason])
           )
         end
 

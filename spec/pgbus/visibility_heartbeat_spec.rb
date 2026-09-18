@@ -130,6 +130,32 @@ RSpec.describe Pgbus::VisibilityHeartbeat do
         .with("pgbus.job_visibility_extended", hash_including(extensions: 1))
     end
 
+    # Event handlers (issue #470): the same beat that keeps the message
+    # invisible refreshes the idempotency claim's liveness stamp, so a pending
+    # claim's age measures silence rather than time-since-claim.
+    it "runs the on_beat hook on every extension" do
+      beats = 0
+
+      track(on_beat: -> { beats += 1 }) do
+        described_class.tick!(now: Process.clock_gettime(Process::CLOCK_MONOTONIC) + 10, config: config)
+      end
+
+      expect(beats).to eq(1)
+    end
+
+    it "contains a failing on_beat hook instead of aborting the beat" do
+      allow(ActiveSupport::Notifications).to receive(:instrument).and_call_original
+      allow(Pgbus.logger).to receive(:warn)
+
+      track(on_beat: -> { raise StandardError, "claim gone" }) do
+        described_class.tick!(now: Process.clock_gettime(Process::CLOCK_MONOTONIC) + 10, config: config)
+      end
+
+      expect(client).to have_received(:set_visibility_timeout).once
+      expect(ActiveSupport::Notifications).to have_received(:instrument)
+        .with("pgbus.job_visibility_extended", hash_including(extensions: 1))
+    end
+
     it "does not touch any semaphore for a job without a concurrency key" do
       allow(Pgbus::Concurrency::Semaphore).to receive(:touch)
 
