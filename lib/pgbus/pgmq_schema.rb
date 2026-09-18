@@ -24,9 +24,7 @@ module Pgbus
 
       # Returns sorted list of all vendored PGMQ versions.
       def available_versions
-        Dir.glob(File.join(SCHEMA_DIR, "pgmq_v*.sql"))
-           .map { |f| File.basename(f).match(/pgmq_v(.+)\.sql/)[1] }
-           .sort_by { |v| Gem::Version.new(v) }
+        versions_in(SCHEMA_DIR)
       end
 
       # Versions that ship a table fixup, in version order.
@@ -37,9 +35,7 @@ module Pgbus
       # partitioned queues' msg_id from GENERATED ALWAYS to BY DEFAULT) needs
       # its own step, and that is what these files are.
       def fixup_versions
-        Dir.glob(File.join(FIXUPS_DIR, "pgmq_v*.sql"))
-           .map { |f| File.basename(f).match(/pgmq_v(.+)\.sql/)[1] }
-           .sort_by { |v| Gem::Version.new(v) }
+        versions_in(FIXUPS_DIR)
       end
 
       # Concatenated fixups for every version in (after, upto], in version
@@ -209,6 +205,15 @@ module Pgbus
       end
 
       private
+
+      # Vendored versions discovered in a directory, in version order. Schema
+      # files and fixups share this so the two can never drift into different
+      # discovery rules.
+      def versions_in(dir)
+        Dir.glob(File.join(dir, "pgmq_v*.sql"))
+           .map { |f| File.basename(f).match(/pgmq_v(.+)\.sql/)[1] }
+           .sort_by { |v| Gem::Version.new(v) }
+      end
 
       # Strips extension-specific blocks (pg_extension_config_dump, pg_depend checks)
       # that only work when pgmq is installed as an extension.
