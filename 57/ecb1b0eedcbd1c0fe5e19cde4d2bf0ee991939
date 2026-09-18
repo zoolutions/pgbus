@@ -1,0 +1,29 @@
+lib/pgbus/pgmq_schema.rb
+  s_8b8690beed2324::t_e795260882a47b 27,38,209-216
+  s_8b8690beed2324::t_63fb6593d8538f 217
+spec/pgbus/pgmq_schema_spec.rb
+  s_8b8690beed2324::t_e795260882a47b 194-197
+CHANGELOG.md
+  s_8b8690beed2324::t_e795260882a47b 9
+lib/pgbus/pgmq_schema/fixups/pgmq_v1.13.0.sql
+  s_8b8690beed2324::t_e5c2c1676d35f2 32-37,39-43
+  s_8b8690beed2324::t_ba8a74b7cace9d 3,10-12
+spec/integration/pgmq_schema_upgrade_spec.rb
+  s_8b8690beed2324::t_e795260882a47b 232-244
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "57ecb1b0eedcbd1c0fe5e19cde4d2bf0ee991939",
+  "prompts": {},
+  "sessions": {
+    "s_8b8690beed2324": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "be3834bc-7e78-4557-9c71-b7966dbf8315",
+        "model": "claude-opus-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
