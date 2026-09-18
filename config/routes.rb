@@ -81,6 +81,11 @@ Pgbus::Engine.routes.draw do
     collection do
       post :discard_selected
       post :discard_all
+      # Collection routes, not member: a concurrency key is a free-form
+      # string that may contain ".", "/" or ":" and does not belong in a
+      # path segment. Both take the key as a form param.
+      post :release_key
+      post :discard_parked
     end
   end
   resource :insights, only: [:show], controller: "insights"

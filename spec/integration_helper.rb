@@ -91,7 +91,7 @@ def bootstrap_integration_tables(conn)
   end
 
   # Idempotency ledger — mirrors the processed_events DDL in
-  # lib/generators/pgbus/templates/migration.rb.erb. Handler#claim_idempotency?
+  # lib/generators/pgbus/templates/migration.rb.erb. Handler#claim_idempotency
   # does INSERT ... ON CONFLICT (event_id, handler_class) DO NOTHING, so the
   # unique index is what makes the second delivery return :skipped.
   unless conn.table_exists?("pgbus_processed_events")
@@ -100,12 +100,23 @@ def bootstrap_integration_tables(conn)
         id BIGSERIAL PRIMARY KEY,
         event_id VARCHAR NOT NULL,
         handler_class VARCHAR NOT NULL,
-        processed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        processed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        completed_at TIMESTAMP
       );
       CREATE UNIQUE INDEX idx_pgbus_processed_events_unique
         ON pgbus_processed_events (event_id, handler_class);
     SQL
   end
+
+  # completed_at arrived with the two-phase claim (issue #385) and this DDL
+  # was not updated with it, so every integration run silently exercised the
+  # legacy single-phase fallback instead. Added separately from the CREATE so
+  # a database created before this line picks it up too.
+  unless conn.column_exists?("pgbus_processed_events", "completed_at")
+    conn.execute("ALTER TABLE pgbus_processed_events ADD COLUMN completed_at TIMESTAMP")
+  end
+  Pgbus::ProcessedEvent.reset_column_information
+  Pgbus::ProcessedEvent.reset_completion_column_check!
 
   # Stream queue registry — mirrors lib/generators/pgbus/templates/
   # add_stream_queues.rb.erb. StreamQueue.record! does INSERT ... ON CONFLICT

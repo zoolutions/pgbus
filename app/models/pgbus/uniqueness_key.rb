@@ -86,6 +86,26 @@ module Pgbus
       )
     end
 
+    # Release a lock only while it is still UNBOUND (msg_id = 0) AND was
+    # acquired no later than +acquired_before+. Used when discarding a parked
+    # job: a parked job never got a msg_id, so its lock was never bound, and
+    # there is no message to identify it by the way release_if_bound! does.
+    #
+    # Two things could otherwise be dropped by mistake once the unbound-lock
+    # reaper has removed the parked job's own row and a successor has taken the
+    # same key: a successor that was actually sent (its row is bound, excluded
+    # by msg_id = 0), and a successor that is itself parked (also unbound, so
+    # only the timestamp separates them). The lock is acquired immediately
+    # before the row is parked, so a lock created AFTER the parked row cannot
+    # belong to it — pass the parked row's created_at as the ceiling.
+    def self.release_if_unbound!(lock_key, acquired_before:)
+      Thread.current[:pgbus_uniqueness_created_at]&.delete(lock_key)
+      connection.exec_delete(
+        "DELETE FROM #{table_name} WHERE lock_key = $1 AND msg_id = 0 AND created_at <= $2",
+        "UniquenessKey Release If Unbound", [lock_key, acquired_before]
+      )
+    end
+
     # Check if a key is currently locked.
     def self.locked?(lock_key)
       result = connection.select_value(

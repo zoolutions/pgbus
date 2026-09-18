@@ -110,6 +110,18 @@ RSpec.describe Pgbus::Metrics::Subscriber do
     end
   end
 
+  describe "pgbus.event_skipped" do
+    it "increments event_count as skipped, tagged with the reason (issue #470)" do
+      ActiveSupport::Notifications.instrument(
+        "pgbus.event_skipped", handler: "H", routing_key: "k", reason: :owned
+      )
+
+      expect(backend.counters).to include(
+        ["pgbus_event_count", 1, hash_including(status: "skipped", reason: :owned)]
+      )
+    end
+  end
+
   describe "pgbus.client.send_message" do
     it "increments messages_sent by one" do
       ActiveSupport::Notifications.instrument("pgbus.client.send_message", queue: "default") { :ok }

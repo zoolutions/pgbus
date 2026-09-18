@@ -219,6 +219,26 @@ RSpec.describe "Pgbus MCP tools" do # rubocop:disable RSpec/DescribeClass
     end
   end
 
+  describe Pgbus::MCP::Tools::ConcurrencyTool do
+    it "delegates to concurrency_stats" do
+      allow(data_source).to receive(:concurrency_stats).and_return(
+        parked_total: 7, oldest_parked_age_sec: 812, slots_held: 3, keys_at_limit: 1,
+        keys: [{ key: "ProcessOrder-42", value: 1, max_value: 1, lease_fresh: true,
+                 parked_count: 7, oldest_parked_age_sec: 812 }]
+      )
+
+      result = body(described_class.call(server_context: context))
+
+      expect(result["parked_total"]).to eq(7)
+      expect(result["keys"].first["key"]).to eq("ProcessOrder-42")
+      expect(result["keys"].first["parked_count"]).to eq(7)
+    end
+
+    it "is read-only" do
+      expect(described_class.annotations_value.to_h).to include(readOnlyHint: true)
+    end
+  end
+
   describe Pgbus::MCP::Tools::ThroughputTool do
     it "delegates with a clamped window" do
       allow(data_source).to receive(:job_throughput).with(minutes: 1440).and_return([])

@@ -50,7 +50,11 @@ RSpec.describe "Pgbus::Integrations::Appsignal::Probe" do
           throughput_rate: 12.5,
           total_dead_tuples: 100,
           tables_needing_vacuum: 0,
-          oldest_transaction_age_sec: 0.5
+          oldest_transaction_age_sec: 0.5,
+          parked_total: 7,
+          oldest_parked_age_sec: 812,
+          slots_held: 3,
+          keys_at_limit: 2
         }
       end
 
@@ -160,8 +164,15 @@ RSpec.describe "Pgbus::Integrations::Appsignal::Probe" do
       "pgbus_dlq_depth",
       "pgbus_failed_events_total",
       "pgbus_total_dead_tuples",
-      "pgbus_oldest_transaction_age_seconds"
+      "pgbus_oldest_transaction_age_seconds",
+      "pgbus_concurrency_blocked_executions",
+      "pgbus_concurrency_blocked_oldest_age_seconds",
+      "pgbus_concurrency_slots_held"
     )
+
+    parked_gauge = appsignal_class.gauges.find { |g| g[0] == "pgbus_concurrency_blocked_executions" }
+    expect(parked_gauge[1]).to eq(7)
+    expect(parked_gauge[2]).to eq({})
 
     dlq_gauge = appsignal_class.gauges.find { |g| g[0] == "pgbus_dlq_depth" }
     expect(dlq_gauge[2]).to eq({})

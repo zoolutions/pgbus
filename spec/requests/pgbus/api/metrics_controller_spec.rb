@@ -31,6 +31,18 @@ RSpec.describe "Pgbus::Api::MetricsController", type: :request do
         expect(response.body).to include("# TYPE pgbus_queue_depth gauge")
         expect(response.body).to include('pgbus_queue_depth{queue="pgbus_default"}')
       end
+
+      it "renders the concurrency gauges when jobs are parked" do
+        @stub_data_source.stats[:parked_total] = 7
+        @stub_data_source.stats[:oldest_parked_age_sec] = 812
+        @stub_data_source.stats[:slots_held] = 3
+
+        get "/pgbus/api/metrics"
+
+        expect(response.body).to include("pgbus_concurrency_blocked_executions 7")
+        expect(response.body).to include("pgbus_concurrency_blocked_oldest_age_seconds 812")
+        expect(response.body).to include("pgbus_concurrency_slots_held 3")
+      end
     end
   end
 end

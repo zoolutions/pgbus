@@ -5,6 +5,11 @@ require "time"
 module Pgbus
   module Web
     class DataSource
+      # Ceiling on how many parked jobs one dashboard release promotes, so a
+      # key with thousands parked cannot hold the request open. The dispatcher
+      # sweep picks up whatever is left on its next pass.
+      PROMOTE_CAP = 100
+
       def initialize(client: Pgbus.client)
         @client = client
         @last_throughput_snapshot = nil
@@ -35,7 +40,18 @@ module Pgbus
           total_dead_tuples: health[:total_dead_tuples],
           tables_needing_vacuum: health[:tables_needing_vacuum],
           oldest_transaction_age_sec: health[:oldest_transaction_age_sec]
-        }
+        }.merge(concurrency_summary)
+      end
+
+      # Drop the per-instance memos. The memos assume one instance per web
+      # request; the AppSignal probe and the MCP server both hold ONE DataSource
+      # for the life of the process, so without this their gauges and tool
+      # responses would freeze at the first read. Both call this per iteration
+      # / per tool call.
+      def reset_cache!
+        @queues_with_metrics = nil
+        @concurrency_summary = nil
+        self
       end
 
       # Queues — query via ActiveRecord for reliability in web processes
@@ -667,6 +683,83 @@ module Pgbus
         []
       end
 
+      # Concurrency keys — the `limits_concurrency` slot table and the jobs
+      # parked behind it. Aggregate numbers plus up to 100 key rows, busiest
+      # first. The two tables are joined FULL OUTER, not LEFT: a key can have
+      # parked rows and no semaphore (its holder died and the sweep removed the
+      # row) or a semaphore and nothing parked — an operator needs to see both.
+      def concurrency_stats
+        concurrency_summary.merge(keys: concurrency_keys)
+      end
+
+      # Drop a key's semaphore row and promote whatever can now run.
+      #
+      # Promotion goes through Concurrency::BlockedExecution.promote_next, which
+      # takes each slot through the same guarded upsert an enqueue uses — a
+      # dashboard release can no more over-admit than an enqueue can. Re-sending
+      # the parked payloads directly would reintroduce exactly the over-admission
+      # issue #460 closed. Returns the number of jobs promoted.
+      def release_concurrency_key(key)
+        return 0 if key.to_s.strip.empty?
+
+        # Zero the held slots rather than DELETE the row: the row is where the
+        # key's limit is recorded, and `Semaphore.acquire!` falls back to a
+        # limit of 1 on a fresh row. Deleting it would silently demote a
+        # `to: 3` key to 1 whenever the parked job's class no longer resolves
+        # (the payload then carries no limit for promotion to use). A row left
+        # at 0 is reaped by the dispatcher's `Semaphore.expired` sweep.
+        Pgbus::Semaphore.where(key: key).update_all(value: 0)
+        promoted = 0
+        promoted += 1 while promoted < PROMOTE_CAP &&
+                            Concurrency::BlockedExecution.promote_next(key, client: @client)
+
+        # Nothing took the freed slot, so mark the empty row expired: the
+        # dispatcher's `Concurrency::Semaphore.expire_stale` matches on
+        # expires_at ALONE, so a zeroed row would otherwise sit on the Locks
+        # page as a phantom 0/N key until its original lease ran out — up to
+        # the key's whole `duration`. Guarded on value = 0 so a row a promotion
+        # just filled is never expired out from under its holder.
+        Pgbus::Semaphore.where(key: key, value: 0).update_all(expires_at: Time.current)
+        promoted
+      rescue StandardError => e
+        Pgbus.logger.debug { "[Pgbus::Web] Error releasing concurrency key #{key}: #{e.message}" }
+        0
+      end
+
+      # Drop every job parked behind a key. The jobs never run, so the
+      # bookkeeping they would have resolved has to be resolved here: a parked
+      # batch child is marked failed (otherwise its batch waits forever and
+      # on_failure never fires — issue #413) and an :until_executed uniqueness
+      # lock is released (otherwise it is orphaned, since no executor will ever
+      # release it — issue #423). Returns the number of jobs discarded.
+      def discard_parked_jobs(key)
+        return 0 if key.to_s.strip.empty?
+
+        rows = []
+        Pgbus::BlockedExecution.transaction do
+          # SKIP LOCKED so this can never race a concurrent promote, which
+          # deletes its row under the same lock before enqueueing it.
+          rows = Pgbus::BlockedExecution.for_key(key).lock("FOR UPDATE SKIP LOCKED").to_a
+          Pgbus::BlockedExecution.where(id: rows.map(&:id)).delete_all if rows.any?
+        end
+
+        # Cleanup runs after the claim commits, because the SKIP LOCKED claim
+        # only holds inside the transaction. The residual: a process killed
+        # between the commit and the cleanup leaves a resolved-nothing orphan
+        # that Batch::Sweep un-counts rather than fails. Running the cleanup
+        # inside the transaction would swap that for the failure this codebase
+        # has already judged worse (Concurrency::BlockedExecution#backfill) —
+        # `Batch.job_discarded` can enqueue a batch callback, and a callback
+        # fired for a batch that then rolls back is not recoverable, while an
+        # orphan row is. Each row is cleaned under its own rescue, so one bad
+        # payload never costs the rest.
+        rows.each { |row| cleanup_discarded_parked_job(row) }
+        rows.size
+      rescue StandardError => e
+        Pgbus.logger.debug { "[Pgbus::Web] Error discarding parked jobs for #{key}: #{e.message}" }
+        0
+      end
+
       # Batches
       def batches(limit: 100)
         records = BatchEntry.order(created_at: :desc).limit(limit).to_a
@@ -1024,6 +1117,122 @@ module Pgbus
 
       def connection
         Pgbus::BusRecord.connection
+      end
+
+      # Aggregate concurrency numbers, memoized for the lifetime of this
+      # instance: summary_stats, the metrics serializer and the AppSignal probe
+      # all read them on the same request, and concurrency_stats merges them in
+      # alongside the key rows. Mutations redirect to a fresh request with a new
+      # instance, so the memo never serves stale numbers.
+      def concurrency_summary
+        @concurrency_summary ||= fetch_concurrency_summary
+      end
+
+      def fetch_concurrency_summary
+        row = connection.select_all(<<~SQL, "Pgbus Concurrency Summary").to_a.first || {}
+          SELECT
+            (SELECT COUNT(*) FROM pgbus_blocked_executions) AS parked_total,
+            (SELECT EXTRACT(EPOCH FROM (now() - MIN(created_at)))::bigint
+               FROM pgbus_blocked_executions) AS oldest_parked_age_sec,
+            (SELECT COALESCE(SUM(value), 0) FROM pgbus_semaphores) AS slots_held,
+            (SELECT COUNT(*) FROM pgbus_semaphores WHERE value >= max_value) AS keys_at_limit
+        SQL
+
+        {
+          parked_total: row["parked_total"].to_i,
+          oldest_parked_age_sec: row["oldest_parked_age_sec"]&.to_i,
+          slots_held: row["slots_held"].to_i,
+          keys_at_limit: row["keys_at_limit"].to_i
+        }
+      rescue StandardError => e
+        Pgbus.logger.debug { "[Pgbus::Web] Error fetching concurrency summary: #{e.message}" }
+        { parked_total: 0, oldest_parked_age_sec: nil, slots_held: 0, keys_at_limit: 0 }
+      end
+
+      # `lease_fresh` is the one fact an operator needs before releasing a key:
+      # a live lease means a holder is probably still running, so releasing lets
+      # another job start beside it.
+      def concurrency_keys(limit: 100)
+        rows = connection.select_all(<<~SQL, "Pgbus Concurrency Keys")
+          SELECT COALESCE(s.key, b.concurrency_key) AS key,
+                 s.value AS value,
+                 s.max_value AS max_value,
+                 s.expires_at AS expires_at,
+                 (s.value > 0 AND s.expires_at > now()) AS lease_fresh,
+                 COALESCE(b.parked_count, 0) AS parked_count,
+                 EXTRACT(EPOCH FROM (now() - b.oldest_parked_at))::bigint AS oldest_parked_age_sec
+          FROM pgbus_semaphores s
+          FULL OUTER JOIN (
+            SELECT concurrency_key, COUNT(*) AS parked_count, MIN(created_at) AS oldest_parked_at
+            FROM pgbus_blocked_executions
+            GROUP BY concurrency_key
+          ) b ON s.key = b.concurrency_key
+          ORDER BY COALESCE(b.parked_count, 0) DESC, s.expires_at ASC NULLS LAST
+          LIMIT #{limit.to_i}
+        SQL
+
+        rows.to_a.map { |row| format_concurrency_key(row) }
+      rescue StandardError => e
+        Pgbus.logger.debug { "[Pgbus::Web] Error fetching concurrency keys: #{e.message}" }
+        []
+      end
+
+      def format_concurrency_key(row)
+        {
+          key: row["key"],
+          value: row["value"]&.to_i,
+          max_value: row["max_value"]&.to_i,
+          expires_at: row["expires_at"],
+          lease_fresh: [true, "t"].include?(row["lease_fresh"]),
+          parked_count: row["parked_count"].to_i,
+          oldest_parked_age_sec: row["oldest_parked_age_sec"]&.to_i
+        }
+      end
+
+      # Resolve the bookkeeping a discarded parked job will never resolve
+      # itself. Per-row rather than batched: one bad payload must not stop the
+      # rest from being cleaned up, and the rows are already deleted.
+      def cleanup_discarded_parked_job(row)
+        payload = decode_parked_payload(row.payload)
+        batch_id = payload[Batch::METADATA_KEY]
+        Batch.job_discarded(batch_id, job_id: payload["job_id"]) if batch_id
+
+        release_parked_uniqueness_lock(payload, row.created_at)
+
+        Pgbus.logger.warn do
+          "[Pgbus::Web] Discarded parked job #{payload["job_class"]} (#{payload["job_id"]}) " \
+            "for concurrency key #{row.concurrency_key}"
+        end
+        Instrumentation.instrument(
+          "pgbus.blocked_execution_discarded",
+          concurrency_key: row.concurrency_key,
+          job_class: payload["job_class"],
+          job_id: payload["job_id"]
+        )
+      rescue StandardError => e
+        Pgbus.logger.warn { "[Pgbus::Web] Parked job cleanup failed: #{e.class}: #{e.message}" }
+      end
+
+      # release_if_unbound!, not release_lock: a parked job's lock is unbound (it
+      # never got a msg_id). If the reaper already removed it and a successor
+      # took the same key, that successor's lock must survive — msg_id = 0
+      # excludes one that was sent, and the parked row's own created_at excludes
+      # one acquired after this row was parked.
+      def release_parked_uniqueness_lock(payload, parked_at)
+        key = payload[Uniqueness::METADATA_KEY]
+        return unless key && payload[Uniqueness::STRATEGY_KEY].to_s == "until_executed"
+
+        UniquenessKey.release_if_unbound!(key, acquired_before: parked_at)
+      end
+
+      # A row parked before the double-encoding fix stores a jsonb *string*
+      # holding the document — the same two-pass unwrap BlockedExecution
+      # .release_next! does.
+      def decode_parked_payload(payload)
+        2.times { payload = JSON.parse(payload) if payload.is_a?(String) }
+        payload.is_a?(Hash) ? payload : {}
+      rescue JSON::ParserError
+        {}
       end
 
       # Single query to fetch pg_stat_user_tables stats for all queue and

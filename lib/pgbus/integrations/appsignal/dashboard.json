@@ -355,6 +355,44 @@
             "tags": []
           }
         ]
+      },
+      {
+        "type": "timeseries",
+        "display": "LINE",
+        "title": "Concurrency",
+        "description": "Jobs parked behind a concurrency key, how long the oldest has waited, and slots held across all keys.",
+        "line_label": "%name%",
+        "format": "number",
+        "draw_null_as_zero": true,
+        "metrics": [
+          {
+            "name": "pgbus_concurrency_blocked_executions",
+            "fields": [
+              {
+                "field": "gauge"
+              }
+            ],
+            "tags": []
+          },
+          {
+            "name": "pgbus_concurrency_blocked_oldest_age_seconds",
+            "fields": [
+              {
+                "field": "gauge"
+              }
+            ],
+            "tags": []
+          },
+          {
+            "name": "pgbus_concurrency_slots_held",
+            "fields": [
+              {
+                "field": "gauge"
+              }
+            ],
+            "tags": []
+          }
+        ]
       }
     ]
   }

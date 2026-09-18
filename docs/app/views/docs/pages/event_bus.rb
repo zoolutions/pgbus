@@ -92,6 +92,16 @@ class Views::Docs::Pages::EventBus < DocsUI::Page
         # Audit everything under the orders.* namespace, at any depth:
         Pgbus::EventBus::Registry.instance.subscribe("orders.#", OrderAuditHandler)
       RUBY
+      md <<~'MD'
+        Fanout is per queue, and a queue is consumed only by the handler(s)
+        registered against it: one event matching N subscribers becomes N
+        deliveries, one per handler, and each handler runs exactly once per
+        event. Two handlers registered with the same explicit `queue_name:`
+        share a queue and both run on its delivery. A message sitting in a queue
+        no subscriber in this process owns — a stale topic binding from a
+        renamed or removed handler — is archived, logged once per queue, and
+        reported as `pgbus.event_unrouted`.
+      MD
     end
   end
 
@@ -181,6 +191,20 @@ class Views::Docs::Pages::EventBus < DocsUI::Page
         records each `(event_id, handler_class)` in `pgbus_processed_events` with a
         unique index — a second delivery of the same event to the same handler is
         skipped, backed by an in-memory cache to avoid the round trip when it can.
+
+        The claim is two-phase: the row is inserted *before* `handle` runs
+        (`completed_at IS NULL`) and stamped completed after it returns, so a
+        process killed mid-handler leaves a pending claim that a later delivery
+        re-runs instead of silently dropping.
+
+        A pending claim is not automatically a dead one, though — it equally
+        describes a handler that is still running somewhere else. The consumer's
+        visibility heartbeat refreshes both the message's visibility timeout and
+        its claims on the same cadence, so a claim that has gone quiet for longer
+        than the heartbeat window belongs to a process that is gone, and a fresher
+        one belongs to a live holder. A delivery that meets a live holder skips
+        rather than running the handler alongside it, and publishes
+        `pgbus.event_skipped` with `reason: :owned` and the claim's age.
       MD
       DocsUI::Callout(:tip) do
         plain "How long processed-event records are kept is "

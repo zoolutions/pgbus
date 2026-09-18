@@ -33,14 +33,14 @@ class Views::Docs::Pages::Dashboard < DocsUI::Page
       DocsUI::Table(
         [ "Panel", "Shows" ],
         [
-          [ "Overview", "Queue depths, enqueued count, active processes, failures, throughput rate." ],
+          [ "Overview", "Queue depths, enqueued count, active processes, failures, throughput rate, parked jobs." ],
           [ "Queues", "Per-queue metrics with purge / pause / resume / delete." ],
           [ "Jobs", "Enqueued and failed jobs, with retry / discard." ],
           [ "Dead letter", "DLQ messages with retry / discard and bulk actions." ],
           [ "Processes", [ :md, "Active workers, dispatcher, consumers with heartbeat status **and per-worker throughput** (e.g. `12.4/s processed · 0.2/s failed`)." ] ],
           [ "Events", "Registered subscribers and processed events." ],
           [ "Outbox", "Transactional outbox entries pending publication." ],
-          [ "Locks", "Active uniqueness locks — state, owner PID@host, age." ],
+          [ "Locks", "Uniqueness locks and concurrency keys — value, limit, lease, parked jobs; release a key or discard its parked jobs." ],
           [ "Insights", "Throughput chart, status distribution, slowest job classes." ]
         ]
       )

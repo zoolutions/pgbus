@@ -78,6 +78,11 @@ module Pgbus
         )
         @registry = EventBus::Registry.instance
         @circuit_breaker = Pgbus::CircuitBreaker.new(config: config)
+        # Queues already warned about for an unroutable message (issue #469).
+        # handle_message runs on the execution pool, so this is touched from
+        # several threads — Concurrent::Set makes add? the atomic
+        # test-and-set the once-per-queue guarantee needs.
+        @unrouted_queues = Concurrent::Set.new
         # stat_buffer: :default means "build one iff config.stats_enabled";
         # passing an explicit value (including nil) overrides that for tests.
         @stat_buffer =
@@ -222,10 +227,12 @@ module Pgbus
         raw = JSON.parse(message.message)
         routing_key = raw.dig("headers", "routing_key") || raw["routing_key"]
 
-        handlers = @registry.handlers_for(routing_key || "")
-        handlers.each do |subscriber|
-          handler = subscriber.handler_class.new
-          handler.process(message)
+        handlers = @registry.handlers_for(routing_key || "", queue_name: queue_name)
+
+        if handlers.empty?
+          report_unrouted(queue_name, routing_key)
+        else
+          dispatch(handlers, message, queue_name)
         end
 
         Pgbus.client.archive_message(queue_name, message.msg_id.to_i)
@@ -245,6 +252,65 @@ module Pgbus
         # never trip on a poison/all-failing queue: the exact unbounded-memory
         # scenario recycling exists to bound.
         @jobs_processed.increment
+      end
+
+      # Run every handler that owns this message, with the message's visibility
+      # timeout held open for as long as they take (issue #470).
+      #
+      # Without this the consumer had no equivalent of
+      # ActiveJob::Executor#with_visibility_heartbeat: an event handler slower
+      # than config.visibility_timeout (30s by default) was redelivered *while
+      # still running*, a second consumer read the same envelope, and the
+      # holder's pending idempotency claim was indistinguishable from a claim
+      # left by a crash — so the handler ran twice, concurrently.
+      #
+      # The beat also refreshes the claims the handlers register, which is what
+      # lets Handler tell "holder still running" from "holder died": message
+      # visibility and claim liveness go quiet together when this process does.
+      #
+      # Tracking ends before the caller archives — a beat must never re-arm the
+      # VT of a message that is already gone (same rule as the executor's).
+      def dispatch(handlers, message, queue_name)
+        claim_beat = EventBus::ClaimBeat.new
+
+        VisibilityHeartbeat.track(
+          client: Pgbus.client,
+          queue_name: queue_name,
+          msg_id: message.msg_id.to_i,
+          job_class: "EventConsumer",
+          config: config,
+          on_beat: -> { claim_beat.touch! }
+        ) do
+          handlers.each { |subscriber| subscriber.handler_class.new.process(message, claim_beat: claim_beat) }
+        end
+      end
+
+      # No subscriber in this process owns +queue_name+ (a stale
+      # pgmq.topic_bindings row left by a renamed or removed handler, another
+      # app bound to the same bus), or the owner's pattern no longer matches the
+      # routing key. The message is archived by the caller either way — looping
+      # it through VT redelivery would only walk it into the DLQ — but that used
+      # to happen in total silence. The warning is rate-limited to once per
+      # queue per process so a permanently stale binding cannot flood the log;
+      # the instrumentation fires on every message, so the real rate stays
+      # visible in metrics (issue #469).
+      def report_unrouted(queue_name, routing_key)
+        first_for_queue = @unrouted_queues.add?(queue_name)
+
+        if first_for_queue
+          Pgbus.logger.warn do
+            "[Pgbus] Consumer read an unroutable event from queue #{queue_name} " \
+              "(routing_key=#{routing_key.inspect}): no subscriber in this process owns that queue. " \
+              "Archiving. This usually means a stale topic binding — a handler was renamed or removed " \
+              "without unbinding its queue. Further unrouted messages on this queue are not logged."
+          end
+        end
+
+        Pgbus::Instrumentation.instrument(
+          "pgbus.event_unrouted",
+          queue_name: queue_name,
+          routing_key: routing_key
+        )
       end
 
       # Record a job stat for the handled message, mirroring the shape the
@@ -521,6 +587,7 @@ module Pgbus
         # wait IS its drain window — bound it by the same knob workers use
         # instead of a hardcoded 30s (issue #386).
         @pool.wait_for_termination(config.drain_timeout)
+        VisibilityHeartbeat.stop
         @stat_buffer&.stop
         @heartbeat&.stop
         restore_signals

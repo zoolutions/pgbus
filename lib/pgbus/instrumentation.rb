@@ -20,6 +20,10 @@ module Pgbus
   #                                  payload: queue, job_class, msg_id, vt, extensions
   #   pgbus.event_processed        — event handler succeeded
   #   pgbus.event_failed           — event handler raised; carries :exception_object
+  #   pgbus.event_unrouted         — a consumer read an event from a queue no
+  #                                  subscriber in this process owns (stale topic
+  #                                  binding); the message is archived
+  #                                  payload: queue_name, routing_key
   #   pgbus.stream.broadcast       — stream broadcast (sync or deferred)
   #   pgbus.outbox.publish         — outbox row created
   #   pgbus.recurring.enqueue      — scheduler enqueued a due recurring task
@@ -29,6 +33,9 @@ module Pgbus
   #   pgbus.serializer.deserialize — job/event deserialization
   #   pgbus.batch_finished         — batch flipped to finished
   #                                  payload: batch_id, total_jobs, completed_jobs, failed_jobs
+  #   pgbus.blocked_execution_discarded — a parked job was discarded from the
+  #                                  dashboard; it will never run
+  #                                  payload: concurrency_key, job_class, job_id
   #   pgbus.batch_sweep            — dispatcher stalled-batch sweep
   #                                  payload: stalled_for, stale_executions, orphan_rows,
   #                                  started_batches, finished_batches

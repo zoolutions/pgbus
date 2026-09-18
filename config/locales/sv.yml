@@ -86,6 +86,8 @@ sv:
         enqueued: Inlagda
         failed_dlq: Misslyckade / DLQ
         failed_dlq_labels: Misslyckade / Dead Lettered
+        parked_jobs: Parkerade jobb
+        parked_jobs_oldest: äldst %{age}
         processes: Processer
         queues: Köer
         recurring: Återkommande
@@ -404,6 +406,43 @@ sv:
       toggle_dark_mode: Växla mörkt läge
       toggle_menu: Växla meny
     locks:
+      concurrency:
+        cards:
+          keys_at_limit: Nycklar vid gränsen
+          keys_at_limit_hint: ingen ledig plats
+          oldest_wait: Längsta väntan
+          oldest_wait_hint: längst ett jobb har väntat
+          parked_jobs: Parkerade jobb
+          parked_jobs_hint: väntar på en plats
+          slots_held: Hållna platser
+          slots_held_hint: över alla nycklar
+        description: Nycklar deklarerade med limits_concurrency, platserna de håller och jobben som parkerats bakom dem
+        discard_parked: Kasta parkerade
+        discard_parked_confirm:
+          one: Kasta det 1 jobb som parkerats bakom denna nyckel? Det kommer aldrig att köras.
+          other: Kasta de %{count} jobb som parkerats bakom denna nyckel? De kommer aldrig att köras.
+        empty: Inga samtidighetsnycklar används
+        headers:
+          in_use: Används
+          key: Nyckel
+          lease: Lås
+          oldest_wait: Längsta väntan
+          parked: Parkerade
+        key_released:
+          one: Frigjorde %{key} och befordrade 1 jobb.
+          other: Frigjorde %{key} och befordrade %{count} jobb.
+        lease:
+          expired: Utgånget
+          live: Aktivt
+          none: Ingen innehavare
+        no_key: Ingen samtidighetsnyckel angiven.
+        parked_discarded:
+          one: Kastade 1 parkerat jobb.
+          other: Kastade %{count} parkerade jobb.
+        release: Frigör
+        release_confirm: Frigör %{key} och befordra dess parkerade jobb?
+        release_confirm_live: Låset på %{key} är fortfarande färskt, så ett jobb körs troligen än. Att frigöra låter ett annat starta bredvid det. Fortsätta?
+        title: Samtidighet
       index:
         all_locks_discarded:
           one: Kasserade 1 lås.
@@ -427,7 +466,9 @@ sv:
           one: Kasserade 1 lås.
           other: Kasserade %{count} lås.
         none_selected: Inga lås valda.
-        title: Unikhetsnycklar
+        page_description: Unikhetsnycklar och samtidighetsplatser som håller tillbaka jobb
+        title: Lås
+        uniqueness_title: Unikhetsnycklar
     outbox:
       index:
         description: Transaktionella utboxposter som väntar på publicering till PGMQ

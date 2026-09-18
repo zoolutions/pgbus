@@ -245,6 +245,37 @@ RSpec.describe Pgbus::EventBus::Handler do
         expect(relation).to have_received(:update_all).with(completed_at: kind_of(Time))
       end
 
+      # The drop that motivated StaleConnectionRetry: the socket dies between
+      # handle() returning and the stamp landing, so the host app paged for a
+      # message whose handler had already succeeded.
+      context "when the claim stamp hits a stale connection" do
+        before do
+          allow(Pgbus::EventBus::StaleConnectionRetry).to receive(:reconnect_leased!)
+          attempts = 0
+          allow(relation).to receive(:update_all) do
+            attempts += 1
+            raise ActiveRecord::ConnectionFailed, "PQconsumeInput() SSL error: unexpected eof while reading" if attempts == 1
+
+            1
+          end
+        end
+
+        it "reconnects, stamps the claim and still reports :handled" do
+          expect(handler.process(message)).to eq(:handled)
+
+          expect(relation).to have_received(:update_all).twice
+          expect(Pgbus::EventBus::StaleConnectionRetry).to have_received(:reconnect_leased!).once
+        end
+
+        # The recovered stamp must not re-run the handler: retrying `process`
+        # rather than the stamp alone would double every side effect.
+        it "runs handle exactly once" do
+          handler.process(message)
+
+          expect(handler.handled_events.size).to eq(1)
+        end
+      end
+
       it "marks the dedup cache once the claim is completed" do
         handler.process(message)
 
@@ -255,7 +286,8 @@ RSpec.describe Pgbus::EventBus::Handler do
     context "with a completed claim (row exists, completed_at set)" do
       before do
         allow(Pgbus::ProcessedEvent).to receive(:insert).and_return(empty_result)
-        allow(relation).to receive(:pick).with(:completed_at).and_return(Time.now.utc)
+        allow(relation).to receive(:pick).with(:completed_at, :processed_at)
+                                         .and_return([Time.now.utc, Time.now.utc])
       end
 
       it "returns :skipped without running handle" do
@@ -279,10 +311,14 @@ RSpec.describe Pgbus::EventBus::Handler do
       end
     end
 
-    context "with a pending claim (prior attempt crashed between claim and handle)" do
+    # A pending claim whose liveness stamp has gone quiet for longer than the
+    # ownership window: the holder is dead by the beat's own definition, so the
+    # crash-safety re-run of issue #385 still applies.
+    context "with an abandoned pending claim (holder stopped heartbeating)" do
       before do
         allow(Pgbus::ProcessedEvent).to receive(:insert).and_return(empty_result)
-        allow(relation).to receive(:pick).with(:completed_at).and_return(nil)
+        allow(relation).to receive(:pick).with(:completed_at, :processed_at)
+                                         .and_return([nil, Time.now.utc - 3600])
       end
 
       it "re-runs handle instead of skipping" do
@@ -296,6 +332,130 @@ RSpec.describe Pgbus::EventBus::Handler do
         handler.process(message)
 
         expect(relation).to have_received(:update_all).with(completed_at: kind_of(Time))
+      end
+    end
+
+    # Issue #470: the same state — row present, completed_at NULL — also
+    # describes a handler that is simply still running somewhere else. A claim
+    # whose liveness stamp is fresh is owned, not abandoned.
+    context "with a live pending claim (holder still running, issue #470)" do
+      let(:claim_age) { 1.0 }
+
+      before do
+        allow(Pgbus::ProcessedEvent).to receive(:insert).and_return(empty_result)
+        allow(relation).to receive(:pick).with(:completed_at, :processed_at)
+                                         .and_return([nil, Time.now.utc - claim_age])
+      end
+
+      it "returns :skipped without running handle concurrently with the holder" do
+        expect(handler.process(message)).to eq(:skipped)
+        expect(handler.handled_events).to be_nil
+      end
+
+      it "does not stamp the holder's claim completed" do
+        handler.process(message)
+
+        expect(relation).not_to have_received(:update_all)
+      end
+
+      # The holder may still fail; only a *completed* execution may enter the
+      # cache, or the recovery redelivery would be skipped from memory.
+      it "does not mark the dedup cache" do
+        handler.process(message)
+
+        expect(handler_class.dedup_cache.seen?(cache_key)).to be false
+      end
+
+      it "publishes the skip with the claim age and read_ct so it is observable" do
+        payloads = []
+        subscription = ActiveSupport::Notifications.subscribe("pgbus.event_skipped") do |*args|
+          payloads << ActiveSupport::Notifications::Event.new(*args).payload
+        end
+
+        begin
+          handler.process(message)
+        ensure
+          ActiveSupport::Notifications.unsubscribe(subscription)
+        end
+
+        expect(payloads.size).to eq(1)
+        expect(payloads.first).to include(
+          event_id: event_id,
+          handler: handler_class.name,
+          reason: :owned,
+          read_ct: message.read_ct.to_i,
+          msg_id: message.msg_id.to_i
+        )
+        expect(payloads.first[:claim_age]).to be_within(1.0).of(claim_age)
+      end
+    end
+
+    # The row can be purged between the losing insert and the read. pick
+    # returns nil for the whole row then, which is not a pending claim —
+    # nothing is running, so the delivery must run rather than skip.
+    context "when the claim row was purged between insert and read" do
+      before do
+        allow(Pgbus::ProcessedEvent).to receive(:insert).and_return(empty_result)
+        allow(relation).to receive(:pick).with(:completed_at, :processed_at).and_return(nil)
+      end
+
+      it "runs handle" do
+        expect(handler.process(message)).to eq(:handled)
+        expect(handler.handled_events.size).to eq(1)
+      end
+    end
+
+    describe "claim liveness heartbeat (issue #470)" do
+      let(:claim_beat) { Pgbus::EventBus::ClaimBeat.new }
+
+      before { allow(Pgbus::ProcessedEvent).to receive(:insert).and_return(insert_result) }
+
+      it "registers the claim for the duration of handle so a beat can touch it" do
+        registered = nil
+        klass = Class.new(described_class) do
+          idempotent!
+          define_method(:handle) { |_event| registered = true }
+        end
+        allow(Pgbus::ProcessedEvent).to receive(:where)
+          .with(event_id: event_id, handler_class: klass.name).and_return(relation)
+
+        in_flight = nil
+        allow(relation).to receive(:update_all) do |attrs|
+          in_flight = claim_beat.size if attrs.key?(:completed_at)
+          1
+        end
+
+        klass.new.process(message, claim_beat: claim_beat)
+
+        expect(registered).to be true
+        # Released before the completion stamp, and definitely after it.
+        expect(in_flight).to eq(0)
+        expect(claim_beat).to be_empty
+      end
+
+      it "releases the claim when handle raises" do
+        klass = Class.new(described_class) do
+          idempotent!
+          def handle(_event)
+            raise "boom"
+          end
+        end
+        allow(Pgbus::ProcessedEvent).to receive(:where)
+          .with(event_id: event_id, handler_class: klass.name).and_return(relation)
+
+        expect { klass.new.process(message, claim_beat: claim_beat) }.to raise_error("boom")
+
+        expect(claim_beat).to be_empty
+      end
+
+      it "does not register a claim for a non-idempotent handler" do
+        klass = Class.new(described_class) do
+          define_method(:handle) { |_event| nil }
+        end
+
+        klass.new.process(message, claim_beat: claim_beat)
+
+        expect(claim_beat).to be_empty
       end
     end
 
@@ -354,7 +514,9 @@ RSpec.describe Pgbus::EventBus::Handler do
         expect { handler.process(message) }.to raise_error(detection_error)
 
         allow(Pgbus::ProcessedEvent).to receive_messages(completion_column?: true, insert: empty_result) # row exists now
-        allow(relation).to receive(:pick).with(:completed_at).and_return(nil) # still pending
+        # still pending, and quiet for longer than the ownership window
+        allow(relation).to receive(:pick).with(:completed_at, :processed_at)
+                                         .and_return([nil, Time.now.utc - 3600])
 
         expect(handler.process(message)).to eq(:handled)
         expect(handler.handled_events.size).to eq(1)

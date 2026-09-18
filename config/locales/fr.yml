@@ -86,6 +86,8 @@ fr:
         enqueued: Enregistré
         failed_dlq: Échoué / DLQ
         failed_dlq_labels: Échoués / Dead Lettered
+        parked_jobs: Jobs en attente
+        parked_jobs_oldest: le plus ancien %{age}
         processes: Processus
         queues: Files d'attente
         recurring: Récurrent
@@ -404,6 +406,43 @@ fr:
       toggle_dark_mode: Basculer en mode sombre
       toggle_menu: Basculer le menu
     locks:
+      concurrency:
+        cards:
+          keys_at_limit: Clés à la limite
+          keys_at_limit_hint: aucun créneau libre
+          oldest_wait: Attente la plus longue
+          oldest_wait_hint: le job qui attend depuis le plus longtemps
+          parked_jobs: Jobs en attente
+          parked_jobs_hint: attendent un créneau
+          slots_held: Créneaux occupés
+          slots_held_hint: toutes clés confondues
+        description: Clés déclarées avec limits_concurrency, les créneaux qu'elles occupent et les jobs mis en attente derrière
+        discard_parked: Supprimer en attente
+        discard_parked_confirm:
+          one: Supprimer le job en attente derrière cette clé ? Il ne s'exécutera jamais.
+          other: Supprimer les %{count} jobs en attente derrière cette clé ? Ils ne s'exécuteront jamais.
+        empty: Aucune clé de concurrence utilisée
+        headers:
+          in_use: Occupé
+          key: Clé
+          lease: Bail
+          oldest_wait: Attente la plus longue
+          parked: En attente
+        key_released:
+          one: "%{key} libérée et 1 job promu."
+          other: "%{key} libérée et %{count} jobs promus."
+        lease:
+          expired: Expiré
+          live: Actif
+          none: Aucun détenteur
+        no_key: Aucune clé de concurrence fournie.
+        parked_discarded:
+          one: 1 job en attente supprimé.
+          other: "%{count} jobs en attente supprimés."
+        release: Libérer
+        release_confirm: Libérer %{key} et promouvoir ses jobs en attente ?
+        release_confirm_live: Le bail de %{key} est encore valide, un job est donc probablement toujours en cours. Libérer permet à un autre de démarrer à côté. Continuer ?
+        title: Concurrence
       index:
         all_locks_discarded:
           one: 1 verrou supprimé.
@@ -427,7 +466,9 @@ fr:
           one: 1 verrou supprimé.
           other: "%{count} verrous supprimés."
         none_selected: Aucun verrou sélectionné.
-        title: Clés d'unicité
+        page_description: Clés d'unicité et créneaux de concurrence qui retiennent des jobs
+        title: Verrous
+        uniqueness_title: Clés d'unicité
     outbox:
       index:
         description: Entrées de boîte d'envoi transactionnelle en attente de publication vers PGMQ

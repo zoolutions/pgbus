@@ -86,6 +86,8 @@ en:
         enqueued: Enqueued
         failed_dlq: Failed / DLQ
         failed_dlq_labels: Failed / Dead Lettered
+        parked_jobs: Parked jobs
+        parked_jobs_oldest: oldest %{age}
         processes: Processes
         queues: Queues
         recurring: Recurring
@@ -404,6 +406,43 @@ en:
       toggle_dark_mode: Toggle dark mode
       toggle_menu: Toggle menu
     locks:
+      concurrency:
+        cards:
+          keys_at_limit: Keys at limit
+          keys_at_limit_hint: no slot free
+          oldest_wait: Oldest wait
+          oldest_wait_hint: longest a job has waited
+          parked_jobs: Parked jobs
+          parked_jobs_hint: waiting for a slot
+          slots_held: Slots held
+          slots_held_hint: across all keys
+        description: Keys declared with limits_concurrency, the slots they hold and the jobs parked behind them
+        discard_parked: Discard parked
+        discard_parked_confirm:
+          one: Discard the 1 job parked behind this key? It will never run.
+          other: Discard the %{count} jobs parked behind this key? They will never run.
+        empty: No concurrency keys in use
+        headers:
+          in_use: In use
+          key: Key
+          lease: Lease
+          oldest_wait: Oldest wait
+          parked: Parked
+        key_released:
+          one: Released %{key} and promoted 1 job.
+          other: Released %{key} and promoted %{count} jobs.
+        lease:
+          expired: Expired
+          live: Live
+          none: No holder
+        no_key: No concurrency key given.
+        parked_discarded:
+          one: Discarded 1 parked job.
+          other: Discarded %{count} parked jobs.
+        release: Release
+        release_confirm: Release %{key} and promote its parked jobs?
+        release_confirm_live: The lease on %{key} is still fresh, so a job is probably still running. Releasing lets another start beside it. Continue?
+        title: Concurrency
       index:
         all_locks_discarded:
           one: Discarded 1 lock.
@@ -427,7 +466,9 @@ en:
           one: Discarded 1 lock.
           other: Discarded %{count} locks.
         none_selected: No locks selected.
-        title: Uniqueness Keys
+        page_description: Uniqueness keys and concurrency slots holding jobs back
+        title: Locks
+        uniqueness_title: Uniqueness Keys
     outbox:
       index:
         description: Transactional outbox entries pending publication to PGMQ

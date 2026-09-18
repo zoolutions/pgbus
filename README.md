@@ -221,6 +221,14 @@ Pgbus::EventBus::Registry.instance.subscribe(
 )
 ```
 
+Each subscriber gets its own queue, and a queue is consumed only by the
+handler(s) registered against it: one published event matching N subscribers
+becomes N deliveries, one per handler, so every handler runs exactly once per
+event. (Two handlers sharing an explicit `queue_name:` both run on that queue's
+delivery.) A message on a queue no subscriber in this process owns — a stale
+topic binding left by a renamed or removed handler — is archived, logged once
+per queue, and reported as `pgbus.event_unrouted`.
+
 `idempotent!` uses a **two-phase claim**: a *pending* row in
 `pgbus_processed_events` is inserted before `handle` runs, and only stamped
 `completed_at` after `handle` returns. Deduplication applies to **completed**

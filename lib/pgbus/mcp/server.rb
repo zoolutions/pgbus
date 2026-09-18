@@ -23,6 +23,7 @@ module Pgbus
         Tools::DlqTool,
         Tools::DlqDetailTool,
         Tools::LocksTool,
+        Tools::ConcurrencyTool,
         Tools::ThroughputTool,
         Tools::StatsTool,
         Tools::RecurringTool
@@ -32,7 +33,7 @@ module Pgbus
         Read-only diagnostic tools for a pgbus (PostgreSQL/PGMQ) deployment.
         Start with pgbus_health for a one-call OK/DEGRADED/STALLED verdict,
         then drill in with pgbus_queues, pgbus_processes, pgbus_jobs,
-        pgbus_dlq, and pgbus_locks. No tool mutates state. Message payloads
+        pgbus_dlq, pgbus_locks, and pgbus_concurrency. No tool mutates state. Message payloads
         are redacted unless the server was started with payloads explicitly
         allowed.
       TEXT

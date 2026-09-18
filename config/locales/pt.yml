@@ -86,6 +86,8 @@ pt:
         enqueued: Enfileirado
         failed_dlq: Falhou / DLQ
         failed_dlq_labels: Falhados / Dead Lettered
+        parked_jobs: Trabalhos estacionados
+        parked_jobs_oldest: mais antigo %{age}
         processes: Processos
         queues: Filas
         recurring: Recorrente
@@ -404,6 +406,43 @@ pt:
       toggle_dark_mode: Alternar modo escuro
       toggle_menu: Alternar menu
     locks:
+      concurrency:
+        cards:
+          keys_at_limit: Chaves no limite
+          keys_at_limit_hint: sem vaga livre
+          oldest_wait: Espera mais longa
+          oldest_wait_hint: o trabalho que espera há mais tempo
+          parked_jobs: Trabalhos estacionados
+          parked_jobs_hint: à espera de uma vaga
+          slots_held: Vagas ocupadas
+          slots_held_hint: em todas as chaves
+        description: Chaves declaradas com limits_concurrency, as vagas que ocupam e os trabalhos estacionados atrás delas
+        discard_parked: Descartar estacionados
+        discard_parked_confirm:
+          one: Descartar o trabalho estacionado atrás desta chave? Nunca será executado.
+          other: Descartar os %{count} trabalhos estacionados atrás desta chave? Nunca serão executados.
+        empty: Nenhuma chave de concorrência em uso
+        headers:
+          in_use: Em uso
+          key: Chave
+          lease: Concessão
+          oldest_wait: Espera mais longa
+          parked: Estacionados
+        key_released:
+          one: "%{key} libertada e 1 trabalho promovido."
+          other: "%{key} libertada e %{count} trabalhos promovidos."
+        lease:
+          expired: Expirada
+          live: Ativa
+          none: Sem detentor
+        no_key: Nenhuma chave de concorrência indicada.
+        parked_discarded:
+          one: 1 trabalho estacionado descartado.
+          other: "%{count} trabalhos estacionados descartados."
+        release: Libertar
+        release_confirm: Libertar %{key} e promover os seus trabalhos estacionados?
+        release_confirm_live: A concessão de %{key} ainda está válida, por isso é provável que um trabalho continue a correr. Libertar permite que outro arranque ao lado. Continuar?
+        title: Concorrência
       index:
         all_locks_discarded:
           one: 1 bloqueio descartado.
@@ -427,7 +466,9 @@ pt:
           one: 1 bloqueio descartado.
           other: "%{count} bloqueios descartados."
         none_selected: Nenhum bloqueio selecionado.
-        title: Chaves de unicidade
+        page_description: Chaves de unicidade e vagas de concorrência que estão a reter trabalhos
+        title: Bloqueios
+        uniqueness_title: Chaves de unicidade
     outbox:
       index:
         description: Entradas da caixa de saída transacional pendentes de publicação para PGMQ

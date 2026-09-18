@@ -1,5 +1,5 @@
 <turbo-frame id="dashboard-stats" data-auto-refresh data-src="<%= pgbus.root_path(frame: 'stats') %>">
-  <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-6 mb-8">
+  <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-7 mb-8">
     <div class="rounded-lg bg-white dark:bg-gray-800 p-5 shadow ring-1 ring-gray-200 dark:ring-gray-700">
       <p class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.stats_cards.queues") %></p>
       <p class="mt-1 text-3xl font-semibold text-gray-900 dark:text-white"><%= @stats[:total_queues] %></p>
@@ -39,5 +39,18 @@
       <p class="mt-1 text-3xl font-semibold text-gray-900 dark:text-white"><%= @stats[:throughput_rate] %></p>
       <p class="text-xs text-gray-400"><%= t("pgbus.dashboard.stats_cards.throughput_unit") %></p>
     </div>
+
+    <%# The whole card links to the Locks page: parked jobs are only actionable
+        there. turbo_frame: "_top" because this card sits inside the
+        dashboard-stats frame, and /locks has no frame of that id to render into. %>
+    <%= link_to pgbus.locks_path, data: { turbo_frame: "_top" }, class: "rounded-lg bg-white dark:bg-gray-800 p-5 shadow ring-1 ring-gray-200 dark:ring-gray-700 block hover:ring-gray-300 dark:hover:ring-gray-600" do %>
+      <p class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.stats_cards.parked_jobs") %></p>
+      <p class="mt-1 text-3xl font-semibold <%= @stats[:parked_total].to_i > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-900 dark:text-white' %>">
+        <%= pgbus_number(@stats[:parked_total]) %>
+      </p>
+      <p class="text-xs text-gray-400 dark:text-gray-500">
+        <%= t("pgbus.dashboard.stats_cards.parked_jobs_oldest", age: pgbus_duration(@stats[:oldest_parked_age_sec])) %>
+      </p>
+    <% end %>
   </div>
 </turbo-frame>
