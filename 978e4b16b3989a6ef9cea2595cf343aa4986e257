@@ -1,0 +1,163 @@
+app/views/pgbus/dashboard/_stats_cards.html.erb
+  s_8b8690beed2324::t_90aa8c32b2b565 2,42-54
+config/locales/fi.yml
+  s_8b8690beed2324::t_90aa8c32b2b565 89-90,409-445,469-471
+lib/pgbus/event_bus/registry.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 65-88
+spec/pgbus/integrations/appsignal/probe_spec.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 53-57,167-170,173-175
+config/locales/it.yml
+  s_8b8690beed2324::t_90aa8c32b2b565 89-90,409-445,469-471
+docs/app/views/docs/pages/concurrency_uniqueness.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 15,157-202
+lib/pgbus/event_bus/claim_beat.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 1-80
+config/locales/ja.yml
+  s_8b8690beed2324::t_90aa8c32b2b565 89-90,409-445,469-471
+lib/pgbus/testing.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 61
+docs/app/views/docs/pages/streams.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 336-349,353-362
+lib/pgbus/mcp/tools/concurrency_tool.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 1-32
+spec/pgbus/event_bus/stale_connection_retry_spec.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 1-156
+spec/pgbus/streams/turbo_broadcastable_spec.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 12-13,28-51,193-329
+lib/pgbus/process/consumer.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 81-85,230-235,257-315,590
+lib/pgbus/streams/broadcast_opts.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 1-70
+docs/app/views/docs/pages/event_bus.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 95-104,194-207
+lib/pgbus/mcp/base_tool.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 39-41,43-45
+spec/pgbus/event_bus/claim_beat_spec.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 1-72
+spec/pgbus/process/consumer_spec.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 113-114,120-122,137-138,144-146,150-298,425-426,784-793,1026-1027
+spec/pgbus/web/metrics_serializer_spec.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 53-54,251-293
+spec/pgbus/event_bus/registry_spec.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 32,38,43,48,53-100
+lib/pgbus/event_bus/stale_connection_retry.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 1-85
+app/views/pgbus/locks/_uniqueness.html.erb
+  s_8b8690beed2324::t_90aa8c32b2b565 1-80
+lib/pgbus/mcp.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 27
+config/locales/es.yml
+  s_8b8690beed2324::t_90aa8c32b2b565 89-90,409-445,469-471
+spec/requests/pgbus/locks_controller_spec.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 11-72
+docs/app/views/docs/pages/dashboard.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 36,43
+gemfiles/rails_7_1.gemfile.lock
+  ai_agent 4,552
+app/frontend/pgbus/style.css
+  s_8b8690beed2324::t_90aa8c32b2b565 2
+lib/pgbus/integrations/appsignal/probe.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 63-67,124-128
+config/locales/nb.yml
+  s_8b8690beed2324::t_90aa8c32b2b565 89-90,409-445,469-471
+lib/pgbus/web/data_source.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 8-12,43-54,686-762,1122-1235
+lib/pgbus/mcp/server.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 26,36
+spec/integration/event_bus_flow_spec.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 107-173
+README.md
+  s_8b8690beed2324::t_90aa8c32b2b565 224-231
+docs/Gemfile.lock
+  ai_agent 4,505
+spec/integration/dashboard_concurrency_spec.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 1-213
+spec/pgbus/mcp/tools_spec.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 222-241
+spec/pgbus/event_bus/handler_spec.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 248-278,289-290,314-317,320-321,338-461,517-519
+Gemfile.lock
+  ai_agent 4,526
+lib/pgbus/streams/turbo_broadcastable.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 37-84,87,97-101,104-113
+app/models/pgbus/uniqueness_key.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 89-108
+lib/pgbus/metrics/subscriber.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 36,143-152
+lib/pgbus/event_bus/publisher.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 28
+lib/pgbus/web/metrics_serializer.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 25-29,32,155-166,237-267
+spec/pgbus/metrics/subscriber_spec.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 113-124
+spec/support/pgbus/stub_data_source.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 18-19,48-49,54,79,135-139,181-182,205-207
+config/locales/fr.yml
+  s_8b8690beed2324::t_90aa8c32b2b565 89-90,409-445,469-471
+config/locales/de.yml
+  s_8b8690beed2324::t_90aa8c32b2b565 89-90,409-445,469-471
+config/locales/en.yml
+  s_8b8690beed2324::t_90aa8c32b2b565 89-90,409-445,469-471
+lib/pgbus/visibility_heartbeat.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 28-34,36,68,70,75,140,197-204
+config/locales/nl.yml
+  s_8b8690beed2324::t_90aa8c32b2b565 89-90,409-445,469-471
+config/locales/sv.yml
+  s_8b8690beed2324::t_90aa8c32b2b565 89-90,409-445,469-471
+spec/system/dashboard_spec.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 20-46
+app/views/pgbus/locks/index.html.erb
+  s_8b8690beed2324::t_90aa8c32b2b565 1-3,6-7
+lib/pgbus/version.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 4
+spec/system/locks_spec.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 9-10,12,57,119-195
+lib/pgbus/streams/broadcastable_override.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 43,131,138-141,143
+app/controllers/pgbus/locks_controller.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 6-8,36-58
+spec/pgbus/web/data_source_spec.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 198-199,559-832
+config/locales/da.yml
+  s_8b8690beed2324::t_90aa8c32b2b565 89-90,409-445,469-471
+lib/pgbus/instrumentation.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 23-26,36-38
+spec/integration_helper.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 94,103-104,111-119
+spec/requests/pgbus/api/metrics_controller_spec.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 34-45
+app/views/pgbus/locks/_concurrency.html.erb
+  s_8b8690beed2324::t_90aa8c32b2b565 1-94
+docs/app/views/docs/pages/observability.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 15,73,119-142
+spec/support/fake_turbo_stream_helpers.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 1-44
+spec/pgbus/streams/broadcastable_override_spec.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 62-63,91-92,95-96,99-100,104-111,114-115,170-171,319-384
+spec/pgbus/visibility_heartbeat_spec.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 133-155
+lib/pgbus/integrations/appsignal/dashboard.json
+  s_8b8690beed2324::t_90aa8c32b2b565 358-395
+config/locales/pt.yml
+  s_8b8690beed2324::t_90aa8c32b2b565 89-90,409-445,469-471
+config/routes.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 84-88
+lib/pgbus/event_bus/handler.rb
+  s_8b8690beed2324::t_90aa8c32b2b565 20-33,42,47-53,63-69,87,136,138-151,153-154,157-159,161,170,173,175-184,186-242,250-261,265-269
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "978e4b16b3989a6ef9cea2595cf343aa4986e257",
+  "prompts": {},
+  "sessions": {
+    "s_8b8690beed2324": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "be3834bc-7e78-4557-9c71-b7966dbf8315",
+        "model": "claude-opus-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
