@@ -29,7 +29,7 @@ Protect this session's context: delegate mechanical exploration to cheaper subag
 
 1. Fan out Explore agents (`model: haiku`) for file discovery and naming-convention sweeps; use `model: sonnet` agents when a subsystem needs to be read and summarized. Launch independent explorations in parallel.
 2. Read the load-bearing files yourself — the ones the design decision actually hinges on. Don't design from subagent summaries alone.
-3. Check the architecture layers in `CLAUDE.md` and read the matching source files — past decisions and gotchas live there.
+3. Check the architecture layers in `AGENTS.md` and read the matching source files — past decisions and gotchas live there.
 4. Check `git log` for recent related work; the design should extend it, not fight it.
 
 ## Phase 2 — Surface the unknowns (blindspot pass + interview)
@@ -41,7 +41,7 @@ Investigation tells you what the codebase says; this phase finds what the REQUES
    - edge cases the codebase makes possible that the request never mentions
    - anything with no precedent in this repo — flag it explicitly as unknown-unknown territory
 2. **Interview the user** with AskUserQuestion, one question at a time, prioritized by blast radius: architecture-changing answers first, then public API / config surface, then UX. Rules:
-   - Skip anything the codebase, CLAUDE.md, or an existing issue already answers.
+   - Skip anything the codebase, AGENTS.md, or an existing issue already answers.
    - 2–5 questions is the sweet spot; zero is fine when the request is genuinely unambiguous — say so rather than inventing questions.
    - Every question offers concrete options with a recommended default, never an open-ended essay prompt.
 3. **Record the answers** in the plan's Decision section as `Settled in interview:` bullets — constraints the executor must not re-litigate.
