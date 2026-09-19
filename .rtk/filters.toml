@@ -1,0 +1,50 @@
+# Project-local RTK filters (https://github.com/rtk-ai/rtk#custom-filters).
+#
+# The `rtk hook claude` PreToolUse hook rewrites a matching command to
+# `rtk <cmd>`; rtk runs it and drops the lines listed here before the agent
+# sees the output. Filters are line-based: they strip noise, never reformat.
+#
+# `match_command` is matched against the command with the first word reduced
+# to its basename, so `bin/validate_all`, `./bin/validate_all` and
+# `validate_all` all hit `^validate_all\b`.
+#
+# Trust is a SHA-256 of this file: after every edit run `rtk trust --yes`,
+# then `rtk verify` to run the inline tests.
+schema_version = 1
+
+[filters.rake-build]
+description = "bundle exec rake build (CI's 'Verify gem builds' step): drop the packaged-file listing, keep the gem metadata and unpack confirmation"
+match_command = "^(?:bundle\\s+exec\\s+)?rake\\s+build\\b"
+strip_lines_matching = [
+  "^\\s*$",
+  "^/tmp/gem-verify/",
+]
+on_empty = "rake build: ok"
+
+[[tests.rake-build]]
+name = "keeps gem metadata, unpack confirmation and shell echoes; drops blank lines and the packaged-file listing"
+input = """gem build pgbus.gemspec --strict
+  Successfully built RubyGem
+  Name: pgbus
+  Version: 0.16.7
+  File: pgbus-0.16.7.gem
+gem unpack pgbus-0.16.7.gem --target /tmp/gem-verify
+Unpacked gem: '/tmp/gem-verify/pgbus-0.16.7'
+find /tmp/gem-verify -type f | sort
+
+=== Gem contents ===
+/tmp/gem-verify/pgbus-0.16.7/lib/pgbus.rb
+/tmp/gem-verify/pgbus-0.16.7/lib/pgbus/version.rb
+/tmp/gem-verify/pgbus-0.16.7/README.md
+rm -rf /tmp/gem-verify pgbus-0.16.7.gem
+"""
+expected = """gem build pgbus.gemspec --strict
+  Successfully built RubyGem
+  Name: pgbus
+  Version: 0.16.7
+  File: pgbus-0.16.7.gem
+gem unpack pgbus-0.16.7.gem --target /tmp/gem-verify
+Unpacked gem: '/tmp/gem-verify/pgbus-0.16.7'
+find /tmp/gem-verify -type f | sort
+=== Gem contents ===
+rm -rf /tmp/gem-verify pgbus-0.16.7.gem"""
