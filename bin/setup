@@ -5,4 +5,8 @@ set -vx
 
 bundle install
 
+# rtk (PreToolUse hook) condenses agent command output; .rtk/filters.toml adds
+# this repo's own filters. Trust is a SHA-256 of that file, so re-trust here.
+command -v rtk >/dev/null 2>&1 && rtk trust --yes >/dev/null 2>&1 || true
+
 # Do any other automated setup that you need to do here
