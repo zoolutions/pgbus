@@ -19,7 +19,7 @@ strip_lines_matching = [
   "^\\s*$",
   "^/tmp/gem-verify/",
 ]
-on_empty = "rake build: ok"
+on_empty = "rake build: no output left after filtering (check the exit code)"
 
 [[tests.rake-build]]
 name = "keeps gem metadata, unpack confirmation and shell echoes; drops blank lines and the packaged-file listing"
