@@ -69,7 +69,7 @@ hook-rewritable shapes: no `for`/subshell wrappers, no `| head` on rtk-handled c
 | `/architect` | Coordinate multi-layer development |
 | `/perf` | Benchmark current branch against main (before/after with worktree) |
 
-Commands and agents pin a model tier via frontmatter aliases: `sonnet` for pattern-following implementation (the default), `opus` for orchestration, security, and full PR review, `fable` for read-only planning (`/plan`). Use aliases, not full model IDs, so commands track the latest model in each tier. When spawning subagents for mechanical work (file finding, pattern scans), pass a cheaper model explicitly rather than letting them inherit the session model.
+**Models.** Sessions run on `opus` (Opus 5.5) with `fable` (Fable 5.1) as the advisor (`.claude/settings.json`). Fable is spent where judgment matters most: `/plan` runs on Fable, the advisor is consulted at decision points (before choosing an approach, a schema or public API, a migration, a dependency, anything irreversible, and when a failure repeats), and the `fable-validator` agent checks every finished implementation before its pull request opens (`/lfg`, Phase 6.5). Commands pin their tier by alias, never by full model ID: `opus` for orchestration, security, full PR review, payments and production debugging; `sonnet` for the implementation specialists and TDD; `haiku` for mechanical scans. Every spawned agent names its `model:`; one that does not runs on `sonnet` (`CLAUDE_CODE_SUBAGENT_MODEL`), never on the session's model. Plan mode cannot take a model of its own: it runs on Opus and asks the advisor.
 
 ## Architecture
 

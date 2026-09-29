@@ -89,6 +89,8 @@ Layer 0: Configuration               lib/pgbus/configuration.rb, config_loader.r
 - [ ] `bundle exec rubocop` passes
 - [ ] `bundle exec rspec` passes
 
+Run the `fable-validator` agent on the combined diff first; do not open or merge on BLOCK.
+
 ## Handoff
 
 When complete, summarize:
