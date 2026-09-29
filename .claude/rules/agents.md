@@ -12,10 +12,10 @@
 
 Use agents PROACTIVELY without waiting for user prompt:
 
-1. **Complex feature requests** -> Use Plan agent first
-2. **Codebase exploration** -> Use Explore agent
-3. **Multi-file searches** -> Use Explore agent (not direct Glob/Grep)
-4. **Architectural decisions** -> Use Plan agent
+1. **Complex feature requests** -> Use Plan agent first (`model: sonnet`)
+2. **Codebase exploration** -> Use Explore agent (`model: haiku`)
+3. **Multi-file searches** -> Use Explore agent (`model: haiku`; not direct Glob/Grep)
+4. **Architectural decisions** -> Use Plan agent (`model: sonnet`), and consult the advisor before committing to one
 
 ## Parallel Execution
 
@@ -34,7 +34,7 @@ First explore, wait, then check patterns, wait, then review...
 
 ## When to Use Explore Agent
 
-Use the Explore agent (subagent_type=Explore) instead of direct Glob/Grep when:
+Use the Explore agent (subagent_type=Explore, `model: haiku`) instead of direct Glob/Grep when:
 - Open-ended codebase exploration
 - Searching for patterns across client, adapter, event bus, and process layers
 - Answering questions about codebase structure
