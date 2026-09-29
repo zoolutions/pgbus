@@ -1,7 +1,7 @@
 ---
 description: "Drive a set of open PRs to merge-ready, one at a time, in a given order. Auto-resolves the recurring CHANGELOG [Unreleased] and docs/Gemfile.lock conflicts, runs /github-review-pr (CI failures then review comments) on each, then waits for the user to merge before rebasing and advancing to the next. Use to clear a stack of stacked/parallel PRs without manual rebase churn."
 model: opus
-argument-hint: "ordered PR list (e.g. '292 288 289 293 294 295'); optional 'automerge' to enable gh auto-merge; empty = auto-discover your open PRs"
+argument-hint: "ordered PR list (e.g. '292 288 289 293 294 295'); optional 'automerge' to merge each PR once every check is green (no gh auto-merge); empty = auto-discover your open PRs"
 allowed-tools: Bash(gh pr list:*), Bash(gh pr view:*), Bash(gh pr checks:*), Bash(gh pr diff:*), Bash(gh pr comment:*), Bash(gh pr merge:*), Bash(gh api:*), Bash(gh run view:*), Bash(git:*), Bash(bundle:*), Bash(bundle exec:*), Bash(cd:*), Read, Write, Edit, Glob, Grep, Agent, Skill, TaskCreate, TaskUpdate, TaskGet, TaskList, ScheduleWakeup
 ---
 
