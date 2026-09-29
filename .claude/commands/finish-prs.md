@@ -23,7 +23,7 @@ The two things that make a batch of PRs churn on this repo are **recurring and m
 `$ARGUMENTS` may be:
 
 - A space/comma-separated ordered list of PR numbers: `292 288 289 293 294 295` (also accepts `#292`, `PR292`).
-- The word `automerge` anywhere in the args → enable `gh pr merge --auto --squash` on each PR once it is green + approved (still respects branch protection; GitHub merges when gates pass). Strip it out before parsing numbers.
+- The word `automerge` anywhere in the args → merge each PR with `gh pr merge --squash` once every check is finished and green and it is approved (not `--auto`, which waits only for the required checks). Strip it out before parsing numbers.
 - Empty → auto-discover: `gh pr list --author=@me --state=open --limit 100 --json number,title,headRefName,createdAt` and order **oldest-first** (`createdAt` ascending). The explicit `--limit` matters — `gh pr list` defaults to 30, so without it the discovery silently drops older PRs once the queue grows past 30. Oldest-first is the safe default: the earliest PR is usually the base others were cut from, so merging it first minimizes downstream rebases. Show the discovered order and proceed.
 
 **Order matters.** Each merge invalidates the others' merge base. Processing in a fixed order means you rebase each remaining PR exactly once per upstream merge, not repeatedly. If the user gave an explicit order, honor it exactly — they may know a dependency the metadata doesn't show.
@@ -116,13 +116,13 @@ gh pr view <PR> --json mergeable,mergeStateStatus,reviewDecision --jq '{mergeabl
 gh pr checks <PR>
 ```
 
-Merge-ready means: `mergeable=MERGEABLE`, no failing checks (green or pending-green), and `reviewDecision` is `APPROVED` or empty (not `CHANGES_REQUESTED`). A `BLOCKED` mergeStateStatus with everything else green usually means "awaiting required approval" — that is expected and fine; it is the user's/reviewer's gate, not a defect.
+Merge-ready means: `mergeable=MERGEABLE`, every check finished and green (`gh pr checks <PR> --json name,bucket`: each bucket `pass` or `skipping`, none `pending`, none `fail`; wait while any is pending), and `reviewDecision` is `APPROVED` or empty (not `CHANGES_REQUESTED`). A `BLOCKED` mergeStateStatus with everything else green usually means "awaiting required approval" — that is expected and fine; it is the user's/reviewer's gate, not a defect.
 
 ### 2f. Hand off for merge
 
 Run the `fable-validator` agent on the combined diff first. On BLOCK do not open or merge: mark it `needs-user` and report the blockers instead of calling it ready.
 
-- **`automerge` mode:** `gh pr merge <PR> --auto --squash` (GitHub merges when gates pass). Then go to Phase 3 to wait for the merge to land before advancing.
+- **`automerge` mode:** `gh pr merge <PR> --squash`, only once every check is finished and green as above. Do not arm `--auto`: GitHub would merge as soon as the *required* checks pass, while a check that is not required (Security, Gitar) may still be pending or about to fail. Then go to Phase 3 to wait for the merge to land before advancing.
 - **Default (pause) mode:** report this PR as ✅ merge-ready with its URL and a one-line "what's in it," and tell the user it's ready to merge. Then **wait** (Phase 3).
 
 Mark the PR's task `completed` (merge-ready) — or `needs-user` via a metadata note if it got stuck in 2d.
