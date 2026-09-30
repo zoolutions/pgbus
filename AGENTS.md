@@ -48,7 +48,7 @@ bundle exec rake bench:integration        # Real DB benchmarks (requires PGBUS_D
 bundle exec rake bench:streams            # SSE streaming benchmarks (requires PGBUS_DATABASE_URL)
 bundle exec rake frontend:css             # Rebuild app/frontend/pgbus/style.css after adding a Tailwind class to a view
 bin/release list                          # Last releases + next patch/minor/major version
-bin/release [minor|major|X.Y.Z] [-n]      # Cut a release (patch by default) via rake release; -n = dry run
+bin/release [minor|major|X.Y.Z] [-n]      # Cut a release (patch by default) via rake release (rakelib/release.rake, shared across the zoolutions gems); -n = dry run
 ```
 
 Command output is condensed by rtk (PreToolUse hook). `.rtk/filters.toml` covers this repo's
