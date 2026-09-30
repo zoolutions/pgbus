@@ -5,7 +5,7 @@ source "https://rubygems.org"
 # from RubyGems now that the gem is published there — the old GitHub ref (needed
 # when docs-kit wasn't on rubygems and the Docker build context couldn't see a
 # sibling checkout) is obsolete.
-gem "docs-kit", "~> 1.1", ">= 1.1.1", require: "docs_kit"
+gem "docs-kit", "~> 1.2", ">= 1.2.1", require: "docs_kit"
 gem "daisyui", require: "daisy_ui"
 gem "phlex-rails"
 gem "rails_icons", "~> 1.1"
@@ -20,10 +20,10 @@ gem "pgbus", path: "..", require: "pgbus/version"
 
 # docs-kit's optional read-only MCP server (POST /mcp, JSON-RPC). Present so the
 # endpoint goes live (routes uncommented in config/routes.rb); the whole
-# zoolutions docs fleet is consumed by agents. Pinned (pre-1.0, so ~> 0.22.0
-# tracks only 0.22.x patches) so a routine bundle update can't pull a breaking
-# release into this public endpoint.
-gem "mcp", "~> 0.22.0"
+# zoolutions docs fleet is consumed by agents. Pinned to the 1.x line (~> 1.6)
+# so a routine bundle update can't pull a breaking 2.0 into this public
+# endpoint.
+gem "mcp", "~> 1.6"
 
 # Throttle the public, unauthenticated AI endpoints (/mcp, /llms*, /docs/search)
 # by IP — they're bare ActionController::Base controllers in the gem, so a
