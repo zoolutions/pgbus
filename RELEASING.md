@@ -1,13 +1,19 @@
 # Releasing pgbus
 
-pgbus is released with a single command: **`rake release[X.Y.Z]`**. It bumps the
-version, verifies the gem builds, commits, pushes `main`, and creates the GitHub
-Release. Creating that Release triggers `.github/workflows/release.yml`, which
+pgbus is released with a single command: **`bin/release`**, the front door to
+`rake release[X.Y.Z]` (`rakelib/release.rake`). It bumps the version and the
+lockfile pins, verifies the gem builds, commits, pushes `main`, and creates the
+GitHub Release. Creating that Release triggers `.github/workflows/release.yml`, which
 re-runs the full test suite, rebuilds and verifies the gem, and publishes to
 RubyGems via OIDC trusted publishing with a Sigstore attestation.
 
 Nothing is published from a branch or a PR — a PR only *stages* the changelog
-roll and any release-prep changes. The tag is cut from `main` by `rake release`.
+roll and any release-prep changes. The tag is cut from `main` by `bin/release`.
+
+`bin/release`, `rakelib/release.rake` and everything below the `test` job in
+`release.yml` are byte-identical across the zoolutions gems (docs-kit, daisyui,
+dash, pgbus, phlex-reactive): the gem name, version file and lockfiles all come
+from `pgbus.gemspec`. Change them in every repo or none.
 
 ## Pre-release checklist
 
@@ -30,9 +36,11 @@ Run these on `main` (or the branch you're about to merge and release):
       you normally don't touch them; if you changed dependencies, re-lock the
       affected file (`bundle install`, `BUNDLE_GEMFILE=gemfiles/rails_7_1.gemfile
       bundle install`, `cd docs && bundle install`) and commit it in the
-      release-prep PR. All three are installed frozen in CI — a stale one fails
-      `release.yml`'s own `bundle install` before anything is published.
-- [ ] Working directory is clean. `rake release` aborts on any uncommitted change.
+      release-prep PR. All three are installed frozen in PR CI, and
+      `release.yml`'s test job installs the root `Gemfile.lock` frozen
+      (`BUNDLE_FROZEN` whenever a lock is committed) — a stale root pin fails the
+      release before anything is published.
+- [ ] Working directory is clean. `bin/release` aborts on any uncommitted change.
 
 ## Release-prep PR (the changelog roll)
 
@@ -53,36 +61,44 @@ release` bumps them together.
 On a clean, up-to-date `main`:
 
 ```bash
-rake release[X.Y.Z]
+bin/release list        # last releases + what each bump would give
+bin/release --dry-run   # the version it would cut + the changes since the last tag
+bin/release             # patch bump (or: minor, major, an explicit X.Y.Z)
 ```
 
-That one task, in order:
+`bin/release` refuses unless you're on a clean `main` that matches
+`origin/main`, checks no tracked lockfile pins pgbus below the new version, asks
+for confirmation, then runs `rake release[X.Y.Z]`, which in order:
 
-1. Aborts unless the working directory is clean.
-2. Updates `lib/pgbus/version.rb` to `X.Y.Z` (the single source of truth;
-   `release.yml` fails the publish if the tag and `Pgbus::VERSION` disagree).
-3. Runs `gem build pgbus.gemspec --strict` as a local sanity check (and removes
+1. Aborts unless on `main` with a clean working directory.
+2. Reads every tracked lockfile that sources pgbus (`Gemfile.lock`,
+   `gemfiles/rails_7_1.gemfile.lock`, `docs/Gemfile.lock`) and aborts, before
+   touching anything, if one has no `pgbus (X.Y.Z)` pin to bump.
+3. Updates `lib/pgbus/version.rb` to `X.Y.Z` (the single source of truth;
+   `release.yml` fails the publish if the tag and the gemspec version disagree).
+4. Bumps the `pgbus (X.Y.Z)` pins in those lockfiles in place (no re-resolve).
+5. Runs `gem build pgbus.gemspec --strict` as a local sanity check (and removes
    the built `.gem`).
-4. Commits `chore: bump version to X.Y.Z`.
-5. Pushes to `origin/main`.
-6. Creates the GitHub Release `vX.Y.Z` with `gh release create --generate-notes`,
+6. Commits `chore: bump version to X.Y.Z`.
+7. Pushes to `origin/main`.
+8. Creates the GitHub Release `vX.Y.Z` with `gh release create --generate-notes`,
    which is what triggers the publish pipeline below.
 
-You never run `git tag`, `git push --tags`, or `gem push` by hand — `rake release`
+You never run `git tag`, `git push --tags`, or `gem push` by hand — `bin/release`
 creates the tag+Release and the workflow owns publishing.
 
 ### Variants
 
-- **Prerelease:** `rake release[1.2.0.rc1]` — a version matching `alpha|beta|rc|pre`
+- **Prerelease:** `bin/release 1.2.0.rc1` — a version matching `alpha|beta|rc|pre`
   is auto-detected and the GitHub Release is marked `--prerelease`.
   `rake release[pre]` cuts a prerelease of the *current* `version.rb` without
   bumping.
-- **Re-cut a botched release:** `rake release[X.Y.Z,force]` — deletes the existing
+- **Re-cut a botched release:** `bin/release X.Y.Z --force` — deletes the existing
   `vX.Y.Z` GitHub Release and tag (remote + local) first, then re-runs. Use only
   when a release failed partway and needs redoing; never to overwrite a release
   that already published to RubyGems.
 
-## What `release.yml` does after `rake release` creates the Release
+## What `release.yml` does after `bin/release` creates the Release
 
 Triggered by `release: [published]`, the workflow runs these jobs in order:
 
@@ -90,7 +106,7 @@ Triggered by `release: [published]`, the workflow runs these jobs in order:
    broken build blocks the publish.
 
 2. **`build`** (needs `test`) —
-   - **Tag/version consistency check:** reads `Pgbus::VERSION`, strips the `v`
+   - **Tag/version consistency check:** reads the `pgbus.gemspec` version, strips the `v`
      from the release tag, and fails the job if they differ.
    - Builds the gem with `gem build pgbus.gemspec --strict`.
    - **Gem-contents guard:** unpacks the gem and fails if any `.git*` file,
@@ -103,16 +119,17 @@ Triggered by `release: [published]`, the workflow runs these jobs in order:
    - Verifies the checksums.
    - Configures RubyGems **trusted publishing** credentials via OIDC
      (`rubygems/configure-rubygems-credentials`) — no long-lived API token.
-   - Signs the gem with `sigstore-cli` and pushes with `gem push --attestation`
-     (Sigstore attestation), then uploads the `.sigstore.json` bundle as the
-     `sigstore` artifact.
+   - Signs the gem with `sigstore-cli`, then pushes with `gem push --attestation`
+     (Sigstore attestation) unless that version is already on RubyGems (a re-run
+     skips the push but still signs), and uploads the `.sigstore.json` bundle as
+     the `sigstore` artifact.
 
 4. **`upload-release-assets`** (needs `build` + `publish-rubygems`,
    `contents: write`) — attaches the `.gem`, both checksum files, and the
    Sigstore bundle to the GitHub Release.
 
 If any job fails, the gem is not published; fix the cause, then re-cut with
-`rake release[X.Y.Z,force]`.
+`bin/release X.Y.Z --force`.
 
 ## Post-release notes
 
