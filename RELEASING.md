@@ -36,8 +36,10 @@ Run these on `main` (or the branch you're about to merge and release):
       you normally don't touch them; if you changed dependencies, re-lock the
       affected file (`bundle install`, `BUNDLE_GEMFILE=gemfiles/rails_7_1.gemfile
       bundle install`, `cd docs && bundle install`) and commit it in the
-      release-prep PR. All three are installed frozen in CI — a stale one fails
-      `release.yml`'s own `bundle install` before anything is published.
+      release-prep PR. All three are installed frozen in PR CI, and
+      `release.yml`'s test job installs the root `Gemfile.lock` frozen
+      (`BUNDLE_FROZEN` whenever a lock is committed) — a stale root pin fails the
+      release before anything is published.
 - [ ] Working directory is clean. `bin/release` aborts on any uncommitted change.
 
 ## Release-prep PR (the changelog roll)
