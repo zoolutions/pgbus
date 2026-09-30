@@ -1,0 +1,36 @@
+docs/Gemfile.lock
+  ai_agent 17-19,23-28,30-34,37-39,47,49-52,55-56,61-62,64-68,70-74,76,91,93,109,111,119,121,130,132,146,152,171,177,182,184,203-204,235,247-258,260,271-273,289,297,319-320,330,333,335,337,341,353,358-362,370-372,403,405,426-436,439,441,453,455,459,463-464,470,472,480,483,485-486,496-497,514,521,525,531,533,541-544,549,553-557,562-563
+docs/package.json
+  s_caaa3afdbc1a68::t_0cb535356ea2cf 8-10
+docs/.gitignore
+  s_caaa3afdbc1a68::t_87e649fe54ccad 38-39
+docs/AGENTS.md
+  s_caaa3afdbc1a68::t_87e649fe54ccad 69-71
+.bun-version
+  s_caaa3afdbc1a68::t_705b11956397f4 1
+docs/config/initializers/docs_kit.rb
+  s_caaa3afdbc1a68::t_87e649fe54ccad 3
+docs/Gemfile
+  s_caaa3afdbc1a68::t_0cb535356ea2cf 23-26
+  s_caaa3afdbc1a68::t_807df1d6b8794b 8
+docs/Dockerfile
+  s_caaa3afdbc1a68::t_87e649fe54ccad 11
+docs/bun.lock
+  ai_agent 7-9,52,54,56,58,60,62,64,66,68,70,72,74,76,78,80,84,88,140
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "e16734e81a587f084308109f8117d581eafc8e3d",
+  "prompts": {},
+  "sessions": {
+    "s_caaa3afdbc1a68": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c89479f9-d4d4-4208-9c69-aae294181ee4",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
