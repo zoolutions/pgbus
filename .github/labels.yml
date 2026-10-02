@@ -29,7 +29,7 @@ labels:
     description: Refactoring or cleanup that pays down an accepted shortcut
     group: type
   - name: security
-    color: e9e257
+    color: "e9e257"
     description: Vulnerability, hardening, or an authorization correctness fix
     group: type
   - name: documentation
@@ -109,7 +109,7 @@ labels:
     description: The test helpers shipped to host apps
     group: area
   - name: stability
-    color: 300e84
+    color: "300e84"
     description: Crash safety, recovery and resilience under failure (applied by judgment)
     group: area
   - name: core
@@ -124,7 +124,7 @@ labels:
     description: Has a /plan body with Context, Decision, Steps and Gates; ready for /lfg
     group: status
   - name: epic
-    color: 5319e7
+    color: "5319e7"
     description: Umbrella item tracking several smaller issues
     group: status
   - name: blocker
@@ -155,7 +155,7 @@ labels:
     description: This issue or pull request already exists
     group: community
   - name: invalid
-    color: e4e669
+    color: "e4e669"
     description: This doesn't seem right
     group: community
   - name: wontfix
@@ -173,26 +173,32 @@ paths:
   "lib/tasks/pgbus_streams.rake": streaming
   "lib/pgbus/{client,pgmq_schema,queue_factory,queue_name_validator}.rb": client
   "lib/pgbus/{client,pgmq_schema}/**/*": client
+  "lib/pgbus/{client,pgmq_schema}.rb": client
   "lib/tasks/pgbus_{pgmq,queues}.rake": client
   "lib/pgbus/{dedicated_connection,bus_record,database_tasks_guard}.rb": connections
   "lib/pgbus/process/**/*": process
   "lib/pgbus/execution_pools/**/*": process
+  "lib/pgbus/execution_pools.rb": process
   "lib/pgbus/{execution_pools,visibility_heartbeat,circuit_breaker,fair_share,health_probe}.rb": process
   "lib/puma/**/*": process
   "lib/pgbus/{active_job,batch,concurrency,recurring}/**/*": jobs
+  "lib/pgbus/{active_job,batch,concurrency,recurring}.rb": jobs
   "lib/pgbus/{batch,concurrency,uniqueness,retry_backoff,dedup_cache}.rb": jobs
   "lib/pgbus/event_bus/**/*": event-bus
   "lib/pgbus/outbox/**/*": event-bus
+  "lib/pgbus/outbox.rb": event-bus
   "lib/pgbus/{event,outbox,failed_event_recorder}.rb": event-bus
   "app/**/*": dashboard
   "lib/pgbus/web/**/*": dashboard
   "config/routes.rb": dashboard
   "config/locales/**/*": dashboard
   "lib/pgbus/metrics/**/*": observability
+  "lib/pgbus/metrics.rb": observability
   "lib/pgbus/{metrics,instrumentation,log_formatter,error_reporter,stat_buffer,rate_counter}.rb": observability
   "lib/pgbus/mcp.rb": mcp
   "lib/pgbus/mcp/**/*": mcp
   "lib/pgbus/cli/**/*": cli
+  "lib/pgbus/cli.rb": cli
   "lib/pgbus/{cli,doctor,autovacuum_tuning,table_maintenance}.rb": cli
   "lib/tasks/pgbus_{doctor,autovacuum}.rake": cli
   "exe/**/*": cli
@@ -205,12 +211,42 @@ paths:
   "lib/pgbus.rb": core
   "lib/pgbus/{configuration,engine,current_attributes,serializer,support}.rb": core
   "lib/pgbus/configuration/**/*": core
+  "lib/pgbus/configuration.rb": core
+  "spec/pgbus/streams_spec.rb": streaming
+  "spec/pgbus/streams/**/*": streaming
+  "spec/pgbus/{client,pgmq_schema,queue_factory,queue_name_validator}_spec.rb": client
+  "spec/pgbus/{client,pgmq_schema}/**/*": client
+  "spec/pgbus/{client,pgmq_schema}_spec.rb": client
+  "spec/pgbus/{dedicated_connection,bus_record,database_tasks_guard}_spec.rb": connections
+  "spec/pgbus/process/**/*": process
+  "spec/pgbus/execution_pools/**/*": process
+  "spec/pgbus/execution_pools_spec.rb": process
+  "spec/pgbus/{execution_pools,visibility_heartbeat,circuit_breaker,fair_share,health_probe}_spec.rb": process
+  "spec/pgbus/{active_job,batch,concurrency,recurring}/**/*": jobs
+  "spec/pgbus/{active_job,batch,concurrency,recurring}_spec.rb": jobs
+  "spec/pgbus/{batch,concurrency,uniqueness,retry_backoff,dedup_cache}_spec.rb": jobs
+  "spec/pgbus/event_bus/**/*": event-bus
+  "spec/pgbus/outbox/**/*": event-bus
+  "spec/pgbus/outbox_spec.rb": event-bus
+  "spec/pgbus/{event,outbox,failed_event_recorder}_spec.rb": event-bus
+  "spec/pgbus/web/**/*": dashboard
+  "spec/pgbus/metrics/**/*": observability
+  "spec/pgbus/{metrics,instrumentation,log_formatter,error_reporter,stat_buffer,rate_counter}_spec.rb": observability
+  "spec/pgbus/mcp/**/*": mcp
+  "spec/pgbus/cli_spec.rb": cli
+  "spec/pgbus/{cli,doctor,autovacuum_tuning,table_maintenance}_spec.rb": cli
+  "spec/pgbus/generators/**/*": generators
+  "spec/pgbus/testing_spec.rb": testing
+  "spec/pgbus/testing/**/*": testing
+  "spec/pgbus_spec.rb": core
+  "spec/pgbus/{configuration,engine,current_attributes,serializer,support}_spec.rb": core
+  "spec/pgbus/configuration/**/*": core
+  "spec/pgbus/configuration_spec.rb": core
   ".github/**/*": devops
   "bin/release": devops
   "rakelib/**/*": devops
-  "Dockerfile*": devops
+  "**/Dockerfile*": devops
   ".claude/**/*": dx
   "{AGENTS,CLAUDE}.md": dx
   "bin/labels": dx
-  "lode/**/*": dx
   "docs/**/*": docs-site
