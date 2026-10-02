@@ -145,6 +145,7 @@ jobs:
           else
             gh issue create \
               --title "$title" \
+              --label dependencies --label client \
               --body "$(printf '%s\n\n**Current (vendored):** %s\n**Latest upstream:** %s\n**Release notes:** %s\n' "$BODY_DETAIL" "$CURRENT" "$LATEST" "$RELEASE_URL")"
           fi
 
@@ -187,6 +188,7 @@ jobs:
           else
             gh issue create \
               --title "$title" \
+              --label dependencies --label client \
               --body "$(printf '%s\n\n**Current (locked):** %s\n**Latest upstream:** %s\n**Release notes:** %s\n' "$BODY_DETAIL" "$CURRENT" "$LATEST" "$RELEASE_URL")"
           fi
 

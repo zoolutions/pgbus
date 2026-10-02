@@ -35,6 +35,9 @@ Style/StringLiterals:
 
 Style/StringLiteralsInInterpolation:
   EnforcedStyle: double_quotes
+  Exclude:
+    # bin/labels is the zoolutions labels kit, byte-identical across repos; see docs-kit LABELS_KIT.md
+    - bin/labels
 
 Style/Documentation:
   Enabled: false
