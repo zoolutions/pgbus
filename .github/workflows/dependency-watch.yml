@@ -31,7 +31,7 @@ concurrency:
 
 jobs:
   dependency-watch:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     name: Check upstream releases
     steps:
       - uses: actions/checkout@v6
