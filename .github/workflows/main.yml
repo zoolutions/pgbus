@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   security:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     name: Security
     steps:
       - uses: actions/checkout@v6
@@ -27,7 +27,7 @@ jobs:
         run: bundle exec bundle-audit check --update
 
   lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     name: Lint
     steps:
       - uses: actions/checkout@v6
@@ -64,7 +64,7 @@ jobs:
   # Ruby-version-independent) stays on 3.4; this leg is deliberately narrow.
   # See issue #284.
   lint_floor:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     name: Lint (Ruby 3.3 floor)
     steps:
       - uses: actions/checkout@v6
@@ -81,7 +81,7 @@ jobs:
         run: bundle exec rake build
 
   bench:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     name: Benchmarks (report only)
     steps:
       - uses: actions/checkout@v6
@@ -96,7 +96,7 @@ jobs:
         continue-on-error: true
         run: bundle exec rake bench:all
       - name: Upload benchmark report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: benchmarks
@@ -104,7 +104,7 @@ jobs:
           if-no-files-found: warn
 
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     name: Ruby ${{ matrix.ruby }} (Rails ${{ matrix.rails }})
     strategy:
       fail-fast: false
@@ -147,7 +147,7 @@ jobs:
       - name: Run unit tests
         run: bundle exec rspec spec/pgbus/ spec/generators/
       - name: Upload coverage report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: coverage-ruby-${{ matrix.ruby }}-rails-${{ matrix.rails }}
@@ -155,7 +155,7 @@ jobs:
           if-no-files-found: warn
 
   integration:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     name: Integration (PG ${{ matrix.postgres }})
     strategy:
       fail-fast: false
@@ -303,7 +303,7 @@ jobs:
         run: bundle exec rspec spec/integration/
 
   system_test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     name: System Tests
     env:
       RAILS_ENV: test
@@ -350,7 +350,7 @@ jobs:
         run: bundle exec rspec spec/system/
 
       - name: Upload failure screenshots
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: capybara-screenshots
