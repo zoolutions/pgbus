@@ -91,7 +91,7 @@ class UniqueUntilExecutedJob < ActiveJob::Base
   include Pgbus::Uniqueness
 
   self.queue_adapter = :inline
-  ensures_uniqueness strategy: :until_executed, lock_ttl: 3600, on_conflict: :discard
+  ensures_uniqueness strategy: :until_executed, key: ->(arg) { "ue:#{arg}" }, on_conflict: :discard
   def perform(*); end
 end
 
@@ -99,7 +99,7 @@ class UniqueWhileExecutingJob < ActiveJob::Base
   include Pgbus::Uniqueness
 
   self.queue_adapter = :inline
-  ensures_uniqueness strategy: :while_executing, lock_ttl: 3600, on_conflict: :discard
+  ensures_uniqueness strategy: :while_executing, key: ->(arg) { "we:#{arg}" }, on_conflict: :discard
   def perform(*); end
 end
 
@@ -150,8 +150,7 @@ Benchmark.ips do |x|
       payload = {
         "job_class" => "UniqueUntilExecutedJob", "arguments" => [i],
         Pgbus::Uniqueness::METADATA_KEY => key,
-        Pgbus::Uniqueness::STRATEGY_KEY => "until_executed",
-        Pgbus::Uniqueness::TTL_KEY => 3600
+        Pgbus::Uniqueness::STRATEGY_KEY => "until_executed"
       }
       Pgbus::UniquenessKey.acquire!(key, queue_name: "default", msg_id: 0)
       client.send_message("default", payload)
@@ -201,12 +200,10 @@ plain_payload = PlainBenchJob.new(42).serialize
 ue_payload = UniqueUntilExecutedJob.new(42).serialize
 ue_payload[Pgbus::Uniqueness::METADATA_KEY] = "bench-exec-ue"
 ue_payload[Pgbus::Uniqueness::STRATEGY_KEY] = "until_executed"
-ue_payload[Pgbus::Uniqueness::TTL_KEY] = 3600
 
 we_payload = UniqueWhileExecutingJob.new(42).serialize
 we_payload[Pgbus::Uniqueness::METADATA_KEY] = "bench-exec-we"
 we_payload[Pgbus::Uniqueness::STRATEGY_KEY] = "while_executing"
-we_payload[Pgbus::Uniqueness::TTL_KEY] = 3600
 
 Benchmark.ips do |x|
   x.config(time: 5, warmup: 2)
