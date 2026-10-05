@@ -1,0 +1,40 @@
+benchmarks/support/worker_profile_runner.rb
+  s_183490a5780def::t_f76a5cad212042 71-73,96-98
+spec/pgbus/client_spec.rb
+  s_183490a5780def::t_01377a1d932973 1452-1466,1468-1473
+  s_183490a5780def::t_b73d744a6e30ad 1467
+spec/pgbus/failed_event_recorder_spec.rb
+  s_183490a5780def::t_7465bb22cee4de 116-135
+lib/pgbus/doctor.rb
+  s_183490a5780def::t_f76a5cad212042 177,181-182
+spec/pgbus/doctor_spec.rb
+  s_183490a5780def::t_f76a5cad212042 428
+README.md
+  s_183490a5780def::t_f76a5cad212042 2039
+docs/app/views/docs/pages/cli_generators.rb
+  s_183490a5780def::t_f76a5cad212042 57
+lib/pgbus/failed_event_recorder.rb
+  s_183490a5780def::t_6bf677fbfbe2c5 50-66
+benchmarks/worker_profile_bench.rb
+  s_183490a5780def::t_f76a5cad212042 36-38
+CHANGELOG.md
+  ai_agent 19
+lib/pgbus/client.rb
+  s_183490a5780def::t_6adb84cdbb8b01 702-704
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "b9077d8475e647d7b93ae372b5ef318219cc9820",
+  "prompts": {},
+  "sessions": {
+    "s_183490a5780def": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "44a52efc-7d4a-453d-b4a0-46d287d131dc",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
