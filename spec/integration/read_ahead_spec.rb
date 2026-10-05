@@ -12,7 +12,8 @@ RSpec.describe "Read-ahead (integration)", :integration do
     Class.new(ActiveJob::Base) do
       self.queue_adapter = :inline
       def self.name = "ReadAheadSpec::SlowJob"
-      def perform(*) = sleep(1.5) # outlives the drain window asserted below
+      # Outlives the drain window asserted below.
+      def perform(*) = sleep(1.5)
     end
   end
 

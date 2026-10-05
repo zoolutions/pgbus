@@ -18,6 +18,7 @@ class Views::Docs::Pages::RunningWorkers < DocsUI::Page
     connection_circuit_breaker
     read_timeouts
     prefetch
+    read_ahead
     async
   end
 
@@ -277,6 +278,33 @@ class Views::Docs::Pages::RunningWorkers < DocsUI::Page
       DocsUI::Code(<<~RUBY)
         Pgbus.configure { |c| c.prefetch_limit = 20 } # nil = unlimited (default)
       RUBY
+    end
+  end
+
+  def read_ahead
+    DocsUI::Section("Read-ahead", description: "For a database on another host.") do
+      md <<~'MD'
+        By default a worker reads as many messages as it has free threads. Once the
+        pool is busy, threads free one at a time, so the worker makes one read round
+        trip per job. Next to the database that is free. Across a network, that
+        round trip becomes the ceiling. `read_ahead` claims up to N messages beyond
+        the free threads and holds them until a thread frees, so one read feeds
+        many jobs:
+      MD
+      DocsUI::Code(<<~RUBY, filename: "config/initializers/pgbus.rb")
+        Pgbus.configure do |config|
+          config.read_ahead = 12 # 0 = off (default)
+          config.capsule :api, queues: %w[api], threads: 12, read_ahead: 12
+          config.event_consumers = [{ topics: ["orders.#"], threads: 8, read_ahead: 8 }]
+        end
+      RUBY
+      md <<~'MD'
+        Start with `read_ahead` equal to `threads`. Buffered messages stay invisible
+        (the visibility heartbeat holds them) until their job starts. On drain,
+        recycle, pause or shutdown they go straight back to the queue, with
+        `read_ct` already counted. They also count as in flight, so `prefetch_limit`
+        still caps the total.
+      MD
     end
   end
 

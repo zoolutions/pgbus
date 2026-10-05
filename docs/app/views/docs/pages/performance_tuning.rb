@@ -13,6 +13,7 @@ class Views::Docs::Pages::PerformanceTuning < DocsUI::Page
     autovacuum
     archive
     job_burst_tuning
+    remote_database
     streams_master_hub
     streams_pool_autoscaling
     fanout_throughput
@@ -20,6 +21,34 @@ class Views::Docs::Pages::PerformanceTuning < DocsUI::Page
   end
 
   private
+
+  def remote_database
+    DocsUI::Section("Database on another host: turn on read-ahead",
+                    description: "Under network latency the worker's single reader is the ceiling.") do
+      md <<~'MD'
+        A worker reads in one loop and runs jobs on its pool. Once the pool is
+        busy, threads free one at a time, so each read claims one message: one
+        read round trip per job. Add a millisecond of network to every round trip
+        and that loop caps a worker at a fixed number of jobs per second, however
+        many threads it has. `read_ahead` claims extra messages and holds them
+        (kept invisible by the visibility heartbeat) until a thread frees, so one
+        read feeds many jobs. Start with `read_ahead` equal to `threads`:
+      MD
+      DocsUI::Code(<<~RUBY, filename: "config/initializers/pgbus.rb")
+        Pgbus.configure { |config| config.read_ahead = 12 } # or per capsule / event consumer
+      RUBY
+      DocsUI::Callout(:note) do
+        plain "Measure it on your own topology with "
+        code { "rake bench:worker_profile" }
+        plain " (set "
+        code { "PGBUS_BENCH_PROXY_URL" }
+        plain " to a Postgres behind toxiproxy, and "
+        code { "WP_BENCH_READ_AHEAD" }
+        plain " to the value to try). It drives a real worker and a real event "
+        plain "consumer and reports jobs/s plus where each thread's time goes."
+      end
+    end
+  end
 
   def job_burst_tuning
     DocsUI::Section("Job bursts: raise threads and the pool together",
