@@ -1,0 +1,35 @@
+spec/pgbus/active_job/executor_allocation_budget_spec.rb
+  s_183490a5780def::t_80156ba7ead89d 32-40
+  s_183490a5780def::t_241edb4947aac9 26
+  s_183490a5780def::t_b2ec9c5ba65890 55,61
+  s_183490a5780def::t_cb700a215c16ba 53-54,56,62-72
+  s_183490a5780def::t_e2e9c89a5b8666 22-25
+  s_183490a5780def::t_eca3e0f9b7f5c0 45
+  s_183490a5780def::t_d196d91027a575 1-21,27-31,41-44,46-52,57-60,73-74
+spec/integration/job_lifecycle_spec.rb
+  s_183490a5780def::t_672ec6fe375980 52-101
+spec/pgbus/active_job/executor_spec.rb
+  s_183490a5780def::t_9a31e080d93f60 495
+  s_183490a5780def::t_01d682752fdfd0 125-127,130-138
+lib/pgbus/active_job/executor.rb
+  s_183490a5780def::t_1bb9dfff6045b3 119-123
+  s_183490a5780def::t_b2ec9c5ba65890 22,44,72,97,103,116,128,156,176-177
+  s_183490a5780def::t_3478e218d7e0cd 111
+  s_183490a5780def::t_2920a377058ae7 178-180
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "35ae5656102c4bcfadb82c6ab9c95d9261f4bd04",
+  "prompts": {},
+  "sessions": {
+    "s_183490a5780def": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "44a52efc-7d4a-453d-b4a0-46d287d131dc",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
