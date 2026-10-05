@@ -1,0 +1,31 @@
+lib/pgbus/visibility_heartbeat.rb
+  s_d9f3f782b9c155::t_e03384c1b99fef 33-35,85-103,150-152,154-157
+spec/pgbus/visibility_heartbeat_spec.rb
+  s_d9f3f782b9c155::t_55a5d24ffef91b 194-256
+spec/pgbus/process/claim_buffer_spec.rb
+  s_d9f3f782b9c155::t_a7cbf6ecd7a966 21
+  s_d9f3f782b9c155::t_8d7f22daf72ddb 1-20,22-163
+lib/pgbus/process/claim_buffer.rb
+  s_d9f3f782b9c155::t_6ac68d3750a5da 1-104
+spec/pgbus/configuration_spec.rb
+  s_d9f3f782b9c155::t_f2d7e72a8982a0 224-279
+lib/pgbus/configuration.rb
+  s_d9f3f782b9c155::t_102f089545b8f8 15-20,286,583-592,848-849,868-870,873-878
+  s_d9f3f782b9c155::t_81837b17c506ff 871-872
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "0686791fa54916fdd46caaf620bd03a3d8f9672b",
+  "prompts": {},
+  "sessions": {
+    "s_d9f3f782b9c155": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c639d67a-07d6-4aff-996e-6b764588a015",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
