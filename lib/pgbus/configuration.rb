@@ -876,6 +876,20 @@ module Pgbus
 
         raise Pgbus::ConfigurationError, "#{name} must be a non-negative Integer (got #{value.inspect})"
       end
+      warn_read_ahead_without_heartbeat(settings)
+    end
+
+    # Buffered claims are kept invisible only by the visibility heartbeat.
+    # Without it a message buffered longer than visibility_timeout can be
+    # claimed by another worker while it still waits here. Legal, but warned.
+    def warn_read_ahead_without_heartbeat(settings)
+      return if visibility_heartbeat
+      return unless settings.any? { |_name, value| value.positive? }
+
+      Pgbus.logger.warn do
+        "[Pgbus] read_ahead is on but visibility_heartbeat is false — a message buffered longer than " \
+          "visibility_timeout (#{visibility_timeout}s) can be claimed and run by another worker"
+      end
     end
 
     # An explicit shutdown_timeout must be a positive number; nil keeps the

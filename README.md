@@ -555,8 +555,8 @@ end
 ```
 
 - **When to turn it on:** when Postgres is not on the same host as the worker. Start with `read_ahead` equal to `threads`. With a local database it buys little, because the worker is CPU-bound there. Under +1 ms of latency, `read_ahead` 12 took a 12-thread worker from ~1.3–1.7k to ~2.3–2.5k no-op jobs/s (`docs/performance.md`, "Read-ahead"). The next ceiling is the connection pool, so raise `pool_size` with it.
-- **Visibility:** buffered messages are kept invisible by the visibility heartbeat until their job starts, so a long wait never lets another worker claim them.
-- **Shutdown and recycle:** when a worker drains, recycles, pauses or shuts down, buffered messages go straight back to the queue (`set_vt` 0), not after `visibility_timeout`. Their `read_ct` has already been incremented, the same as after a crash.
+- **Visibility:** buffered messages are kept invisible by the visibility heartbeat until their job starts, so a long wait never lets another worker claim them. With `visibility_heartbeat = false` nothing holds them, and a message buffered past `visibility_timeout` can run twice; `validate!` warns about that combination.
+- **Shutdown and recycle:** when a worker drains, recycles, pauses or shuts down, buffered messages go straight back to the queue (`set_vt` 0), not after `visibility_timeout`. Their `read_ct` has already been incremented, the same as after a crash, so with `zombie_detection` on, the worker that picks one up logs it as a zombie redelivery.
 - **With `prefetch_limit`:** buffered messages count as in flight, so `prefetch_limit` still caps everything a worker has claimed.
 - **Multi-queue workers:** the plain multi-queue read (no priority, fair share or group mode) can claim and discard rows past its limit. A larger read makes that worse; see `docs/performance.md`.
 

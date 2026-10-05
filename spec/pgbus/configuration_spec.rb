@@ -258,6 +258,31 @@ RSpec.describe Pgbus::Configuration do
       expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /read_ahead/)
     end
 
+    # Without the heartbeat nothing keeps a buffered message invisible past
+    # visibility_timeout, so another worker can claim it while it waits here.
+    it "warns when read_ahead is on but the visibility heartbeat is off" do
+      config.read_ahead = 4
+      config.visibility_heartbeat = false
+      allow(Pgbus.logger).to receive(:warn)
+
+      config.validate!
+
+      expect(Pgbus.logger).to have_received(:warn) do |&block|
+        expect(block.call).to match(/read_ahead.*visibility_heartbeat/)
+      end
+    end
+
+    it "warns for a capsule read_ahead with the heartbeat off, and not when every read_ahead is 0" do
+      config.visibility_heartbeat = false
+      allow(Pgbus.logger).to receive(:warn)
+      config.validate!
+      expect(Pgbus.logger).not_to have_received(:warn)
+
+      config.workers = [{ queues: %w[default], threads: 2, read_ahead: 3 }]
+      config.validate!
+      expect(Pgbus.logger).to have_received(:warn).once
+    end
+
     it "rejects an event consumer read_ahead that is not a non-negative Integer" do
       config.event_consumers = [{ topics: ["orders.#"], threads: 2, read_ahead: "8" }]
       expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /read_ahead/)

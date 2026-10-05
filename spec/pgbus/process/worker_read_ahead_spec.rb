@@ -230,6 +230,22 @@ RSpec.describe Pgbus::Process::Worker, "#claim_and_execute with read-ahead (issu
       runner&.kill
     end
 
+    it "hands the buffer back when the worker is paused" do
+      runner = run_until_buffered
+
+      worker.lifecycle.transition_to(:paused)
+      deadline = Time.now + 2
+      sleep 0.01 until worker.stats[:in_flight].zero? || Time.now > deadline
+
+      expect(mock_client).to have_received(:set_visibility_timeout).with("default", anything, vt: 0, prefixed: true)
+                                                                   .exactly(3).times
+      expect(worker.stats).to include(in_flight: 0, buffered: 0)
+      worker.graceful_shutdown
+      expect(runner.join(2)).to eq(runner)
+    ensure
+      runner&.kill
+    end
+
     it "takes the same path when a recycle limit starts the drain" do
       runner = run_until_buffered
 

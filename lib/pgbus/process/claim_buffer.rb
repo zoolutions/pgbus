@@ -18,7 +18,11 @@ module Pgbus
     # Every buffered message is kept invisible by a VisibilityHeartbeat hold
     # from claim until the run starts, under the executor's key
     # (`source_queue || queue_name`, `prefixed: source_queue.nil?`), so the
-    # run's own tracking takes over the same entry with no gap.
+    # run's own tracking takes over the same entry with no gap. The hold does
+    # not know the job class, so a job that opted out with
+    # `pgbus_visibility_heartbeat false` is still held while it waits here:
+    # the opt-out covers its run, not the wait. With the heartbeat disabled
+    # globally there is no hold at all (Configuration#validate! warns).
     #
     # Only ever touched from the owning process's loop thread, so no mutex.
     class ClaimBuffer

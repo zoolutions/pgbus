@@ -212,9 +212,12 @@ What the numbers say:
   result for no-op jobs; a real job's own work dilutes it.
 - **Locally it changes nothing measurable.** There the worker is CPU-bound
   under the GVL (#484), so a faster reader has nothing to feed. `read_ahead` 0
-  matches the baseline within the run-to-run spread in every cell. It still
-  routes each claim through the buffer (one heartbeat hold and release per
-  message), and that cost does not show.
+  overlaps the baseline's run-to-run range in 7 of 8 cells. The exception,
+  consumer / proxied / no JIT, sits 2–18 % below (1 283–1 295 vs 1 326–1 576),
+  and round 1's worker / proxied / no JIT `read_ahead` 0 cell was 13 % below
+  its baseline (1 108 vs 1 277). Under load 29–45 that is plausibly noise, but
+  it was not proven to be. `read_ahead` 0 still routes each claim through the
+  buffer (one heartbeat hold and release per message).
 - **The next ceiling is the connection pool.** With the pool busy, job threads
   now spend 14–15 % of their time waiting to check out a pgmq connection (the
   bench sizes the pool from pgbus defaults, ~7 for 12 threads), up from 2–3 %.
@@ -231,7 +234,13 @@ Known limits, documented rather than solved:
   different read statement.
 - A message handed back on drain, recycle, pause or shutdown (`set_vt` 0) has
   already had its `read_ct` incremented, the same cost a crash or stale claim
-  pays.
+  pays. With `zombie_detection` on, the next claimant logs it as a zombie
+  redelivery (`read_ct > 1`, no failed-event row): up to `read_ahead` such
+  warnings per recycle.
+- With `visibility_heartbeat = false` there is no hold, so a message buffered
+  longer than `visibility_timeout` can be claimed and run by another worker.
+  `Configuration#validate!` warns when `read_ahead > 0` meets a disabled
+  heartbeat.
 
 ### Native compilation (Spinel, Roundhouse) and Rust
 

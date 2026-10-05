@@ -303,7 +303,8 @@ class Views::Docs::Pages::RunningWorkers < DocsUI::Page
         (the visibility heartbeat holds them) until their job starts. On drain,
         recycle, pause or shutdown they go straight back to the queue, with
         `read_ct` already counted. They also count as in flight, so `prefetch_limit`
-        still caps the total.
+        still caps the total. The hold needs `visibility_heartbeat` (on by default);
+        with it off, a message buffered past `visibility_timeout` can run twice.
       MD
     end
   end
