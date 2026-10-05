@@ -221,6 +221,62 @@ RSpec.describe Pgbus::Configuration do
     end
   end
 
+  # Issue #486: read-ahead claims beyond the free threads. Off by default.
+  describe "#read_ahead" do
+    it "defaults to 0 (off)" do
+      expect(config.read_ahead).to eq(0)
+    end
+
+    it "normalises nil to 0" do
+      config.read_ahead = nil
+      expect(config.read_ahead).to eq(0)
+    end
+
+    it "accepts 0 and positive Integers" do
+      [0, 12].each do |value|
+        config.read_ahead = value
+        expect { config.validate! }.not_to raise_error
+      end
+    end
+
+    it "rejects a negative or non-Integer value" do
+      [-1, 2.5, "4"].each do |value|
+        config.read_ahead = value
+        expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /read_ahead/)
+      end
+    end
+
+    it "is stored by the capsule DSL" do
+      config.workers = nil
+      config.capsule :fast, queues: %w[fast], threads: 4, read_ahead: 4
+
+      expect(config.capsule_named(:fast)[:read_ahead]).to eq(4)
+    end
+
+    it "rejects a capsule read_ahead that is not a non-negative Integer" do
+      config.workers = [{ queues: %w[default], threads: 2, read_ahead: -3 }]
+      expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /read_ahead/)
+    end
+
+    it "rejects an event consumer read_ahead that is not a non-negative Integer" do
+      config.event_consumers = [{ topics: ["orders.#"], threads: 2, read_ahead: "8" }]
+      expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /read_ahead/)
+    end
+  end
+
+  describe "#read_ahead_for" do
+    it "returns the global value when the entry has no override" do
+      config.read_ahead = 6
+      expect(config.read_ahead_for({ queues: %w[default] })).to eq(6)
+    end
+
+    it "returns the capsule or consumer entry's override" do
+      config.read_ahead = 6
+      expect(config.read_ahead_for({ queues: %w[default], read_ahead: 2 })).to eq(2)
+      expect(config.read_ahead_for({ topics: ["orders.#"], read_ahead: 0 })).to eq(0)
+    end
+  end
+
   describe "#queue_name" do
     it "prefixes the queue name" do
       expect(config.queue_name("critical")).to eq("pgbus_critical")

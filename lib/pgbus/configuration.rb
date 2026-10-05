@@ -12,6 +12,12 @@ module Pgbus
 
     # Worker settings
     attr_accessor :polling_interval, :prefetch_limit, :execution_mode
+    # read_ahead (issue #486): how many messages a worker or event consumer
+    # claims beyond its free threads and holds, heartbeated, until a thread
+    # frees. Under database latency one read then feeds many jobs instead of
+    # one. 0 (default) is off. Overridable per capsule / event_consumers entry
+    # (`read_ahead:`); prefetch_limit still caps everything claimed.
+    attr_reader :read_ahead
     # visibility_heartbeat / visibility_heartbeat_interval: while a job runs,
     # its message's visibility timeout is re-armed every interval seconds
     # (default: a third of visibility_timeout), so a job that outlives the
@@ -277,6 +283,7 @@ module Pgbus
       @visibility_heartbeat_interval = nil
 
       @prefetch_limit = nil
+      @read_ahead = 0
       @execution_mode = :threads
 
       @max_jobs_per_worker = nil
@@ -573,6 +580,16 @@ module Pgbus
       (0...priority_levels).map { |p| priority_queue_name(name, p) }
     end
 
+    def read_ahead=(value)
+      @read_ahead = value.nil? ? 0 : value
+    end
+
+    # Read-ahead for one capsule or event_consumers entry, falling back to
+    # the global read_ahead (mirrors execution_mode_for).
+    def read_ahead_for(entry)
+      entry.fetch(:read_ahead, nil) || read_ahead
+    end
+
     # Returns the execution mode for a specific worker config hash,
     # falling back to the global execution_mode setting.
     def execution_mode_for(worker_config)
@@ -828,6 +845,8 @@ module Pgbus
               "prefetch_limit must be > 0"
       end
 
+      validate_read_ahead!
+
       if priority_levels && !(priority_levels.is_a?(Integer) && priority_levels >= 1 && priority_levels <= 10)
         raise Pgbus::ConfigurationError, "priority_levels must be an integer between 1 and 10"
       end
@@ -844,6 +863,19 @@ module Pgbus
       validate_fair_share!
 
       self
+    end
+
+    # Global, per-capsule and per-consumer read_ahead: a non-negative Integer.
+    def validate_read_ahead!
+      settings = [["read_ahead", read_ahead]]
+      Array(workers).each { |w| settings << ["worker read_ahead", w[:read_ahead]] unless w[:read_ahead].nil? }
+      Array(event_consumers).each { |c| settings << ["event consumer read_ahead", c[:read_ahead]] unless c[:read_ahead].nil? }
+
+      settings.each do |name, value|
+        next if value.is_a?(Integer) && !value.negative?
+
+        raise Pgbus::ConfigurationError, "#{name} must be a non-negative Integer (got #{value.inspect})"
+      end
     end
 
     # An explicit shutdown_timeout must be a positive number; nil keeps the
