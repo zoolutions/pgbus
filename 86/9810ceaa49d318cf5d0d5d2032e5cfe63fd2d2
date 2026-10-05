@@ -1,0 +1,34 @@
+lib/pgbus/process/claim_buffer.rb
+  s_d9f3f782b9c155::t_5406f90cad56a0 21-25
+README.md
+  s_d9f3f782b9c155::t_3d7915735276e1 558-559
+spec/pgbus/configuration_spec.rb
+  s_d9f3f782b9c155::t_1c025fbc48fc13 261-285
+docs/app/views/docs/pages/running_workers.rb
+  s_d9f3f782b9c155::t_3d7915735276e1 306-307
+CHANGELOG.md
+  s_d9f3f782b9c155::t_3d7915735276e1 21
+spec/pgbus/process/worker_read_ahead_spec.rb
+  s_d9f3f782b9c155::t_945f3c5f441701 237-238,240-241,243-244
+  s_d9f3f782b9c155::t_1c025fbc48fc13 233-236,239,242
+docs/performance.md
+  s_d9f3f782b9c155::t_3d7915735276e1 215-220,237-243
+lib/pgbus/configuration.rb
+  s_d9f3f782b9c155::t_5406f90cad56a0 879-892
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "869810ceaa49d318cf5d0d5d2032e5cfe63fd2d2",
+  "prompts": {},
+  "sessions": {
+    "s_d9f3f782b9c155": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c639d67a-07d6-4aff-996e-6b764588a015",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
