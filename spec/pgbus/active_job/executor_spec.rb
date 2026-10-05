@@ -122,8 +122,20 @@ RSpec.describe Pgbus::ActiveJob::Executor do
         expect(result).to eq(:success)
       end
 
-      it "clears any prior failed event record" do
+      # A failed-event row is only ever written after a failed attempt, so a
+      # first delivery cannot have one: skip the per-job DELETE (issue #484).
+      it "does not touch pgbus_failed_events on a first delivery" do
         executor.execute(message, queue_name)
+
+        expect(Pgbus::FailedEventRecorder).not_to have_received(:clear!)
+      end
+    end
+
+    context "when a redelivered job succeeds" do
+      let(:message) { build_message_double(msg_id: 5, message: message_json, read_ct: 2) }
+
+      it "clears the failed event recorded by the earlier attempt" do
+        expect(executor.execute(message, queue_name)).to eq(:success)
 
         expect(Pgbus::FailedEventRecorder).to have_received(:clear!).with(
           queue_name: queue_name, msg_id: 5
@@ -480,6 +492,7 @@ RSpec.describe Pgbus::ActiveJob::Executor do
         expect(result).to eq(:duplicate)
         expect(Pgbus::Concurrency::Semaphore).not_to have_received(:signal)
         expect(Pgbus::Batch).not_to have_received(:job_completed)
+        expect(Pgbus::FailedEventRecorder).not_to have_received(:clear!)
       end
 
       # archive_from retries once on a connection error. If our first archive

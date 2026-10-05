@@ -19,8 +19,7 @@ module Pgbus
 
       def execute(message, queue_name, source_queue: nil)
         execution_start = monotonic_now
-        tag = "msg_id=#{message.msg_id} queue=#{queue_name} read_ct=#{message.read_ct}"
-        Pgbus.logger.debug { "[Pgbus::Executor] start #{tag}" }
+        Pgbus.logger.debug { "[Pgbus::Executor] start #{log_tag(message, queue_name)}" }
 
         payload = JSON.parse(message.message)
         job_class = payload["job_class"]
@@ -42,7 +41,7 @@ module Pgbus
             read_ct: read_count,
             msg_id: message.msg_id.to_i
           )
-          Pgbus.logger.debug { "[Pgbus::Executor] dead_lettered #{tag} job_class=#{job_class}" }
+          Pgbus.logger.debug { "[Pgbus::Executor] dead_lettered #{log_tag(message, queue_name)} job_class=#{job_class}" }
           return :dead_lettered
         end
         uniqueness_key = Uniqueness.extract_key(payload)
@@ -70,7 +69,7 @@ module Pgbus
           end
         end
 
-        Pgbus.logger.debug { "[Pgbus::Executor] deserialized #{tag} job_class=#{job_class}" }
+        Pgbus.logger.debug { "[Pgbus::Executor] deserialized #{log_tag(message, queue_name)} job_class=#{job_class}" }
         job_succeeded = false
         retried = false
 
@@ -95,13 +94,13 @@ module Pgbus
           # job data, so hand it to the job before perform — that is what makes
           # `batch` (and `batch.enqueue` for open batches) work inside a job.
           assign_batch_id(job, payload)
-          Pgbus.logger.debug { "[Pgbus::Executor] running #{tag} job_class=#{job_class}" }
+          Pgbus.logger.debug { "[Pgbus::Executor] running #{log_tag(message, queue_name)} job_class=#{job_class}" }
           with_visibility_heartbeat(job, queue_name, msg_id, source_queue, payload) { execute_job(job) }
           # retry_on re-enqueues from inside perform_now and returns normally:
           # this attempt is done (archive it) but the job is not — the retry
           # message carries the batch tag and signals on its own outcome.
           retried = Batch.retry_reenqueued?(payload["job_id"])
-          Pgbus.logger.debug { "[Pgbus::Executor] perform_returned #{tag} job_class=#{job_class}" }
+          Pgbus.logger.debug { "[Pgbus::Executor] perform_returned #{log_tag(message, queue_name)} job_class=#{job_class}" }
           # Archiving is the exact-once claim on this execution.
           # :already_archived means another worker archived the message (our
           # heartbeat lapsed and it was redelivered): that worker owns the
@@ -109,20 +108,24 @@ module Pgbus
           # concurrency slot a second time (rails/solid_queue#761).
           if archive_from(queue_name, msg_id, source_queue: source_queue) == :already_archived
             Pgbus.logger.warn do
-              "[Pgbus::Executor] already archived elsewhere, skipping signals #{tag} job_class=#{job_class}"
+              "[Pgbus::Executor] already archived elsewhere, skipping signals #{log_tag(message, queue_name)} job_class=#{job_class}"
             end
             release_duplicate_execution_lock(uniqueness_key, uniqueness_strategy, queue_name, msg_id)
             return :duplicate
           end
-          Pgbus.logger.debug { "[Pgbus::Executor] archived #{tag} job_class=#{job_class}" }
+          Pgbus.logger.debug { "[Pgbus::Executor] archived #{log_tag(message, queue_name)} job_class=#{job_class}" }
           job_succeeded = true
           release_uniqueness_lock(uniqueness_key)
-          FailedEventRecorder.clear!(queue_name: queue_name, msg_id: msg_id)
+          # Only FailedEventRecorder.record! writes this table, and only after a
+          # failed attempt, so a first delivery has no row: skip the per-job
+          # DELETE round trip (issue #484). A stale row from a dropped-and-
+          # recreated queue reusing this msg_id is the dispatcher's to sweep.
+          FailedEventRecorder.clear!(queue_name: queue_name, msg_id: msg_id) if read_count > 1
         end
 
         instrument("pgbus.job_completed", queue: queue_name, job_class: job_class)
         record_stat(payload, queue_name, "success", execution_start, message: message)
-        Pgbus.logger.debug { "[Pgbus::Executor] done #{tag} job_class=#{job_class}" }
+        Pgbus.logger.debug { "[Pgbus::Executor] done #{log_tag(message, queue_name)} job_class=#{job_class}" }
         :success
       rescue *FATAL_EXCEPTIONS
         # Process-fatal: propagate so the supervisor/OS can react.
@@ -150,7 +153,7 @@ module Pgbus
           exception_object: e
         )
         record_stat(payload, queue_name, "failed", execution_start, message: message)
-        Pgbus.logger.debug { "[Pgbus::Executor] failed #{tag} job_class=#{payload&.dig("job_class")} error=#{e.class}" }
+        Pgbus.logger.debug { "[Pgbus::Executor] failed #{log_tag(message, queue_name)} job_class=#{payload&.dig("job_class")} error=#{e.class}" }
         # Don't signal concurrency on transient failure — the job will be retried.
         # Semaphore is released only on success or dead-lettering.
         :failed
@@ -169,6 +172,12 @@ module Pgbus
       end
 
       private
+
+      # Built inside the logger blocks so a job pays for the string only when
+      # debug logging is on (issue #484).
+      def log_tag(message, queue_name)
+        "msg_id=#{message.msg_id} queue=#{queue_name} read_ct=#{message.read_ct}"
+      end
 
       def assign_batch_id(job, payload)
         batch_id = payload[Batch::METADATA_KEY]
