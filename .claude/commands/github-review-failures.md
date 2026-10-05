@@ -55,7 +55,7 @@ Categorise each failing check:
 | Benchmarks | `Benchmarks (report only)` | report-only artifact — never a merge blocker |
 
 Extract the run ID and job IDs from the check URLs. The URL format is:
-`https://github.com/mhenrixon/pgbus/actions/runs/<RUN_ID>/job/<JOB_ID>`
+`https://github.com/zoolutions/pgbus/actions/runs/<RUN_ID>/job/<JOB_ID>`
 
 If all checks pass or are pending, report that and stop.
 

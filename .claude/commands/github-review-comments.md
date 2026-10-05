@@ -40,7 +40,7 @@ Retrieve all review comments and identify unresolved ones:
 
 ```bash
 # Get all review comments (not resolved)
-gh api "repos/mhenrixon/pgbus/pulls/<PR_NUMBER>/comments" --paginate
+gh api "repos/zoolutions/pgbus/pulls/<PR_NUMBER>/comments" --paginate
 
 # Get all review threads to check resolution status
 gh api graphql -f query='
@@ -67,7 +67,7 @@ gh api graphql -f query='
       }
     }
   }
-' -f owner=mhenrixon -f repo=pgbus -F pr=<PR_NUMBER>
+' -f owner=zoolutions -f repo=pgbus -F pr=<PR_NUMBER>
 ```
 
 For each unresolved thread, extract:
@@ -144,7 +144,7 @@ For **each** unresolved thread, reply:
 Reply with what was fixed and the commit SHA:
 
 ```bash
-gh api "repos/mhenrixon/pgbus/pulls/<PR>/comments/<COMMENT_ID>/replies" \
+gh api "repos/zoolutions/pgbus/pulls/<PR>/comments/<COMMENT_ID>/replies" \
   --method POST \
   -f 'body=Fixed in <SHA>. <Brief description of what changed>.'
 ```
@@ -154,7 +154,7 @@ gh api "repos/mhenrixon/pgbus/pulls/<PR>/comments/<COMMENT_ID>/replies" \
 Reply with technical reasoning:
 
 ```bash
-gh api "repos/mhenrixon/pgbus/pulls/<PR>/comments/<COMMENT_ID>/replies" \
+gh api "repos/zoolutions/pgbus/pulls/<PR>/comments/<COMMENT_ID>/replies" \
   --method POST \
   -f 'body=<Technical explanation of why the suggestion was not implemented>'
 ```
@@ -199,7 +199,7 @@ gh api graphql -f query='
       }
     }
   }
-' -f owner=mhenrixon -f repo=pgbus -F pr=<PR_NUMBER>
+' -f owner=zoolutions -f repo=pgbus -F pr=<PR_NUMBER>
 ```
 
 Report the final tally: how many comments were accepted/fixed, how many were pushed back on, and confirm all threads are resolved.
