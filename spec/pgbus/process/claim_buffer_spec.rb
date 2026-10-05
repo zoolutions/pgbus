@@ -131,6 +131,18 @@ RSpec.describe Pgbus::Process::ClaimBuffer do
       expect(Pgbus::VisibilityHeartbeat.tracked_count).to eq(0)
     end
 
+    # A heartbeat tick racing the return must find no hold to extend, or it
+    # would re-hide the message for a full visibility_timeout.
+    it "drops the hold before it writes vt: 0" do
+      buffer.push("default", message(1), nil, client: client)
+      held_at_write = nil
+      allow(client).to receive(:set_visibility_timeout) { held_at_write = Pgbus::VisibilityHeartbeat.tracked_count }
+
+      buffer.return_all!(client: client)
+
+      expect(held_at_write).to eq(0)
+    end
+
     it "logs a failed return and keeps going" do
       buffer.push("default", message(1), nil, client: client)
       buffer.push("default", message(2), nil, client: client)

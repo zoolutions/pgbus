@@ -245,6 +245,26 @@ RSpec.describe Pgbus::VisibilityHeartbeat do
       end
     end
 
+    # tick! picks its due entries under the mutex but extends them after
+    # letting go of it. An entry released in between (a read-ahead claim being
+    # handed back with vt: 0) must not be re-hidden by that stale extension.
+    it "does not extend an entry that was released after tick! picked it" do
+      entry = hold
+      described_class.release(entry)
+
+      described_class.send(:extend!, entry, now: later, config: config)
+
+      expect(client).not_to have_received(:set_visibility_timeout)
+    end
+
+    it "still extends an entry that is registered" do
+      entry = hold
+
+      described_class.send(:extend!, entry, now: later, config: config)
+
+      expect(client).to have_received(:set_visibility_timeout).with("default", 7, vt: 30, prefixed: true).once
+    end
+
     it "holds nothing and returns nil when the heartbeat is disabled; release(nil) is a no-op" do
       config.visibility_heartbeat = false
 

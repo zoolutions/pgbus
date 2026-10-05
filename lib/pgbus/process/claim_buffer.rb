@@ -81,7 +81,7 @@ module Pgbus
       # Hand every buffered message back to the queue right away instead of
       # leaving it invisible until its timeout. Their read_ct has already been
       # bumped, the same cost a crash or a stale claim pays. A failed return
-      # is logged and skipped: the hold is dropped either way, so the message
+      # is logged and skipped: the hold is already dropped, so the message
       # reappears when its current timeout runs out. Returns the count. One
       # claim at a time, so #size stays true while the returns are written.
       def return_all!(client: Pgbus.client)
@@ -95,7 +95,13 @@ module Pgbus
 
       private
 
+      # The hold goes first: a heartbeat tick that still held the entry could
+      # otherwise write its extension after the vt: 0 and hide the message
+      # again for a full visibility_timeout. (VisibilityHeartbeat#extend!
+      # re-checks registration, which shrinks the remaining window to the
+      # tick's own check-then-write.)
       def return_claim(claim, client)
+        VisibilityHeartbeat.release(claim.hold)
         queue = claim.source_queue || claim.queue_name
         client.set_visibility_timeout(queue, claim.message.msg_id.to_i, vt: 0, prefixed: claim.source_queue.nil?)
       rescue StandardError => e
@@ -103,8 +109,6 @@ module Pgbus
           "[Pgbus] Could not return read-ahead message msg_id=#{claim.message.msg_id} queue=#{queue}: " \
             "#{e.class}: #{e.message}"
         end
-      ensure
-        VisibilityHeartbeat.release(claim.hold)
       end
     end
   end

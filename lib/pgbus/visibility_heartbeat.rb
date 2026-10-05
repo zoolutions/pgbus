@@ -158,6 +158,11 @@ module Pgbus
       end
 
       def extend!(entry, now:, config:)
+        # tick! picked this entry under the mutex but runs here without it: if
+        # the entry was released meanwhile (a read-ahead claim handed back with
+        # vt: 0, a job that finished), extending it would undo that.
+        return unless registered?(entry)
+
         vt = config.visibility_timeout
         entry.client.set_visibility_timeout(entry.queue_name, entry.msg_id, vt: vt, prefixed: entry.prefixed)
         entry.extended_at = now
@@ -242,6 +247,10 @@ module Pgbus
 
       def entries
         @entries ||= {}
+      end
+
+      def registered?(entry)
+        synchronize { entries[key_for(entry)].equal?(entry) }
       end
 
       def key_for(entry)
