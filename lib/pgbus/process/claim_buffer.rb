@@ -78,12 +78,15 @@ module Pgbus
       # leaving it invisible until its timeout. Their read_ct has already been
       # bumped, the same cost a crash or a stale claim pays. A failed return
       # is logged and skipped: the hold is dropped either way, so the message
-      # reappears when its current timeout runs out. Returns the count.
+      # reappears when its current timeout runs out. Returns the count. One
+      # claim at a time, so #size stays true while the returns are written.
       def return_all!(client: Pgbus.client)
-        claims = @claims
-        @claims = []
-        claims.each { |claim| return_claim(claim, client) }
-        claims.size
+        returned = 0
+        while (claim = @claims.shift)
+          return_claim(claim, client)
+          returned += 1
+        end
+        returned
       end
 
       private
