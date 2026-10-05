@@ -742,6 +742,16 @@ RSpec.describe Pgbus::Process::Supervisor do
       expect(banner).to include("worker_notify_wakeup=true")
     end
 
+    # Issue #484: a production host that lost YJIT shows it in the first log lines.
+    it "names the Ruby JIT on the version line" do
+      allow(Pgbus.client).to receive(:pgmq_schema_version).and_return(nil)
+      allow(Pgbus::RubyJit).to receive(:label).and_return("yjit")
+
+      supervisor.send(:log_boot_banner)
+
+      expect(banner).to match(/boot: pgbus \S+ pid=\d+ jit=yjit/)
+    end
+
     it "renders the connection target as host + dbname without the password" do
       config.database_url = "postgres://u:sekret@db:5432/app"
       allow(Pgbus.client).to receive(:pgmq_schema_version).and_return(nil)

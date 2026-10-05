@@ -48,8 +48,8 @@ RSpec.describe Pgbus::Doctor do
   end
 
   describe "#run" do
-    it "runs eleven checks" do
-      expect(doctor.run.size).to eq(11)
+    it "runs twelve checks" do
+      expect(doctor.run.size).to eq(12)
     end
 
     it "returns hashes with :name, :status, :detail keys" do
@@ -375,6 +375,74 @@ RSpec.describe Pgbus::Doctor do
     end
   end
 
+  # Issue #484: the worker is GVL-bound when Postgres is close, so YJIT is worth
+  # ~20% jobs/s there. Rails turns it on through config.yjit (load_defaults 7.2+
+  # in every env, 8.0+ outside local envs). The check reports; it never enables.
+  describe "the Ruby JIT check (issue #484)" do
+    let(:yjit) { Module.new }
+
+    before do
+      stub_const("RubyVM::YJIT", yjit)
+      hide_const("RubyVM::ZJIT")
+    end
+
+    def stub_yjit(enabled)
+      allow(yjit).to receive(:enabled?).and_return(enabled)
+    end
+
+    def stub_rails_env(local:)
+      env = double("Rails.env", local?: local, production?: !local, to_s: local ? "development" : "production")
+      stub_const("Rails", Module.new)
+      allow(Rails).to receive(:env).and_return(env)
+    end
+
+    it "is :ok and names YJIT when it is enabled" do
+      stub_yjit(true)
+      check = jit_check(doctor.run)
+      expect(check[:status]).to eq(:ok)
+      expect(check[:detail]).to include("YJIT enabled")
+    end
+
+    it "is :ok when YJIT is off in a local Rails environment" do
+      stub_yjit(false)
+      stub_rails_env(local: true)
+      check = jit_check(doctor.run)
+      expect(check[:status]).to eq(:ok)
+      expect(check[:detail]).to match(/local/i)
+    end
+
+    it "warns (never fails) when YJIT is off outside a local environment" do
+      stub_yjit(false)
+      stub_rails_env(local: false)
+      check = jit_check(doctor.run)
+      expect(check[:status]).to eq(:warn)
+      expect(check[:detail]).to include("config.yjit")
+      expect(check[:detail]).to include("RUBY_YJIT_ENABLE")
+      expect(doctor.success?).to be(true)
+    end
+
+    it "is :ok when this Ruby has no JIT at all" do
+      hide_const("RubyVM::YJIT")
+      check = jit_check(doctor.run)
+      expect(check[:status]).to eq(:ok)
+      expect(check[:detail]).to match(/no JIT/i)
+    end
+
+    it "reports and never enables the JIT" do
+      stub_yjit(false)
+      allow(yjit).to receive(:enable)
+      stub_rails_env(local: false)
+      doctor.run
+      expect(yjit).not_to have_received(:enable)
+    end
+
+    it "runs right after the configuration check and is neither boot-skipped nor strict-fatal" do
+      expect(described_class::CHECKS.keys.first(2)).to eq(["Configuration", "Ruby JIT"])
+      expect(described_class::BOOT_SKIP).not_to include("Ruby JIT")
+      expect(described_class::STRICT_FATAL).not_to include("Ruby JIT")
+    end
+  end
+
   describe "the dedicated-connections check (issue #352)" do
     def dedicated_check(results)
       results.find { |c| c[:name] == "Dedicated connections" }
@@ -608,8 +676,8 @@ RSpec.describe Pgbus::Doctor do
       expect(names).not_to include(a_string_matching(/process|liveness/i))
     end
 
-    it "runs the other nine checks" do
-      expect(doctor.boot_checks.size).to eq(10)
+    it "runs the other eleven checks" do
+      expect(doctor.boot_checks.size).to eq(11)
     end
 
     it "never invokes the HealthAnalyzer — the excluded check does zero work" do
@@ -683,4 +751,5 @@ RSpec.describe Pgbus::Doctor do
   def gid_check(checks)     = checks.find { |c| c[:name].match?(/globalid|allowlist/i) }
   def broadcast_queue_check(checks) = checks.find { |c| c[:name].match?(/broadcast queue/i) }
   def primary_check(checks)         = checks.find { |c| c[:name].match?(/primary/i) }
+  def jit_check(checks)             = checks.find { |c| c[:name] == "Ruby JIT" }
 end

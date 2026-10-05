@@ -2031,11 +2031,12 @@ pgbus help      # Show help
 
 #### pgbus doctor
 
-A single preflight command that answers "is this environment healthy enough to run?" — useful as a deploy or CI gate. It runs 11 checks and never raises; a broken environment turns every probe into a failed/warned check instead of a crash:
+A single preflight command that answers "is this environment healthy enough to run?" — useful as a deploy or CI gate. It runs 12 checks and never raises; a broken environment turns every probe into a failed/warned check instead of a crash:
 
 | Check | Fails (`:fail`) when | Warns (`:warn`) when |
 |---|---|---|
 | Configuration | `Configuration#validate!` raises | — |
+| Ruby JIT | — | YJIT is available but off outside a local environment (a GVL-bound worker runs ~20% fewer jobs/s without it); reports only, never enables |
 | Database | Unreachable (`SELECT 1` via `Client#ping`) | — |
 | PGMQ schema | Schema not installed | Installed but untracked, or behind the vendored version |
 | Queues | A configured queue has no PGMQ table | — |
