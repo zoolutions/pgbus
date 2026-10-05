@@ -1,0 +1,27 @@
+benchmarks/support/worker_profile_harness.rb
+  s_d9f3f782b9c155::t_0bff9c3cf8b2f6 55
+benchmarks/support/worker_profile_runner.rb
+  s_d9f3f782b9c155::t_1f9ebc38bff3d3 56-58,62-64,66-79,83,87-88,103
+benchmarks/support/consumer_profile_runner.rb
+  s_d9f3f782b9c155::t_649942fb1d0809 1-61
+spec/benchmarks/worker_profile_harness_spec.rb
+  s_d9f3f782b9c155::t_fd8a1366169d96 136-145
+benchmarks/worker_profile_bench.rb
+  s_d9f3f782b9c155::t_7774ba4c20cd02 10-14,27-30,43-45,49-60,62-63,65-67,71-72,75,83-84,90,96,107,118,125,128-129,135,149-151,155-158
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "cc10eb2976b2cb2f3f6e36ff3b974e33320ca5a2",
+  "prompts": {},
+  "sessions": {
+    "s_d9f3f782b9c155": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c639d67a-07d6-4aff-996e-6b764588a015",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
