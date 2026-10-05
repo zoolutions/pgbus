@@ -7,7 +7,7 @@ module Pgbus
     class Consumer
       include SignalHandler
 
-      attr_reader :topics, :threads, :config, :execution_mode,
+      attr_reader :topics, :threads, :config, :execution_mode, :read_ahead,
                   :queue_names, :wake_signal, :notify_retry_backoff, :circuit_breaker
       # notify_listener is writable so tests can simulate a start_notify_listener
       # success from inside a stub (production sets it in start_notify_listener).
@@ -28,6 +28,11 @@ module Pgbus
 
       def jobs_processed
         @jobs_processed.value
+      end
+
+      # Messages claimed by read-ahead and not yet handed to the pool (#486).
+      def buffered
+        @claim_buffer.size
       end
 
       # Seed the processed-job counter. Used by tests to drive the recycle
@@ -60,7 +65,7 @@ module Pgbus
                      queue_names: nil, liveness_pipe: nil, stat_buffer: :default,
                      notify_listener: nil, notify_retry_at: 0.0,
                      notify_retry_backoff: NOTIFY_RETRY_BASE_SECONDS,
-                     started_at_monotonic: nil, wake_pipe: nil)
+                     started_at_monotonic: nil, wake_pipe: nil, read_ahead: nil)
         @topics = Array(topics)
         @threads = threads
         @config = config
@@ -68,6 +73,8 @@ module Pgbus
         @shutting_down = false
         @recycling = false
         @jobs_processed = Concurrent::AtomicFixnum.new(0)
+        @read_ahead = read_ahead || config.read_ahead
+        @claim_buffer = ClaimBuffer.new(config: config)
         @loop_tick_at = Concurrent::AtomicReference.new(nil)
         @started_at_monotonic = started_at_monotonic || monotonic_now
         @wake_signal = WakeSignal.new
@@ -134,7 +141,12 @@ module Pgbus
           check_recycle
           ensure_notify_listener
 
-          break if @shutting_down
+          if @shutting_down
+            # No drain loop here: buffered claims go straight back to the
+            # queue; shutdown then waits for the ones already running.
+            @claim_buffer.return_all!(client: Pgbus.client) unless @claim_buffer.empty?
+            break
+          end
 
           consume
           @stat_buffer&.flush_if_due
@@ -171,20 +183,35 @@ module Pgbus
         @queue_names = @registry.queue_names_for_topics(topics)
       end
 
+      # Same loop step as Worker#claim_and_execute (issue #486): feed
+      # buffered claims to free slots, read the deficit, feed again, and wait
+      # only when the step moved nothing.
       def consume
-        idle = @pool.available_capacity
-        return @wake_signal.wait(timeout: wake_timeout) if idle <= 0
+        drained = drain_claim_buffer
+        claimed = claim_deficit
+        drained += drain_claim_buffer
+        @wake_signal.wait(timeout: wake_timeout) if drained.zero? && claimed.zero?
+      end
 
-        tagged_messages = fetch_messages(idle)
-
-        if tagged_messages.empty?
-          @wake_signal.wait(timeout: wake_timeout)
-          return
+      # The hold is released before handle_message's own heartbeat tracking
+      # registers the same key, so the message is never untracked in between.
+      def drain_claim_buffer
+        @claim_buffer.drain_into(@pool) do |claim|
+          @pool.post do
+            VisibilityHeartbeat.release(claim.hold)
+            handle_message(claim.message, claim.queue_name)
+          end
         end
+      end
 
-        tagged_messages.each do |queue_name, message|
-          @pool.post { handle_message(message, queue_name) }
-        end
+      def claim_deficit
+        want = @claim_buffer.deficit(free_slots: @pool.available_capacity, read_ahead: @read_ahead)
+        return 0 if want.zero?
+
+        tagged_messages = fetch_messages(want)
+        client = Pgbus.client
+        tagged_messages.each { |queue_name, message| @claim_buffer.push(queue_name, message, client: client) }
+        tagged_messages.size
       end
 
       # Returns an array of [queue_name, message] pairs. Queues whose circuit

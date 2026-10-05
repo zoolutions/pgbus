@@ -7,7 +7,7 @@ module Pgbus
     class Worker
       include SignalHandler
 
-      attr_reader :queues, :threads, :config, :execution_mode,
+      attr_reader :queues, :threads, :config, :execution_mode, :read_ahead,
                   :rate_counter, :wake_signal, :restore_streak, :lifecycle
       # stat_buffer is writable so a test can swap in a buffer double after
       # construction to assert graceful_shutdown / check_recycle flush it. The
@@ -35,7 +35,7 @@ module Pgbus
                      rate_counter: nil, wake_signal: nil, stat_buffer: :default,
                      notify_listener: nil, notify_retry_at: 0.0,
                      notify_retry_backoff: NOTIFY_RETRY_BASE_SECONDS,
-                     started_at_monotonic: nil, wake_pipe: nil)
+                     started_at_monotonic: nil, wake_pipe: nil, read_ahead: nil)
         @queues = Array(queues)
         @initial_queues = @queues.dup.freeze
         @wildcard = @queues.include?("*")
@@ -65,7 +65,10 @@ module Pgbus
         @last_wildcard_resolve = nil
         @jobs_processed = Concurrent::AtomicFixnum.new(0)
         @jobs_failed = Concurrent::AtomicFixnum.new(0)
+        # in_flight counts every claimed message: buffered and running.
         @in_flight = Concurrent::AtomicFixnum.new(0)
+        @read_ahead = read_ahead || config.read_ahead
+        @claim_buffer = ClaimBuffer.new(config: config)
         @loop_tick_at = Concurrent::AtomicReference.new(nil)
         @rate_counter = rate_counter || RateCounter.new(:processed, :failed, :dequeued)
         @started_at = Time.current
@@ -119,6 +122,7 @@ module Pgbus
           jobs_processed: @jobs_processed.value,
           jobs_failed: @jobs_failed.value,
           in_flight: @in_flight.value,
+          buffered: @claim_buffer.size,
           state: @lifecycle.state,
           execution_mode: @execution_mode,
           consumer_priority: @consumer_priority,
@@ -184,6 +188,9 @@ module Pgbus
           check_recycle
           refresh_wildcard_queues
           ensure_notify_listener
+          # Draining, paused or stopped: claims nobody will run here go back
+          # to the queue now rather than when their timeout runs out.
+          return_claims unless @lifecycle.can_process?
 
           break if @lifecycle.stopped?
           # quiesced? (all slots free), not idle? (any slot free) — exiting
@@ -240,32 +247,53 @@ module Pgbus
 
       private
 
+      # One loop step (issue #486): feed buffered claims to free slots, read
+      # the deficit (free slots + read_ahead - buffered, capped by
+      # prefetch_limit), feed again. With read_ahead 0 the buffer never
+      # outlives the step and qty is the free slot count, as before. Waits
+      # only when the step moved nothing, so a full pool with a topped-up
+      # buffer sleeps until a slot frees (the pool's on_state_change wakes it).
       def claim_and_execute
-        poll_interval = wake_timeout
+        drained = drain_claim_buffer
+        claimed = claim_deficit
+        drained += drain_claim_buffer
+        @wake_signal.wait(timeout: wake_timeout) if drained.zero? && claimed.zero?
+      end
 
-        idle = @pool.available_capacity
-        return @wake_signal.wait(timeout: poll_interval) if idle <= 0
-
-        if config.prefetch_limit
-          available = config.prefetch_limit - @in_flight.value
-          return @wake_signal.wait(timeout: poll_interval) if available <= 0
-
-          idle = [idle, available].min
+      # The hold is released before the executor's own heartbeat tracking
+      # registers the same key, so the message is never untracked in between.
+      def drain_claim_buffer
+        @claim_buffer.drain_into(@pool) do |claim|
+          @pool.post do
+            VisibilityHeartbeat.release(claim.hold)
+            process_message(claim.message, claim.queue_name, source_queue: claim.source_queue)
+          end
         end
+      end
 
-        tagged_messages = fetch_messages(idle)
+      def claim_deficit
+        prefetch_room = config.prefetch_limit && (config.prefetch_limit - @in_flight.value)
+        want = @claim_buffer.deficit(free_slots: @pool.available_capacity, read_ahead: @read_ahead,
+                                     prefetch_room: prefetch_room)
+        return 0 if want.zero?
 
-        if tagged_messages.empty?
-          @wake_signal.wait(timeout: poll_interval)
-          return
-        end
+        tagged_messages = fetch_messages(want)
+        return 0 if tagged_messages.empty?
 
         @rate_counter.increment(:dequeued, tagged_messages.size)
+        client = Pgbus.client
         tagged_messages.each do |queue_name, message, source_queue|
           detect_zombie(queue_name, message)
           @in_flight.increment
-          @pool.post { process_message(message, queue_name, source_queue: source_queue) }
+          @claim_buffer.push(queue_name, message, source_queue, client: client)
         end
+        tagged_messages.size
+      end
+
+      def return_claims
+        return if @claim_buffer.empty?
+
+        @in_flight.decrement(@claim_buffer.return_all!(client: Pgbus.client))
       end
 
       # Returns an array of [queue_name, message] pairs so we always know
@@ -831,7 +859,8 @@ module Pgbus
           "rates" => @rate_counter.rates.transform_keys(&:to_s),
           "jobs_processed" => @jobs_processed.value,
           "jobs_failed" => @jobs_failed.value,
-          "in_flight" => @in_flight.value
+          "in_flight" => @in_flight.value,
+          "buffered" => @claim_buffer.size
         }
       end
 

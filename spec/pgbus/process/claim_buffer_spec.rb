@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "active_support/core_ext/time"
 
 # Issue #486: the read-ahead buffer a Worker/Consumer owns. It is only ever
 # touched from the process's loop thread (push, shift, drain, return), so it
@@ -18,7 +19,7 @@ RSpec.describe Pgbus::Process::ClaimBuffer do
   end
 
   def message(id, read_ct: 1)
-    build_message_double(msg_id: id.to_s, read_ct: read_ct, enqueued_at: nil)
+    build_message_double(msg_id: id.to_s, read_ct: read_ct)
   end
 
   def pool(capacity)
