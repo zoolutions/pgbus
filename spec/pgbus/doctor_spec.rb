@@ -376,7 +376,7 @@ RSpec.describe Pgbus::Doctor do
   end
 
   # Issue #484: the worker is GVL-bound when Postgres is close, so YJIT is worth
-  # ~20% jobs/s there. Rails turns it on through config.yjit (load_defaults 7.2+
+  # ~15-20% jobs/s there. Rails turns it on through config.yjit (load_defaults 7.2+
   # in every env, 8.0+ outside local envs). The check reports; it never enables.
   describe "the Ruby JIT check (issue #484)" do
     let(:yjit) { Module.new }

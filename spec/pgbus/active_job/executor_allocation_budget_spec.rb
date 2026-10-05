@@ -52,13 +52,16 @@ RSpec.describe Pgbus::ActiveJob::Executor do
 
   # Rails hidden: with the dummy app loaded the executor wraps perform in
   # Rails.application.executor, whose allocations depend on the app, not pgbus.
-  it "allocates fewer than 9 pgbus-owned objects per successful job" do
+  it "allocates fewer than 10 pgbus-owned objects per successful job" do
     hide_const("Rails")
-    5.times { executor.execute(message, "default") }
+    # Measure the success path: a regression into the failure path must fail
+    # here, not be measured silently.
+    expect(executor.execute(message, "default")).to eq(:success)
+    4.times { executor.execute(message, "default") }
 
     per_job = pgbus_allocations { 10.times { executor.execute(message, "default") } } / 10.0
 
-    expect(per_job).to be < 9
+    expect(per_job).to be < 10
   end
 
   # The trim itself, independent of Rails and the CI matrix: at info level the

@@ -168,7 +168,7 @@ module Pgbus
     end
 
     # 1b. Ruby JIT (issue #484). With Postgres close by, a worker is GVL-bound
-    # and YJIT is worth ~20% jobs/s (docs/performance.md). Rails enables it via
+    # and YJIT is worth ~15-20% jobs/s (docs/performance.md). Rails enables it via
     # config.yjit (load_defaults 7.2+, or 8.0+ outside local envs). Reports
     # only — enabling a JIT is the application's decision, never pgbus's.
     def check_ruby_jit
@@ -178,7 +178,7 @@ module Pgbus
       return Check.new(name: "Ruby JIT", status: :ok, detail: "YJIT off in a local environment (expected)") if local_env?
 
       Check.new(name: "Ruby JIT", status: :warn,
-                detail: "YJIT is available but off — workers run ~20% fewer jobs/s when CPU-bound. " \
+                detail: "YJIT is available but off — workers run ~15% fewer jobs/s when CPU-bound. " \
                         "Enable it with config.yjit = true (or load_defaults 7.2+) or RUBY_YJIT_ENABLE=1")
     rescue StandardError => e
       Check.new(name: "Ruby JIT", status: :warn, detail: "could not determine (#{e.class}: #{e.message})")

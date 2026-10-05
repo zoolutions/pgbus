@@ -80,15 +80,20 @@ the shape of a database on another host (setup in the bench header).
 
 Measured on an M-series laptop, local PostgreSQL 18, Ruby 3.4.2, at normal
 machine load. Baseline is `main`; "after" is the per-job DELETE removal below.
-Each row is the median of two runs; local cells repeat within 1 %, proxied
-cells within ~5 %.
+Local rows are the mean of two runs, which repeated within 1 %. Proxied rows
+show the range of the two runs instead: the proxy adds real jitter, and the
+proxied/YJIT "after" pair spread 27 % (1 324 vs 1 679). Read the proxied rows
+as "no measurable change", not as a YJIT ranking. The bench sizes the pgmq pool
+from pgbus defaults (`resolved_pool_size` ~7 for these runs) under a 12-thread
+worker; the `pool_wait` bucket below stays at 1-3 %, so that shape did not cap
+these numbers.
 
 | cell | baseline jobs/s | after jobs/s | Δ | CPU/wall (after) |
 |---|---:|---:|---:|---:|
 | local / YJIT | 4 569 | 5 823 | **+27 %** | 84–86 % |
 | local / no JIT | 3 797 | 5 119 | **+35 %** | 92 % |
-| proxied / YJIT | 1 260 | 1 324–1 679 | within noise | 33–35 % |
-| proxied / no JIT | 1 396 | 1 361–1 412 | within noise | 37–39 % |
+| proxied / YJIT | 1 228–1 292 | 1 324–1 679 | within noise | 33–35 % |
+| proxied / no JIT | 1 382–1 409 | 1 361–1 412 | within noise | 37–39 % |
 
 Where the time goes (after; "pool" = the 12 job threads, "loop" = the worker
 thread that reads batches and hands them to the pool):
@@ -439,7 +444,7 @@ that enforce hard limits:
 | `Client#read_batch` | < 30 objects/call |
 | JSON round-trip | < 20 objects |
 | Retained objects (leak detection) | 0 across 100 cycles |
-| `Executor#execute`, pgbus-owned objects only (`executor_allocation_budget_spec.rb`) | < 9 objects/job |
+| `Executor#execute`, pgbus-owned objects only (`executor_allocation_budget_spec.rb`) | < 10 objects/job (measured 8) |
 
 These run as part of `bundle exec rspec` on every PR. They are hard gates — a
 regression that exceeds the budget fails the build.
