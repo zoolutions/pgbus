@@ -1,7 +1,7 @@
 ---
 description: Review a GitHub pull request for code quality, patterns, and best practices
 model: opus
-argument-hint: "PR URL or number (e.g., 5 or https://github.com/mhenrixon/pgbus/pull/5)"
+argument-hint: "PR URL or number (e.g., 5 or https://github.com/zoolutions/pgbus/pull/5)"
 ---
 
 # PR Review
