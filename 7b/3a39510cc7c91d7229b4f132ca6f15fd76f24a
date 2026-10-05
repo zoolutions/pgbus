@@ -1,0 +1,29 @@
+docs/app/views/docs/pages/cli_generators.rb
+  s_183490a5780def::t_a0ab878c1f6c46 57
+spec/pgbus/doctor_spec.rb
+  s_183490a5780def::t_a0ab878c1f6c46 379
+spec/pgbus/active_job/executor_allocation_budget_spec.rb
+  s_183490a5780def::t_a0ab878c1f6c46 55,57-60,64
+lib/pgbus/doctor.rb
+  s_183490a5780def::t_a0ab878c1f6c46 171,181
+docs/performance.md
+  s_183490a5780def::t_a0ab878c1f6c46 83-89,95-96,447
+README.md
+  s_183490a5780def::t_a0ab878c1f6c46 2039
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "7b3a39510cc7c91d7229b4f132ca6f15fd76f24a",
+  "prompts": {},
+  "sessions": {
+    "s_183490a5780def": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "44a52efc-7d4a-453d-b4a0-46d287d131dc",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
