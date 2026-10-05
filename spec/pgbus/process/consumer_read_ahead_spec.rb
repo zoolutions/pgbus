@@ -40,6 +40,9 @@ RSpec.describe Pgbus::Process::Consumer, "#consume with read-ahead (issue #486)"
   let(:mock_client) { build_mock_client }
   let(:mock_heartbeat) { instance_double(Pgbus::Process::Heartbeat, start: nil, stop: nil) }
   let(:registry) { instance_double(Pgbus::EventBus::Registry, queue_names_for_topics: %w[q_orders]) }
+  # A real CircuitBreaker reads its pause table through ActiveRecord, which
+  # would leave an AR lease on the runner thread once it exits (Rails 7.1).
+  let(:circuit_breaker) { instance_double(Pgbus::CircuitBreaker, paused?: false, record_success: nil, record_failure: nil) }
   let(:pool) { fake_pool_class.new(2) }
   let(:read_ahead) { 3 }
   let(:consumer) do
@@ -56,6 +59,7 @@ RSpec.describe Pgbus::Process::Consumer, "#consume with read-ahead (issue #486)"
     allow(Pgbus::ExecutionPools).to receive(:build).and_return(pool)
     allow(Pgbus::Process::Heartbeat).to receive(:new).and_return(mock_heartbeat)
     allow(Pgbus::EventBus::Registry).to receive(:instance).and_return(registry)
+    allow(Pgbus::CircuitBreaker).to receive(:new).and_return(circuit_breaker)
     allow(wake_signal).to receive(:wait)
   end
 
