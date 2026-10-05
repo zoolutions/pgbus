@@ -1,0 +1,35 @@
+spec/pgbus/process/claim_buffer_spec.rb
+  s_d9f3f782b9c155::t_1afc553a48531d 22
+spec/pgbus/process/worker_read_ahead_spec.rb
+  s_d9f3f782b9c155::t_bf444ef0d01a62 101-102,173
+  s_d9f3f782b9c155::t_69a6e7fef1fc9c 9
+  s_d9f3f782b9c155::t_62ac103c63492f 1-8,10-100,103-172,174-247
+spec/pgbus/process/supervisor_spec.rb
+  s_d9f3f782b9c155::t_4f58258fba6a14 348-392
+lib/pgbus/process/worker.rb
+  s_d9f3f782b9c155::t_c004752fed33be 10,38,68,70-71,125,191-193,250-255,257-270,272,274-278,280-281,284,288,290-296,862-863
+spec/pgbus/process/consumer_read_ahead_spec.rb
+  s_d9f3f782b9c155::t_69a6e7fef1fc9c 8
+  s_d9f3f782b9c155::t_f5a582380b90d7 138
+  s_d9f3f782b9c155::t_bd5c4ec91433f7 1-7,9-137,139-207
+lib/pgbus/process/supervisor.rb
+  s_d9f3f782b9c155::t_ef8fc1988c8ea0 333,502
+lib/pgbus/process/consumer.rb
+  s_d9f3f782b9c155::t_e5f0c9eaf125d2 10,33-37,68,76-77,144-149,186-188,190-194,196-203,205,207-214
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "8b2e13dfba424e8b40b57021125269604c4f2d61",
+  "prompts": {},
+  "sessions": {
+    "s_d9f3f782b9c155": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c639d67a-07d6-4aff-996e-6b764588a015",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
