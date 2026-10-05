@@ -425,7 +425,7 @@ RSpec.describe Pgbus::Doctor do
       hide_const("RubyVM::YJIT")
       check = jit_check(doctor.run)
       expect(check[:status]).to eq(:ok)
-      expect(check[:detail]).to match(/no JIT/i)
+      expect(check[:detail]).to match(/no YJIT/i)
     end
 
     it "reports and never enables the JIT" do

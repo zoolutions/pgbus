@@ -54,7 +54,7 @@ class Views::Docs::Pages::CliGenerators < DocsUI::Page
         [ "Check", "Fails when" ],
         [
           [ "Configuration", [ :md, "`Configuration#validate!` raises." ] ],
-          [ "Ruby JIT", [ :md, "Never fails. Warns when YJIT is available but off outside a local environment — a CPU-bound worker runs ~15% fewer jobs/s without it. Reports only; enabling YJIT stays with `config.yjit`." ] ],
+          [ "Ruby JIT", [ :md, "Never fails. Warns when YJIT is available but off outside a local environment — a CPU-bound worker with Postgres nearby runs ~15% fewer jobs/s without it; a network-bound one shows no measurable difference. Reports only; enabling YJIT stays with `config.yjit`." ] ],
           [ "Database", [ :md, "The DB is unreachable (a plain `SELECT 1` via `Client#ping`)." ] ],
           [ "PGMQ schema", "The schema is missing, untracked, or behind the vendored version (warn)." ],
           [ "Queues", "A configured queue has no PGMQ table." ],

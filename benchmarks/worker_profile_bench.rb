@@ -33,6 +33,9 @@ JOBS = Integer(ENV.fetch("WP_BENCH_JOBS", "5000"))
 PROFILE_JOBS = Integer(ENV.fetch("WP_BENCH_PROFILE_JOBS", "2000"))
 THREADS = Integer(ENV.fetch("WP_BENCH_THREADS", "12"))
 WARMUP_JOBS = 500
+{ "WP_BENCH_JOBS" => JOBS, "WP_BENCH_PROFILE_JOBS" => PROFILE_JOBS, "WP_BENCH_THREADS" => THREADS }.each do |name, value|
+  abort "#{name} must be a positive integer (got #{value})" unless value.positive?
+end
 
 def run_child(location, url)
   require_relative "support/worker_profile_runner"

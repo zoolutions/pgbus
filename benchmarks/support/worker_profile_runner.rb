@@ -68,7 +68,9 @@ module WorkerProfileRunner
         runner.name = WorkerProfileHarness::LOOP_THREAD_NAME
         # sleep, not Thread.pass: a spinning watcher holds the GVL and would
         # show up as gvl_wait on every thread it is measuring.
-        sleep(0.002) until worker.stats[:jobs_processed] >= jobs
+        # A crash rescued in Worker#process_message counts as failed but not
+        # processed, so wait on either: the check below reports it.
+        sleep(0.002) until drained?(worker, jobs)
         worker.graceful_shutdown
         runner.join
       end
@@ -89,6 +91,11 @@ module WorkerProfileRunner
     raise "#{failed} jobs failed during the drain — the bench measured errors, not work" if failed.positive?
 
     measurement.merge(jobs: jobs)
+  end
+
+  def drained?(worker, jobs)
+    stats = worker.stats
+    stats[:jobs_failed].positive? || stats[:jobs_processed] >= jobs
   end
 
   def measure

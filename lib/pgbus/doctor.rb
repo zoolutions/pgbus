@@ -174,11 +174,12 @@ module Pgbus
     def check_ruby_jit
       label = RubyJit.label
       return Check.new(name: "Ruby JIT", status: :ok, detail: "#{label.upcase} enabled") unless label == "none"
-      return Check.new(name: "Ruby JIT", status: :ok, detail: "no JIT available on this Ruby") unless RubyJit.yjit_available?
+      return Check.new(name: "Ruby JIT", status: :ok, detail: "no YJIT available on this Ruby") unless RubyJit.yjit_available?
       return Check.new(name: "Ruby JIT", status: :ok, detail: "YJIT off in a local environment (expected)") if local_env?
 
       Check.new(name: "Ruby JIT", status: :warn,
-                detail: "YJIT is available but off — workers run ~15% fewer jobs/s when CPU-bound. " \
+                detail: "YJIT is available but off — a CPU-bound worker (Postgres nearby) runs ~15% fewer jobs/s " \
+                        "without it; no measurable effect when network-bound. " \
                         "Enable it with config.yjit = true (or load_defaults 7.2+) or RUBY_YJIT_ENABLE=1")
     rescue StandardError => e
       Check.new(name: "Ruby JIT", status: :warn, detail: "could not determine (#{e.class}: #{e.message})")
