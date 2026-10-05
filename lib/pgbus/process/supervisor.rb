@@ -171,7 +171,7 @@ module Pgbus
       private_constant :ROLE_FLAGS
 
       def log_boot_banner
-        Pgbus.logger.info { "[Pgbus] boot: pgbus #{Pgbus::VERSION} pid=#{::Process.pid}" }
+        Pgbus.logger.info { "[Pgbus] boot: pgbus #{Pgbus::VERSION} pid=#{::Process.pid} jit=#{RubyJit.label}" }
         Pgbus.logger.info do
           "[Pgbus] boot: connection=#{redacted_connection_target} pool=#{banner_field { config.resolved_pool_size }}"
         end

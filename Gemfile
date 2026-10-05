@@ -41,6 +41,9 @@ group :test do
   # Performance & memory profiling
   gem "benchmark-ips", "~> 2.13"
   gem "memory_profiler", "~> 1.1"
+  # Multi-thread, GVL-aware sampling profiler for the worker profiling bench
+  # (benchmarks/worker_profile_bench.rb, issue #484).
+  gem "vernier", "~> 1.0", require: false
 end
 
 group :development, :test do

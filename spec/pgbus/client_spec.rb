@@ -1449,6 +1449,28 @@ RSpec.describe Pgbus::Client do
       expect(mock_pgmq).to have_received(:drop_queue).with("pgbus_test_default")
     end
 
+    # PGMQ msg_ids restart when a queue is recreated, so a failed-event row
+    # left behind would point the dashboard's retry/discard at an unrelated
+    # new message (issue #484 review). Rows are keyed by whichever name the
+    # executor saw: the physical name or the logical one.
+    it "clears the dropped queue's failed-event rows under both names" do
+      allow(Pgbus::FailedEventRecorder).to receive(:clear_queue!)
+
+      client.drop_queue("pgbus_test_default", prefixed: false)
+
+      expect(Pgbus::FailedEventRecorder).to have_received(:clear_queue!)
+        .with(%w[pgbus_test_default default])
+    end
+
+    it "does not clear failed-event rows when the drop raises" do
+      allow(Pgbus::FailedEventRecorder).to receive(:clear_queue!)
+      real_pgmq_connection_error # the client's retry wrapper rescues this class
+      allow(mock_pgmq).to receive(:drop_queue).and_raise(StandardError, "boom")
+
+      expect { client.drop_queue("default") }.to raise_error(StandardError, "boom")
+      expect(Pgbus::FailedEventRecorder).not_to have_received(:clear_queue!)
+    end
+
     it "removes the queue from the created cache" do
       client.ensure_queue("default")
       client.drop_queue("default")

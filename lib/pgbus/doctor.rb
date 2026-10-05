@@ -5,7 +5,7 @@ require "pgbus/mcp/health_analyzer"
 
 module Pgbus
   # Preflight diagnostics for a pgbus deployment — the single command that
-  # answers "is this environment healthy enough to run?". Runs eleven checks and
+  # answers "is this environment healthy enough to run?". Runs twelve checks and
   # returns a machine-readable result plus a human report, so `pgbus doctor`
   # and `rake pgbus:doctor` can gate a deploy or CI run (exit 0 on success,
   # 1 on any failure).
@@ -32,6 +32,7 @@ module Pgbus
     # stable identity of each check (used in the report and to select subsets).
     CHECKS = {
       "Configuration" => :check_configuration,
+      "Ruby JIT" => :check_ruby_jit,
       "Database" => :check_database,
       "PGMQ schema" => :check_pgmq_schema,
       "Queues" => :check_queues,
@@ -164,6 +165,33 @@ module Pgbus
       Check.new(name: "Configuration", status: :fail, detail: e.message)
     rescue StandardError => e
       Check.new(name: "Configuration", status: :fail, detail: "#{e.class}: #{e.message}")
+    end
+
+    # 1b. Ruby JIT (issue #484). With Postgres close by, a worker is GVL-bound
+    # and YJIT is worth ~15-20% jobs/s (docs/performance.md). Rails enables it via
+    # config.yjit (load_defaults 7.2+, or 8.0+ outside local envs). Reports
+    # only — enabling a JIT is the application's decision, never pgbus's.
+    def check_ruby_jit
+      label = RubyJit.label
+      return Check.new(name: "Ruby JIT", status: :ok, detail: "#{label.upcase} enabled") unless label == "none"
+      return Check.new(name: "Ruby JIT", status: :ok, detail: "no YJIT available on this Ruby") unless RubyJit.yjit_available?
+      return Check.new(name: "Ruby JIT", status: :ok, detail: "YJIT off in a local environment (expected)") if local_env?
+
+      Check.new(name: "Ruby JIT", status: :warn,
+                detail: "YJIT is available but off — a CPU-bound worker (Postgres nearby) runs ~15% fewer jobs/s " \
+                        "without it; no measurable effect when network-bound. " \
+                        "Enable it with config.yjit = true (or load_defaults 7.2+) or RUBY_YJIT_ENABLE=1")
+    rescue StandardError => e
+      Check.new(name: "Ruby JIT", status: :warn, detail: "could not determine (#{e.class}: #{e.message})")
+    end
+
+    # A Rails app outside development/test. Without Rails the environment is
+    # unknown, so assume local and stay quiet rather than warn on a guess.
+    def local_env?
+      return true unless defined?(Rails) && Rails.respond_to?(:env) && Rails.env
+
+      env = Rails.env
+      env.respond_to?(:local?) ? env.local? : %w[development test].include?(env.to_s)
     end
 
     # 2. Database connectivity — SELECT 1 via Client#ping.

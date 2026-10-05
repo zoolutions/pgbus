@@ -41,11 +41,12 @@ class Views::Docs::Pages::CliGenerators < DocsUI::Page
   def doctor
     DocsUI::Section("pgbus doctor", description: "One preflight command for deploy/CI gating.") do
       md <<~'MD'
-        `pgbus doctor` (and the equivalent `rake pgbus:doctor`) runs six checks and
-        prints a report — config validity, database connectivity, PGMQ schema
-        version, configured-queue existence, LISTEN/NOTIFY triggers, and process
-        liveness (the same `OK` / `DEGRADED` / `STALLED` verdict as the MCP
-        `pgbus_health` tool). It never touches PGMQ or PostgreSQL directly outside
+        `pgbus doctor` (and the equivalent `rake pgbus:doctor`) runs a set of checks
+        and prints a report — among them config validity, the Ruby JIT, database
+        connectivity, PGMQ schema version, configured-queue existence, LISTEN/NOTIFY
+        triggers, and process liveness (the same `OK` / `DEGRADED` / `STALLED` verdict
+        as the MCP `pgbus_health` tool). The README's doctor table lists every check.
+        It never touches PGMQ or PostgreSQL directly outside
         `Pgbus::Client`, and it never raises — a broken environment turns every
         probe into a failed check instead of a crash.
       MD
@@ -53,6 +54,7 @@ class Views::Docs::Pages::CliGenerators < DocsUI::Page
         [ "Check", "Fails when" ],
         [
           [ "Configuration", [ :md, "`Configuration#validate!` raises." ] ],
+          [ "Ruby JIT", [ :md, "Never fails. Warns when YJIT is available but off outside a local environment — a CPU-bound worker with Postgres nearby runs ~15% fewer jobs/s without it; a network-bound one shows no measurable difference. Reports only; enabling YJIT stays with `config.yjit`." ] ],
           [ "Database", [ :md, "The DB is unreachable (a plain `SELECT 1` via `Client#ping`)." ] ],
           [ "PGMQ schema", "The schema is missing, untracked, or behind the vendored version (warn)." ],
           [ "Queues", "A configured queue has no PGMQ table." ],

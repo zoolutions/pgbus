@@ -25,7 +25,8 @@ namespace :bench do
   # no-DB unit suite that bench:all runs in CI.
   db_benches = %w[connection_pool_bench integration_bench streams_bench streams_read_pool_bench
                   execution_modes_bench pool_swap_bench pool_autoscale_bench job_burst_bench
-                  notify_wake_bench notify_chaos_bench streams_hub_bench fair_read_bench].freeze
+                  notify_wake_bench notify_chaos_bench streams_hub_bench fair_read_bench
+                  worker_profile_bench].freeze
   # The unit suite is every *_bench.rb that doesn't need a database, derived
   # from the directory so a new unit bench is picked up automatically (kept in
   # sync with bench:one, which globs the same files).
@@ -58,6 +59,11 @@ namespace :bench do
   desc "Run integration benchmarks (requires PGBUS_DATABASE_URL)"
   task :integration do
     ruby "benchmarks/integration_bench.rb"
+  end
+
+  desc "Run worker profiling bench: jobs/s and where a job's time goes (requires PGBUS_DATABASE_URL)"
+  task :worker_profile do
+    ruby "benchmarks/worker_profile_bench.rb"
   end
 
   desc "Run fair share read benchmark (requires PGBUS_DATABASE_URL)"

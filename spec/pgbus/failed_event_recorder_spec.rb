@@ -113,4 +113,24 @@ RSpec.describe Pgbus::FailedEventRecorder do
       end.not_to raise_error
     end
   end
+
+  describe ".clear_queue!" do
+    it "deletes every failed event recorded under any of the given queue names" do
+      allow(mock_connection).to receive(:exec_delete)
+
+      described_class.clear_queue!(%w[pgbus_default default])
+
+      expect(mock_connection).to have_received(:exec_delete).with(
+        a_string_matching(/DELETE FROM pgbus_failed_events WHERE queue_name = ANY/),
+        "FailedEvent Clear Queue",
+        ["{pgbus_default,default}"]
+      )
+    end
+
+    it "does not raise on database errors" do
+      allow(mock_connection).to receive(:exec_delete).and_raise(ActiveRecord::StatementInvalid, "table missing")
+
+      expect { described_class.clear_queue!(%w[default]) }.not_to raise_error
+    end
+  end
 end

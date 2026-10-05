@@ -47,6 +47,23 @@ module Pgbus
         false
       end
 
+      # Drops every row recorded under any of `queue_names`. Called when a
+      # queue is dropped: PGMQ restarts msg_ids on recreate, so a surviving
+      # row would aim the dashboard's retry/discard at an unrelated message.
+      # Queue names are validated word characters, so the array literal is safe.
+      def clear_queue!(queue_names)
+        connection.exec_delete(
+          "DELETE FROM pgbus_failed_events WHERE queue_name = ANY($1::text[])",
+          "FailedEvent Clear Queue",
+          ["{#{queue_names.join(",")}}"]
+        )
+      rescue StandardError => e
+        Pgbus.logger.error do
+          "[Pgbus] Failed to clear failed events for dropped queue(s) #{queue_names.join(", ")}: " \
+            "#{e.class}: #{e.message}"
+        end
+      end
+
       def clear!(queue_name:, msg_id:)
         connection.exec_delete(
           "DELETE FROM pgbus_failed_events WHERE queue_name = $1 AND msg_id = $2",

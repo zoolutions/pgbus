@@ -49,6 +49,56 @@ RSpec.describe "Job lifecycle (integration)", :integration do
     end
   end
 
+  # Issue #484: the executor skips the failed-event DELETE on a first delivery,
+  # so the redelivery path is the one that must still clear the row the failed
+  # attempt wrote.
+  describe "failed-event bookkeeping across a redelivery" do
+    let(:queue) { "lifecycle_failed_events" }
+    let(:executor) { Pgbus::ActiveJob::Executor.new(client: client) }
+    let(:flaky_job) do
+      Class.new(ActiveJob::Base) do
+        self.queue_adapter = :inline
+        def self.name = "JobLifecycleSpec::FlakyJob"
+        cattr_accessor :attempts, default: 0
+        def perform(*)
+          self.class.attempts += 1
+          raise "boom on first attempt" if self.class.attempts == 1
+        end
+      end
+    end
+
+    before do
+      require "active_job"
+      ActiveJob::Base.logger = Logger.new(IO::NULL)
+      stub_const("JobLifecycleSpec", Module.new)
+      stub_const("JobLifecycleSpec::FlakyJob", flaky_job)
+      client.ensure_queue(queue)
+      client.purge_queue(queue)
+      ActiveRecord::Base.connection.execute("DELETE FROM pgbus_failed_events WHERE queue_name = '#{queue}'")
+    end
+
+    def failed_event_count(msg_id)
+      ActiveRecord::Base.connection.select_value(
+        "SELECT COUNT(*) FROM pgbus_failed_events WHERE queue_name = '#{queue}' AND msg_id = #{msg_id.to_i}"
+      ).to_i
+    end
+
+    it "records the failure, then clears it when the redelivered job succeeds" do
+      msg_id = client.send_message(queue, flaky_job.new(1).serialize)
+
+      first = client.read_batch(queue, qty: 1, vt: 30).first
+      expect(executor.execute(first, queue)).to eq(:failed)
+      expect(failed_event_count(msg_id)).to eq(1)
+
+      client.set_visibility_timeout(queue, msg_id.to_i, vt: 0)
+      second = client.read_batch(queue, qty: 1, vt: 30).first
+      expect(second.read_ct.to_i).to eq(2)
+      expect(executor.execute(second, queue)).to eq(:success)
+
+      expect(failed_event_count(msg_id)).to eq(0)
+    end
+  end
+
   describe "dead letter queue" do
     it "moves a message to DLQ" do
       client.send_message("default", { "dlq_test" => true })

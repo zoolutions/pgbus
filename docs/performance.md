@@ -50,6 +50,7 @@ rake bench:execution_modes  # threads vs async DB-connection consumption (requir
 rake bench:notify_wake      # NOTIFY wake latency + LISTEN census (requires PGBUS_DATABASE_URL)
 rake bench:notify_chaos     # NotifyHub failure-mode measurements (requires PGBUS_DATABASE_URL)
 rake bench:streams_hub      # streams master-hub hop cost + census (requires PGBUS_DATABASE_URL)
+rake bench:worker_profile   # real Worker: jobs/s + where a job's time goes (requires PGBUS_DATABASE_URL)
 ```
 
 - **Unit benches** (`benchmarks/*_bench.rb`) isolate gem overhead with a mocked
@@ -64,6 +65,120 @@ rake bench:streams_hub      # streams master-hub hop cost + census (requires PGB
   isolates the per-wake `Client#read_after` cost against a real DB, comparing
   a fresh `PG.connect` per call (the pre-#315 `with_raw_connection` behavior) to
   the dedicated streams pool.
+
+### Where a job's time goes (issue #484)
+
+`benchmarks/worker_profile_bench.rb` (`rake bench:worker_profile`) drives a
+**real `Pgbus::Process::Worker`** (12 threads, `execution_mode: :threads`)
+draining 5 000 no-op ActiveJob jobs from a real PGMQ queue, with stats on. Each
+cell is its own subprocess. jobs/s comes from an unprofiled drain; the time
+split comes from a second drain under [vernier](https://github.com/jhawthorn/vernier),
+which samples every thread and tags each sample as running, idle (GVL released:
+blocked in libpq or on a condition variable) or stalled (runnable, waiting for
+the GVL). `proxied` puts Postgres behind toxiproxy with **+1 ms per round trip**,
+the shape of a database on another host (setup in the bench header).
+
+Measured on an M-series laptop, local PostgreSQL 18, Ruby 3.4.2, at normal
+machine load. Baseline is `main`; "after" is the per-job DELETE removal below.
+Local rows are the mean of two runs, which repeated within 1 %. Proxied rows
+show the range of the two runs instead: the proxy adds real jitter, and the
+proxied/YJIT "after" pair spread 27 % (1 324 vs 1 679). Read the proxied rows
+as "no measurable change", not as a YJIT ranking. The bench sizes the pgmq pool
+from pgbus defaults (`resolved_pool_size` ~7 for these runs) under a 12-thread
+worker; the `pool_wait` bucket below stays at 1-3 %, so that shape did not cap
+these numbers.
+
+| cell | baseline jobs/s | after jobs/s | Δ | CPU/wall (after) |
+|---|---:|---:|---:|---:|
+| local / YJIT | 4 569 | 5 823 | **+27 %** | 84–86 % |
+| local / no JIT | 3 797 | 5 119 | **+35 %** | 92 % |
+| proxied / YJIT | 1 228–1 292 | 1 324–1 679 | within noise | 33–35 % |
+| proxied / no JIT | 1 382–1 409 | 1 361–1 412 | within noise | 37–39 % |
+
+Where the time goes (after; "pool" = the 12 job threads, "loop" = the worker
+thread that reads batches and hands them to the pool):
+
+| cell | pool idle (no work) | pool DB wait | pool GVL wait | loop DB wait | loop GVL wait | on-CPU: pgbus / driver / Rails / other |
+|---|---:|---:|---:|---:|---:|---|
+| local / YJIT | 65 % | 7 % | 24 % | 21 % | 46 % | 35 / 24 / 37 / 5 % |
+| proxied / YJIT | 63 % | 24 % | 10 % | 68 % | 19 % | 30 / 28 / 36 / 7 % |
+
+What the numbers say:
+
+- **Local: the worker is CPU-bound under the GVL.** CPU/wall sits near one
+  core, the loop spends ~half its time waiting for the GVL, and pool threads
+  are mostly idle. Per-job Ruby CPU is the ceiling, which is why removing a
+  query's *client-side* cost moved jobs/s by a third and why **YJIT is worth
+  ~14–20 %** here. "pgbus" in the on-CPU column includes JSON parsing and
+  client wrappers attributed to their pgbus caller; pgbus-owned allocation is
+  only ~8 of ~70 objects per job.
+- **Proxied: the single reader is the ceiling, not per-job round trips.** The
+  loop is ~68 % waiting on Postgres while pool threads sit ~63 % idle. The loop
+  reads `qty = free slots`, and at steady state slots free one at a time, so it
+  degenerates to about one read round trip per job: ~1.3–1.7 k jobs/s per
+  worker regardless of thread count. YJIT does nothing measurable here.
+  Raising this needs a read-ahead / minimum-batch change to the claim model —
+  a separate issue, deliberately not in #484.
+- These are method/system results for **no-op jobs**. A real job's own work
+  (its queries, HTTP calls) adds to every row and dilutes every percentage.
+
+**Changes made from these numbers (issue #484):**
+
+- **Dropped the per-job `pgbus_failed_events` DELETE on first delivery.** Every
+  successful job ran `DELETE FROM pgbus_failed_events WHERE queue_name = $1 AND
+  msg_id = $2` through ActiveRecord. Only `FailedEventRecorder.record!` writes
+  that table, and only after a failed attempt, so a job on `read_ct == 1`
+  cannot have a row; the executor now clears only on redelivery. Local
+  +27 % / +35 % jobs/s above; the single-threaded `rake bench:integration`
+  "execute: plain job" cycle (enqueue + read + execute) went 1 904 → 2 074 i/s
+  (+9 %) and 153 → 147 objects/cycle.
+- **The executor's debug tag string is built only when debug logging is on**
+  (9 → 8 pgbus-owned objects per job; a hard budget in
+  `spec/pgbus/active_job/executor_allocation_budget_spec.rb`). No throughput
+  change is measurable; it is kept because it is free.
+- **`pgbus doctor` reports the Ruby JIT** and the supervisor boot banner logs
+  `jit=yjit|zjit|none`. pgbus never enables a JIT; Rails does through
+  `config.yjit`.
+
+**Gate verdicts (not done, with the number):**
+
+- *Further executor allocation trims* (guarding instrument payload hashes):
+  ~1 object per job each, not measurable in throughput. Not pursued.
+- *A prepared statement for `pgmq.archive`*: pool threads have spare capacity
+  under latency, so a faster archive cannot raise jobs/s; and on one
+  connection `exec_prepared` vs `exec_params` for `SELECT pgmq.archive(…)` was
+  "same-ish" within error both locally (~85–135 µs) and proxied (~1.6–2.0 ms),
+  with the winner flipping when run order was swapped. `pgmq.archive` is
+  plpgsql, so its inner plan is cached either way. Not pursued.
+
+### Native compilation (Spinel, Roundhouse) and Rust
+
+Evaluated 2026-10-05 for issue #484; recorded so the question stays answered.
+
+- **The worker is not a standalone program.** The generated binstub requires
+  the host's `config/environment`, the supervisor eager-loads the app, and the
+  executor runs the *host's* job classes inside `Rails.application.executor`.
+  "Compile the pgbus process" means compiling the host Rails app and every gem
+  it loads.
+- **[Spinel](https://github.com/matz/spinel)** (Matz's AOT compiler, first
+  release 2026.09.12) rules that out: no RubyGems or C extensions at runtime
+  (so no `pg`), no `eval`, `method_missing`, runtime `send` or computed
+  `define_method` — all of which ActiveJob, ActiveRecord and Zeitwerk rely on.
+  Its benchmarks are CPU-bound single programs; none waits on a database.
+- **[Roundhouse](https://github.com/rubys/roundhouse)** transpiles a Rails
+  *application* to another runtime. Its [published bench](https://rubys.github.io/roundhouse/bench/)
+  is SQLite-only and HTTP-only, with no ActiveJob. An app that went through it
+  would no longer run Ruby, so pgbus-the-gem would not be involved.
+- **Compiling only the fetch loop** would hand each message back to CRuby for
+  `perform_now`, adding an IPC hop per job rather than removing a round trip.
+- **A Rust extension inside the gem** could only speed up pgbus-owned Ruby CPU
+  (libpq already releases the GVL, `JSON.parse` is already C, ActiveJob is
+  Rails code) and would make pgbus a compiled gem for every host. A standalone
+  Rust worker that shares pgbus's database contract, for apps that do not run
+  Ruby, is tracked separately in #483.
+- The table above is the reason none of this is the lever: locally the CPU that
+  a compiler could speed up is shared with Rails and the driver, and under real
+  network latency the ceiling is a read round trip, which no compiler removes.
 
 ### Fair share reads (issue #426)
 
@@ -329,6 +444,7 @@ that enforce hard limits:
 | `Client#read_batch` | < 30 objects/call |
 | JSON round-trip | < 20 objects |
 | Retained objects (leak detection) | 0 across 100 cycles |
+| `Executor#execute`, pgbus-owned objects only (`executor_allocation_budget_spec.rb`) | < 10 objects/job (measured 8) |
 
 These run as part of `bundle exec rspec` on every PR. They are hard gates — a
 regression that exceeds the budget fails the build.

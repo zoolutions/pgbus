@@ -699,6 +699,9 @@ module Pgbus
         synchronized { @pgmq.drop_queue(name) }
       end
       @queues_created.delete(name)
+      # Failed-event rows are keyed by the name the executor saw (physical or
+      # logical); a recreated queue reuses msg_ids, so neither may survive.
+      FailedEventRecorder.clear_queue!([name, name.delete_prefix("#{config.queue_prefix}_")].uniq)
       result
     end
 
