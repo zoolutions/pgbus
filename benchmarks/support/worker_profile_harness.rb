@@ -52,7 +52,7 @@ module WorkerProfileHarness
 
   Frame = Struct.new(:filename, :label, keyword_init: true)
 
-  Cell = Struct.new(:location, :jit, :jobs, :wall_s, :cpu_s, :gc_s, :jobs_per_s, :pool_shares, :loop_shares,
+  Cell = Struct.new(:role, :location, :jit, :jobs, :wall_s, :cpu_s, :gc_s, :jobs_per_s, :pool_shares, :loop_shares,
                     :cpu_shares,
                     :profile_path, keyword_init: true) do
     def to_h = super.transform_keys(&:to_s)

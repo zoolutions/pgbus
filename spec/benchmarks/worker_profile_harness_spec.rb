@@ -133,6 +133,16 @@ RSpec.describe WorkerProfileHarness do
     end
   end
 
+  # Issue #486: the bench runs the same harness over a Worker and an event
+  # Consumer, so each result row says which loop it measured.
+  describe "Cell" do
+    it "round-trips role through to_h" do
+      cell = described_class::Cell.new(role: "consumer", location: "local", jit: "yjit", jobs: 10)
+
+      expect(cell.to_h).to include("role" => "consumer", "location" => "local")
+    end
+  end
+
   describe ".jit_label" do
     it "reports yjit when YJIT is enabled" do
       stub_const("RubyVM::YJIT", Module.new { def self.enabled? = true })
