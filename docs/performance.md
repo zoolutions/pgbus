@@ -118,7 +118,8 @@ What the numbers say:
   degenerates to about one read round trip per job: ~1.3–1.7 k jobs/s per
   worker regardless of thread count. YJIT does nothing measurable here.
   Raising this needs a read-ahead / minimum-batch change to the claim model —
-  a separate issue, deliberately not in #484.
+  a separate issue, deliberately not in #484. Done in #486: see "Read-ahead"
+  below.
 - These are method/system results for **no-op jobs**. A real job's own work
   (its queries, HTTP calls) adds to every row and dilutes every percentage.
 
@@ -150,6 +151,96 @@ What the numbers say:
   "same-ish" within error both locally (~85–135 µs) and proxied (~1.6–2.0 ms),
   with the winner flipping when run order was swapped. `pgmq.archive` is
   plpgsql, so its inner plan is cached either way. Not pursued.
+
+### Read-ahead (issue #486)
+
+`config.read_ahead = N` (also per capsule and per `event_consumers` entry) lets
+a worker or event consumer claim up to N messages beyond its free threads.
+They wait in a `Process::ClaimBuffer`, kept invisible by a visibility-heartbeat
+hold, until a thread frees. The loop feeds buffered claims to free slots, then
+reads `free slots + read_ahead - buffered` (capped by `prefetch_limit -
+in_flight`), then feeds again. It waits on the wake signal only when a step
+moved nothing. The default is 0, which reads exactly the free slots, as before.
+
+`rake bench:worker_profile` now also has a **consumer cell**: a real
+`Process::Consumer` draining an event-bus topic queue through a plain (not
+`idempotent!`) handler, so the transport is measured and the dedup table is not.
+`WP_BENCH_ROLE` picks `worker`, `consumer` or `both`, and
+`WP_BENCH_READ_AHEAD` sets the value.
+
+Measured on the same M-series laptop, local PostgreSQL 18, Ruby 3.4.2, 12
+threads, 5 000 no-op jobs/events, **+1 ms per round trip** for `proxied`. The
+machine was shared and loaded: load average 29–45 on 12 cores, from other
+sessions' test suites. Each round therefore ran baseline (`main`'s
+worker/consumer with the bench files copied in), `read_ahead` 0 and
+`read_ahead` 12 back to back. The rows are the range of rounds 2 and 3 (load
+~29–36). Round 1 ran at load ~43; its local cells were depressed across the
+board (baseline local worker 1 413 jobs/s), and it is listed separately below.
+
+| cell | baseline jobs/s | read_ahead 0 | read_ahead 12 | Δ (12 vs baseline) |
+|---|---:|---:|---:|---:|
+| worker / local / YJIT | 4 664–5 952 | 5 446–5 843 | 5 994–6 057 | within noise |
+| worker / local / no JIT | 4 342–4 953 | 4 602–4 896 | 4 929–4 965 | within noise |
+| worker / proxied / YJIT | 1 323–1 731 | 1 302–1 546 | 2 300–2 462 | **+33 % to +86 %** |
+| worker / proxied / no JIT | 1 286–1 680 | 1 384–1 525 | 2 423–2 441 | **+44 % to +90 %** |
+| consumer / local / YJIT | 7 800–8 145 | 7 751–7 876 | 7 868–8 013 | within noise |
+| consumer / local / no JIT | 6 275–7 066 | 6 780–6 899 | 6 905–6 975 | within noise |
+| consumer / proxied / YJIT | 1 359–1 779 | 1 347–1 565 | 2 590–2 599 | **+46 % to +91 %** |
+| consumer / proxied / no JIT | 1 326–1 576 | 1 283–1 295 | 2 288–2 300 | **+45 % to +73 %** |
+
+Round 1 (load ~43), proxied only: worker baseline 1 313 / 1 277 (YJIT / no
+JIT), `read_ahead` 0 1 271 / 1 108, `read_ahead` 12 **2 382 / 1 121**; consumer
+baseline 1 027 / 1 258, `read_ahead` 0 1 292 / 1 001, `read_ahead` 12 1 615 /
+2 527. The worker/no-JIT `read_ahead` 12 cell is the one run in 12 where
+read-ahead showed no gain. It ran at the highest load of the session.
+
+Where the time goes, proxied / YJIT, round 3 (pool = the 12 job threads, loop
+= the reader thread):
+
+| cell | pool idle | pool DB wait | pool checkout wait | loop DB wait |
+|---|---:|---:|---:|---:|
+| worker, baseline | 62 % | 27 % | 2 % | 73 % |
+| worker, read_ahead 12 | 39 % | 33 % | 14 % | 64 % |
+| consumer, baseline | 60 % | 28 % | 3 % | 78 % |
+| consumer, read_ahead 12 | 32 % | 37 % | 15 % | 76 % |
+
+What the numbers say:
+
+- **Under latency, read-ahead is the lever #484 predicted.** One read now feeds
+  several jobs: pool threads that sat idle waiting for work are busy, and jobs/s
+  rises 1.4–1.9× for both loops against the same round's baseline (rounds 2–3). This is a system-level
+  result for no-op jobs; a real job's own work dilutes it.
+- **Locally it changes nothing measurable.** There the worker is CPU-bound
+  under the GVL (#484), so a faster reader has nothing to feed. `read_ahead` 0
+  overlaps the baseline's run-to-run range in 7 of 8 cells. The exception,
+  consumer / proxied / no JIT, sits 2–18 % below (1 283–1 295 vs 1 326–1 576),
+  and round 1's worker / proxied / no JIT `read_ahead` 0 cell was 13 % below
+  its baseline (1 108 vs 1 277). Under load 29–45 that is plausibly noise, but
+  it was not proven to be. `read_ahead` 0 still routes each claim through the
+  buffer (one heartbeat hold and release per message).
+- **The next ceiling is the connection pool.** With the pool busy, job threads
+  now spend 14–15 % of their time waiting to check out a pgmq connection (the
+  bench sizes the pool from pgbus defaults, ~7 for 12 threads), up from 2–3 %.
+  Raise `pool_size` together with `read_ahead` under latency.
+- **Sizing:** start at `read_ahead = threads`. `prefetch_limit` still caps the
+  total, because buffered claims count as in flight.
+
+Known limits, documented rather than solved:
+
+- `read_multi` (a multi-queue worker without priority, fair share or group
+  mode, and a multi-queue consumer) may claim up to `qty` rows per queue and
+  discard those past the `LIMIT`. A discarded row stays invisible until its
+  timeout. A larger `qty` discards more. This predates read-ahead; the fix is a
+  different read statement.
+- A message handed back on drain, recycle, pause or shutdown (`set_vt` 0) has
+  already had its `read_ct` incremented, the same cost a crash or stale claim
+  pays. With `zombie_detection` on, the next claimant logs it as a zombie
+  redelivery (`read_ct > 1`, no failed-event row): up to `read_ahead` such
+  warnings per recycle.
+- With `visibility_heartbeat = false` there is no hold, so a message buffered
+  longer than `visibility_timeout` can be claimed and run by another worker.
+  `Configuration#validate!` warns when `read_ahead > 0` meets a disabled
+  heartbeat.
 
 ### Native compilation (Spinel, Roundhouse) and Rust
 

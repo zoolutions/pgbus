@@ -30,8 +30,9 @@ module Pgbus
     #
     # The ninth member takes the struct out of the 80-byte slot it used to fit
     # (measured: 80 → 160). That is paid at most once per in-flight message, so
-    # the whole table is bounded by the execution pool's capacity — a handful of
-    # entries per process, not one per enqueued job.
+    # the whole table is bounded by the execution pool's capacity plus the
+    # read-ahead buffer (threads + read_ahead per process, issue #486) — a
+    # handful of entries per process, not one per enqueued job.
     Entry = Struct.new(:client, :queue_name, :prefixed, :msg_id, :job_class, :extended_at, :extensions,
                        :concurrency, :on_beat, keyword_init: true)
 
@@ -81,6 +82,25 @@ module Pgbus
         end
       end
 
+      # Keep a claimed-but-not-started message invisible until #release.
+      # Used by Process::ClaimBuffer for read-ahead (issue #486): a buffered
+      # message waits for a free slot and must not be redelivered meanwhile.
+      # Same key as #track, so the run's own tracking takes over after the
+      # hold is released. Returns the entry, or nil when the heartbeat is off.
+      def hold(client:, queue_name:, msg_id:, prefixed: true, job_class: nil, config: Pgbus.configuration)
+        return unless config.visibility_heartbeat
+
+        entry = Entry.new(client: client, queue_name: queue_name, prefixed: prefixed, msg_id: msg_id.to_i,
+                          job_class: job_class, extended_at: monotonic_now, extensions: 0)
+        register(entry, config)
+        entry
+      end
+
+      # Drop a #hold. A nil entry (heartbeat off) is a no-op.
+      def release(entry)
+        unregister(entry) if entry
+      end
+
       # Extend every tracked message whose last extension is older than the
       # heartbeat interval. Public so tests and callers without the thread
       # can drive it.
@@ -127,11 +147,22 @@ module Pgbus
         end
       end
 
+      # Only the entry that is registered under the key: a stale hold released
+      # after #track re-registered the same message must not drop the running
+      # job's entry (issue #486).
       def unregister(entry)
-        synchronize { entries.delete(key_for(entry)) }
+        synchronize do
+          key = key_for(entry)
+          entries.delete(key) if entries[key].equal?(entry)
+        end
       end
 
       def extend!(entry, now:, config:)
+        # tick! picked this entry under the mutex but runs here without it: if
+        # the entry was released meanwhile (a read-ahead claim handed back with
+        # vt: 0, a job that finished), extending it would undo that.
+        return unless registered?(entry)
+
         vt = config.visibility_timeout
         entry.client.set_visibility_timeout(entry.queue_name, entry.msg_id, vt: vt, prefixed: entry.prefixed)
         entry.extended_at = now
@@ -216,6 +247,10 @@ module Pgbus
 
       def entries
         @entries ||= {}
+      end
+
+      def registered?(entry)
+        synchronize { entries[key_for(entry)].equal?(entry) }
       end
 
       def key_for(entry)

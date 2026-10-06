@@ -191,6 +191,89 @@ RSpec.describe Pgbus::VisibilityHeartbeat do
     end
   end
 
+  # Issue #486: a worker's read-ahead buffer holds claimed messages that have
+  # not started yet. hold/release keep them invisible across that wait, with
+  # the same extension a running job gets.
+  describe ".hold / .release" do
+    def hold(msg_id: 7, queue_name: "default", prefixed: true)
+      described_class.hold(client: client, queue_name: queue_name, msg_id: msg_id, prefixed: prefixed,
+                           job_class: "Buffered", config: config)
+    end
+
+    let(:later) { Process.clock_gettime(Process::CLOCK_MONOTONIC) + 10 }
+
+    it "registers an entry that tick! extends like a tracked one, honouring prefixed:" do
+      hold(queue_name: "pgbus_default_p1", prefixed: false)
+
+      expect(described_class.tracked_count).to eq(1)
+      expect(described_class.tick!(now: later, config: config)).to eq(1)
+      expect(client).to have_received(:set_visibility_timeout)
+        .with("pgbus_default_p1", 7, vt: 30, prefixed: false).once
+    end
+
+    it "returns the entry, and release removes it" do
+      entry = hold
+
+      expect(entry).to be_a(described_class::Entry)
+      described_class.release(entry)
+      expect(described_class.tracked_count).to eq(0)
+    end
+
+    it "replaces rather than duplicates a second hold of the same message" do
+      hold
+      hold
+
+      expect(described_class.tracked_count).to eq(1)
+    end
+
+    it "leaves exactly the tracked entry when the hold is released before track (the handoff)" do
+      entry = hold
+      described_class.release(entry)
+
+      track { expect(described_class.tracked_count).to eq(1) }
+      expect(described_class.tracked_count).to eq(0)
+    end
+
+    # A release that lands after the executor's track registered the same key
+    # must not drop the running job's entry.
+    it "does not remove a tracked entry when a stale hold for the same key is released" do
+      entry = hold
+
+      track do
+        described_class.release(entry)
+        expect(described_class.tracked_count).to eq(1)
+      end
+    end
+
+    # tick! picks its due entries under the mutex but extends them after
+    # letting go of it. An entry released in between (a read-ahead claim being
+    # handed back with vt: 0) must not be re-hidden by that stale extension.
+    it "does not extend an entry that was released after tick! picked it" do
+      entry = hold
+      described_class.release(entry)
+
+      described_class.send(:extend!, entry, now: later, config: config)
+
+      expect(client).not_to have_received(:set_visibility_timeout)
+    end
+
+    it "still extends an entry that is registered" do
+      entry = hold
+
+      described_class.send(:extend!, entry, now: later, config: config)
+
+      expect(client).to have_received(:set_visibility_timeout).with("default", 7, vt: 30, prefixed: true).once
+    end
+
+    it "holds nothing and returns nil when the heartbeat is disabled; release(nil) is a no-op" do
+      config.visibility_heartbeat = false
+
+      expect(hold).to be_nil
+      expect(described_class.tracked_count).to eq(0)
+      expect { described_class.release(nil) }.not_to raise_error
+    end
+  end
+
   describe ".stop" do
     it "stops the ticker thread and keeps tracked entries" do
       track do

@@ -330,6 +330,7 @@ module Pgbus
             queues: queues, threads: threads, config: config,
             single_active_consumer: single_active, consumer_priority: priority,
             execution_mode: exec_mode, group_mode: grp_mode,
+            read_ahead: config.read_ahead_for(worker_config),
             liveness_pipe: liveness_writer, wake_pipe: wake_reader
           )
           worker.run
@@ -498,6 +499,7 @@ module Pgbus
           setup_child_process
           load_rails_app
           consumer = Consumer.new(topics: topics, threads: threads, config: config,
+                                  read_ahead: config.read_ahead_for(consumer_config),
                                   liveness_pipe: liveness_writer, wake_pipe: wake_reader)
           consumer.run
         end

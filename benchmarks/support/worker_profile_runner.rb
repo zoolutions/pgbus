@@ -53,25 +53,39 @@ module WorkerProfileRunner
   # Enqueues `jobs` plain jobs, then drains them with a real Worker.
   # Returns {wall_s:, cpu_s:, gc_s:, jobs:} measured from worker start to the
   # last job's completion. With profile_path, the drain runs under vernier and
-  # the result also carries :shares.
-  def drain(jobs:, threads:, profile_path: nil)
+  # the result also carries :shares. A nil read_ahead is not passed at all, so
+  # the bench also runs against a Worker that predates the keyword (#486).
+  def drain(jobs:, threads:, read_ahead: nil, profile_path: nil)
     reset!
     enqueue(jobs)
     Pgbus.stopping = false
-    worker = Pgbus::Process::Worker.new(queues: [QUEUE], threads: threads)
+    options = { queues: [QUEUE], threads: threads }
+    options[:read_ahead] = read_ahead unless read_ahead.nil?
+    worker = Pgbus::Process::Worker.new(**options)
 
+    # A crash rescued in Worker#process_message counts as failed but not
+    # processed, so wait on either: the check below reports it.
+    measurement = drive(worker, profile_path) { drained?(worker, jobs) }
+
+    failed = worker.stats[:jobs_failed]
+    raise "#{failed} jobs failed during the drain — the bench measured errors, not work" if failed.positive?
+
+    measurement.merge(jobs: jobs)
+  end
+
+  # Runs `process` (a Worker or a Consumer) on a named loop thread until the
+  # block says the drain is done, then shuts it down gracefully. Shared with
+  # ConsumerProfileRunner so both loops are measured the same way.
+  def drive(process, profile_path)
     measurement = nil
-    nil
     run = lambda do
       measurement = measure do
-        runner = Thread.new { worker.run }
+        runner = Thread.new { process.run }
         runner.name = WorkerProfileHarness::LOOP_THREAD_NAME
         # sleep, not Thread.pass: a spinning watcher holds the GVL and would
         # show up as gvl_wait on every thread it is measuring.
-        # A crash rescued in Worker#process_message counts as failed but not
-        # processed, so wait on either: the check below reports it.
-        sleep(0.002) until drained?(worker, jobs)
-        worker.graceful_shutdown
+        sleep(0.002) until yield
+        process.graceful_shutdown
         runner.join
       end
     end
@@ -86,11 +100,7 @@ module WorkerProfileRunner
     else
       run.call
     end
-
-    failed = worker.stats[:jobs_failed]
-    raise "#{failed} jobs failed during the drain — the bench measured errors, not work" if failed.positive?
-
-    measurement.merge(jobs: jobs)
+    measurement
   end
 
   def drained?(worker, jobs)

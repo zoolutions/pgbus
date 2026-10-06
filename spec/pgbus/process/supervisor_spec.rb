@@ -345,6 +345,51 @@ RSpec.describe Pgbus::Process::Supervisor do
     end
   end
 
+  # Issue #486: read_ahead reaches the forked Worker / Consumer from the
+  # capsule or event_consumers entry, else from the global setting. Here fork
+  # runs its block in-process (child setup stubbed) so the constructor
+  # arguments are observable.
+  describe "read_ahead passthrough on fork (issue #486)" do
+    let(:supervisor) { described_class.new }
+    let(:child) { double("child", run: nil) }
+
+    before do
+      allow(supervisor).to receive(:fork) do |&block|
+        block.call
+        7001
+      end
+      allow(supervisor).to receive_messages(restore_signals: nil, setup_child_process: nil, load_rails_app: nil,
+                                            bootstrap_queues!: nil)
+      allow(Pgbus::Process::Worker).to receive(:new).and_return(child)
+      allow(Pgbus::Process::Consumer).to receive(:new).and_return(child)
+    end
+
+    after { config.read_ahead = 0 }
+
+    it "passes the capsule's read_ahead to Worker.new" do
+      config.read_ahead = 2
+      supervisor.send(:fork_worker, { queues: %w[default], threads: 4, read_ahead: 8 }, slot: 0)
+
+      expect(Pgbus::Process::Worker).to have_received(:new).with(hash_including(read_ahead: 8))
+    end
+
+    it "passes the global read_ahead to Worker.new when the capsule has none" do
+      config.read_ahead = 2
+      supervisor.send(:fork_worker, { queues: %w[default], threads: 4 }, slot: 0)
+
+      expect(Pgbus::Process::Worker).to have_received(:new).with(hash_including(read_ahead: 2))
+    end
+
+    it "passes the event_consumers entry's read_ahead to Consumer.new, else the global" do
+      config.read_ahead = 2
+      supervisor.send(:fork_consumer, { topics: ["orders.#"], threads: 3, read_ahead: 5 }, slot: 0)
+      supervisor.send(:fork_consumer, { topics: ["orders.#"], threads: 3 }, slot: 1)
+
+      expect(Pgbus::Process::Consumer).to have_received(:new).with(hash_including(read_ahead: 5))
+      expect(Pgbus::Process::Consumer).to have_received(:new).with(hash_including(read_ahead: 2))
+    end
+  end
+
   describe "worker liveness pipe (private)" do
     let(:supervisor) { described_class.new }
     let(:worker_config) { { queues: ["default"], threads: 5 } }

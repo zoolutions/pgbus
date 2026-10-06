@@ -26,6 +26,7 @@ PostgreSQL-native job processing and event bus for Rails, built on [PGMQ](https:
   - [Client-level circuit breaker (database-down)](#client-level-circuit-breaker-database-down)
   - [Read timeouts (libpq-native)](#read-timeouts-libpq-native)
   - [Prefetch flow control](#prefetch-flow-control)
+  - [Read-ahead](#read-ahead)
   - [Worker recycling](#worker-recycling)
   - [Retry backoff](#retry-backoff)
 - [Routing and ordering](#routing-and-ordering)
@@ -540,6 +541,24 @@ end
 ```
 
 The worker tracks in-flight messages with an atomic counter and only fetches `min(idle_threads, prefetch_available)` messages per cycle. The counter is decremented in an `ensure` block so it never gets stuck.
+
+### Read-ahead
+
+By default a worker reads as many messages as it has free threads. Once the pool is busy, threads free one at a time, so the worker ends up making one read round trip per job. That costs nothing when Postgres is on the same host. When Postgres is on another host, that round trip becomes the throughput ceiling. `read_ahead` lets a worker or event consumer claim up to N messages beyond its free threads and hold them until a thread frees:
+
+```ruby
+Pgbus.configure do |config|
+  config.read_ahead = 12                                   # global; 0 = off (default)
+  config.capsule :api, queues: %w[api], threads: 12, read_ahead: 12   # per capsule
+  config.event_consumers = [{ topics: ["orders.#"], threads: 8, read_ahead: 8 }]
+end
+```
+
+- **When to turn it on:** when Postgres is not on the same host as the worker. Start with `read_ahead` equal to `threads`. With a local database it buys little, because the worker is CPU-bound there. Under +1 ms of latency, `read_ahead` 12 took a 12-thread worker from ~1.3–1.7k to ~2.3–2.5k no-op jobs/s (`docs/performance.md`, "Read-ahead"). The next ceiling is the connection pool, so raise `pool_size` with it.
+- **Visibility:** buffered messages are kept invisible by the visibility heartbeat until their job starts, so a long wait never lets another worker claim them. With `visibility_heartbeat = false` nothing holds them, and a message buffered past `visibility_timeout` can run twice; `validate!` warns about that combination.
+- **Shutdown and recycle:** when a worker drains, recycles, pauses or shuts down, buffered messages go straight back to the queue (`set_vt` 0), not after `visibility_timeout`. Their `read_ct` has already been incremented, the same as after a crash, so with `zombie_detection` on, the worker that picks one up logs it as a zombie redelivery.
+- **With `prefetch_limit`:** buffered messages count as in flight, so `prefetch_limit` still caps everything a worker has claimed.
+- **Multi-queue workers:** the plain multi-queue read (no priority, fair share or group mode) can claim and discard rows past its limit. A larger read makes that worse; see `docs/performance.md`.
 
 ### Worker recycling
 
