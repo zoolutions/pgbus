@@ -231,6 +231,7 @@ it:
       bulk_select_row: Seleziona %{id}
       bulk_selected: selezionato
       pagination:
+        label: Paginazione
         next: Avanti
         previous: Indietro
         showing: Visualizzazione %{from}–%{to} di %{total}
@@ -317,47 +318,6 @@ it:
           7d: 7g
         title: Approfondimenti
     jobs:
-      enqueued_table:
-        arguments: Argomenti
-        discard: Scarta
-        discard_all: Scarta tutti
-        discard_all_confirm: Scartare tutti i lavori in coda e rilasciare i relativi blocchi? Questa azione non può essere annullata.
-        discard_confirm: Scartare questo messaggio?
-        empty: Nessun lavoro in coda
-        full_json_payload: Payload JSON completo
-        headers:
-          enqueued: In coda
-          id: ID
-          job_class: Classe Lavoro
-          queue: Coda
-          reads: Letture
-        headers_section: Intestazioni
-        job_id: 'ID Lavoro:'
-        metadata: Metadati
-        metadata_labels:
-          last_read: 'Ultima lettura:'
-          locale: 'Locale:'
-          priority: 'Priorità:'
-          queue: 'Coda:'
-          scheduled: 'Programmato:'
-          timezone: 'Fuso orario:'
-          visible_at: 'Visibile alle:'
-        retry: Riprova
-        retry_confirm: Reimpostare il timeout di visibilità e riprovare?
-        title: Lavori in coda
-      failed_table:
-        discard: Scarta
-        discard_confirm: Scartare questo lavoro?
-        empty: Nessun lavoro fallito
-        headers:
-          actions: Azioni
-          error: Errore
-          failed: Fallito
-          id: ID
-          queue: Coda
-          retries: Tentativi
-        retry: Riprova
-        title: Lavori Falliti
       index:
         discard_all: Scarta Tutto
         discard_all_confirm: Scartare tutti i lavori falliti?
@@ -371,6 +331,74 @@ it:
         retry_all: Riprova Tutto
         retry_all_confirm: Riprova tutti i lavori falliti?
         title: Lavori
+      list:
+        arguments: Argomenti
+        discard: Scarta
+        discard_all_enqueued: Scarta tutti quelli in coda
+        discard_all_enqueued_confirm: Scartare tutti i lavori in coda e rilasciare i relativi blocchi? Questa azione non può essere annullata.
+        discard_confirm: Scartare questo lavoro?
+        empty:
+          all: Nessun job
+          blocked: Nessun job bloccato da un limite di concorrenza
+          ready: Nessun job in attesa di esecuzione
+          retrying: Nessun job in attesa di ripetizione
+          running: Nessun job in esecuzione
+          scheduled: Nessun job pianificato
+        full_json_payload: Payload JSON completo
+        headers:
+          actions: Azioni
+          attempts: Tentativi
+          id: ID
+          job: Job
+          queue: Coda
+          reason: Prossima esecuzione / Motivo
+          state: Stato
+        headers_section: Intestazioni
+        job_id: 'ID Lavoro:'
+        metadata: Metadati
+        metadata_labels:
+          concurrency_key: 'Chiave di concorrenza:'
+          enqueued: 'Accodato:'
+          last_read: 'Ultima lettura:'
+          locale: 'Locale:'
+          priority: 'Priorità:'
+          scheduled: 'Programmato:'
+          timezone: 'Fuso orario:'
+          visible_at: 'Visibile alle:'
+        reasons:
+          blocked: In attesa di uno slot di concorrenza su %{key} (occupati %{held}/%{limit}) · parcheggiato %{ago}
+          blocked_no_slots: In attesa di uno slot di concorrenza su %{key} · parcheggiato %{ago}
+          lease_expired: Lease scaduto (probabilmente il worker è terminato) — riconsegna, tentativo %{attempt}
+          no_workers: Nessun worker integro in esecuzione
+          not_drained: Nessun worker elabora questa coda
+          orphaned: Fallito con %{error} — il messaggio non è più nella coda
+          paused: Coda in pausa
+          retrying: 'Tentativo %{attempt}/%{max} fallito: %{error} — prossimo tentativo %{time}'
+          retrying_dlq: 'Tentativo %{attempt}/%{max} fallito: %{error} — la prossima lettura lo sposta nella DLQ'
+          retrying_due: 'Tentativo %{attempt}/%{max} fallito: %{error} — prossimo tentativo ora'
+          running: Prelevato %{ago} · il lease scade %{time}
+          scheduled: Pianificato — viene eseguito %{time}
+          waiting: In attesa — %{count} davanti
+          waiting_priority: In attesa — %{count} davanti con questa priorità
+          waiting_unknown: In attesa di essere prelevato
+        retry: Riprova
+        retry_confirm: Reimpostare il timeout di visibilità e riprovare?
+        states:
+          blocked: Bloccato
+          ready: Pronto
+          retrying: In ripetizione
+          running: In esecuzione
+          scheduled: Pianificato
+        tabs:
+          all: Tutti
+          blocked: Bloccati
+          ready: Pronti
+          retrying: In ripetizione
+          running: In esecuzione
+          scheduled: Pianificati
+        tabs_label: Stati dei job
+        view_failure: Vedi errore
+        view_locks: Vedi i lock
       show:
         back: Torna ai Lavori
         backtrace: Traccia dello stack

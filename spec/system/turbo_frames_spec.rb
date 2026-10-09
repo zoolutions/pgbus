@@ -18,11 +18,11 @@ RSpec.describe "Turbo Frames", type: :system do
     expect(page).to have_css("turbo-frame#queues-list")
   end
 
-  it "jobs index has turbo-frames for failed and enqueued" do
-    visit "/pgbus/jobs"
+  it "jobs index has one auto-refreshing list frame that keeps the tab and page" do
+    visit "/pgbus/jobs?state=ready&page=2"
 
-    expect(page).to have_css("turbo-frame#jobs-failed")
-    expect(page).to have_css("turbo-frame#jobs-enqueued")
+    frame = find("turbo-frame#jobs-list[data-auto-refresh]")
+    expect(frame["data-src"]).to include("frame=list", "state=ready", "page=2")
   end
 
   it "processes index has turbo-frame" do

@@ -231,6 +231,7 @@ fr:
       bulk_select_row: Sélectionner %{id}
       bulk_selected: sélectionné
       pagination:
+        label: Pagination
         next: Suivant
         previous: Précédent
         showing: Affichage de %{from}–%{to} sur %{total}
@@ -317,47 +318,6 @@ fr:
           7d: 7j
         title: Aperçus
     jobs:
-      enqueued_table:
-        arguments: Arguments
-        discard: Rejeter
-        discard_all: Tout supprimer
-        discard_all_confirm: Supprimer tous les travaux en file d'attente et libérer leurs verrous ? Cette action est irréversible.
-        discard_confirm: Rejeter ce message ?
-        empty: Aucun travail en file d'attente
-        full_json_payload: Charge utile JSON complète
-        headers:
-          enqueued: En file d'attente
-          id: ID
-          job_class: Classe de travail
-          queue: File d'attente
-          reads: Lectures
-        headers_section: En-têtes
-        job_id: 'ID du travail :'
-        metadata: Métadonnées
-        metadata_labels:
-          last_read: 'Dernière lecture :'
-          locale: 'Langue :'
-          priority: 'Priorité :'
-          queue: 'File d''attente :'
-          scheduled: 'Planifié :'
-          timezone: 'Fuseau horaire :'
-          visible_at: 'Visible à :'
-        retry: Réessayer
-        retry_confirm: Réinitialiser le délai de visibilité et réessayer ?
-        title: Travaux en file d'attente
-      failed_table:
-        discard: Ignorer
-        discard_confirm: Ignorer ce travail ?
-        empty: Aucun travail échoué
-        headers:
-          actions: Actions
-          error: Erreur
-          failed: Échoué
-          id: ID
-          queue: File d'attente
-          retries: Reprises
-        retry: Réessayer
-        title: Travaux échoués
       index:
         discard_all: Tout ignorer
         discard_all_confirm: Ignorer tous les travaux échoués ?
@@ -371,6 +331,74 @@ fr:
         retry_all: Tout réessayer
         retry_all_confirm: Réessayer tous les travaux échoués ?
         title: Travaux
+      list:
+        arguments: Arguments
+        discard: Ignorer
+        discard_all_enqueued: Abandonner tous les jobs en file
+        discard_all_enqueued_confirm: Supprimer tous les travaux en file d'attente et libérer leurs verrous ? Cette action est irréversible.
+        discard_confirm: Ignorer ce travail ?
+        empty:
+          all: Aucun job
+          blocked: Aucun job bloqué par une limite de concurrence
+          ready: Aucun job en attente d'exécution
+          retrying: Aucun job en attente d'un nouvel essai
+          running: Aucun job en cours
+          scheduled: Aucun job planifié
+        full_json_payload: Charge utile JSON complète
+        headers:
+          actions: Actions
+          attempts: Tentatives
+          id: ID
+          job: Job
+          queue: File d'attente
+          reason: Prochaine exécution / Raison
+          state: État
+        headers_section: En-têtes
+        job_id: 'ID du travail :'
+        metadata: Métadonnées
+        metadata_labels:
+          concurrency_key: 'Clé de concurrence :'
+          enqueued: 'Mis en file :'
+          last_read: 'Dernière lecture :'
+          locale: 'Langue :'
+          priority: 'Priorité :'
+          scheduled: 'Planifié :'
+          timezone: 'Fuseau horaire :'
+          visible_at: 'Visible à :'
+        reasons:
+          blocked: En attente d'un créneau de concurrence sur %{key} (occupés %{held}/%{limit}) · mis en attente %{ago}
+          blocked_no_slots: En attente d'un créneau de concurrence sur %{key} · mis en attente %{ago}
+          lease_expired: Bail expiré (le worker est probablement mort) — nouvelle livraison, tentative %{attempt}
+          no_workers: Aucun worker sain en cours d'exécution
+          not_drained: Aucun worker ne traite cette file
+          orphaned: Échec avec %{error} — le message n'est plus dans la file
+          paused: File en pause
+          retrying: 'La tentative %{attempt}/%{max} a échoué : %{error} — prochaine tentative %{time}'
+          retrying_dlq: 'La tentative %{attempt}/%{max} a échoué : %{error} — la prochaine lecture le déplace vers la DLQ'
+          retrying_due: 'La tentative %{attempt}/%{max} a échoué : %{error} — prochaine tentative maintenant'
+          running: Réclamé %{ago} · le bail expire %{time}
+          scheduled: Planifié — s'exécute %{time}
+          waiting: En attente — %{count} devant
+          waiting_priority: En attente — %{count} devant à cette priorité
+          waiting_unknown: En attente de prise en charge
+        retry: Réessayer
+        retry_confirm: Réinitialiser le délai de visibilité et réessayer ?
+        states:
+          blocked: Bloqué
+          ready: Prêt
+          retrying: Nouvel essai
+          running: En cours
+          scheduled: Planifié
+        tabs:
+          all: Tous
+          blocked: Bloqués
+          ready: Prêts
+          retrying: Nouvel essai
+          running: En cours
+          scheduled: Planifiés
+        tabs_label: États des jobs
+        view_failure: Voir l'échec
+        view_locks: Voir les verrous
       show:
         back: Retour aux travaux
         backtrace: Trace de la pile

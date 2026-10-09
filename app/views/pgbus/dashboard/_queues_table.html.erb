@@ -2,37 +2,37 @@
   <div class="mb-8">
     <div class="flex items-center justify-between mb-3">
       <h2 class="text-lg font-semibold text-gray-900 dark:text-white"><%= t("pgbus.dashboard.queues_table.title") %></h2>
-      <%= link_to t("pgbus.dashboard.queues_table.view_all"), pgbus.queues_path, class: "text-sm text-indigo-600 hover:text-indigo-500", data: { turbo_frame: "_top" } %>
+      <%= link_to t("pgbus.dashboard.queues_table.view_all"), pgbus.queues_path, class: "text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 dark:hover:text-indigo-300", data: { turbo_frame: "_top" } %>
     </div>
 
     <div class="overflow-hidden rounded-lg bg-white dark:bg-gray-800 shadow ring-1 ring-gray-200 dark:ring-gray-700">
       <table class="pgbus-table min-w-full divide-y divide-gray-200 dark:divide-gray-700">
         <thead class="bg-gray-50 dark:bg-gray-900">
           <tr>
-            <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500"><%= t("pgbus.dashboard.queues_table.headers.queue") %></th>
-            <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500"><%= t("pgbus.dashboard.queues_table.headers.depth") %></th>
-            <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500"><%= t("pgbus.dashboard.queues_table.headers.visible") %></th>
-            <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500"><%= t("pgbus.dashboard.queues_table.headers.parked") %></th>
-            <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500"><%= t("pgbus.dashboard.queues_table.headers.oldest_claimable") %></th>
-            <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500"><%= t("pgbus.dashboard.queues_table.headers.total") %></th>
+            <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.queues_table.headers.queue") %></th>
+            <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.queues_table.headers.depth") %></th>
+            <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.queues_table.headers.visible") %></th>
+            <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.queues_table.headers.parked") %></th>
+            <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.queues_table.headers.oldest_claimable") %></th>
+            <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.queues_table.headers.total") %></th>
           </tr>
         </thead>
         <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
           <% @queues.each do |q| %>
-            <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50 dark:bg-gray-900">
+            <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
               <td data-label="Queue" class="px-4 py-3 text-sm">
-                <%= link_to q[:name], pgbus.queue_path(name: q[:name]), class: "font-medium text-indigo-600 hover:text-indigo-500", data: { turbo_frame: "_top" } %>
+                <%= link_to q[:name], pgbus.queue_path(name: q[:name]), class: "font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 dark:hover:text-indigo-300", data: { turbo_frame: "_top" } %>
                 <%= pgbus_queue_badge(q[:name]) %>
               </td>
-              <td data-label="Depth" class="px-4 py-3 text-sm text-right text-gray-700"><%= pgbus_number(q[:queue_length]) %></td>
-              <td data-label="Visible" class="px-4 py-3 text-sm text-right text-gray-700"><%= pgbus_number(q[:queue_visible_length]) %></td>
-              <td data-label="Parked" class="px-4 py-3 text-sm text-right text-gray-500"><%= pgbus_number(q[:parked_length]) %></td>
-              <td data-label="Oldest claimable" class="px-4 py-3 text-sm text-right text-gray-500"><%= q[:oldest_claimable_age_sec] || "—" %></td>
-              <td data-label="Total" class="px-4 py-3 text-sm text-right text-gray-500"><%= pgbus_number(q[:total_messages]) %></td>
+              <td data-label="Depth" class="px-4 py-3 text-sm text-right text-gray-700 dark:text-gray-200"><%= pgbus_number(q[:queue_length]) %></td>
+              <td data-label="Visible" class="px-4 py-3 text-sm text-right text-gray-700 dark:text-gray-200"><%= pgbus_number(q[:queue_visible_length]) %></td>
+              <td data-label="Parked" class="px-4 py-3 text-sm text-right text-gray-500 dark:text-gray-400"><%= pgbus_number(q[:parked_length]) %></td>
+              <td data-label="Oldest claimable" class="px-4 py-3 text-sm text-right text-gray-500 dark:text-gray-400"><%= q[:oldest_claimable_age_sec] || "—" %></td>
+              <td data-label="Total" class="px-4 py-3 text-sm text-right text-gray-500 dark:text-gray-400"><%= pgbus_number(q[:total_messages]) %></td>
             </tr>
           <% end %>
           <% if @queues.empty? %>
-            <tr><td colspan="6" class="px-4 py-8 text-center text-sm text-gray-400"><%= t("pgbus.dashboard.queues_table.empty") %></td></tr>
+            <tr><td colspan="6" class="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.queues_table.empty") %></td></tr>
           <% end %>
         </tbody>
       </table>

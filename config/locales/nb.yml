@@ -231,6 +231,7 @@ nb:
       bulk_select_row: Velg %{id}
       bulk_selected: valgt
       pagination:
+        label: Paginering
         next: Neste
         previous: Forrige
         showing: Viser %{from}–%{to} av %{total}
@@ -317,47 +318,6 @@ nb:
           7d: 7d
         title: Innsikt
     jobs:
-      enqueued_table:
-        arguments: Argumenter
-        discard: Forkast
-        discard_all: Forkast alle
-        discard_all_confirm: Forkast alle køede jobber og frigi låsene? Dette kan ikke angres.
-        discard_confirm: Forkaste denne meldingen?
-        empty: Ingen kølagte jobber
-        full_json_payload: Full JSON-payload
-        headers:
-          enqueued: Kølagt
-          id: ID
-          job_class: Jobbklasse
-          queue: Kø
-          reads: Lesninger
-        headers_section: Overskrifter
-        job_id: 'Jobb-ID:'
-        metadata: Metadata
-        metadata_labels:
-          last_read: 'Sist lest:'
-          locale: 'Språk:'
-          priority: 'Prioritet:'
-          queue: 'Kø:'
-          scheduled: 'Planlagt:'
-          timezone: 'Tidssone:'
-          visible_at: 'Synlig fra:'
-        retry: Prøv igjen
-        retry_confirm: Tilbakestill synlighetstidsavbrudd og prøv igjen?
-        title: Kølagte jobber
-      failed_table:
-        discard: Forkast
-        discard_confirm: Forkast denne jobben?
-        empty: Ingen mislykkede jobber
-        headers:
-          actions: Handlinger
-          error: Feil
-          failed: Mislyktes
-          id: ID
-          queue: Kø
-          retries: Forsøk
-        retry: Prøv på nytt
-        title: Mislykkede jobber
       index:
         discard_all: Forkast alle
         discard_all_confirm: Forkast alle mislykkede jobber?
@@ -371,6 +331,74 @@ nb:
         retry_all: Prøv alle på nytt
         retry_all_confirm: Prøv alle mislykkede jobber på nytt?
         title: Jobber
+      list:
+        arguments: Argumenter
+        discard: Forkast
+        discard_all_enqueued: Forkast alle i kø
+        discard_all_enqueued_confirm: Forkast alle køede jobber og frigi låsene? Dette kan ikke angres.
+        discard_confirm: Forkast denne jobben?
+        empty:
+          all: Ingen jobber
+          blocked: Ingen jobber blokkert av en samtidighetsgrense
+          ready: Ingen jobber venter på å kjøre
+          retrying: Ingen jobber venter på nytt forsøk
+          running: Ingen jobber kjører
+          scheduled: Ingen planlagte jobber
+        full_json_payload: Full JSON-payload
+        headers:
+          actions: Handlinger
+          attempts: Forsøk
+          id: ID
+          job: Jobb
+          queue: Kø
+          reason: Neste kjøring / Årsak
+          state: Tilstand
+        headers_section: Overskrifter
+        job_id: 'Jobb-ID:'
+        metadata: Metadata
+        metadata_labels:
+          concurrency_key: 'Samtidighetsnøkkel:'
+          enqueued: 'Satt i kø:'
+          last_read: 'Sist lest:'
+          locale: 'Språk:'
+          priority: 'Prioritet:'
+          scheduled: 'Planlagt:'
+          timezone: 'Tidssone:'
+          visible_at: 'Synlig fra:'
+        reasons:
+          blocked: Venter på en samtidighetsplass på %{key} (opptatt %{held}/%{limit}) · parkert %{ago}
+          blocked_no_slots: Venter på en samtidighetsplass på %{key} · parkert %{ago}
+          lease_expired: Lease utløpt (worker døde sannsynligvis) — leveres på nytt, forsøk %{attempt}
+          no_workers: Ingen frisk worker kjører
+          not_drained: Ingen worker tømmer denne køen
+          orphaned: Feilet med %{error} — meldingen er ikke lenger i køen
+          paused: Køen er satt på pause
+          retrying: 'Forsøk %{attempt}/%{max} feilet: %{error} — neste forsøk %{time}'
+          retrying_dlq: 'Forsøk %{attempt}/%{max} feilet: %{error} — neste lesing flytter den til DLQ'
+          retrying_due: 'Forsøk %{attempt}/%{max} feilet: %{error} — neste forsøk nå'
+          running: Hentet %{ago} · lease utløper %{time}
+          scheduled: Planlagt — kjører %{time}
+          waiting: Venter — %{count} foran
+          waiting_priority: Venter — %{count} foran med denne prioriteten
+          waiting_unknown: Venter på å bli hentet
+        retry: Prøv på nytt
+        retry_confirm: Tilbakestill synlighetstidsavbrudd og prøv igjen?
+        states:
+          blocked: Blokkert
+          ready: Klar
+          retrying: Prøver igjen
+          running: Kjører
+          scheduled: Planlagt
+        tabs:
+          all: Alle
+          blocked: Blokkert
+          ready: Klar
+          retrying: Prøver igjen
+          running: Kjører
+          scheduled: Planlagt
+        tabs_label: Jobbtilstander
+        view_failure: Vis feil
+        view_locks: Vis låser
       show:
         back: Tilbake til jobber
         backtrace: Tilbakekalling

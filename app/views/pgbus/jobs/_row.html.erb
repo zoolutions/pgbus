@@ -1,0 +1,107 @@
+<%# One job of the unified list plus its expansion row. Locals: row (a
+    DataSource#job_rows hash), job (its JobState::Result), selectable, columns. %>
+<% payload = pgbus_parse_message(row[:payload]) %>
+<% queue_row = row[:source] == "queue" %>
+<% failed_id = row[:failed_event_id] %>
+<tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50" data-job-row data-state="<%= job.state %>">
+  <% if selectable %>
+    <td class="w-10 px-4 py-3 align-top">
+      <% if failed_id %>
+        <input type="checkbox" name="ids[]" value="<%= failed_id %>" form="bulk-discard-jobs-form" data-bulk-item
+               aria-label="<%= t("pgbus.helpers.bulk_select_row", id: row[:msg_id] || failed_id) %>"
+               class="h-4 w-4 rounded border-gray-300 text-indigo-600 dark:text-indigo-400 focus:ring-indigo-600 mt-1">
+      <% elsif queue_row %>
+        <input type="checkbox" data-bulk-item data-pgbus-action="bulk-row-toggle"
+               aria-label="<%= t("pgbus.helpers.bulk_select_row", id: row[:msg_id]) %>"
+               class="h-4 w-4 rounded border-gray-300 text-indigo-600 dark:text-indigo-400 focus:ring-indigo-600 mt-1">
+        <input type="hidden" name="messages[][queue_name]" value="<%= row[:queue_name] %>" form="bulk-discard-jobs-form" disabled>
+        <input type="hidden" name="messages[][msg_id]" value="<%= row[:msg_id] %>" form="bulk-discard-jobs-form" disabled>
+      <% end %>
+    </td>
+  <% end %>
+  <td data-label="<%= t("pgbus.jobs.list.headers.id") %>" class="px-4 py-3 text-sm font-mono text-gray-900 dark:text-white align-top">
+    <details data-job-toggle class="group">
+      <summary class="cursor-pointer list-none text-indigo-600 hover:text-indigo-500 dark:hover:text-indigo-300 dark:text-indigo-400"><%= row[:msg_id] || row[:id] %></summary>
+    </details>
+  </td>
+  <td data-label="<%= t("pgbus.jobs.list.headers.job") %>" class="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white align-top"><%= row[:job_class].presence || "—" %></td>
+  <td data-label="<%= t("pgbus.jobs.list.headers.queue") %>" class="px-4 py-3 text-sm text-gray-700 dark:text-gray-200 align-top"><%= row[:queue_name] %></td>
+  <td data-label="<%= t("pgbus.jobs.list.headers.state") %>" class="px-4 py-3 text-sm align-top"><%= pgbus_job_state_badge(job.state) %></td>
+  <td data-label="<%= t("pgbus.jobs.list.headers.attempts") %>" class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 align-top"><%= pgbus_job_attempts(row, @state_context.max_retries) %></td>
+  <td data-label="<%= t("pgbus.jobs.list.headers.reason") %>" class="px-4 py-3 text-sm text-gray-700 dark:text-gray-200 align-top" data-testid="job-reason">
+    <%= pgbus_job_reason(job) %>
+  </td>
+  <td data-label="<%= t("pgbus.jobs.list.headers.actions") %>" class="px-4 py-3 text-sm text-right align-top">
+    <div class="flex justify-end space-x-2">
+      <% if row[:source] == "blocked" %>
+        <%= link_to t("pgbus.jobs.list.view_locks"), pgbus.locks_path,
+              class: "text-xs font-medium text-indigo-600 hover:text-indigo-800 dark:hover:text-indigo-300 dark:text-indigo-400", data: { turbo_frame: "_top" } %>
+      <% elsif failed_id %>
+        <%# A retry attempt in progress (running) must not have its lease reset. %>
+        <% unless job.state == "running" %>
+          <%= button_to t("pgbus.jobs.list.retry"), pgbus.retry_job_path(failed_id), method: :post,
+                class: "text-xs font-medium text-indigo-600 hover:text-indigo-800 dark:hover:text-indigo-300 dark:text-indigo-400",
+                data: { turbo_frame: "_top" } %>
+        <% end %>
+        <%= button_to t("pgbus.jobs.list.discard"), pgbus.discard_job_path(failed_id), method: :post,
+              class: "text-xs font-medium text-red-600 hover:text-red-800 dark:hover:text-red-300 dark:text-red-400",
+              data: { turbo_confirm: t("pgbus.jobs.list.discard_confirm"), turbo_frame: "_top" } %>
+      <% else %>
+        <%# Resetting a running job's lease would run it twice: no Retry for it. %>
+        <% unless job.state == "running" %>
+          <%= button_to t("pgbus.jobs.list.retry"), pgbus.retry_message_queue_path(name: row[:queue_name], msg_id: row[:msg_id]),
+                method: :post,
+                class: "text-xs font-medium text-indigo-600 hover:text-indigo-800 dark:hover:text-indigo-300 dark:text-indigo-400",
+                data: { turbo_confirm: t("pgbus.jobs.list.retry_confirm"), turbo_frame: "_top" } %>
+        <% end %>
+        <%= button_to t("pgbus.jobs.list.discard"), pgbus.discard_message_queue_path(name: row[:queue_name], msg_id: row[:msg_id]),
+              method: :post,
+              class: "text-xs font-medium text-red-600 hover:text-red-800 dark:hover:text-red-300 dark:text-red-400",
+              data: { turbo_confirm: t("pgbus.jobs.list.discard_confirm"), turbo_frame: "_top" } %>
+      <% end %>
+    </div>
+  </td>
+</tr>
+<tr class="pgbus-job-detail" data-job-detail>
+  <td colspan="<%= columns %>" class="px-4 pb-4 bg-gray-50 dark:bg-gray-900 border-t border-gray-100 dark:border-gray-700">
+    <div class="flex items-center justify-between mt-3 mb-3">
+      <span class="text-xs font-mono text-gray-500 dark:text-gray-400"><%= t("pgbus.jobs.list.job_id") %> <%= payload["job_id"] || "—" %></span>
+      <% if failed_id %>
+        <%= link_to t("pgbus.jobs.list.view_failure"), pgbus.job_path(failed_id),
+              class: "text-xs font-medium text-indigo-600 hover:text-indigo-500 dark:hover:text-indigo-300 dark:text-indigo-400", data: { turbo_frame: "_top" } %>
+      <% end %>
+    </div>
+    <% if row[:error_class] %>
+      <p class="mb-3 text-xs text-red-600 dark:text-red-400"><span class="font-medium"><%= row[:error_class] %></span>: <%= truncate(row[:error_message].to_s, length: 300) %></p>
+    <% end %>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-3">
+      <div>
+        <span class="text-xs font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.jobs.list.arguments") %></span>
+        <pre class="text-xs text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 rounded p-2 mt-1 overflow-x-auto max-h-40"><%= JSON.pretty_generate(payload["arguments"] || []) rescue "—" %></pre>
+      </div>
+      <div>
+        <span class="text-xs font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.jobs.list.metadata") %></span>
+        <div class="text-xs text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 rounded p-2 mt-1 space-y-1">
+          <% if payload["priority"] %><p><strong><%= t("pgbus.jobs.list.metadata_labels.priority") %></strong> <%= payload["priority"] %></p><% end %>
+          <% if payload["locale"] %><p><strong><%= t("pgbus.jobs.list.metadata_labels.locale") %></strong> <%= payload["locale"] %></p><% end %>
+          <% if payload["timezone"] %><p><strong><%= t("pgbus.jobs.list.metadata_labels.timezone") %></strong> <%= payload["timezone"] %></p><% end %>
+          <% if payload["scheduled_at"] %><p><strong><%= t("pgbus.jobs.list.metadata_labels.scheduled") %></strong> <%= payload["scheduled_at"] %></p><% end %>
+          <% if row[:enqueued_at] %><p><strong><%= t("pgbus.jobs.list.metadata_labels.enqueued") %></strong> <%= row[:enqueued_at] %></p><% end %>
+          <% if row[:vt] %><p><strong><%= t("pgbus.jobs.list.metadata_labels.visible_at") %></strong> <%= row[:vt] %></p><% end %>
+          <% if row[:last_read_at] %><p><strong><%= t("pgbus.jobs.list.metadata_labels.last_read") %></strong> <%= row[:last_read_at] %></p><% end %>
+          <% if row[:concurrency_key] %><p><strong><%= t("pgbus.jobs.list.metadata_labels.concurrency_key") %></strong> <%= row[:concurrency_key] %></p><% end %>
+        </div>
+      </div>
+    </div>
+    <details class="mt-2">
+      <summary class="text-xs font-medium text-gray-500 dark:text-gray-400 cursor-pointer hover:text-gray-700 dark:hover:text-gray-200"><%= t("pgbus.jobs.list.full_json_payload") %></summary>
+      <pre class="text-xs text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 rounded p-2 mt-1 overflow-x-auto max-h-96"><%= JSON.pretty_generate(payload) rescue row[:payload] %></pre>
+    </details>
+    <% if row[:headers] %>
+      <details class="mt-2">
+        <summary class="text-xs font-medium text-gray-500 dark:text-gray-400 cursor-pointer hover:text-gray-700 dark:hover:text-gray-200"><%= t("pgbus.jobs.list.headers_section") %></summary>
+        <pre class="text-xs text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 rounded p-2 mt-1 overflow-x-auto"><%= JSON.pretty_generate(JSON.parse(row[:headers])) rescue row[:headers] %></pre>
+      </details>
+    <% end %>
+  </td>
+</tr>

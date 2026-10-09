@@ -4,19 +4,51 @@ require "rails_helper"
 
 RSpec.describe "Pgbus::JobsController", type: :request do
   describe "GET /pgbus/jobs" do
-    it "renders the jobs index" do
+    def job_rows_call = @stub_data_source.calls[:job_rows].last.first
+
+    it "renders the unified job list on the All tab" do
       get "/pgbus/jobs"
+
       expect(response).to have_http_status(:ok)
+      expect(response.body).to include('<turbo-frame id="jobs-list"')
+      expect(job_rows_call).to include(state: nil, page: 1)
     end
 
-    it "renders the failed turbo frame" do
-      get "/pgbus/jobs", params: { frame: "failed" }
-      expect(response).to have_http_status(:ok)
+    %w[ready scheduled running retrying blocked].each do |state|
+      it "filters the list by state=#{state}" do
+        get "/pgbus/jobs", params: { state: state }
+
+        expect(response).to have_http_status(:ok)
+        expect(job_rows_call).to include(state: state)
+      end
     end
 
-    it "renders the enqueued turbo frame" do
-      get "/pgbus/jobs", params: { frame: "enqueued" }
+    it "treats the old status=failed link as the Retrying tab" do
+      get "/pgbus/jobs", params: { status: "failed" }
+
+      expect(job_rows_call).to include(state: "retrying")
+    end
+
+    it "falls back to All for an unknown state" do
+      get "/pgbus/jobs", params: { state: "exploded" }
+
+      expect(job_rows_call).to include(state: nil)
+    end
+
+    it "renders only the list frame for frame=list" do
+      get "/pgbus/jobs", params: { frame: "list", state: "ready" }
+
       expect(response).to have_http_status(:ok)
+      expect(response.body).to include('<turbo-frame id="jobs-list"')
+      expect(response.body).not_to include("<h1")
+    end
+
+    it "keeps the page, state and queue in the auto-refresh source" do
+      get "/pgbus/jobs", params: { state: "ready", page: "2", queue: "pgbus_default" }
+
+      expect(job_rows_call).to include(state: "ready", page: 2, queue_name: "pgbus_default")
+      src = response.body[/data-src="([^"]+)"/, 1]
+      expect(CGI.unescapeHTML(src)).to include("frame=list", "page=2", "queue=pgbus_default", "state=ready")
     end
   end
 
@@ -126,6 +158,17 @@ RSpec.describe "Pgbus::JobsController", type: :request do
              params: { messages: [{ queue_name: "pgbus_default", msg_id: "9" }] }
         expect(response).to redirect_to("/pgbus/jobs")
         expect(@stub_data_source.calls[:discard_job]).to eq([%w[pgbus_default 9]])
+      end
+    end
+
+    context "when failed-event rows are selected from the unified list" do
+      it "discards them through their failed event" do
+        post "/pgbus/jobs/discard_selected_enqueued",
+             params: { ids: %w[3], messages: [{ queue_name: "pgbus_default", msg_id: "9" }] }
+        expect(response).to redirect_to("/pgbus/jobs")
+        expect(@stub_data_source.calls[:discard_failed_event]).to eq([[3]])
+        expect(@stub_data_source.calls[:discard_job]).to eq([%w[pgbus_default 9]])
+        expect(flash[:notice]).to eq("Discarded 2 selected items.")
       end
     end
   end

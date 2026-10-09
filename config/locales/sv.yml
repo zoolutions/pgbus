@@ -231,6 +231,7 @@ sv:
       bulk_select_row: Markera %{id}
       bulk_selected: valda
       pagination:
+        label: Sidnumrering
         next: Nästa
         previous: Föregående
         showing: Visar %{from}–%{to} av %{total}
@@ -317,47 +318,6 @@ sv:
           7d: 7d
         title: Insikter
     jobs:
-      enqueued_table:
-        arguments: Argument
-        discard: Kassera
-        discard_all: Kassera alla
-        discard_all_confirm: Kassera alla köade jobb och frigör deras lås? Detta kan inte ångras.
-        discard_confirm: Kassera detta meddelande?
-        empty: Inga köade jobb
-        full_json_payload: Fullständig JSON-payload
-        headers:
-          enqueued: Köade
-          id: ID
-          job_class: Jobbklass
-          queue: Kö
-          reads: Läser
-        headers_section: Headers
-        job_id: 'Jobb-ID:'
-        metadata: Metadata
-        metadata_labels:
-          last_read: 'Senast läst:'
-          locale: 'Språk:'
-          priority: 'Prioritet:'
-          queue: 'Kö:'
-          scheduled: 'Schemalagt:'
-          timezone: 'Tidszon:'
-          visible_at: 'Synlig vid:'
-        retry: Försök igen
-        retry_confirm: Återställ synlighetstimeout och försök igen?
-        title: Köade jobb
-      failed_table:
-        discard: Kassera
-        discard_confirm: Kassera detta jobb?
-        empty: Inga misslyckade jobb
-        headers:
-          actions: Åtgärder
-          error: Fel
-          failed: Misslyckades
-          id: ID
-          queue: Kö
-          retries: Försök igen
-        retry: Försök igen
-        title: Misslyckade jobb
       index:
         discard_all: Kassera alla
         discard_all_confirm: Kassera alla misslyckade jobb?
@@ -371,6 +331,74 @@ sv:
         retry_all: Försök igen alla
         retry_all_confirm: Försök igen alla misslyckade jobb?
         title: Jobb
+      list:
+        arguments: Argument
+        discard: Kassera
+        discard_all_enqueued: Kasta alla köade
+        discard_all_enqueued_confirm: Kassera alla köade jobb och frigör deras lås? Detta kan inte ångras.
+        discard_confirm: Kassera detta jobb?
+        empty:
+          all: Inga jobb
+          blocked: Inga jobb blockerade av en samtidighetsgräns
+          ready: Inga jobb väntar på att köras
+          retrying: Inga jobb väntar på nytt försök
+          running: Inga jobb körs
+          scheduled: Inga schemalagda jobb
+        full_json_payload: Fullständig JSON-payload
+        headers:
+          actions: Åtgärder
+          attempts: Försök
+          id: ID
+          job: Jobb
+          queue: Kö
+          reason: Nästa körning / Orsak
+          state: Status
+        headers_section: Headers
+        job_id: 'Jobb-ID:'
+        metadata: Metadata
+        metadata_labels:
+          concurrency_key: 'Samtidighetsnyckel:'
+          enqueued: 'Köad:'
+          last_read: 'Senast läst:'
+          locale: 'Språk:'
+          priority: 'Prioritet:'
+          scheduled: 'Schemalagt:'
+          timezone: 'Tidszon:'
+          visible_at: 'Synlig vid:'
+        reasons:
+          blocked: Väntar på en samtidighetsplats för %{key} (upptagna %{held}/%{limit}) · parkerad %{ago}
+          blocked_no_slots: Väntar på en samtidighetsplats för %{key} · parkerad %{ago}
+          lease_expired: Lease har gått ut (workern dog troligen) — levereras igen, försök %{attempt}
+          no_workers: Ingen frisk worker körs
+          not_drained: Ingen worker tömmer den här kön
+          orphaned: Misslyckades med %{error} — meddelandet finns inte längre i kön
+          paused: Kön är pausad
+          retrying: 'Försök %{attempt}/%{max} misslyckades: %{error} — nästa försök %{time}'
+          retrying_dlq: 'Försök %{attempt}/%{max} misslyckades: %{error} — nästa läsning flyttar den till DLQ'
+          retrying_due: 'Försök %{attempt}/%{max} misslyckades: %{error} — nästa försök nu'
+          running: Hämtad %{ago} · lease går ut %{time}
+          scheduled: Schemalagd — körs %{time}
+          waiting: Väntar — %{count} före
+          waiting_priority: Väntar — %{count} före med den här prioriteten
+          waiting_unknown: Väntar på att hämtas
+        retry: Försök igen
+        retry_confirm: Återställ synlighetstimeout och försök igen?
+        states:
+          blocked: Blockerad
+          ready: Redo
+          retrying: Försöker igen
+          running: Körs
+          scheduled: Schemalagd
+        tabs:
+          all: Alla
+          blocked: Blockerade
+          ready: Redo
+          retrying: Försöker igen
+          running: Körs
+          scheduled: Schemalagda
+        tabs_label: Jobbstatus
+        view_failure: Visa fel
+        view_locks: Visa lås
       show:
         back: Tillbaka till jobb
         backtrace: Backtrace

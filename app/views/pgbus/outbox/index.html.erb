@@ -1,19 +1,19 @@
 <div class="mb-6">
   <h1 class="text-2xl font-bold text-gray-900 dark:text-white"><%= t("pgbus.outbox.index.title") %></h1>
-  <p class="mt-1 text-sm text-gray-500"><%= t("pgbus.outbox.index.description") %></p>
+  <p class="mt-1 text-sm text-gray-500 dark:text-gray-400"><%= t("pgbus.outbox.index.description") %></p>
 </div>
 
 <div class="mb-6 grid grid-cols-3 gap-4">
   <div class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
-    <dt class="text-xs font-medium uppercase text-gray-500"><%= t("pgbus.outbox.index.stats.unpublished") %></dt>
+    <dt class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.outbox.index.stats.unpublished") %></dt>
     <dd class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white"><%= pgbus_number(@stats[:unpublished]) %></dd>
   </div>
   <div class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
-    <dt class="text-xs font-medium uppercase text-gray-500"><%= t("pgbus.outbox.index.stats.total") %></dt>
+    <dt class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.outbox.index.stats.total") %></dt>
     <dd class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white"><%= pgbus_number(@stats[:total]) %></dd>
   </div>
   <div class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
-    <dt class="text-xs font-medium uppercase text-gray-500"><%= t("pgbus.outbox.index.stats.oldest_unpublished") %></dt>
+    <dt class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.outbox.index.stats.oldest_unpublished") %></dt>
     <dd class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white"><%= @stats[:oldest_unpublished_age] ? t("pgbus.outbox.index.stats.oldest_age", seconds: @stats[:oldest_unpublished_age]) : t("pgbus.outbox.index.stats.no_age") %></dd>
   </div>
 </div>
@@ -22,33 +22,33 @@
   <table class="pgbus-table min-w-full divide-y divide-gray-200 dark:divide-gray-700">
     <thead class="bg-gray-50 dark:bg-gray-900">
       <tr>
-        <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500"><%= t("pgbus.outbox.index.headers.id") %></th>
-        <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500"><%= t("pgbus.outbox.index.headers.queue_topic") %></th>
-        <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500"><%= t("pgbus.outbox.index.headers.payload") %></th>
-        <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500"><%= t("pgbus.outbox.index.headers.priority") %></th>
-        <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500"><%= t("pgbus.outbox.index.headers.status") %></th>
-        <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500"><%= t("pgbus.outbox.index.headers.created") %></th>
+        <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.outbox.index.headers.id") %></th>
+        <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.outbox.index.headers.queue_topic") %></th>
+        <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.outbox.index.headers.payload") %></th>
+        <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.outbox.index.headers.priority") %></th>
+        <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.outbox.index.headers.status") %></th>
+        <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.outbox.index.headers.created") %></th>
       </tr>
     </thead>
     <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
       <% @entries.each do |entry| %>
-        <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50 dark:bg-gray-900">
-          <td data-label="ID" class="px-4 py-3 text-sm font-mono text-gray-700"><%= entry.id %></td>
-          <td data-label="Routing Key" class="px-4 py-3 text-sm text-gray-700"><%= entry.routing_key || entry.queue_name %></td>
-          <td data-label="Payload" class="px-4 py-3 text-sm text-gray-500 max-w-xs truncate"><%= pgbus_json_preview(entry.payload) %></td>
-          <td data-label="Priority" class="px-4 py-3 text-sm text-right text-gray-500"><%= entry.priority %></td>
+        <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+          <td data-label="ID" class="px-4 py-3 text-sm font-mono text-gray-700 dark:text-gray-200"><%= entry.id %></td>
+          <td data-label="Routing Key" class="px-4 py-3 text-sm text-gray-700 dark:text-gray-200"><%= entry.routing_key || entry.queue_name %></td>
+          <td data-label="Payload" class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 max-w-xs truncate"><%= pgbus_json_preview(entry.payload) %></td>
+          <td data-label="Priority" class="px-4 py-3 text-sm text-right text-gray-500 dark:text-gray-400"><%= entry.priority %></td>
           <td data-label="Status" class="px-4 py-3 text-sm text-right">
             <% if entry.published_at %>
-              <span class="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800"><%= t("pgbus.outbox.index.published") %></span>
+              <span class="inline-flex items-center rounded-full bg-green-100 dark:bg-green-900/30 px-2 py-0.5 text-xs font-medium text-green-800 dark:text-green-400"><%= t("pgbus.outbox.index.published") %></span>
             <% else %>
-              <span class="inline-flex items-center rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-800"><%= t("pgbus.outbox.index.pending") %></span>
+              <span class="inline-flex items-center rounded-full bg-yellow-100 dark:bg-yellow-900/30 px-2 py-0.5 text-xs font-medium text-yellow-800 dark:text-yellow-400"><%= t("pgbus.outbox.index.pending") %></span>
             <% end %>
           </td>
-          <td data-label="Created" class="px-4 py-3 text-sm text-right text-gray-500"><%= pgbus_time_ago(entry.created_at) %></td>
+          <td data-label="Created" class="px-4 py-3 text-sm text-right text-gray-500 dark:text-gray-400"><%= pgbus_time_ago(entry.created_at) %></td>
         </tr>
       <% end %>
       <% if @entries.empty? %>
-        <tr><td colspan="6" class="px-4 py-8 text-center text-sm text-gray-400"><%= t("pgbus.outbox.index.empty") %></td></tr>
+        <tr><td colspan="6" class="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400"><%= t("pgbus.outbox.index.empty") %></td></tr>
       <% end %>
     </tbody>
   </table>

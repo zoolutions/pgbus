@@ -2,17 +2,21 @@
 
 module Pgbus
   class JobsController < ApplicationController
+    # Tabs of the unified list (issue #489); "all" is no filter.
+    STATES = ["all", *Web::JobState::STATES].freeze
+
     def index
-      if params[:frame] == "failed"
-        @failed = data_source.failed_events(page: page_param, per_page: per_page)
-        render_frame("pgbus/jobs/failed_table")
-      elsif params[:frame] == "enqueued"
-        @jobs = params[:status] == "failed" ? [] : data_source.jobs(queue_name: params[:queue], page: page_param, per_page: per_page)
-        render_frame("pgbus/jobs/enqueued_table")
-      else
-        @jobs = params[:status] == "failed" ? [] : data_source.jobs(queue_name: params[:queue], page: page_param, per_page: per_page)
-        @failed = data_source.failed_events(page: page_param, per_page: per_page)
-      end
+      @state = job_state_param
+      @queue = params[:queue].presence
+      @page = page_param
+      @per_page = per_page
+      @rows = data_source.job_rows(state: (@state unless @state == "all"), queue_name: @queue,
+                                   page: @page, per_page: @per_page)
+      @counts = data_source.job_state_counts(queue_name: @queue)
+      @ahead = data_source.jobs_ahead(@rows)
+      @state_context = data_source.job_list_context
+      @failed_total = @queue ? data_source.failed_events_count : @counts["retrying"]
+      render_frame("pgbus/jobs/list") if params[:frame] == "list"
     end
 
     def show
@@ -64,8 +68,31 @@ module Pgbus
       redirect_to jobs_path, notice: t("pgbus.jobs.index.discarded_selected", count: count)
     end
 
+    # The unified list posts every selected row here: queue messages as
+    # messages[], rows backed by a failed event (retrying, orphaned) as ids[]
+    # so discarding them also clears the failed-event row.
     def discard_selected_enqueued
-      selections = Array(params[:messages]).filter_map do |s|
+      selections = selected_messages
+      ids = Array(params[:ids]).map(&:to_i).reject(&:zero?)
+      if selections.empty? && ids.empty?
+        redirect_to jobs_path, alert: t("pgbus.jobs.index.none_selected")
+        return
+      end
+
+      count = ids.count { |id| data_source.discard_failed_event(id) }
+      count += selections.count { |sel| data_source.discard_job(sel[:queue_name], sel[:msg_id]) }
+      redirect_to jobs_path, notice: t("pgbus.jobs.index.discarded_selected", count: count)
+    end
+
+    private
+
+    def job_state_param
+      state = params[:state].presence || ("retrying" if params[:status] == "failed")
+      STATES.include?(state) ? state : "all"
+    end
+
+    def selected_messages
+      Array(params[:messages]).filter_map do |s|
         next unless s.respond_to?(:[])
 
         queue_name = s[:queue_name]
@@ -74,16 +101,6 @@ module Pgbus
 
         { queue_name: queue_name, msg_id: msg_id }
       end
-      if selections.empty?
-        redirect_to jobs_path, alert: t("pgbus.jobs.index.none_selected")
-        return
-      end
-
-      count = 0
-      selections.each do |sel|
-        count += 1 if data_source.discard_job(sel[:queue_name], sel[:msg_id])
-      end
-      redirect_to jobs_path, notice: t("pgbus.jobs.index.discarded_selected", count: count)
     end
   end
 end

@@ -82,8 +82,8 @@ RSpec.describe "Dashboard edge cases", type: :system do
         visit "/pgbus/jobs"
 
         expect(page).to have_css("h1", text: "Jobs")
-        # Empty state text from the failed_table partial
-        expect(page).to have_text("No failed jobs").or have_text("0")
+        # Empty state of the unified job list
+        expect(page).to have_text("No jobs")
       end
     end
 

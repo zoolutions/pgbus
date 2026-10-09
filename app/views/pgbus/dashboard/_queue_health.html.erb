@@ -8,7 +8,7 @@
         <p class="mt-1 text-3xl font-semibold <%= @health[:total_dead_tuples] > 10_000 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-900 dark:text-white' %>">
           <%= pgbus_number(@health[:total_dead_tuples]) %>
         </p>
-        <p class="text-xs text-gray-400 dark:text-gray-500"><%= pgbus_number(@health[:total_live_tuples]) %> <%= t("pgbus.dashboard.queue_health.live") %></p>
+        <p class="text-xs text-gray-500 dark:text-gray-400"><%= pgbus_number(@health[:total_live_tuples]) %> <%= t("pgbus.dashboard.queue_health.live") %></p>
       </div>
 
       <div class="rounded-lg bg-white dark:bg-gray-800 p-5 shadow ring-1 ring-gray-200 dark:ring-gray-700">
@@ -30,7 +30,7 @@
             —
           <% end %>
         </p>
-        <p class="text-xs text-gray-400 dark:text-gray-500"><%= t("pgbus.dashboard.queue_health.oldest_vacuum_ago") %></p>
+        <p class="text-xs text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.queue_health.oldest_vacuum_ago") %></p>
       </div>
 
       <div class="rounded-lg bg-white dark:bg-gray-800 p-5 shadow ring-1 ring-gray-200 dark:ring-gray-700">
@@ -42,7 +42,7 @@
             —
           <% end %>
         </p>
-        <p class="text-xs text-gray-400 dark:text-gray-500"><%= t("pgbus.dashboard.queue_health.oldest_open_txn") %></p>
+        <p class="text-xs text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.queue_health.oldest_open_txn") %></p>
       </div>
     </div>
 
@@ -51,17 +51,17 @@
         <table class="pgbus-table min-w-full divide-y divide-gray-200 dark:divide-gray-700">
           <thead class="bg-gray-50 dark:bg-gray-900">
             <tr>
-              <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500"><%= t("pgbus.dashboard.queue_health.headers.table") %></th>
-              <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500"><%= t("pgbus.dashboard.queue_health.headers.kind") %></th>
-              <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500"><%= t("pgbus.dashboard.queue_health.headers.live") %></th>
-              <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500"><%= t("pgbus.dashboard.queue_health.headers.dead") %></th>
-              <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500"><%= t("pgbus.dashboard.queue_health.headers.bloat") %></th>
-              <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500"><%= t("pgbus.dashboard.queue_health.headers.last_vacuum") %></th>
+              <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.queue_health.headers.table") %></th>
+              <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.queue_health.headers.kind") %></th>
+              <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.queue_health.headers.live") %></th>
+              <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.queue_health.headers.dead") %></th>
+              <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.queue_health.headers.bloat") %></th>
+              <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.queue_health.headers.last_vacuum") %></th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
             <% @health[:tables].each do |t| %>
-              <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50 dark:bg-gray-900">
+              <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                 <td class="px-4 py-3 text-sm font-mono text-gray-900 dark:text-white"><%= t[:table] %></td>
                 <td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.queue_health.kinds.#{t[:kind]}") %></td>
                 <td class="px-4 py-3 text-sm text-right text-gray-700 dark:text-gray-300"><%= pgbus_number(t[:live_tuples]) %></td>

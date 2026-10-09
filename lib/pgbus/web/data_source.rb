@@ -5,6 +5,8 @@ require "time"
 module Pgbus
   module Web
     class DataSource
+      include JobList
+
       # Ceiling on how many parked jobs one dashboard release promotes, so a
       # key with thousands parked cannot hold the request open. The dispatcher
       # sweep picks up whatever is left on its next pass.

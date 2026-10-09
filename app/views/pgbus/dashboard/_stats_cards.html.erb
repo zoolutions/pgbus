@@ -8,12 +8,12 @@
     <div class="rounded-lg bg-white dark:bg-gray-800 p-5 shadow ring-1 ring-gray-200 dark:ring-gray-700">
       <p class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.stats_cards.enqueued") %></p>
       <p class="mt-1 text-3xl font-semibold text-gray-900 dark:text-white"><%= pgbus_number(@stats[:total_depth]) %></p>
-      <p class="text-xs text-gray-400 dark:text-gray-500"><%= pgbus_number(@stats[:total_visible]) %> <%= t("pgbus.dashboard.stats_cards.visible") %></p>
+      <p class="text-xs text-gray-500 dark:text-gray-400"><%= pgbus_number(@stats[:total_visible]) %> <%= t("pgbus.dashboard.stats_cards.visible") %></p>
     </div>
 
     <div class="rounded-lg bg-white dark:bg-gray-800 p-5 shadow ring-1 ring-gray-200 dark:ring-gray-700">
       <p class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.stats_cards.processes") %></p>
-      <p class="mt-1 text-3xl font-semibold <%= @stats[:active_processes] > 0 ? 'text-green-600 dark:text-green-400' : 'text-gray-400' %>">
+      <p class="mt-1 text-3xl font-semibold <%= @stats[:active_processes] > 0 ? 'text-green-600 dark:text-green-400' : 'text-gray-500 dark:text-gray-400' %>">
         <%= @stats[:active_processes] %>
       </p>
     </div>
@@ -21,8 +21,8 @@
     <div class="rounded-lg bg-white dark:bg-gray-800 p-5 shadow ring-1 ring-gray-200 dark:ring-gray-700">
       <p class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.stats_cards.recurring") %></p>
       <p class="mt-1 text-3xl font-semibold text-gray-900 dark:text-white"><%= @stats[:recurring_count] %></p>
-      <p class="text-xs text-gray-400">
-        <%= link_to t("pgbus.dashboard.stats_cards.view_tasks"), pgbus.recurring_tasks_path, class: "text-blue-500 hover:text-blue-700 dark:text-blue-400" %>
+      <p class="text-xs text-gray-500 dark:text-gray-400">
+        <%= link_to t("pgbus.dashboard.stats_cards.view_tasks"), pgbus.recurring_tasks_path, class: "text-blue-500 hover:text-blue-700 dark:hover:text-blue-300 dark:text-blue-400" %>
       </p>
     </div>
 
@@ -31,13 +31,13 @@
       <p class="mt-1 text-3xl font-semibold <%= (@stats[:failed_count] + @stats[:dlq_depth]) > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white' %>">
         <%= @stats[:failed_count] %> / <%= @stats[:dlq_depth] %>
       </p>
-      <p class="text-xs text-gray-400 dark:text-gray-500"><%= t("pgbus.dashboard.stats_cards.failed_dlq_labels") %></p>
+      <p class="text-xs text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.stats_cards.failed_dlq_labels") %></p>
     </div>
 
     <div class="rounded-lg bg-white dark:bg-gray-800 p-5 shadow ring-1 ring-gray-200 dark:ring-gray-700">
       <p class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.stats_cards.throughput") %></p>
       <p class="mt-1 text-3xl font-semibold text-gray-900 dark:text-white"><%= @stats[:throughput_rate] %></p>
-      <p class="text-xs text-gray-400"><%= t("pgbus.dashboard.stats_cards.throughput_unit") %></p>
+      <p class="text-xs text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.stats_cards.throughput_unit") %></p>
     </div>
 
     <%# The whole card links to the Locks page: parked jobs are only actionable
@@ -48,7 +48,7 @@
       <p class="mt-1 text-3xl font-semibold <%= @stats[:parked_total].to_i > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-900 dark:text-white' %>">
         <%= pgbus_number(@stats[:parked_total]) %>
       </p>
-      <p class="text-xs text-gray-400 dark:text-gray-500">
+      <p class="text-xs text-gray-500 dark:text-gray-400">
         <%= t("pgbus.dashboard.stats_cards.parked_jobs_oldest", age: pgbus_duration(@stats[:oldest_parked_age_sec])) %>
       </p>
     <% end %>

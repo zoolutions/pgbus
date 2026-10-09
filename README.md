@@ -2137,7 +2137,7 @@ The dashboard is a mountable Rails engine at `/pgbus` with:
 
 - **Overview** — queue depths, enqueued count, active processes, failure count, throughput rate
 - **Queues** — per-queue metrics, purge/pause/resume/delete actions
-- **Jobs** — enqueued and failed jobs, retry/discard actions
+- **Jobs** — one list of every job with its state (Ready / Scheduled / Running / Retrying / Blocked), why it is waiting and when it will run, filter tabs with counts, paging, retry/discard actions
 - **Dead letter** — DLQ messages with retry/discard, bulk actions
 - **Processes** — active workers/dispatcher/consumers with heartbeat status **and per-worker throughput** (e.g. `12.4/s processed · 0.2/s failed`)
 - **Events** — registered subscribers and processed events
