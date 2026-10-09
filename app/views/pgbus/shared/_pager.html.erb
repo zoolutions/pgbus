@@ -1,0 +1,34 @@
+<%# Shared pager. Locals:
+      page        – current page (1-based)
+      per_page    – rows per page
+      shown       – rows rendered on this page
+      total_count – row total (a lower bound when has_more is passed)
+      page_path   – lambda { |page| url } for the previous/next links
+      has_more    – optional; true when a next page exists beyond total_count %>
+<% has_more = local_assigns.fetch(:has_more, false) %>
+<% total_pages = (total_count.to_f / per_page).ceil %>
+<% if total_count.positive? %>
+  <div class="flex items-center justify-between border-t border-gray-200 dark:border-gray-700 px-4 py-3">
+    <p class="text-sm text-gray-500 dark:text-gray-400">
+      <% from = (page - 1) * per_page + 1 %>
+      <% to = [from + shown - 1, total_count].min %>
+      <%= t("pgbus.helpers.pagination.showing", from: from, to: to, total: total_count) %>
+    </p>
+    <% if total_pages > 1 || has_more %>
+      <nav class="inline-flex rounded-lg shadow-sm" role="navigation" aria-label="Pagination">
+        <% if page > 1 %>
+          <%= link_to t("pgbus.helpers.pagination.previous"), page_path.call(page - 1),
+                class: "px-3 py-1.5 text-xs font-medium border border-gray-300 dark:border-gray-600 rounded-l-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700" %>
+        <% else %>
+          <span class="px-3 py-1.5 text-xs font-medium border border-gray-300 dark:border-gray-600 rounded-l-lg bg-gray-100 dark:bg-gray-900 text-gray-400 dark:text-gray-600 cursor-not-allowed"><%= t("pgbus.helpers.pagination.previous") %></span>
+        <% end %>
+        <% if page < total_pages || has_more %>
+          <%= link_to t("pgbus.helpers.pagination.next"), page_path.call(page + 1),
+                class: "-ml-px px-3 py-1.5 text-xs font-medium border border-gray-300 dark:border-gray-600 rounded-r-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700" %>
+        <% else %>
+          <span class="-ml-px px-3 py-1.5 text-xs font-medium border border-gray-300 dark:border-gray-600 rounded-r-lg bg-gray-100 dark:bg-gray-900 text-gray-400 dark:text-gray-600 cursor-not-allowed"><%= t("pgbus.helpers.pagination.next") %></span>
+        <% end %>
+      </nav>
+    <% end %>
+  </div>
+<% end %>

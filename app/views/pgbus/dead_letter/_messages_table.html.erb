@@ -94,34 +94,12 @@
           </tr>
         <% end %>
         <% if @messages.empty? %>
-          <tr><td colspan="6" class="px-4 py-8 text-center text-sm text-gray-400"><%= t("pgbus.dead_letter.messages_table.empty") %></td></tr>
+          <%# No rows means no checkbox column: five columns. %>
+          <%= render "pgbus/shared/empty_row", colspan: 5, message: t("pgbus.dead_letter.messages_table.empty") %>
         <% end %>
       </tbody>
     </table>
-    <% if @total_count && @total_count > 0 %>
-      <div class="flex items-center justify-between border-t border-gray-200 dark:border-gray-700 px-4 py-3">
-        <p class="text-sm text-gray-500 dark:text-gray-400">
-          <% from = (@page - 1) * @per_page + 1 %>
-          <% to = [from + @messages.size - 1, @total_count].min %>
-          <%= t("pgbus.helpers.pagination.showing", from: from, to: to, total: @total_count) %>
-        </p>
-        <% if @total_pages > 1 %>
-          <nav class="inline-flex rounded-lg shadow-sm" role="navigation" aria-label="Pagination">
-            <% if @page > 1 %>
-              <%= link_to t("pgbus.helpers.pagination.previous"), pgbus.dead_letter_index_path(page: @page - 1),
-                    class: "px-3 py-1.5 text-xs font-medium border border-gray-300 dark:border-gray-600 rounded-l-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700" %>
-            <% else %>
-              <span class="px-3 py-1.5 text-xs font-medium border border-gray-300 dark:border-gray-600 rounded-l-lg bg-gray-100 dark:bg-gray-900 text-gray-400 dark:text-gray-600 cursor-not-allowed"><%= t("pgbus.helpers.pagination.previous") %></span>
-            <% end %>
-            <% if @page < @total_pages %>
-              <%= link_to t("pgbus.helpers.pagination.next"), pgbus.dead_letter_index_path(page: @page + 1),
-                    class: "-ml-px px-3 py-1.5 text-xs font-medium border border-gray-300 dark:border-gray-600 rounded-r-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700" %>
-            <% else %>
-              <span class="-ml-px px-3 py-1.5 text-xs font-medium border border-gray-300 dark:border-gray-600 rounded-r-lg bg-gray-100 dark:bg-gray-900 text-gray-400 dark:text-gray-600 cursor-not-allowed"><%= t("pgbus.helpers.pagination.next") %></span>
-            <% end %>
-          </nav>
-        <% end %>
-      </div>
-    <% end %>
+    <%= render "pgbus/shared/pager", page: @page, per_page: @per_page, shown: @messages.size, total_count: @total_count.to_i,
+          page_path: ->(n) { pgbus.dead_letter_index_path(page: n) } %>
   </div>
 </turbo-frame>
