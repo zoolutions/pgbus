@@ -1,0 +1,79 @@
+app/frontend/pgbus/style.css
+  s_b7ecd97068835a::t_8a0d98fda2151c 2
+config/locales/fr.yml
+  s_b7ecd97068835a::t_1cfa3fc0dea0e2 320-333,335-345,348-349,351,353-354,359-360,367-382,385-400
+config/locales/nl.yml
+  s_b7ecd97068835a::t_1cfa3fc0dea0e2 320-333,335-345,348-349,351,353-354,359-360,367-382,385-400
+config/locales/es.yml
+  s_b7ecd97068835a::t_1cfa3fc0dea0e2 320-333,336-345,348-349,351,353-354,359-360,367-382,385-400
+app/views/pgbus/jobs/_row.html.erb
+  s_b7ecd97068835a::t_31bee9a1186223 12,16
+  s_b7ecd97068835a::t_fb4bc258ee361c 1-11,13-15,17-104
+config/locales/ja.yml
+  s_b7ecd97068835a::t_1cfa3fc0dea0e2 320-333,336-345,348-349,351,353-354,359-360,367-382,385-400
+spec/dummy/lib/stub_data_source.rb
+  s_b7ecd97068835a::t_79e471378f164b 65-85
+  s_b7ecd97068835a::t_4c9f34ac9da3f1 331-363
+app/controllers/pgbus/jobs_controller.rb
+  s_b7ecd97068835a::t_748ab2187f297d 7
+  s_b7ecd97068835a::t_621aceb81c5f05 5-6,9-18,70-72,74-94
+config/locales/de.yml
+  s_b7ecd97068835a::t_1cfa3fc0dea0e2 320-333,336-345,348-349,351,353-354,359-360,367-382,385-400
+CHANGELOG.md
+  s_b7ecd97068835a::t_541dda23b6fa07 5-6
+spec/requests/pgbus/jobs_controller_spec.rb
+  s_b7ecd97068835a::t_117e7276d1e4a3 20,25,28,31,34,45,48,164-173
+  s_b7ecd97068835a::t_d520dcd9cf6a5a 7-9,11,13-14,17-19,21-24,26-27,29-30,32-33,35,38-40,42-44,46-47,49-51,163
+config/locales/en.yml
+  s_b7ecd97068835a::t_1cfa3fc0dea0e2 320-333,336-345,348-349,351,353-354,359-360,367-382,385-400
+spec/system/turbo_frames_spec.rb
+  s_b7ecd97068835a::t_94d13672179a11 21-22,24-25
+config/locales/it.yml
+  s_b7ecd97068835a::t_1cfa3fc0dea0e2 320-333,336-345,348-349,351,353-354,359-360,367-382,385-400
+app/helpers/pgbus/application_helper.rb
+  s_b7ecd97068835a::t_42d83c94c02b7c 152-196
+  s_b7ecd97068835a::t_2190807bf7eef2 80,84,88,96,100,137,252,256
+  s_b7ecd97068835a::t_049a583123873e 79,83,87,95,99,136,251,255
+config/locales/sv.yml
+  s_b7ecd97068835a::t_1cfa3fc0dea0e2 320-333,336-345,348-349,351,353-354,359-360,367-382,385-400
+config/locales/nb.yml
+  s_b7ecd97068835a::t_1cfa3fc0dea0e2 320-333,336-345,348-349,351,353-354,359-360,367-382,384-400
+config/locales/fi.yml
+  s_b7ecd97068835a::t_1cfa3fc0dea0e2 320-333,336-345,348-349,351,353-354,359-360,367-382,385-400
+README.md
+  s_b7ecd97068835a::t_541dda23b6fa07 2140
+config/locales/pt.yml
+  s_b7ecd97068835a::t_1cfa3fc0dea0e2 320-333,336-345,348-349,351,353-354,359-360,367-382,384-400
+spec/system/jobs_spec.rb
+  s_b7ecd97068835a::t_88fe890a631d40 6-18,28,30-31,33-34,36-38,40-43,46,49-54,58,61-72,76,79,81-83,86-87,89-90,93,96,98,101,104-105,107-109,112,115-116,118,121,124-126,129,132,134-135,138,141,148,151-154,157,160-163,165-168,171,174-175,177-178
+  s_b7ecd97068835a::t_db0bd663efa876 21-27
+spec/support/pgbus/stub_data_source.rb
+  s_b7ecd97068835a::t_d520dcd9cf6a5a 19,50-52,78-84,87-90,92-93,231-234
+  s_b7ecd97068835a::t_92b7d2de217509 77,85-86,91,94
+config/locales/da.yml
+  s_b7ecd97068835a::t_1cfa3fc0dea0e2 320-333,336-345,348-349,351,353-354,359-360,367-382,384-400
+app/views/pgbus/jobs/index.html.erb
+  s_b7ecd97068835a::t_0cff7e5c0f8f96 3-4,11-12,15-17,21,24-27
+  s_b7ecd97068835a::t_4aec2e72f17a33 18-20,22-23
+app/frontend/pgbus/tailwind.css
+  s_b7ecd97068835a::t_2441286033b510 101-118
+app/views/pgbus/jobs/_list.html.erb
+  s_b7ecd97068835a::t_47e19d1ea9a5c4 1-37,39-62
+  s_b7ecd97068835a::t_31bee9a1186223 38
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "54b51cff7920f49fa1ccce2e10e88e1fac331549",
+  "prompts": {},
+  "sessions": {
+    "s_b7ecd97068835a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "01d57c90-b286-4047-a3ee-6ef7a4812f48",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
