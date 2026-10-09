@@ -1,0 +1,33 @@
+spec/pgbus/web/data_source_job_list_spec.rb
+  s_b7ecd97068835a::t_882d55f6139d6e 65-78
+  s_b7ecd97068835a::t_b0cb513ff762e6 14
+spec/pgbus/web/dark_mode_contrast_spec.rb
+  s_b7ecd97068835a::t_8e7bae591f54e2 44
+spec/system/dashboard_edge_cases_spec.rb
+  s_b7ecd97068835a::t_59798135ba813d 85-86
+app/views/pgbus/shared/_pager.html.erb
+  s_b7ecd97068835a::t_aef01f0767254a 10
+  s_b7ecd97068835a::t_59798135ba813d 14-15
+spec/system/jobs_spec.rb
+  s_b7ecd97068835a::t_cebca979f568e4 180-189
+lib/pgbus/web/data_source/job_list.rb
+  s_b7ecd97068835a::t_aef01f0767254a 41
+app/views/pgbus/jobs/_list.html.erb
+  s_b7ecd97068835a::t_aef01f0767254a 19-20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "ac90c43cd47564177bdd48b27a2a3889ab3630c1",
+  "prompts": {},
+  "sessions": {
+    "s_b7ecd97068835a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "01d57c90-b286-4047-a3ee-6ef7a4812f48",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
