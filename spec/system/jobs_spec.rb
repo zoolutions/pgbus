@@ -177,5 +177,15 @@ RSpec.describe "Jobs", type: :system do
       expect(page).to have_text("PagedJob2")
       expect(page).to have_text("Showing 3–3 of 3")
     end
+
+    it "keeps a Next link when a capped count undercounts the tab" do
+      capped = Pgbus::Web::DataSource::JobList::StateCounts.new(counts: { "all" => 0 }, capped: Set["all"])
+      allow(@stub_data_source).to receive(:job_state_counts).and_return(capped)
+
+      visit "/pgbus/jobs"
+
+      expect(page).to have_text("Showing 1–2 of 2+")
+      expect(page).to have_link("Next")
+    end
   end
 end

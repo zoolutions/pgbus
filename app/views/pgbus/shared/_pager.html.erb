@@ -7,12 +7,12 @@
       has_more    – optional; true when a next page exists beyond total_count %>
 <% has_more = local_assigns.fetch(:has_more, false) %>
 <% total_pages = (total_count.to_f / per_page).ceil %>
-<% if total_count.positive? %>
+<% if total_count.positive? || has_more %>
   <div class="flex items-center justify-between border-t border-gray-200 dark:border-gray-700 px-4 py-3">
     <p class="text-sm text-gray-500 dark:text-gray-400">
       <% from = (page - 1) * per_page + 1 %>
-      <% to = [from + shown - 1, total_count].min %>
-      <%= t("pgbus.helpers.pagination.showing", from: from, to: to, total: total_count) %>
+      <% to = has_more ? from + shown - 1 : [from + shown - 1, total_count].min %>
+      <%= t("pgbus.helpers.pagination.showing", from: from, to: to, total: has_more ? "#{number_with_delimiter([total_count, to].max)}+" : total_count) %>
     </p>
     <% if total_pages > 1 || has_more %>
       <nav class="inline-flex rounded-lg shadow-sm" role="navigation" aria-label="Pagination">

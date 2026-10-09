@@ -16,7 +16,8 @@
           <%= t("pgbus.jobs.index.discard_selected") %>
         </button>
       </div>
-      <% if @counts["all"].positive? %>
+      <%# Blocked and orphaned rows are not queue messages: the action archives none of them. %>
+      <% if %w[ready scheduled running retrying].sum { |s| @counts[s] }.positive? %>
         <%= button_to t("pgbus.jobs.list.discard_all_enqueued"), pgbus.discard_all_enqueued_jobs_path, method: :post,
               class: "rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-500",
               data: { turbo_confirm: t("pgbus.jobs.list.discard_all_enqueued_confirm"), turbo_frame: "_top" } %>

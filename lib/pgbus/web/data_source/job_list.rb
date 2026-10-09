@@ -38,6 +38,18 @@ module Pgbus
         COUNT_CAP = 10_000
 
         QUEUE_STATES = %w[ready scheduled running retrying].freeze
+
+        # A predicate on m that each state branch of STATE_CASE already implies.
+        # Without it a filtered tab walks the whole pkey and probes the LATERAL for
+        # every row before LIMIT bites (300k-row queue, no matches: ~350 ms); with it
+        # only candidates reach the CASE. The exact `q.state = $1` still applies.
+        STATE_PREFILTER = {
+          "scheduled" => "m.read_ct = 0 AND m.vt > now()",
+          "ready" => "m.vt <= now()",
+          "running" => "m.read_ct > 0 AND m.vt > now()",
+          "retrying" => "m.read_ct > 0"
+        }.freeze
+
         INTEGER_COLUMNS = %i[id msg_id read_ct failed_event_id slots_held slots_max].freeze
 
         StateCounts = Data.define(:counts, :capped) do
@@ -129,15 +141,16 @@ module Pgbus
         def job_row_fragments(scope, state, state_param, fetch)
           fragments = []
           unless state == "blocked"
-            fragments.concat(scope[:queues].map { |(qtable, logical)| queue_row_fragment(qtable, logical, state_param, fetch) })
+            fragments.concat(scope[:queues].map { |(qtable, logical)| queue_row_fragment(qtable, logical, state, state_param, fetch) })
           end
           fragments.concat(orphan_fragments(scope, fetch)) if state.nil? || state == "retrying"
           fragments << blocked_fragment(scope, fetch) if state.nil? || state == "blocked"
           fragments
         end
 
-        def queue_row_fragment(qtable, logical, state_param, fetch)
+        def queue_row_fragment(qtable, logical, state, state_param, fetch)
           where = state_param ? "WHERE q.state = #{state_param}" : ""
+          prefilter = state_param && STATE_PREFILTER[state] ? "WHERE #{STATE_PREFILTER[state]}" : ""
           <<~SQL.strip
             (SELECT * FROM (
               SELECT 'queue'::text AS source, m.msg_id AS id, '#{qtable}'::text AS queue_name,
@@ -148,6 +161,7 @@ module Pgbus
                      m.message::text AS payload, m.headers::text AS headers, m.enqueued_at AS sort_at
               FROM pgmq.q_#{qtable} m
               #{failed_join(qtable, logical)}
+              #{prefilter}
             ) q #{where} ORDER BY q.msg_id DESC LIMIT #{fetch})
           SQL
         end

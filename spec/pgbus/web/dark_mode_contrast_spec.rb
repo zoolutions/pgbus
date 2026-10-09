@@ -41,7 +41,7 @@ RSpec.describe "Dashboard dark-mode contrast" do # rubocop:disable RSpec/Describ
 
   # Helpers also build class lists in constants and string concatenations.
   def helper_class_strings(content)
-    content.scan(/"([^"\n]*)"/).flatten.select { |s| s.match?(/\b(?:bg|text)-[a-z]+-\d{2,3}\b/) }.map(&:split)
+    content.scan(/"([^"\n]*)"/).flatten.grep(/\b(?:bg|text)-[a-z]+-\d{2,3}\b/).map(&:split)
   end
 
   def gaps(tokens)

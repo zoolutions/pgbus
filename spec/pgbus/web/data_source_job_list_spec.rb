@@ -11,6 +11,7 @@ RSpec.describe Pgbus::Web::DataSource::JobList do
 
   before do
     allow(Pgbus::BusRecord).to receive(:connection).and_return(mock_connection)
+    allow(Pgbus.configuration).to receive(:queue_prefix).and_return("pgbus_test")
     allow(data_source).to receive(:queues_with_metrics).and_return(queue_names.map { |name| { name: name } })
   end
 
@@ -59,6 +60,20 @@ RSpec.describe Pgbus::Web::DataSource::JobList do
       expect(sql).not_to include("pgbus_blocked_executions")
       expect(sql).not_to include("NOT EXISTS")
       expect(binds).to eq(["running", 5, 0])
+    end
+
+    {
+      "scheduled" => "WHERE m.read_ct = 0 AND m.vt > now()",
+      "ready" => "WHERE m.vt <= now()",
+      "running" => "WHERE m.read_ct > 0 AND m.vt > now()",
+      "retrying" => "WHERE m.read_ct > 0"
+    }.each do |state, prefilter|
+      it "narrows the #{state} scan with a predicate the state CASE implies" do
+        sql, = captured_sql("Pgbus Job List") { data_source.job_rows(state: state) }
+
+        expect(sql).to include(prefilter)
+        expect(sql).to include("WHERE q.state = $1")
+      end
     end
 
     it "keeps orphaned failed rows on the Retrying tab" do
