@@ -79,17 +79,24 @@ module Pgbus
       # the stub filters and pages them the way DataSource#job_rows does.
       def job_rows(state: nil, queue_name: nil, page: 1, per_page: 25)
         record(:job_rows, { state: state, queue_name: queue_name, page: page, per_page: per_page })
-        rows = state ? @job_rows_list.select { |r| r[:state] == state } : @job_rows_list
+        rows = job_rows_in(queue_name)
+        rows = rows.select { |r| r[:state] == state } if state
         rows.slice((page - 1) * per_page, per_page) || []
       end
 
       def job_state_counts(queue_name: nil)
-        counts = @job_rows_list.group_by { |r| r[:state] }.transform_values(&:size)
-        Pgbus::Web::DataSource::JobList::StateCounts.new(counts: counts.merge("all" => @job_rows_list.size),
+        rows = job_rows_in(queue_name)
+        counts = rows.group_by { |r| r[:state] }.transform_values(&:size)
+        Pgbus::Web::DataSource::JobList::StateCounts.new(counts: counts.merge("all" => rows.size),
                                                          capped: Set.new)
       end
 
       def jobs_ahead(_rows) = @jobs_ahead_hash
+
+      def job_rows_in(queue_name)
+        queue_name ? @job_rows_list.select { |r| r[:queue_name] == queue_name } : @job_rows_list
+      end
+
       def job_list_context(now: Time.now) = @job_context.with(now: now)
 
       def batches(limit: 100) = @batches_list
@@ -230,7 +237,7 @@ module Pgbus
 
       def default_job_context
         Pgbus::Web::JobState::Context.new(now: Time.now, max_retries: 5, paused: Set.new, drained: nil,
-                                          workers_alive: true)
+                                          workers_alive: true, handler_queues: Set.new, consumers_alive: true)
       end
 
       def default_health_stats

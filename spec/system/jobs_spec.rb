@@ -7,7 +7,7 @@ RSpec.describe "Jobs", type: :system do
   let(:rows) do
     [
       job_row("ready", msg_id: 11),
-      job_row("scheduled", msg_id: 12, vt: now + 7200),
+      job_row("scheduled", msg_id: 12, vt: now + 5400),
       job_row("running", msg_id: 13, read_ct: 1, last_read_at: now - 12, vt: now + 48),
       job_row("retrying", msg_id: 14, read_ct: 2, last_read_at: now - 30, vt: now + 40,
                           error_class: "Net::ReadTimeout", error_message: "execution expired", failed_event_id: 7),
@@ -64,8 +64,8 @@ RSpec.describe "Jobs", type: :system do
         expect(page).to have_text("0/5")
       end
       within("tr[data-state=scheduled]") { expect(page).to have_text("Scheduled — runs in 1h") }
-      within("tr[data-state=running]") { expect(page).to have_text("Claimed 12s ago · lease expires in") }
-      expect(page).to have_text("Attempt 2/5 failed: Net::ReadTimeout — next attempt in")
+      within("tr[data-state=running]") { expect(page).to have_text(/Claimed \d+s ago · lease expires in \d+s/) }
+      expect(page).to have_text(%r{Attempt 2/5 failed: Net::ReadTimeout — next attempt in \d+s})
       expect(page).to have_text("Failed with RuntimeError — message no longer in queue")
       within("tr[data-state=blocked]") do
         expect(page).to have_text("Waiting for a concurrency slot on Import:42 (held 2/2)")
@@ -152,6 +152,26 @@ RSpec.describe "Jobs", type: :system do
         expect(page).to have_no_button("Retry")
         expect(page).to have_button("Discard")
       end
+    end
+
+    it "offers no Retry for a retry attempt that is running now" do
+      @stub_data_source.job_rows_list = [job_row("running", msg_id: 30, read_ct: 2, last_read_at: now - 5, vt: now + 55,
+                                                            error_class: "Net::ReadTimeout", failed_event_id: 9)]
+      visit "/pgbus/jobs"
+
+      within("tr[data-state=running]") do
+        expect(page).to have_no_button("Retry")
+        expect(page).to have_button("Discard")
+      end
+    end
+
+    it "keeps Retry All while a queue filter hides the failures of other queues" do
+      @stub_data_source.failed_events_list = [{ "id" => 7, "queue_name" => "default" }]
+
+      visit "/pgbus/jobs?queue=pgbus_mailers"
+
+      expect(page).to have_text("No jobs")
+      expect(page).to have_button("Retry All")
     end
 
     it "shows Retry All and Discard All while jobs are retrying" do

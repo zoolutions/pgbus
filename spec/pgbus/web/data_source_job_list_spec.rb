@@ -216,21 +216,24 @@ RSpec.describe Pgbus::Web::DataSource::JobList do
     it "collects paused, drained and worker liveness for JobState" do
       allow(Pgbus::QueueState).to receive(:paused).and_return(instance_double(ActiveRecord::Relation, pluck: ["default"]))
       allow(data_source).to receive_messages(drained_queue_names: Set["pgbus_test_default"],
+                                             handler_queue_physical_names: ["pgbus_test_events"],
                                              processes: [{ kind: "worker", healthy: true }])
 
       context = data_source.job_list_context(now: Time.utc(2026, 1, 1))
 
       expect(context).to have_attributes(paused: Set["default"], drained: Set["pgbus_test_default"], workers_alive: true,
+                                         consumers_alive: false, handler_queues: Set["pgbus_test_events"],
                                          max_retries: Pgbus.configuration.max_retries)
     end
 
     it "reports no live workers when every worker is stale" do
       allow(Pgbus::QueueState).to receive(:paused).and_return(instance_double(ActiveRecord::Relation, pluck: []))
-      allow(data_source).to receive_messages(drained_queue_names: nil,
+      allow(data_source).to receive_messages(drained_queue_names: nil, handler_queue_physical_names: [],
                                              processes: [{ kind: "worker", healthy: false },
+                                                         { kind: "consumer", healthy: true },
                                                          { kind: "dispatcher", healthy: true }])
 
-      expect(data_source.job_list_context.workers_alive).to be(false)
+      expect(data_source.job_list_context).to have_attributes(workers_alive: false, consumers_alive: true)
     end
   end
 end

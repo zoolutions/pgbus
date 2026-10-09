@@ -26,7 +26,10 @@ module Pgbus
 
       # paused: Set of logical queue names. drained: Set of physical queue
       # names, or nil when a wildcard capsule drains every queue.
-      Context = Data.define(:now, :max_retries, :paused, :drained, :workers_alive)
+      # handler_queues: physical EventBus handler queues, which consumers
+      # drain; every other queue needs a live worker.
+      Context = Data.define(:now, :max_retries, :paused, :drained, :workers_alive, :handler_queues,
+                            :consumers_alive)
       Result = Data.define(:state, :reason_key, :reason_args, :next_run_at, :badge_tone)
 
       module_function
@@ -67,7 +70,8 @@ module Pgbus
         return "paused" if context.paused.include?(row[:logical_queue])
         return "not_drained" if context.drained && !context.drained.include?(row[:queue_name])
 
-        "no_workers" unless context.workers_alive
+        alive = context.handler_queues.include?(row[:queue_name]) ? context.consumers_alive : context.workers_alive
+        "no_workers" unless alive
       end
 
       def retrying_reason(row, context)

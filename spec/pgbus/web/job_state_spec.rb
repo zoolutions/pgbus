@@ -7,9 +7,11 @@ RSpec.describe Pgbus::Web::JobState do
   let(:paused) { Set.new }
   let(:drained) { Set["pgbus_default"] }
   let(:workers_alive) { true }
+  let(:consumers_alive) { true }
   let(:context) do
     described_class::Context.new(now: now, max_retries: 5, paused: paused, drained: drained,
-                                 workers_alive: workers_alive)
+                                 workers_alive: workers_alive, handler_queues: Set["pgbus_events"],
+                                 consumers_alive: consumers_alive)
   end
 
   def queue_row(**attrs)
@@ -48,7 +50,8 @@ RSpec.describe Pgbus::Web::JobState do
     it "labels a priority sub-table count as within its priority" do
       row = queue_row(state: "ready", queue_name: "pgbus_default_p1")
       context_with_p1 = described_class::Context.new(now: now, max_retries: 5, paused: paused,
-                                                     drained: Set["pgbus_default_p1"], workers_alive: true)
+                                                     drained: Set["pgbus_default_p1"], workers_alive: true,
+                                                     handler_queues: Set.new, consumers_alive: true)
 
       result = described_class.present(row, context_with_p1, ahead: 2)
 
@@ -90,6 +93,31 @@ RSpec.describe Pgbus::Web::JobState do
 
       it "overlays a lease-expired redelivery too" do
         expect(present(queue_row(state: "ready", read_ct: 1), ahead: 1).reason_key).to eq("paused")
+      end
+    end
+
+    context "with an event-handler queue" do
+      let(:drained) { Set["pgbus_default", "pgbus_events"] }
+      let(:handler_row) { queue_row(state: "ready", queue_name: "pgbus_events", logical_queue: "events") }
+
+      context "when only consumers are alive" do
+        let(:workers_alive) { false }
+
+        it "does not blame missing workers for a queue consumers drain" do
+          expect(present(handler_row, ahead: 0).reason_key).to eq("waiting")
+        end
+
+        it "still blames missing workers for a job queue" do
+          expect(present(queue_row(state: "ready"), ahead: 0).reason_key).to eq("no_workers")
+        end
+      end
+
+      context "when no consumer is alive" do
+        let(:consumers_alive) { false }
+
+        it "reports the missing consumer as no healthy worker" do
+          expect(present(handler_row, ahead: 0).reason_key).to eq("no_workers")
+        end
       end
     end
 

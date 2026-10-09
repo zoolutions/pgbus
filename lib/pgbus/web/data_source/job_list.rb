@@ -116,10 +116,11 @@ module Pgbus
         end
 
         def job_list_context(now: Time.now)
-          workers_alive = processes.any? { |p| %w[worker consumer].include?(p[:kind].to_s) && p[:healthy] }
+          alive = ->(kind) { processes.any? { |p| p[:kind].to_s == kind && p[:healthy] } }
           JobState::Context.new(now: now, max_retries: Pgbus.configuration.max_retries,
                                 paused: paused_queue_names.to_set, drained: drained_queue_names,
-                                workers_alive: workers_alive)
+                                workers_alive: alive.call("worker"), handler_queues: handler_queue_physical_names.to_set,
+                                consumers_alive: alive.call("consumer"))
         end
 
         private
@@ -170,7 +171,7 @@ module Pgbus
           <<~SQL.strip
             LEFT JOIN LATERAL (
               SELECT f.id, f.error_class::text AS error_class, f.error_message,
-                     (f.failed_at AT TIME ZONE 'UTC') AS failed_at
+                     f.failed_at::timestamptz AS failed_at
               FROM pgbus_failed_events f
               WHERE f.queue_name IN ('#{logical}', '#{qtable}') AND f.msg_id = m.msg_id
               ORDER BY f.failed_at DESC LIMIT 1
@@ -201,7 +202,7 @@ module Pgbus
                     'retrying'::text AS state, f.error_class::text AS error_class, f.error_message,
                     f.id AS failed_event_id, NULL::text AS concurrency_key, NULL::integer AS slots_held,
                     NULL::integer AS slots_max, f.payload::text AS payload, f.headers::text AS headers,
-                    (f.failed_at AT TIME ZONE 'UTC') AS sort_at
+                    f.failed_at::timestamptz AS sort_at
              FROM pgbus_failed_events f WHERE #{where} ORDER BY f.id DESC LIMIT #{fetch})
           SQL
         end
@@ -210,11 +211,11 @@ module Pgbus
           <<~SQL.strip
             (SELECT 'blocked'::text AS source, b.id, b.queue_name::text AS queue_name,
                     b.queue_name::text AS logical_queue, NULL::bigint AS msg_id, b.payload->>'job_class' AS job_class,
-                    NULL::integer AS read_ct, (b.created_at AT TIME ZONE 'UTC') AS enqueued_at,
+                    NULL::integer AS read_ct, b.created_at::timestamptz AS enqueued_at,
                     NULL::timestamptz AS last_read_at, NULL::timestamptz AS vt, 'blocked'::text AS state,
                     NULL::text AS error_class, NULL::text AS error_message, NULL::bigint AS failed_event_id,
                     b.concurrency_key::text AS concurrency_key, s.value AS slots_held, s.max_value AS slots_max,
-                    b.payload::text AS payload, NULL::text AS headers, (b.created_at AT TIME ZONE 'UTC') AS sort_at
+                    b.payload::text AS payload, NULL::text AS headers, b.created_at::timestamptz AS sort_at
              FROM pgbus_blocked_executions b
              LEFT JOIN pgbus_semaphores s ON s.key = b.concurrency_key
              #{blocked_where(scope)} ORDER BY b.created_at DESC LIMIT #{fetch})

@@ -15,8 +15,9 @@ RSpec.describe "Dashboard job list (integration)", :integration do
   let!(:ids) do
     client.ensure_queue(queue)
     client.purge_queue(queue)
-    Pgbus::BusRecord.connection.execute("DELETE FROM pgbus_failed_events")
-    Pgbus::BusRecord.connection.execute("DELETE FROM pgbus_blocked_executions")
+    conn = Pgbus::BusRecord.connection
+    conn.exec_delete("DELETE FROM pgbus_failed_events WHERE queue_name IN ($1, $2)", "test", [queue, physical])
+    conn.exec_delete("DELETE FROM pgbus_blocked_executions WHERE queue_name IN ($1, $2)", "test", [queue, physical])
 
     running = client.send_message(queue, payload("RunningJob")).to_i
     read_one(vt: 60)

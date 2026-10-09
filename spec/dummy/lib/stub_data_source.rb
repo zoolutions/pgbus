@@ -64,15 +64,16 @@ module DummyApp
 
     # Unified Jobs list (issue #489): one row per state, plus an orphaned
     # failed row whose message has left its queue.
-    def job_rows(state: nil, queue_name: nil, page: 1, per_page: 25) # rubocop:disable Lint/UnusedMethodArgument
-      rows = sample_job_rows
+    def job_rows(state: nil, queue_name: nil, page: 1, per_page: 25)
+      rows = sample_job_rows_in(queue_name)
       rows = rows.select { |r| r[:state] == state } if state
       rows.slice((page - 1) * per_page, per_page) || []
     end
 
-    def job_state_counts(queue_name: nil) # rubocop:disable Lint/UnusedMethodArgument
-      counts = sample_job_rows.group_by { |r| r[:state] }.transform_values(&:size)
-      Pgbus::Web::DataSource::JobList::StateCounts.new(counts: counts.merge("all" => sample_job_rows.size),
+    def job_state_counts(queue_name: nil)
+      rows = sample_job_rows_in(queue_name)
+      counts = rows.group_by { |r| r[:state] }.transform_values(&:size)
+      Pgbus::Web::DataSource::JobList::StateCounts.new(counts: counts.merge("all" => rows.size),
                                                        capped: Set.new)
     end
 
@@ -80,7 +81,7 @@ module DummyApp
 
     def job_list_context(now: Time.now)
       Pgbus::Web::JobState::Context.new(now: now, max_retries: 5, paused: Set["mailers"], drained: nil,
-                                        workers_alive: true)
+                                        workers_alive: true, handler_queues: Set.new, consumers_alive: true)
     end
 
     def failed_events(page: 1, per_page: 25) # rubocop:disable Lint/UnusedMethodArgument
@@ -327,6 +328,10 @@ module DummyApp
     def discard_all_locks = 2
 
     private
+
+    def sample_job_rows_in(queue_name)
+      queue_name ? sample_job_rows.select { |r| r[:queue_name] == queue_name } : sample_job_rows
+    end
 
     def sample_job_rows
       now = Time.now.utc

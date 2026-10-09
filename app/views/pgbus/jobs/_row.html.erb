@@ -37,9 +37,12 @@
         <%= link_to t("pgbus.jobs.list.view_locks"), pgbus.locks_path,
               class: "text-xs font-medium text-indigo-600 hover:text-indigo-800 dark:text-indigo-400", data: { turbo_frame: "_top" } %>
       <% elsif failed_id %>
-        <%= button_to t("pgbus.jobs.list.retry"), pgbus.retry_job_path(failed_id), method: :post,
-              class: "text-xs font-medium text-indigo-600 hover:text-indigo-800 dark:text-indigo-400",
-              data: { turbo_frame: "_top" } %>
+        <%# A retry attempt in progress (running) must not have its lease reset. %>
+        <% unless job.state == "running" %>
+          <%= button_to t("pgbus.jobs.list.retry"), pgbus.retry_job_path(failed_id), method: :post,
+                class: "text-xs font-medium text-indigo-600 hover:text-indigo-800 dark:text-indigo-400",
+                data: { turbo_frame: "_top" } %>
+        <% end %>
         <%= button_to t("pgbus.jobs.list.discard"), pgbus.discard_job_path(failed_id), method: :post,
               class: "text-xs font-medium text-red-600 hover:text-red-800 dark:text-red-400",
               data: { turbo_confirm: t("pgbus.jobs.list.discard_confirm"), turbo_frame: "_top" } %>

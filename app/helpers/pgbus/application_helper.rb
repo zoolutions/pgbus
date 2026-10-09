@@ -178,7 +178,7 @@ module Pgbus
     def pgbus_job_eta(time)
       return "—" unless time
 
-      "#{pgbus_time_ago_future(time)} (#{time.localtime.strftime("%H:%M")})"
+      "#{pgbus_time_ago_future(time)} (#{time.in_time_zone.strftime("%H:%M")})"
     end
 
     # "2/5" for a job's delivery attempts against max_retries; "—" when the

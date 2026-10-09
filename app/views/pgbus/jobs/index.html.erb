@@ -1,7 +1,8 @@
 <div class="flex items-center justify-between mb-6">
   <h1 class="text-2xl font-bold text-gray-900 dark:text-white"><%= t("pgbus.jobs.index.title") %></h1>
   <div class="flex space-x-2">
-    <% if @counts["retrying"].positive? %>
+    <%# Retry All / Discard All act on failed events in every queue, not just a filtered one. %>
+    <% if @failed_total.positive? %>
       <%= button_to t("pgbus.jobs.index.retry_all"), pgbus.retry_all_jobs_path, method: :post,
             class: "rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500",
             data: { turbo_confirm: t("pgbus.jobs.index.retry_all_confirm") } %>

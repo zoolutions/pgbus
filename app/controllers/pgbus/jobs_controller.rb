@@ -15,6 +15,7 @@ module Pgbus
       @counts = data_source.job_state_counts(queue_name: @queue)
       @ahead = data_source.jobs_ahead(@rows)
       @state_context = data_source.job_list_context
+      @failed_total = @queue ? data_source.failed_events_count : @counts["retrying"]
       render_frame("pgbus/jobs/list") if params[:frame] == "list"
     end
 
