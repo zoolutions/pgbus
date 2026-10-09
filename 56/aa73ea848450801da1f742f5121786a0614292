@@ -1,0 +1,29 @@
+lib/pgbus/web/data_source/job_list.rb
+  s_b7ecd97068835a::t_276e382f1f6866 1-24,26-288
+  s_b7ecd97068835a::t_30bf8f0756a7d8 25
+spec/pgbus/web/data_source_job_list_spec.rb
+  s_b7ecd97068835a::t_8ca4d751b71029 20,27
+  s_b7ecd97068835a::t_5c0a9eeb80a08b 1-9,11-19,21-26,28-34,37-38,40-47,50-57,59-79,81,84,86-88,90-95,97-159,164-178,180,182-202,204-207,209-221
+  s_b7ecd97068835a::t_fdd99ac589b355 58,181
+spec/integration/dashboard_job_list_spec.rb
+  s_b7ecd97068835a::t_8ca4d751b71029 47-57
+  s_b7ecd97068835a::t_e42a68951f790c 1-46,58-120
+lib/pgbus/web/data_source.rb
+  s_b7ecd97068835a::t_563251f36b787e 8-9
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "56aa73ea848450801da1f742f5121786a0614292",
+  "prompts": {},
+  "sessions": {
+    "s_b7ecd97068835a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "01d57c90-b286-4047-a3ee-6ef7a4812f48",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
