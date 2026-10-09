@@ -1,7 +1,7 @@
 <turbo-frame id="recurring-tasks" data-auto-refresh data-src="<%= pgbus.recurring_tasks_path(frame: 'recurring_tasks') %>">
   <div class="rounded-lg bg-white dark:bg-gray-800 shadow ring-1 ring-gray-200 dark:ring-gray-700">
     <% if @recurring_tasks.empty? %>
-      <div class="p-8 text-center text-gray-500">
+      <div class="p-8 text-center text-gray-500 dark:text-gray-400">
         <p class="text-lg font-medium"><%= t("pgbus.recurring_tasks.tasks_table.empty_title") %></p>
         <p class="mt-1 text-sm"><%= t("pgbus.recurring_tasks.tasks_table.empty_hint") %></p>
       </div>
@@ -9,53 +9,53 @@
       <table class="pgbus-table min-w-full divide-y divide-gray-200 dark:divide-gray-700">
         <thead class="bg-gray-50 dark:bg-gray-900">
           <tr>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase"><%= t("pgbus.recurring_tasks.tasks_table.headers.task") %></th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase"><%= t("pgbus.recurring_tasks.tasks_table.headers.schedule") %></th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase"><%= t("pgbus.recurring_tasks.tasks_table.headers.queue") %></th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase"><%= t("pgbus.recurring_tasks.tasks_table.headers.last_run") %></th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase"><%= t("pgbus.recurring_tasks.tasks_table.headers.next_run") %></th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase"><%= t("pgbus.recurring_tasks.tasks_table.headers.status") %></th>
-            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase"><%= t("pgbus.recurring_tasks.tasks_table.headers.actions") %></th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase"><%= t("pgbus.recurring_tasks.tasks_table.headers.task") %></th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase"><%= t("pgbus.recurring_tasks.tasks_table.headers.schedule") %></th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase"><%= t("pgbus.recurring_tasks.tasks_table.headers.queue") %></th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase"><%= t("pgbus.recurring_tasks.tasks_table.headers.last_run") %></th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase"><%= t("pgbus.recurring_tasks.tasks_table.headers.next_run") %></th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase"><%= t("pgbus.recurring_tasks.tasks_table.headers.status") %></th>
+            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase"><%= t("pgbus.recurring_tasks.tasks_table.headers.actions") %></th>
           </tr>
         </thead>
         <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
           <% @recurring_tasks.each do |task| %>
-            <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50 dark:bg-gray-900">
+            <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
               <td data-label="Task" class="px-4 py-3">
                 <div>
                   <%= link_to task[:key], pgbus.recurring_task_path(task[:id]),
-                      class: "text-sm font-medium text-blue-600 hover:text-blue-800",
+                      class: "text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800",
                       data: { turbo_frame: "_top" } %>
                 </div>
-                <div class="text-xs text-gray-500"><%= task[:class_name] || task[:command]&.truncate(40) %></div>
+                <div class="text-xs text-gray-500 dark:text-gray-400"><%= task[:class_name] || task[:command]&.truncate(40) %></div>
                 <% if task[:description] %>
-                  <div class="text-xs text-gray-400 mt-0.5"><%= task[:description] %></div>
+                  <div class="text-xs text-gray-400 dark:text-gray-500 mt-0.5"><%= task[:description] %></div>
                 <% end %>
               </td>
               <td data-label="Schedule" class="px-4 py-3">
                 <div class="text-sm text-gray-900 dark:text-white"><%= task[:schedule] %></div>
                 <% if task[:human_schedule] && task[:human_schedule] != task[:schedule] %>
-                  <div class="text-xs text-gray-400"><%= task[:human_schedule] %></div>
+                  <div class="text-xs text-gray-400 dark:text-gray-500"><%= task[:human_schedule] %></div>
                 <% end %>
               </td>
-              <td data-label="Queue" class="px-4 py-3 text-sm text-gray-600">
+              <td data-label="Queue" class="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
                 <%= task[:queue_name] || t("pgbus.recurring_tasks.tasks_table.default_queue") %>
               </td>
-              <td data-label="Last Run" class="px-4 py-3 text-sm text-gray-600">
+              <td data-label="Last Run" class="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
                 <%= task[:last_run_at] ? pgbus_time_ago(task[:last_run_at]) : t("pgbus.recurring_tasks.tasks_table.never") %>
               </td>
-              <td data-label="Next Run" class="px-4 py-3 text-sm text-gray-600">
+              <td data-label="Next Run" class="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
                 <% if task[:enabled] && task[:next_run_at] %>
                   <%= pgbus_time_ago_future(task[:next_run_at]) %>
                 <% else %>
-                  <span class="text-gray-400">—</span>
+                  <span class="text-gray-400 dark:text-gray-500">—</span>
                 <% end %>
               </td>
               <td data-label="Status" class="px-4 py-3">
                 <% if task[:enabled] %>
                   <%= pgbus_recurring_health_badge(task) %>
                 <% else %>
-                  <span class="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600">
+                  <span class="inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-700 px-2.5 py-0.5 text-xs font-medium text-gray-600 dark:text-gray-300">
                     <%= t("pgbus.recurring_tasks.tasks_table.disabled") %>
                   </span>
                 <% end %>
@@ -68,7 +68,7 @@
                 <% if task[:enabled] %>
                   <%= button_to t("pgbus.recurring_tasks.tasks_table.run_now"),
                       pgbus.enqueue_recurring_task_path(task[:id]),
-                      class: "inline-flex items-center rounded bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-200" %>
+                      class: "inline-flex items-center rounded bg-blue-100 dark:bg-blue-900/30 px-2 py-1 text-xs font-medium text-blue-700 dark:text-blue-400 hover:bg-blue-200" %>
                 <% end %>
               </td>
             </tr>

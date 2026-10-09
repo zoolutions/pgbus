@@ -1,6 +1,6 @@
 <div class="flex items-center justify-between mb-6">
   <h1 class="text-2xl font-bold text-gray-900 dark:text-white"><%= t("pgbus.recurring_tasks.index.title") %></h1>
-  <span class="text-sm text-gray-500"><%= t("pgbus.recurring_tasks.index.task_count", count: @recurring_tasks.size) %></span>
+  <span class="text-sm text-gray-500 dark:text-gray-400"><%= t("pgbus.recurring_tasks.index.task_count", count: @recurring_tasks.size) %></span>
 </div>
 
 <%= render "pgbus/recurring_tasks/tasks_table" %>

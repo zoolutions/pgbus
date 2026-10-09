@@ -1,5 +1,5 @@
 <div class="mb-6">
-  <%= link_to "\u2190 #{t("pgbus.events.show.back")}", pgbus.events_path, class: "text-sm text-indigo-600 hover:text-indigo-500" %>
+  <%= link_to "\u2190 #{t("pgbus.events.show.back")}", pgbus.events_path, class: "text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-500" %>
 </div>
 
 <% if @event %>
@@ -8,21 +8,21 @@
   <div class="rounded-lg bg-white dark:bg-gray-800 shadow ring-1 ring-gray-200 dark:ring-gray-700 p-6">
     <dl class="grid grid-cols-1 gap-4 sm:grid-cols-2">
       <div>
-        <dt class="text-sm font-medium text-gray-500"><%= t("pgbus.events.show.labels.event_id") %></dt>
+        <dt class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.events.show.labels.event_id") %></dt>
         <dd class="text-sm font-mono text-gray-900 dark:text-white"><%= @event["event_id"] %></dd>
       </div>
       <div>
-        <dt class="text-sm font-medium text-gray-500"><%= t("pgbus.events.show.labels.handler") %></dt>
+        <dt class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.events.show.labels.handler") %></dt>
         <dd class="text-sm text-gray-900 dark:text-white"><%= @event["handler_class"] %></dd>
       </div>
       <div>
-        <dt class="text-sm font-medium text-gray-500"><%= t("pgbus.events.show.labels.processed_at") %></dt>
+        <dt class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.events.show.labels.processed_at") %></dt>
         <dd class="text-sm text-gray-900 dark:text-white"><%= @event["processed_at"] %></dd>
       </div>
     </dl>
   </div>
 <% else %>
   <div class="text-center py-12">
-    <p class="text-gray-400"><%= t("pgbus.events.show.not_found") %></p>
+    <p class="text-gray-400 dark:text-gray-500"><%= t("pgbus.events.show.not_found") %></p>
   </div>
 <% end %>

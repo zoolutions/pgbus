@@ -5,23 +5,23 @@
       <table class="pgbus-table min-w-full divide-y divide-gray-200 dark:divide-gray-700">
         <thead class="bg-gray-50 dark:bg-gray-900">
           <tr>
-            <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500"><%= t("pgbus.dashboard.processes_table.headers.kind") %></th>
-            <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500"><%= t("pgbus.dashboard.processes_table.headers.host") %></th>
-            <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500"><%= t("pgbus.dashboard.processes_table.headers.pid") %></th>
-            <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500"><%= t("pgbus.dashboard.processes_table.headers.status") %></th>
+            <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.processes_table.headers.kind") %></th>
+            <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.processes_table.headers.host") %></th>
+            <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.processes_table.headers.pid") %></th>
+            <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.processes_table.headers.status") %></th>
           </tr>
         </thead>
         <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
           <% @processes.each do |p| %>
             <tr>
               <td data-label="Kind" class="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white"><%= p[:kind] %></td>
-              <td data-label="Host" class="px-4 py-3 text-sm text-gray-500"><%= p[:hostname] %></td>
-              <td data-label="PID" class="px-4 py-3 text-sm text-gray-500"><%= p[:pid] %></td>
+              <td data-label="Host" class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400"><%= p[:hostname] %></td>
+              <td data-label="PID" class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400"><%= p[:pid] %></td>
               <td data-label="Status" class="px-4 py-3 text-sm"><%= pgbus_status_badge(p[:status] || p[:healthy]) %></td>
             </tr>
           <% end %>
           <% if @processes.empty? %>
-            <tr><td colspan="4" class="px-4 py-8 text-center text-sm text-gray-400"><%= t("pgbus.dashboard.processes_table.empty") %></td></tr>
+            <tr><td colspan="4" class="px-4 py-8 text-center text-sm text-gray-400 dark:text-gray-500"><%= t("pgbus.dashboard.processes_table.empty") %></td></tr>
           <% end %>
         </tbody>
       </table>
