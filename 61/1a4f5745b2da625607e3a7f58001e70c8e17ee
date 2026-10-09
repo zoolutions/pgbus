@@ -1,0 +1,24 @@
+app/views/pgbus/dead_letter/_messages_table.html.erb
+  s_b7ecd97068835a::t_8ecc8c2470ca89 97-98
+  s_b7ecd97068835a::t_b9d5451e7c0067 102-103
+app/views/pgbus/shared/_pager.html.erb
+  s_b7ecd97068835a::t_b9d5451e7c0067 1-34
+app/views/pgbus/shared/_empty_row.html.erb
+  s_b7ecd97068835a::t_b9d5451e7c0067 1-2
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "611a4f5745b2da625607e3a7f58001e70c8e17ee",
+  "prompts": {},
+  "sessions": {
+    "s_b7ecd97068835a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "01d57c90-b286-4047-a3ee-6ef7a4812f48",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
