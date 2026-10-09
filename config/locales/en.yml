@@ -317,47 +317,6 @@ en:
           7d: 7d
         title: Insights
     jobs:
-      enqueued_table:
-        arguments: Arguments
-        discard: Discard
-        discard_all: Discard All
-        discard_all_confirm: Discard all enqueued jobs and release their locks? This cannot be undone.
-        discard_confirm: Discard this message?
-        empty: No enqueued jobs
-        full_json_payload: Full JSON payload
-        headers:
-          enqueued: Enqueued
-          id: ID
-          job_class: Job Class
-          queue: Queue
-          reads: Reads
-        headers_section: Headers
-        job_id: 'Job ID:'
-        metadata: Metadata
-        metadata_labels:
-          last_read: 'Last read:'
-          locale: 'Locale:'
-          priority: 'Priority:'
-          queue: 'Queue:'
-          scheduled: 'Scheduled:'
-          timezone: 'Timezone:'
-          visible_at: 'Visible at:'
-        retry: Retry
-        retry_confirm: Reset visibility timeout and retry?
-        title: Enqueued Jobs
-      failed_table:
-        discard: Discard
-        discard_confirm: Discard this job?
-        empty: No failed jobs
-        headers:
-          actions: Actions
-          error: Error
-          failed: Failed
-          id: ID
-          queue: Queue
-          retries: Retries
-        retry: Retry
-        title: Failed Jobs
       index:
         discard_all: Discard All
         discard_all_confirm: Discard all failed jobs?
@@ -371,6 +330,74 @@ en:
         retry_all: Retry All
         retry_all_confirm: Retry all failed jobs?
         title: Jobs
+      list:
+        arguments: Arguments
+        discard: Discard
+        discard_all_enqueued: Discard All
+        discard_all_enqueued_confirm: Discard all enqueued jobs and release their locks? This cannot be undone.
+        discard_confirm: Discard this job?
+        empty:
+          all: No jobs
+          blocked: No jobs blocked by a concurrency limit
+          ready: No jobs waiting to run
+          retrying: No jobs waiting to retry
+          running: No jobs running
+          scheduled: No scheduled jobs
+        full_json_payload: Full JSON payload
+        headers:
+          actions: Actions
+          attempts: Attempts
+          id: ID
+          job: Job
+          queue: Queue
+          reason: Next run / Reason
+          state: State
+        headers_section: Headers
+        job_id: 'Job ID:'
+        metadata: Metadata
+        metadata_labels:
+          concurrency_key: 'Concurrency key:'
+          enqueued: 'Enqueued:'
+          last_read: 'Last read:'
+          locale: 'Locale:'
+          priority: 'Priority:'
+          scheduled: 'Scheduled:'
+          timezone: 'Timezone:'
+          visible_at: 'Visible at:'
+        reasons:
+          blocked: Waiting for a concurrency slot on %{key} (held %{held}/%{limit}) · parked %{ago}
+          blocked_no_slots: Waiting for a concurrency slot on %{key} · parked %{ago}
+          lease_expired: Lease expired (worker likely died) — redelivering, attempt %{attempt}
+          no_workers: No healthy worker running
+          not_drained: No worker drains this queue
+          orphaned: Failed with %{error} — message no longer in queue
+          paused: Queue paused
+          retrying: 'Attempt %{attempt}/%{max} failed: %{error} — next attempt %{time}'
+          retrying_dlq: 'Attempt %{attempt}/%{max} failed: %{error} — next read moves it to the DLQ'
+          retrying_due: 'Attempt %{attempt}/%{max} failed: %{error} — next attempt due now'
+          running: Claimed %{ago} · lease expires %{time}
+          scheduled: Scheduled — runs %{time}
+          waiting: Waiting — %{count} ahead
+          waiting_priority: Waiting — %{count} ahead at this priority
+          waiting_unknown: Waiting to be picked up
+        retry: Retry
+        retry_confirm: Reset visibility timeout and retry?
+        states:
+          blocked: Blocked
+          ready: Ready
+          retrying: Retrying
+          running: Running
+          scheduled: Scheduled
+        tabs:
+          all: All
+          blocked: Blocked
+          ready: Ready
+          retrying: Retrying
+          running: Running
+          scheduled: Scheduled
+        tabs_label: Job states
+        view_failure: View failure
+        view_locks: View locks
       show:
         back: Back to Jobs
         backtrace: Backtrace

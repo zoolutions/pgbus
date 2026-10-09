@@ -317,47 +317,6 @@ fi:
           7d: 7d
         title: Näkemykset
     jobs:
-      enqueued_table:
-        arguments: Argumentit
-        discard: Hylkää
-        discard_all: Hylkää kaikki
-        discard_all_confirm: Hylkää kaikki jonossa olevat tehtävät ja vapauta lukot? Tätä ei voi perua.
-        discard_confirm: Hylätä tämä viesti?
-        empty: Ei jonotettuja töitä
-        full_json_payload: Täysi JSON-payload
-        headers:
-          enqueued: Jonotettu
-          id: ID
-          job_class: Työn luokka
-          queue: Jono
-          reads: Lukemiset
-        headers_section: Otsikot
-        job_id: 'Työn ID:'
-        metadata: Metatiedot
-        metadata_labels:
-          last_read: 'Viimeksi luettu:'
-          locale: 'Alue:'
-          priority: 'Prioriteetti:'
-          queue: 'Jono:'
-          scheduled: 'Aikataulutettu:'
-          timezone: 'Aikavyöhyke:'
-          visible_at: 'Näkyvissä:'
-        retry: Yritä uudelleen
-        retry_confirm: Nollaa näkyvyysaika ja yritä uudelleen?
-        title: Jonotetut työt
-      failed_table:
-        discard: Hylkää
-        discard_confirm: Hylätäänkö tämä työ?
-        empty: Ei epäonnistuneita töitä
-        headers:
-          actions: Toiminnot
-          error: Virhe
-          failed: Epäonnistunut
-          id: ID
-          queue: Jono
-          retries: Uudelleenyritykset
-        retry: Yritä uudelleen
-        title: Epäonnistuneet työt
       index:
         discard_all: Hylkää kaikki
         discard_all_confirm: Hylätäänkö kaikki epäonnistuneet työt?
@@ -371,6 +330,74 @@ fi:
         retry_all: Yritä uudelleen kaikki
         retry_all_confirm: Yritetäänkö uudelleen kaikki epäonnistuneet työt?
         title: Työt
+      list:
+        arguments: Argumentit
+        discard: Hylkää
+        discard_all_enqueued: Hylkää kaikki
+        discard_all_enqueued_confirm: Hylkää kaikki jonossa olevat tehtävät ja vapauta lukot? Tätä ei voi perua.
+        discard_confirm: Hylätäänkö tämä työ?
+        empty:
+          all: Ei töitä
+          blocked: Ei rinnakkaisuusrajan estämiä töitä
+          ready: Ei ajoa odottavia töitä
+          retrying: Ei uudelleenyritystä odottavia töitä
+          running: Ei käynnissä olevia töitä
+          scheduled: Ei ajastettuja töitä
+        full_json_payload: Täysi JSON-payload
+        headers:
+          actions: Toiminnot
+          attempts: Yritykset
+          id: ID
+          job: Työ
+          queue: Jono
+          reason: Seuraava ajo / Syy
+          state: Tila
+        headers_section: Otsikot
+        job_id: 'Työn ID:'
+        metadata: Metatiedot
+        metadata_labels:
+          concurrency_key: 'Rinnakkaisuusavain:'
+          enqueued: 'Jonoon lisätty:'
+          last_read: 'Viimeksi luettu:'
+          locale: 'Alue:'
+          priority: 'Prioriteetti:'
+          scheduled: 'Aikataulutettu:'
+          timezone: 'Aikavyöhyke:'
+          visible_at: 'Näkyvissä:'
+        reasons:
+          blocked: Odottaa rinnakkaisuuspaikkaa avaimelle %{key} (varattu %{held}/%{limit}) · pysäköity %{ago}
+          blocked_no_slots: Odottaa rinnakkaisuuspaikkaa avaimelle %{key} · pysäköity %{ago}
+          lease_expired: Vuokra vanhentui (worker luultavasti kaatui) — toimitetaan uudelleen, yritys %{attempt}
+          no_workers: Yksikään terve worker ei ole käynnissä
+          not_drained: Mikään worker ei käsittele tätä jonoa
+          orphaned: 'Epäonnistui: %{error} — viesti ei ole enää jonossa'
+          paused: Jono on keskeytetty
+          retrying: 'Yritys %{attempt}/%{max} epäonnistui: %{error} — seuraava yritys %{time}'
+          retrying_dlq: 'Yritys %{attempt}/%{max} epäonnistui: %{error} — seuraava luku siirtää sen DLQ:hun'
+          retrying_due: 'Yritys %{attempt}/%{max} epäonnistui: %{error} — seuraava yritys nyt'
+          running: Noudettu %{ago} · vuokra vanhenee %{time}
+          scheduled: Ajastettu — ajetaan %{time}
+          waiting: Odottaa — %{count} edellä
+          waiting_priority: Odottaa — %{count} edellä tällä prioriteetilla
+          waiting_unknown: Odottaa noutoa
+        retry: Yritä uudelleen
+        retry_confirm: Nollaa näkyvyysaika ja yritä uudelleen?
+        states:
+          blocked: Estetty
+          ready: Valmiina
+          retrying: Uudelleenyritys
+          running: Käynnissä
+          scheduled: Ajastettu
+        tabs:
+          all: Kaikki
+          blocked: Estetty
+          ready: Valmiina
+          retrying: Uudelleenyritys
+          running: Käynnissä
+          scheduled: Ajastetut
+        tabs_label: Töiden tilat
+        view_failure: Näytä virhe
+        view_locks: Näytä lukot
       show:
         back: Takaisin töihin
         backtrace: Takautumisketju

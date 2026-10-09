@@ -16,7 +16,7 @@ module Pgbus
                     :stream_stats_available, :stream_summary, :top_streams_list,
                     :pending_events_list, :outbox_stats_hash, :outbox_entries_list,
                     :batches_list, :batch_detail_hash, :concurrency_stats_hash,
-                    :promoted_count
+                    :promoted_count, :job_rows_list, :jobs_ahead_hash, :job_context
       attr_reader :calls
 
       def initialize
@@ -47,6 +47,9 @@ module Pgbus
         @batch_detail_hash = nil
         @concurrency_stats_hash = default_concurrency_stats
         @promoted_count = 0
+        @job_rows_list = []
+        @jobs_ahead_hash = {}
+        @job_context = default_job_context
         @calls = Hash.new { |h, k| h[k] = [] }
       end
 
@@ -71,6 +74,24 @@ module Pgbus
       def processed_event(id) = @events_list.find { |e| e["id"].to_s == id.to_s }
       def registered_subscribers = @subscribers_list
       def jobs(queue_name: nil, page: 1, per_page: 25) = @jobs_list
+
+      # Unified Jobs list (issue #489). Rows carry their SQL-derived :state;
+      # the stub filters and pages them the way DataSource#job_rows does.
+      def job_rows(state: nil, queue_name: nil, page: 1, per_page: 25)
+        record(:job_rows, { state: state, queue_name: queue_name, page: page, per_page: per_page })
+        rows = state ? @job_rows_list.select { |r| r[:state] == state } : @job_rows_list
+        rows.slice((page - 1) * per_page, per_page) || []
+      end
+
+      def job_state_counts(queue_name: nil)
+        counts = @job_rows_list.group_by { |r| r[:state] }.transform_values(&:size)
+        Pgbus::Web::DataSource::JobList::StateCounts.new(counts: counts.merge("all" => @job_rows_list.size),
+                                                         capped: Set.new)
+      end
+
+      def jobs_ahead(_rows) = @jobs_ahead_hash
+      def job_list_context(now: Time.now) = @job_context.with(now: now)
+
       def batches(limit: 100) = @batches_list
       def batch_detail(batch_id) = @batch_detail_hash
       def batches_count = @batches_list.size
@@ -205,6 +226,11 @@ module Pgbus
 
       def default_concurrency_stats
         { parked_total: 0, oldest_parked_age_sec: nil, slots_held: 0, keys_at_limit: 0, keys: [] }
+      end
+
+      def default_job_context
+        Pgbus::Web::JobState::Context.new(now: Time.now, max_retries: 5, paused: Set.new, drained: nil,
+                                          workers_alive: true)
       end
 
       def default_health_stats

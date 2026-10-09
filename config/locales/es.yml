@@ -317,47 +317,6 @@ es:
           7d: 7d
         title: Perspectivas
     jobs:
-      enqueued_table:
-        arguments: Argumentos
-        discard: Descartar
-        discard_all: Descartar todos
-        discard_all_confirm: "¿Descartar todos los trabajos en cola y liberar sus bloqueos? Esta acción no se puede deshacer."
-        discard_confirm: "¿Descartar este mensaje?"
-        empty: No hay trabajos en cola
-        full_json_payload: Carga JSON completa
-        headers:
-          enqueued: En cola
-          id: ID
-          job_class: Clase de Trabajo
-          queue: Cola
-          reads: Lecturas
-        headers_section: Encabezados
-        job_id: 'ID del Trabajo:'
-        metadata: Metadatos
-        metadata_labels:
-          last_read: 'Última lectura:'
-          locale: 'Configuración regional:'
-          priority: 'Prioridad:'
-          queue: 'Cola:'
-          scheduled: 'Programado:'
-          timezone: 'Zona horaria:'
-          visible_at: 'Visible en:'
-        retry: Reintentar
-        retry_confirm: "¿Restablecer tiempo de visibilidad y reintentar?"
-        title: Trabajos en Cola
-      failed_table:
-        discard: Descartar
-        discard_confirm: "¿Descartar este trabajo?"
-        empty: No hay trabajos fallidos
-        headers:
-          actions: Acciones
-          error: Error
-          failed: Fallado
-          id: ID
-          queue: Cola
-          retries: Reintentos
-        retry: Reintentar
-        title: Trabajos Fallidos
       index:
         discard_all: Descartar Todo
         discard_all_confirm: "¿Descartar todos los trabajos fallidos?"
@@ -371,6 +330,74 @@ es:
         retry_all: Reintentar Todo
         retry_all_confirm: "¿Reintentar todos los trabajos fallidos?"
         title: Trabajos
+      list:
+        arguments: Argumentos
+        discard: Descartar
+        discard_all_enqueued: Descartar todos
+        discard_all_enqueued_confirm: "¿Descartar todos los trabajos en cola y liberar sus bloqueos? Esta acción no se puede deshacer."
+        discard_confirm: "¿Descartar este trabajo?"
+        empty:
+          all: No hay trabajos
+          blocked: No hay trabajos bloqueados por un límite de concurrencia
+          ready: No hay trabajos esperando ejecución
+          retrying: No hay trabajos esperando reintento
+          running: No hay trabajos en ejecución
+          scheduled: No hay trabajos programados
+        full_json_payload: Carga JSON completa
+        headers:
+          actions: Acciones
+          attempts: Intentos
+          id: ID
+          job: Trabajo
+          queue: Cola
+          reason: Próxima ejecución / Motivo
+          state: Estado
+        headers_section: Encabezados
+        job_id: 'ID del Trabajo:'
+        metadata: Metadatos
+        metadata_labels:
+          concurrency_key: 'Clave de concurrencia:'
+          enqueued: 'Encolado:'
+          last_read: 'Última lectura:'
+          locale: 'Configuración regional:'
+          priority: 'Prioridad:'
+          scheduled: 'Programado:'
+          timezone: 'Zona horaria:'
+          visible_at: 'Visible en:'
+        reasons:
+          blocked: Esperando un hueco de concurrencia en %{key} (ocupados %{held}/%{limit}) · aparcado %{ago}
+          blocked_no_slots: Esperando un hueco de concurrencia en %{key} · aparcado %{ago}
+          lease_expired: Concesión expirada (el worker probablemente murió) — reentregando, intento %{attempt}
+          no_workers: No hay ningún worker sano en ejecución
+          not_drained: Ningún worker procesa esta cola
+          orphaned: Falló con %{error} — el mensaje ya no está en la cola
+          paused: Cola en pausa
+          retrying: 'El intento %{attempt}/%{max} falló: %{error} — próximo intento %{time}'
+          retrying_dlq: 'El intento %{attempt}/%{max} falló: %{error} — la próxima lectura lo mueve a la DLQ'
+          retrying_due: 'El intento %{attempt}/%{max} falló: %{error} — el próximo intento es ahora'
+          running: Reclamado %{ago} · la concesión expira %{time}
+          scheduled: Programado — se ejecuta %{time}
+          waiting: Esperando — %{count} por delante
+          waiting_priority: Esperando — %{count} por delante con esta prioridad
+          waiting_unknown: Esperando a ser recogido
+        retry: Reintentar
+        retry_confirm: "¿Restablecer tiempo de visibilidad y reintentar?"
+        states:
+          blocked: Bloqueado
+          ready: Listo
+          retrying: Reintentando
+          running: En ejecución
+          scheduled: Programado
+        tabs:
+          all: Todos
+          blocked: Bloqueados
+          ready: Listos
+          retrying: Reintentando
+          running: En ejecución
+          scheduled: Programados
+        tabs_label: Estados de trabajos
+        view_failure: Ver fallo
+        view_locks: Ver bloqueos
       show:
         back: Volver a Trabajos
         backtrace: Rastreo de pila

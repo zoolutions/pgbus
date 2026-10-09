@@ -1,0 +1,62 @@
+<%# Unified job list (issue #489). Each row's state comes from SQL; JobState
+    adds the reason. A row's expansion is the <tr> after it, shown by CSS
+    (.pgbus-job-detail in tailwind.css) while the ID cell's <details> is open,
+    so the auto-refresh pause on `details[open]` keeps working. %>
+<% selectable = @rows.any? { |r| r[:source] != "blocked" } %>
+<% columns = selectable ? 8 : 7 %>
+<turbo-frame id="jobs-list" data-auto-refresh data-turbo-action="advance"
+             data-src="<%= pgbus.jobs_path(request.query_parameters.merge(frame: "list")) %>">
+  <div data-bulk-page>
+    <div class="flex items-center justify-end mb-3 space-x-2">
+      <div data-bulk-actions class="hidden flex items-center space-x-2">
+        <span class="text-sm text-gray-500 dark:text-gray-400"><span data-bulk-count>0</span> <%= t("pgbus.helpers.bulk_selected") %></span>
+        <button type="submit" form="bulk-discard-jobs-form"
+                class="rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-500"
+                data-turbo-confirm="<%= t("pgbus.jobs.index.discard_selected_confirm") %>">
+          <%= t("pgbus.jobs.index.discard_selected") %>
+        </button>
+      </div>
+      <% if @counts["all"].positive? %>
+        <%= button_to t("pgbus.jobs.list.discard_all_enqueued"), pgbus.discard_all_enqueued_jobs_path, method: :post,
+              class: "rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-500",
+              data: { turbo_confirm: t("pgbus.jobs.list.discard_all_enqueued_confirm"), turbo_frame: "_top" } %>
+      <% end %>
+    </div>
+    <%# Bulk form outside the table to avoid nested forms. Queue rows post
+        messages[]; rows backed by a failed event post ids[]. %>
+    <form id="bulk-discard-jobs-form" action="<%= pgbus.discard_selected_enqueued_jobs_path %>" method="post" data-turbo-frame="_top" class="hidden">
+      <%= hidden_field_tag :authenticity_token, form_authenticity_token %>
+    </form>
+    <div class="overflow-hidden rounded-lg bg-white dark:bg-gray-800 shadow ring-1 ring-gray-200 dark:ring-gray-700" data-bulk-scope="jobs">
+      <table class="pgbus-table min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+        <thead class="bg-gray-50 dark:bg-gray-900">
+          <tr>
+            <% if selectable %>
+              <th class="w-10 px-4 py-3">
+                <input type="checkbox" data-bulk-select-all
+                       aria-label="<%= t("pgbus.helpers.bulk_select_all") %>"
+                       class="h-4 w-4 rounded border-gray-300 text-indigo-600 dark:text-indigo-400 focus:ring-indigo-600">
+              </th>
+            <% end %>
+            <% %w[id job queue state attempts reason].each do |header| %>
+              <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.jobs.list.headers.#{header}") %></th>
+            <% end %>
+            <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.jobs.list.headers.actions") %></th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+          <% @rows.each do |row| %>
+            <% job = Pgbus::Web::JobState.present(row, @state_context, ahead: @ahead[[row[:queue_name], row[:msg_id]]]) %>
+            <%= render "pgbus/jobs/row", row: row, job: job, selectable: selectable, columns: columns %>
+          <% end %>
+          <% if @rows.empty? %>
+            <%= render "pgbus/shared/empty_row", colspan: columns, message: t("pgbus.jobs.list.empty.#{@state}") %>
+          <% end %>
+        </tbody>
+      </table>
+      <%= render "pgbus/shared/pager", page: @page, per_page: @per_page, shown: @rows.size,
+            total_count: @counts[@state], has_more: @counts.capped?(@state) && @rows.size == @per_page,
+            page_path: ->(n) { pgbus.jobs_path(state: (@state unless @state == "all"), queue: @queue, page: n) } %>
+    </div>
+  </div>
+</turbo-frame>

@@ -317,47 +317,6 @@ pt:
           7d: 7d
         title: Insights
     jobs:
-      enqueued_table:
-        arguments: Argumentos
-        discard: Descartar
-        discard_all: Descartar todos
-        discard_all_confirm: Descartar todos os trabalhos na fila e liberar seus bloqueios? Esta ação não pode ser desfeita.
-        discard_confirm: Descartar esta mensagem?
-        empty: Nenhum trabalho enfileirado
-        full_json_payload: Carga JSON completa
-        headers:
-          enqueued: Enfileirado
-          id: ID
-          job_class: Classe do Trabalho
-          queue: Fila
-          reads: Leituras
-        headers_section: Cabeçalhos
-        job_id: 'ID do Trabalho:'
-        metadata: Metadados
-        metadata_labels:
-          last_read: 'Última leitura:'
-          locale: 'Localidade:'
-          priority: 'Prioridade:'
-          queue: 'Fila:'
-          scheduled: 'Agendado:'
-          timezone: 'Fuso horário:'
-          visible_at: 'Visível em:'
-        retry: Tentar novamente
-        retry_confirm: Redefinir tempo de visibilidade e tentar novamente?
-        title: Trabalhos Enfileirados
-      failed_table:
-        discard: Descartar
-        discard_confirm: Descartar este trabalho?
-        empty: Nenhum trabalho falhou
-        headers:
-          actions: Ações
-          error: Erro
-          failed: Falhou
-          id: ID
-          queue: Fila
-          retries: Tentativas
-        retry: Tentar Novamente
-        title: Trabalhos Falhados
       index:
         discard_all: Descartar Todos
         discard_all_confirm: Descartar todos os trabalhos falhados?
@@ -371,6 +330,74 @@ pt:
         retry_all: Tentar Novamente Todos
         retry_all_confirm: Tentar novamente todos os trabalhos falhados?
         title: Trabalhos
+      list:
+        arguments: Argumentos
+        discard: Descartar
+        discard_all_enqueued: Descartar todos
+        discard_all_enqueued_confirm: Descartar todos os trabalhos na fila e liberar seus bloqueios? Esta ação não pode ser desfeita.
+        discard_confirm: Descartar este trabalho?
+        empty:
+          all: Nenhum job
+          blocked: Nenhum job bloqueado por um limite de concorrência
+          ready: Nenhum job aguardando execução
+          retrying: Nenhum job aguardando nova tentativa
+          running: Nenhum job em execução
+          scheduled: Nenhum job agendado
+        full_json_payload: Carga JSON completa
+        headers:
+          actions: Ações
+          attempts: Tentativas
+          id: ID
+          job: Job
+          queue: Fila
+          reason: Próxima execução / Motivo
+          state: Estado
+        headers_section: Cabeçalhos
+        job_id: 'ID do Trabalho:'
+        metadata: Metadados
+        metadata_labels:
+          concurrency_key: 'Chave de concorrência:'
+          enqueued: 'Enfileirado:'
+          last_read: 'Última leitura:'
+          locale: 'Localidade:'
+          priority: 'Prioridade:'
+          scheduled: 'Agendado:'
+          timezone: 'Fuso horário:'
+          visible_at: 'Visível em:'
+        reasons:
+          blocked: Aguardando um slot de concorrência em %{key} (ocupados %{held}/%{limit}) · estacionado %{ago}
+          blocked_no_slots: Aguardando um slot de concorrência em %{key} · estacionado %{ago}
+          lease_expired: Concessão expirada (o worker provavelmente morreu) — reentregando, tentativa %{attempt}
+          no_workers: Nenhum worker saudável em execução
+          not_drained: Nenhum worker processa esta fila
+          orphaned: Falhou com %{error} — a mensagem não está mais na fila
+          paused: Fila pausada
+          retrying: 'A tentativa %{attempt}/%{max} falhou: %{error} — próxima tentativa %{time}'
+          retrying_dlq: 'A tentativa %{attempt}/%{max} falhou: %{error} — a próxima leitura o move para a DLQ'
+          retrying_due: 'A tentativa %{attempt}/%{max} falhou: %{error} — próxima tentativa agora'
+          running: Coletado %{ago} · a concessão expira %{time}
+          scheduled: Agendado — executa %{time}
+          waiting: Aguardando — %{count} à frente
+          waiting_priority: Aguardando — %{count} à frente nesta prioridade
+          waiting_unknown: Aguardando ser coletado
+        retry: Tentar Novamente
+        retry_confirm: Redefinir tempo de visibilidade e tentar novamente?
+        states:
+          blocked: Bloqueado
+          ready: Pronto
+          retrying: Repetindo
+          running: Em execução
+          scheduled: Agendado
+        tabs:
+          all: Todos
+          blocked: Bloqueados
+          ready: Prontos
+          retrying: Repetindo
+          running: Em execução
+          scheduled: Agendados
+        tabs_label: Estados dos jobs
+        view_failure: Ver falha
+        view_locks: Ver bloqueios
       show:
         back: Voltar para Trabalhos
         backtrace: Rastreamento de Pilha

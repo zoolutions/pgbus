@@ -1,16 +1,27 @@
 <div class="flex items-center justify-between mb-6">
   <h1 class="text-2xl font-bold text-gray-900 dark:text-white"><%= t("pgbus.jobs.index.title") %></h1>
-  <% if @failed.any? %>
-    <div class="flex space-x-2">
+  <div class="flex space-x-2">
+    <% if @counts["retrying"].positive? %>
       <%= button_to t("pgbus.jobs.index.retry_all"), pgbus.retry_all_jobs_path, method: :post,
             class: "rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500",
             data: { turbo_confirm: t("pgbus.jobs.index.retry_all_confirm") } %>
       <%= button_to t("pgbus.jobs.index.discard_all"), pgbus.discard_all_jobs_path, method: :post,
             class: "rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-500",
             data: { turbo_confirm: t("pgbus.jobs.index.discard_all_confirm") } %>
-    </div>
-  <% end %>
+    <% end %>
+  </div>
 </div>
 
-<%= render "pgbus/jobs/failed_table" %>
-<%= render "pgbus/jobs/enqueued_table" %>
+<nav class="mb-4 flex flex-wrap gap-2" aria-label="<%= t("pgbus.jobs.list.tabs_label") %>" data-testid="job-state-tabs">
+  <% Pgbus::JobsController::STATES.each do |state| %>
+    <% active = state == @state %>
+    <a href="<%= pgbus.jobs_path(state: (state unless state == "all"), queue: @queue) %>"
+       data-state="<%= state %>" <%= "aria-current=page" if active %>
+       class="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium <%= active ? 'bg-gray-800 text-white dark:bg-gray-700' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white' %>">
+      <span><%= t("pgbus.jobs.list.tabs.#{state}") %></span>
+      <span class="rounded-full px-2 py-0.5 text-xs <%= active ? 'bg-gray-600 text-white' : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200' %>"><%= pgbus_job_count(@counts, state) %></span>
+    </a>
+  <% end %>
+</nav>
+
+<%= render "pgbus/jobs/list" %>

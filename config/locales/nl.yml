@@ -317,47 +317,6 @@ nl:
           7d: 7d
         title: Inzichten
     jobs:
-      enqueued_table:
-        arguments: Argumenten
-        discard: Verwerpen
-        discard_all: Alles verwijderen
-        discard_all_confirm: Alle taken in de wachtrij verwijderen en hun vergrendelingen vrijgeven? Dit kan niet ongedaan worden gemaakt.
-        discard_confirm: Dit bericht verwerpen?
-        empty: Geen in de wachtrij geplaatste taken
-        full_json_payload: Volledige JSON payload
-        headers:
-          enqueued: In de wachtrij geplaatst
-          id: ID
-          job_class: Taakklasse
-          queue: Wachtrij
-          reads: Leest
-        headers_section: Headers
-        job_id: 'Taak ID:'
-        metadata: Metadata
-        metadata_labels:
-          last_read: 'Laatst gelezen:'
-          locale: 'Locale:'
-          priority: 'Prioriteit:'
-          queue: 'Wachtrij:'
-          scheduled: 'Gepland:'
-          timezone: 'Tijdzone:'
-          visible_at: 'Zichtbaar op:'
-        retry: Opnieuw proberen
-        retry_confirm: Zichtbaarheidstimeout resetten en opnieuw proberen?
-        title: Taken in de wachtrij
-      failed_table:
-        discard: Verwijderen
-        discard_confirm: Deze taak verwijderen?
-        empty: Geen mislukte taken
-        headers:
-          actions: Acties
-          error: Fout
-          failed: Mislukt
-          id: ID
-          queue: Wachtrij
-          retries: Herhalingen
-        retry: Opnieuw proberen
-        title: Mislukte Taken
       index:
         discard_all: Alles Verwijderen
         discard_all_confirm: Alle mislukte taken verwijderen?
@@ -371,6 +330,74 @@ nl:
         retry_all: Alles Opnieuw Proberen
         retry_all_confirm: Alle mislukte taken opnieuw proberen?
         title: Taken
+      list:
+        arguments: Argumenten
+        discard: Verwijderen
+        discard_all_enqueued: Alles verwijderen
+        discard_all_enqueued_confirm: Alle taken in de wachtrij verwijderen en hun vergrendelingen vrijgeven? Dit kan niet ongedaan worden gemaakt.
+        discard_confirm: Deze taak verwijderen?
+        empty:
+          all: Geen jobs
+          blocked: Geen jobs geblokkeerd door een gelijktijdigheidslimiet
+          ready: Geen jobs die wachten op uitvoering
+          retrying: Geen jobs die wachten op een nieuwe poging
+          running: Geen actieve jobs
+          scheduled: Geen geplande jobs
+        full_json_payload: Volledige JSON payload
+        headers:
+          actions: Acties
+          attempts: Pogingen
+          id: ID
+          job: Job
+          queue: Wachtrij
+          reason: Volgende run / Reden
+          state: Status
+        headers_section: Headers
+        job_id: 'Taak ID:'
+        metadata: Metadata
+        metadata_labels:
+          concurrency_key: 'Gelijktijdigheidssleutel:'
+          enqueued: 'In wachtrij gezet:'
+          last_read: 'Laatst gelezen:'
+          locale: 'Locale:'
+          priority: 'Prioriteit:'
+          scheduled: 'Gepland:'
+          timezone: 'Tijdzone:'
+          visible_at: 'Zichtbaar op:'
+        reasons:
+          blocked: Wacht op een gelijktijdigheidsslot voor %{key} (bezet %{held}/%{limit}) · geparkeerd %{ago}
+          blocked_no_slots: Wacht op een gelijktijdigheidsslot voor %{key} · geparkeerd %{ago}
+          lease_expired: Lease verlopen (worker waarschijnlijk gestopt) — opnieuw afgeleverd, poging %{attempt}
+          no_workers: Geen gezonde worker actief
+          not_drained: Geen worker verwerkt deze wachtrij
+          orphaned: Mislukt met %{error} — bericht staat niet meer in de wachtrij
+          paused: Wachtrij gepauzeerd
+          retrying: 'Poging %{attempt}/%{max} mislukt: %{error} — volgende poging %{time}'
+          retrying_dlq: 'Poging %{attempt}/%{max} mislukt: %{error} — de volgende lezing verplaatst hem naar de DLQ'
+          retrying_due: 'Poging %{attempt}/%{max} mislukt: %{error} — volgende poging nu'
+          running: Opgepakt %{ago} · lease verloopt %{time}
+          scheduled: Gepland — draait %{time}
+          waiting: Wacht — %{count} ervoor
+          waiting_priority: Wacht — %{count} ervoor met deze prioriteit
+          waiting_unknown: Wacht om opgepakt te worden
+        retry: Opnieuw proberen
+        retry_confirm: Zichtbaarheidstimeout resetten en opnieuw proberen?
+        states:
+          blocked: Geblokkeerd
+          ready: Gereed
+          retrying: Opnieuw
+          running: Actief
+          scheduled: Gepland
+        tabs:
+          all: Alle
+          blocked: Geblokkeerd
+          ready: Gereed
+          retrying: Opnieuw
+          running: Actief
+          scheduled: Gepland
+        tabs_label: Jobstatussen
+        view_failure: Fout bekijken
+        view_locks: Locks bekijken
       show:
         back: Terug naar Taken
         backtrace: Stacktrace

@@ -317,47 +317,6 @@ ja:
           7d: 7日
         title: インサイト
     jobs:
-      enqueued_table:
-        arguments: 引数
-        discard: 破棄
-        discard_all: すべて破棄
-        discard_all_confirm: キュー内のすべてのジョブを破棄し、ロックを解放しますか？この操作は元に戻せません。
-        discard_confirm: このメッセージを破棄しますか？
-        empty: キューに入っているジョブはありません
-        full_json_payload: 完全なJSONペイロード
-        headers:
-          enqueued: キューに入れられた
-          id: ID
-          job_class: ジョブクラス
-          queue: キュー
-          reads: 読み取り数
-        headers_section: ヘッダー
-        job_id: ジョブID：
-        metadata: メタデータ
-        metadata_labels:
-          last_read: 最終読み取り：
-          locale: ロケール：
-          priority: 優先度：
-          queue: キュー：
-          scheduled: スケジュール済み：
-          timezone: タイムゾーン：
-          visible_at: 表示可能日時：
-        retry: リトライ
-        retry_confirm: 可視性タイムアウトをリセットしてリトライしますか？
-        title: キューに入れられたジョブ
-      failed_table:
-        discard: 破棄
-        discard_confirm: このジョブを破棄しますか？
-        empty: 失敗したジョブはありません
-        headers:
-          actions: アクション
-          error: エラー
-          failed: 失敗
-          id: ID
-          queue: キュー
-          retries: リトライ回数
-        retry: リトライ
-        title: 失敗したジョブ
       index:
         discard_all: すべて破棄
         discard_all_confirm: すべての失敗したジョブを破棄しますか？
@@ -371,6 +330,74 @@ ja:
         retry_all: すべてリトライ
         retry_all_confirm: すべての失敗したジョブをリトライしますか？
         title: ジョブ
+      list:
+        arguments: 引数
+        discard: 破棄
+        discard_all_enqueued: すべて破棄
+        discard_all_enqueued_confirm: キュー内のすべてのジョブを破棄し、ロックを解放しますか？この操作は元に戻せません。
+        discard_confirm: このジョブを破棄しますか？
+        empty:
+          all: ジョブはありません
+          blocked: 同時実行制限でブロックされたジョブはありません
+          ready: 実行待ちのジョブはありません
+          retrying: 再試行待ちのジョブはありません
+          running: 実行中のジョブはありません
+          scheduled: 予約済みのジョブはありません
+        full_json_payload: 完全なJSONペイロード
+        headers:
+          actions: アクション
+          attempts: 試行回数
+          id: ID
+          job: ジョブ
+          queue: キュー
+          reason: 次回実行 / 理由
+          state: 状態
+        headers_section: ヘッダー
+        job_id: ジョブID：
+        metadata: メタデータ
+        metadata_labels:
+          concurrency_key: '同時実行キー:'
+          enqueued: 'キュー投入:'
+          last_read: 最終読み取り：
+          locale: ロケール：
+          priority: 優先度：
+          scheduled: スケジュール済み：
+          timezone: タイムゾーン：
+          visible_at: 表示可能日時：
+        reasons:
+          blocked: "%{key} の同時実行枠を待機中（使用中 %{held}/%{limit}） · 待機開始 %{ago}"
+          blocked_no_slots: "%{key} の同時実行枠を待機中 · 待機開始 %{ago}"
+          lease_expired: リースが期限切れ（ワーカーが停止した可能性） — 再配信中、試行 %{attempt}
+          no_workers: 正常なワーカーが動いていません
+          not_drained: このキューを処理するワーカーがいません
+          orphaned: "%{error} で失敗 — メッセージはもうキューにありません"
+          paused: キューは一時停止中
+          retrying: '試行 %{attempt}/%{max} が失敗: %{error} — 次の試行 %{time}'
+          retrying_dlq: '試行 %{attempt}/%{max} が失敗: %{error} — 次の読み取りで DLQ に移動'
+          retrying_due: '試行 %{attempt}/%{max} が失敗: %{error} — 次の試行は今'
+          running: "%{ago} に取得 · リース期限 %{time}"
+          scheduled: 予約済み — 実行予定 %{time}
+          waiting: 待機中 — 前に %{count} 件
+          waiting_priority: 待機中 — この優先度で前に %{count} 件
+          waiting_unknown: 取得待ち
+        retry: リトライ
+        retry_confirm: 可視性タイムアウトをリセットしてリトライしますか？
+        states:
+          blocked: ブロック中
+          ready: 実行待ち
+          retrying: 再試行中
+          running: 実行中
+          scheduled: 予約済み
+        tabs:
+          all: すべて
+          blocked: ブロック中
+          ready: 実行待ち
+          retrying: 再試行中
+          running: 実行中
+          scheduled: 予約済み
+        tabs_label: ジョブの状態
+        view_failure: 失敗を表示
+        view_locks: ロックを表示
       show:
         back: ジョブに戻る
         backtrace: バックトレース

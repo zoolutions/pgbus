@@ -62,6 +62,27 @@ module DummyApp
       end
     end
 
+    # Unified Jobs list (issue #489): one row per state, plus an orphaned
+    # failed row whose message has left its queue.
+    def job_rows(state: nil, queue_name: nil, page: 1, per_page: 25) # rubocop:disable Lint/UnusedMethodArgument
+      rows = sample_job_rows
+      rows = rows.select { |r| r[:state] == state } if state
+      rows.slice((page - 1) * per_page, per_page) || []
+    end
+
+    def job_state_counts(queue_name: nil) # rubocop:disable Lint/UnusedMethodArgument
+      counts = sample_job_rows.group_by { |r| r[:state] }.transform_values(&:size)
+      Pgbus::Web::DataSource::JobList::StateCounts.new(counts: counts.merge("all" => sample_job_rows.size),
+                                                       capped: Set.new)
+    end
+
+    def jobs_ahead(_rows) = { ["pgbus_default", 905] => 0, ["pgbus_mailers", 906] => 14 }
+
+    def job_list_context(now: Time.now)
+      Pgbus::Web::JobState::Context.new(now: now, max_retries: 5, paused: Set["mailers"], drained: nil,
+                                        workers_alive: true)
+    end
+
     def failed_events(page: 1, per_page: 25) # rubocop:disable Lint/UnusedMethodArgument
       [
         { "id" => 1, "handler_class" => "Billing::InvoiceHandler", "event_type" => "invoice.created",
@@ -306,6 +327,39 @@ module DummyApp
     def discard_all_locks = 2
 
     private
+
+    def sample_job_rows
+      now = Time.now.utc
+      base = { source: "queue", queue_name: "pgbus_default", logical_queue: "default", read_ct: 0,
+               last_read_at: nil, error_class: nil, error_message: nil, failed_event_id: nil,
+               concurrency_key: nil, slots_held: nil, slots_max: nil, headers: nil }
+      [
+        base.merge(id: 905, msg_id: 905, job_class: "SendWelcomeEmailJob", state: "ready",
+                   enqueued_at: now - 20, vt: now - 20),
+        base.merge(id: 906, msg_id: 906, job_class: "SendWelcomeEmailJob", state: "ready",
+                   queue_name: "pgbus_mailers", logical_queue: "mailers", enqueued_at: now - 30, vt: now - 30),
+        base.merge(id: 904, msg_id: 904, job_class: "GenerateReportJob", state: "scheduled",
+                   enqueued_at: now - 60, vt: now + 7200),
+        base.merge(id: 903, msg_id: 903, job_class: "CaptureSpaceStatsJob", state: "running", read_ct: 1,
+                   enqueued_at: now - 90, last_read_at: now - 12, vt: now + 48),
+        base.merge(id: 902, msg_id: 902, job_class: "ProcessPaymentJob", state: "retrying", read_ct: 2,
+                   enqueued_at: now - 600, last_read_at: now - 30, vt: now + 40, failed_event_id: 1,
+                   error_class: "Net::ReadTimeout", error_message: "execution expired"),
+        base.merge(id: 901, msg_id: 901, job_class: "SyncInventoryJob", state: "ready", read_ct: 1,
+                   enqueued_at: now - 900, last_read_at: now - 400, vt: now - 100),
+        base.merge(source: "failed", id: 2, msg_id: 870, job_class: "SyncInventoryJob", state: "retrying",
+                   read_ct: 4, enqueued_at: nil, vt: nil, failed_event_id: 2, queue_name: "events",
+                   logical_queue: "events", error_class: "Stripe::InvalidRequestError",
+                   error_message: "No such customer: cus_xxx"),
+        base.merge(source: "blocked", id: 31, msg_id: nil, job_class: "ImportCsvJob", state: "blocked",
+                   read_ct: nil, queue_name: "default", enqueued_at: now - 300, vt: nil,
+                   concurrency_key: "ImportCsvJob/account:42", slots_held: 2, slots_max: 2)
+      ].map do |row|
+        row.merge(payload: { job_class: row[:job_class], job_id: "job-#{row[:id]}",
+                             arguments: sample_arguments(row[:job_class]), locale: "en" }.to_json,
+                  sort_at: row[:enqueued_at])
+      end
+    end
 
     def sample_arguments(job_class)
       case job_class

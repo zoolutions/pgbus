@@ -317,47 +317,6 @@ da:
           7d: 7d
         title: Indsigter
     jobs:
-      enqueued_table:
-        arguments: Argumenter
-        discard: Kassér
-        discard_all: Kassér alle
-        discard_all_confirm: Kassér alle ventende jobs og frigiv deres låse? Dette kan ikke fortrydes.
-        discard_confirm: Kassér denne besked?
-        empty: Ingen job i kø
-        full_json_payload: Fuld JSON-payload
-        headers:
-          enqueued: I kø
-          id: ID
-          job_class: Jobklasse
-          queue: Kø
-          reads: Læsninger
-        headers_section: Headers
-        job_id: 'Job ID:'
-        metadata: Metadata
-        metadata_labels:
-          last_read: 'Sidste læsning:'
-          locale: 'Locale:'
-          priority: 'Prioritet:'
-          queue: 'Kø:'
-          scheduled: 'Planlagt:'
-          timezone: 'Tidszone:'
-          visible_at: 'Synlig fra:'
-        retry: Prøv igen
-        retry_confirm: Nulstil synlighedstimeout og prøv igen?
-        title: Job i kø
-      failed_table:
-        discard: Kassér
-        discard_confirm: Kassér dette job?
-        empty: Ingen mislykkede job
-        headers:
-          actions: Handlinger
-          error: Fejl
-          failed: Mislykkedes
-          id: ID
-          queue: Kø
-          retries: Forsøg
-        retry: Forsøg igen
-        title: Mislykkede job
       index:
         discard_all: Kassér alle
         discard_all_confirm: Kassér alle mislykkede job?
@@ -371,6 +330,74 @@ da:
         retry_all: Forsøg alle igen
         retry_all_confirm: Forsøg alle mislykkede job igen?
         title: Job
+      list:
+        arguments: Argumenter
+        discard: Kassér
+        discard_all_enqueued: Kassér alle
+        discard_all_enqueued_confirm: Kassér alle ventende jobs og frigiv deres låse? Dette kan ikke fortrydes.
+        discard_confirm: Kassér dette job?
+        empty:
+          all: Ingen jobs
+          blocked: Ingen jobs blokeret af en samtidighedsgrænse
+          ready: Ingen jobs venter på at køre
+          retrying: Ingen jobs venter på et nyt forsøg
+          running: Ingen jobs kører
+          scheduled: Ingen planlagte jobs
+        full_json_payload: Fuld JSON-payload
+        headers:
+          actions: Handlinger
+          attempts: Forsøg
+          id: ID
+          job: Job
+          queue: Kø
+          reason: Næste kørsel / Årsag
+          state: Tilstand
+        headers_section: Headers
+        job_id: 'Job ID:'
+        metadata: Metadata
+        metadata_labels:
+          concurrency_key: 'Samtidighedsnøgle:'
+          enqueued: 'Sat i kø:'
+          last_read: 'Sidste læsning:'
+          locale: 'Locale:'
+          priority: 'Prioritet:'
+          scheduled: 'Planlagt:'
+          timezone: 'Tidszone:'
+          visible_at: 'Synlig fra:'
+        reasons:
+          blocked: Venter på en samtidighedsplads på %{key} (optaget %{held}/%{limit}) · parkeret %{ago}
+          blocked_no_slots: Venter på en samtidighedsplads på %{key} · parkeret %{ago}
+          lease_expired: Lease udløbet (worker er sandsynligvis død) — leveres igen, forsøg %{attempt}
+          no_workers: Ingen sund worker kører
+          not_drained: Ingen worker tømmer denne kø
+          orphaned: Fejlede med %{error} — beskeden er ikke længere i køen
+          paused: Køen er sat på pause
+          retrying: 'Forsøg %{attempt}/%{max} fejlede: %{error} — næste forsøg %{time}'
+          retrying_dlq: 'Forsøg %{attempt}/%{max} fejlede: %{error} — næste læsning flytter den til DLQ'
+          retrying_due: 'Forsøg %{attempt}/%{max} fejlede: %{error} — næste forsøg nu'
+          running: Hentet %{ago} · lease udløber %{time}
+          scheduled: Planlagt — kører %{time}
+          waiting: Venter — %{count} foran
+          waiting_priority: Venter — %{count} foran med denne prioritet
+          waiting_unknown: Venter på at blive hentet
+        retry: Forsøg igen
+        retry_confirm: Nulstil synlighedstimeout og prøv igen?
+        states:
+          blocked: Blokeret
+          ready: Klar
+          retrying: Prøver igen
+          running: Kører
+          scheduled: Planlagt
+        tabs:
+          all: Alle
+          blocked: Blokeret
+          ready: Klar
+          retrying: Prøver igen
+          running: Kører
+          scheduled: Planlagt
+        tabs_label: Jobtilstande
+        view_failure: Vis fejl
+        view_locks: Vis låse
       show:
         back: Tilbage til job
         backtrace: Stacktrace

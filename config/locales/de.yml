@@ -317,47 +317,6 @@ de:
           7d: 7d
         title: Einblicke
     jobs:
-      enqueued_table:
-        arguments: Argumente
-        discard: Verwerfen
-        discard_all: Alle verwerfen
-        discard_all_confirm: Alle eingereihten Jobs verwerfen und ihre Sperren freigeben? Dies kann nicht rückgängig gemacht werden.
-        discard_confirm: Diese Nachricht verwerfen?
-        empty: Keine eingereihten Jobs
-        full_json_payload: Vollständige JSON-Nutzlast
-        headers:
-          enqueued: Eingereiht
-          id: ID
-          job_class: Job-Klasse
-          queue: Warteschlange
-          reads: Lesevorgänge
-        headers_section: Header
-        job_id: 'Job-ID:'
-        metadata: Metadaten
-        metadata_labels:
-          last_read: 'Letzter Lesevorgang:'
-          locale: 'Sprache:'
-          priority: 'Priorität:'
-          queue: 'Warteschlange:'
-          scheduled: 'Geplant:'
-          timezone: 'Zeitzone:'
-          visible_at: 'Sichtbar ab:'
-        retry: Wiederholen
-        retry_confirm: Sichtbarkeits-Timeout zurücksetzen und erneut versuchen?
-        title: Eingereihte Jobs
-      failed_table:
-        discard: Verwerfen
-        discard_confirm: Diesen Job verwerfen?
-        empty: Keine fehlgeschlagenen Jobs
-        headers:
-          actions: Aktionen
-          error: Fehler
-          failed: Fehlgeschlagen
-          id: ID
-          queue: Warteschlange
-          retries: Wiederholungen
-        retry: Wiederholen
-        title: Fehlgeschlagene Jobs
       index:
         discard_all: Alle verwerfen
         discard_all_confirm: Alle fehlgeschlagenen Jobs verwerfen?
@@ -371,6 +330,74 @@ de:
         retry_all: Alle wiederholen
         retry_all_confirm: Alle fehlgeschlagenen Jobs wiederholen?
         title: Jobs
+      list:
+        arguments: Argumente
+        discard: Verwerfen
+        discard_all_enqueued: Alle verwerfen
+        discard_all_enqueued_confirm: Alle eingereihten Jobs verwerfen und ihre Sperren freigeben? Dies kann nicht rückgängig gemacht werden.
+        discard_confirm: Diesen Job verwerfen?
+        empty:
+          all: Keine Jobs
+          blocked: Keine durch ein Nebenläufigkeitslimit blockierten Jobs
+          ready: Keine Jobs warten auf Ausführung
+          retrying: Keine Jobs warten auf Wiederholung
+          running: Keine laufenden Jobs
+          scheduled: Keine geplanten Jobs
+        full_json_payload: Vollständige JSON-Nutzlast
+        headers:
+          actions: Aktionen
+          attempts: Versuche
+          id: ID
+          job: Job
+          queue: Warteschlange
+          reason: Nächster Lauf / Grund
+          state: Zustand
+        headers_section: Header
+        job_id: 'Job-ID:'
+        metadata: Metadaten
+        metadata_labels:
+          concurrency_key: 'Nebenläufigkeitsschlüssel:'
+          enqueued: 'Eingereiht:'
+          last_read: 'Letzter Lesevorgang:'
+          locale: 'Sprache:'
+          priority: 'Priorität:'
+          scheduled: 'Geplant:'
+          timezone: 'Zeitzone:'
+          visible_at: 'Sichtbar ab:'
+        reasons:
+          blocked: Wartet auf einen Nebenläufigkeits-Slot für %{key} (belegt %{held}/%{limit}) · geparkt %{ago}
+          blocked_no_slots: Wartet auf einen Nebenläufigkeits-Slot für %{key} · geparkt %{ago}
+          lease_expired: Lease abgelaufen (Worker vermutlich abgestürzt) — wird erneut zugestellt, Versuch %{attempt}
+          no_workers: Kein gesunder Worker läuft
+          not_drained: Kein Worker arbeitet diese Warteschlange ab
+          orphaned: Fehlgeschlagen mit %{error} — Nachricht nicht mehr in der Warteschlange
+          paused: Warteschlange pausiert
+          retrying: 'Versuch %{attempt}/%{max} fehlgeschlagen: %{error} — nächster Versuch %{time}'
+          retrying_dlq: 'Versuch %{attempt}/%{max} fehlgeschlagen: %{error} — der nächste Lesevorgang verschiebt ihn in die DLQ'
+          retrying_due: 'Versuch %{attempt}/%{max} fehlgeschlagen: %{error} — nächster Versuch jetzt fällig'
+          running: Abgeholt %{ago} · Lease läuft ab %{time}
+          scheduled: Geplant — läuft %{time}
+          waiting: Wartet — %{count} davor
+          waiting_priority: Wartet — %{count} davor mit dieser Priorität
+          waiting_unknown: Wartet auf Abholung
+        retry: Wiederholen
+        retry_confirm: Sichtbarkeits-Timeout zurücksetzen und erneut versuchen?
+        states:
+          blocked: Blockiert
+          ready: Bereit
+          retrying: Wiederholung
+          running: Läuft
+          scheduled: Geplant
+        tabs:
+          all: Alle
+          blocked: Blockiert
+          ready: Bereit
+          retrying: Wiederholung
+          running: Laufend
+          scheduled: Geplant
+        tabs_label: Job-Zustände
+        view_failure: Fehler anzeigen
+        view_locks: Sperren anzeigen
       show:
         back: Zurück zu Jobs
         backtrace: Stacktrace

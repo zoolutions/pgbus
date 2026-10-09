@@ -76,23 +76,28 @@ module Pgbus
       case status
       when :healthy
         tag.span(I18n.t("pgbus.helpers.status_badge.healthy"),
-                 class: "inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800")
+                 class: "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium " \
+                        "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400")
       when :stalled
         tag.span(I18n.t("pgbus.helpers.status_badge.stalled"),
-                 class: "inline-flex items-center rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-medium text-yellow-800")
+                 class: "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium " \
+                        "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400")
       else
         tag.span(I18n.t("pgbus.helpers.status_badge.stale"),
-                 class: "inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-800")
+                 class: "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium " \
+                        "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400")
       end
     end
 
     def pgbus_queue_badge(name)
       if name.to_s.end_with?("_dlq")
         tag.span(I18n.t("pgbus.helpers.queue_badge.dlq"),
-                 class: "inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700")
+                 class: "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium " \
+                        "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400")
       else
         tag.span(I18n.t("pgbus.helpers.queue_badge.queue"),
-                 class: "inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700")
+                 class: "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium " \
+                        "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400")
       end
     end
 
@@ -128,7 +133,8 @@ module Pgbus
       return unless paused
 
       tag.span(I18n.t("pgbus.helpers.paused_badge"),
-               class: "inline-flex items-center rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-800")
+               class: "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium " \
+                      "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400")
     end
 
     BATCH_BADGE_BASE = "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
@@ -141,6 +147,51 @@ module Pgbus
     def pgbus_batch_status_badge(status)
       css = BATCH_BADGE_CSS[status] || BATCH_BADGE_CSS["pending"]
       tag.span(I18n.t("pgbus.helpers.batch_status.#{status}", default: status), class: css)
+    end
+
+    JOB_STATE_BADGE_CSS = {
+      blue: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
+      gray: "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300",
+      indigo: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-400",
+      yellow: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
+      purple: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400"
+    }.freeze
+
+    def pgbus_job_state_badge(state)
+      tone = Pgbus::Web::JobState::BADGE_TONES.fetch(state.to_s, :gray)
+      tag.span(I18n.t("pgbus.jobs.list.states.#{state}"), class: "#{BATCH_BADGE_BASE} #{JOB_STATE_BADGE_CSS[tone]}")
+    end
+
+    # A JobState::Result's reason in words. :time is a future moment
+    # ("in 2h (21:40)"), :ago a past one ("5m ago").
+    def pgbus_job_reason(result)
+      args = result.reason_args.to_h do |key, value|
+        case key
+        when :time then [key, pgbus_job_eta(value)]
+        when :ago then [key, pgbus_time_ago(value)]
+        else [key, value]
+        end
+      end
+      I18n.t("pgbus.jobs.list.reasons.#{result.reason_key}", **args)
+    end
+
+    def pgbus_job_eta(time)
+      return "—" unless time
+
+      "#{pgbus_time_ago_future(time)} (#{time.localtime.strftime("%H:%M")})"
+    end
+
+    # "2/5" for a job's delivery attempts against max_retries; "—" when the
+    # row was never delivered (blocked).
+    def pgbus_job_attempts(row, max_retries)
+      return "—" if row[:read_ct].nil?
+
+      "#{row[:read_ct]}/#{max_retries}"
+    end
+
+    # A tab's count, with "+" when a capped fragment made it a lower bound.
+    def pgbus_job_count(counts, state)
+      "#{number_with_delimiter(counts[state])}#{"+" if counts.capped?(state)}"
     end
 
     # Persisted Current attributes for a job payload, as
@@ -197,10 +248,12 @@ module Pgbus
     def pgbus_recurring_health_badge(task)
       if task[:last_run_at].nil?
         tag.span(I18n.t("pgbus.helpers.recurring_health.pending"),
-                 class: "inline-flex items-center rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-medium text-yellow-800")
+                 class: "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium " \
+                        "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400")
       else
         tag.span(I18n.t("pgbus.helpers.recurring_health.active"),
-                 class: "inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800")
+                 class: "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium " \
+                        "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400")
       end
     end
 

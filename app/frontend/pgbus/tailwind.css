@@ -98,3 +98,21 @@
     }
   }
 }
+
+/* Jobs list (issue #489): the row after each job row is its expansion, shown
+   while the ID cell's <details> is open. Scoped under .pgbus-table so it wins
+   over the mobile card layout's `tbody tr { display: block }`. */
+.pgbus-table tbody tr.pgbus-job-detail {
+  display: none;
+}
+.pgbus-table tbody tr:has(details[data-job-toggle][open]) + tr.pgbus-job-detail {
+  display: table-row;
+}
+@media (max-width: 1023px) {
+  .pgbus-table tbody tr:has(details[data-job-toggle][open]) + tr.pgbus-job-detail {
+    display: block;
+  }
+  .pgbus-table tbody tr.pgbus-job-detail > td {
+    text-align: left;
+  }
+}
