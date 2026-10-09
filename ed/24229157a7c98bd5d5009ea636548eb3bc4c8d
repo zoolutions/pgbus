@@ -1,0 +1,19 @@
+app/views/pgbus/jobs/index.html.erb
+  s_b7ecd97068835a::t_50e48a55adab19 19
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "ed24229157a7c98bd5d5009ea636548eb3bc4c8d",
+  "prompts": {},
+  "sessions": {
+    "s_b7ecd97068835a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "01d57c90-b286-4047-a3ee-6ef7a4812f48",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
