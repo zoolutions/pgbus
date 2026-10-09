@@ -1,0 +1,95 @@
+config/locales/nl.yml
+  s_b7ecd97068835a::t_5be58581333de2 234
+app/views/pgbus/jobs/show.html.erb
+  s_b7ecd97068835a::t_d32fa1a572fc32 2,72
+app/views/pgbus/events/_pending_table.html.erb
+  s_b7ecd97068835a::t_d32fa1a572fc32 56,128,147,152
+app/views/pgbus/locks/_uniqueness.html.erb
+  s_b7ecd97068835a::t_d32fa1a572fc32 69
+app/views/pgbus/dashboard/_queue_health.html.erb
+  s_b7ecd97068835a::t_d32fa1a572fc32 11,33,45
+app/views/pgbus/batches/_batches_table.html.erb
+  s_b7ecd97068835a::t_d32fa1a572fc32 49
+config/locales/de.yml
+  s_b7ecd97068835a::t_5be58581333de2 234
+app/views/pgbus/dead_letter/show.html.erb
+  s_b7ecd97068835a::t_d32fa1a572fc32 2,67
+app/views/pgbus/queues/show.html.erb
+  s_b7ecd97068835a::t_d32fa1a572fc32 2,109,130,135,155
+app/views/pgbus/shared/_empty_row.html.erb
+  s_b7ecd97068835a::t_d32fa1a572fc32 2
+app/views/pgbus/processes/_processes_table.html.erb
+  s_b7ecd97068835a::t_d32fa1a572fc32 35
+app/views/pgbus/events/index.html.erb
+  s_b7ecd97068835a::t_d32fa1a572fc32 38,72
+app/views/pgbus/queues/_queues_list.html.erb
+  s_b7ecd97068835a::t_d32fa1a572fc32 20,36,41,46,50,56
+app/views/pgbus/outbox/index.html.erb
+  s_b7ecd97068835a::t_d32fa1a572fc32 51
+app/views/pgbus/insights/show.html.erb
+  s_b7ecd97068835a::t_d32fa1a572fc32 125,156,209,268,298
+app/views/pgbus/recurring_tasks/_tasks_table.html.erb
+  s_b7ecd97068835a::t_d32fa1a572fc32 27,32,38,51,71
+config/locales/pt.yml
+  s_b7ecd97068835a::t_5be58581333de2 234
+config/locales/ja.yml
+  s_b7ecd97068835a::t_5be58581333de2 234
+app/views/pgbus/dashboard/_stats_cards.html.erb
+  s_b7ecd97068835a::t_73745739592662 16
+  s_b7ecd97068835a::t_d32fa1a572fc32 11,24-25,34,40,51
+app/views/pgbus/jobs/_row.html.erb
+  s_b7ecd97068835a::t_d32fa1a572fc32 24,38,43,47,54,59,68,71
+config/locales/es.yml
+  s_b7ecd97068835a::t_5be58581333de2 234
+config/locales/sv.yml
+  s_b7ecd97068835a::t_5be58581333de2 234
+app/views/pgbus/locks/_concurrency.html.erb
+  s_b7ecd97068835a::t_d32fa1a572fc32 12,18,24,30,59,62,73,79,88
+config/locales/fi.yml
+  s_b7ecd97068835a::t_5be58581333de2 234
+config/locales/nb.yml
+  s_b7ecd97068835a::t_5be58581333de2 234
+app/views/pgbus/shared/_pager.html.erb
+  s_b7ecd97068835a::t_5be58581333de2 18
+config/locales/fr.yml
+  s_b7ecd97068835a::t_5be58581333de2 234
+app/frontend/pgbus/style.css
+  s_b7ecd97068835a::t_73745739592662 2
+config/locales/en.yml
+  s_b7ecd97068835a::t_5be58581333de2 234
+config/locales/it.yml
+  s_b7ecd97068835a::t_5be58581333de2 234
+app/views/pgbus/dashboard/_recent_failures.html.erb
+  s_b7ecd97068835a::t_d32fa1a572fc32 6,27
+spec/pgbus/web/dark_mode_contrast_spec.rb
+  s_b7ecd97068835a::t_522b1c78e38021 31-34,65-66,68,77,81,111,114,117
+  s_b7ecd97068835a::t_5690dc414240f8 22,36-38,40,42-44,63-64,67,69-76,78-80,82-91,109-110,112-113,115-116,118
+app/views/pgbus/dead_letter/_messages_table.html.erb
+  s_b7ecd97068835a::t_d32fa1a572fc32 55,82,87
+app/views/pgbus/dashboard/_queues_table.html.erb
+  s_b7ecd97068835a::t_d32fa1a572fc32 5,24,35
+app/views/pgbus/dashboard/_processes_table.html.erb
+  s_b7ecd97068835a::t_d32fa1a572fc32 24
+app/views/pgbus/events/show.html.erb
+  s_b7ecd97068835a::t_d32fa1a572fc32 2,26
+app/views/pgbus/recurring_tasks/show.html.erb
+  s_b7ecd97068835a::t_d32fa1a572fc32 18,28,36,38
+config/locales/da.yml
+  s_b7ecd97068835a::t_5be58581333de2 234
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "94acf4ab6933d9ba2da15bc668ac22137f2c5ad2",
+  "prompts": {},
+  "sessions": {
+    "s_b7ecd97068835a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "01d57c90-b286-4047-a3ee-6ef7a4812f48",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
