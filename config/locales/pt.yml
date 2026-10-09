@@ -231,6 +231,7 @@ pt:
       bulk_select_row: Selecionar %{id}
       bulk_selected: selecionado
       pagination:
+        label: Paginação
         next: Próximo
         previous: Anterior
         showing: Mostrando %{from}–%{to} de %{total}

@@ -17,7 +17,7 @@
         <% @queues.each do |q| %>
           <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
             <td data-label="Queue" class="px-4 py-3 text-sm">
-              <%= link_to q[:name], pgbus.queue_path(name: q[:name]), class: "font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-500", data: { turbo_frame: "_top" } %>
+              <%= link_to q[:name], pgbus.queue_path(name: q[:name]), class: "font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 dark:hover:text-indigo-300", data: { turbo_frame: "_top" } %>
               <%= pgbus_queue_badge(q[:name]) %>
               <% if q[:paused] %>
                 <%= pgbus_paused_badge(q[:paused]) %>
@@ -33,27 +33,27 @@
               <% if q[:paused] %>
                 <%= button_to t("pgbus.queues.queues_list.resume"), pgbus.resume_queue_path(name: q[:name]),
                       method: :post,
-                      class: "text-xs text-green-600 dark:text-green-400 hover:text-green-800 font-medium",
+                      class: "text-xs text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-300 font-medium",
                       data: { turbo_frame: "_top" } %>
               <% else %>
                 <%= button_to t("pgbus.queues.queues_list.pause"), pgbus.pause_queue_path(name: q[:name]),
                       method: :post,
-                      class: "text-xs text-yellow-600 dark:text-yellow-400 hover:text-yellow-800 font-medium",
+                      class: "text-xs text-yellow-600 dark:text-yellow-400 hover:text-yellow-800 dark:hover:text-yellow-300 font-medium",
                       data: { turbo_confirm: t("pgbus.queues.queues_list.pause_confirm", name: q[:name]), turbo_frame: "_top" } %>
               <% end %>
               <%= button_to t("pgbus.queues.queues_list.purge"), pgbus.purge_queue_path(name: q[:name]),
                     method: :post,
-                    class: "text-xs text-red-600 dark:text-red-400 hover:text-red-800 font-medium",
+                    class: "text-xs text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 font-medium",
                     data: { turbo_confirm: t("pgbus.queues.queues_list.purge_confirm", name: q[:name]), turbo_frame: "_top" } %>
               <%= button_to t("pgbus.queues.queues_list.delete"), pgbus.queue_path(name: q[:name]),
                     method: :delete,
-                    class: "text-xs text-red-600 dark:text-red-400 hover:text-red-800 font-medium",
+                    class: "text-xs text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 font-medium",
                     data: { turbo_confirm: t("pgbus.queues.queues_list.delete_confirm", name: q[:name]), turbo_frame: "_top" } %>
             </td>
           </tr>
         <% end %>
         <% if @queues.empty? %>
-          <tr><td colspan="8" class="px-4 py-8 text-center text-sm text-gray-400 dark:text-gray-500"><%= t("pgbus.queues.queues_list.empty") %></td></tr>
+          <tr><td colspan="8" class="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400"><%= t("pgbus.queues.queues_list.empty") %></td></tr>
         <% end %>
       </tbody>
     </table>

@@ -231,6 +231,7 @@ de:
       bulk_select_row: "%{id} auswählen"
       bulk_selected: ausgewählt
       pagination:
+        label: Seitennavigation
         next: Weiter
         previous: Zurück
         showing: Zeige %{from}–%{to} von %{total}

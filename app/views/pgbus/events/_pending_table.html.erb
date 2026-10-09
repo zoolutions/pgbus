@@ -53,7 +53,7 @@
                 </summary>
                 <div class="px-4 pb-4 bg-gray-50 dark:bg-gray-900 border-t border-gray-100 dark:border-gray-700">
                   <div class="flex items-center justify-between mt-3 mb-3">
-                    <span class="text-xs font-mono text-gray-400 dark:text-gray-500"><%= t("pgbus.events.pending_table.event_id") %> <%= payload["event_id"] %></span>
+                    <span class="text-xs font-mono text-gray-500 dark:text-gray-400"><%= t("pgbus.events.pending_table.event_id") %> <%= payload["event_id"] %></span>
                     <div class="flex space-x-2">
                       <%# Mark Handled — handler_class is resolved server-side
                           from the subscriber registry, so we only send queue_name. %>
@@ -125,7 +125,7 @@
                   <% end %>
                   <%# Edit Payload form %>
                   <details class="mt-2">
-                    <summary class="text-xs font-medium text-indigo-600 dark:text-indigo-400 cursor-pointer hover:text-indigo-500"><%= t("pgbus.events.pending_table.edit_payload") %></summary>
+                    <summary class="text-xs font-medium text-indigo-600 dark:text-indigo-400 cursor-pointer hover:text-indigo-500 dark:hover:text-indigo-300"><%= t("pgbus.events.pending_table.edit_payload") %></summary>
                     <div class="mt-2 p-3 bg-white dark:bg-gray-800 rounded ring-1 ring-gray-200 dark:ring-gray-700">
                       <%= form_with url: pgbus.edit_payload_event_path(m[:msg_id]), method: :post, local: true, data: { turbo_frame: "_top" } do |f| %>
                         <%= hidden_field_tag :queue_name, m[:queue_name] %>
@@ -144,12 +144,12 @@
                   </details>
                   <%# Full JSON %>
                   <details class="mt-2">
-                    <summary class="text-xs font-medium text-gray-500 dark:text-gray-400 cursor-pointer hover:text-gray-700"><%= t("pgbus.events.pending_table.full_json_payload") %></summary>
+                    <summary class="text-xs font-medium text-gray-500 dark:text-gray-400 cursor-pointer hover:text-gray-700 dark:hover:text-gray-200"><%= t("pgbus.events.pending_table.full_json_payload") %></summary>
                     <pre class="text-xs text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 rounded p-2 mt-1 overflow-x-auto max-h-96"><%= parse_ok ? (JSON.pretty_generate(payload_raw) rescue m[:message]) : m[:message] %></pre>
                   </details>
                   <% if m[:headers] %>
                     <details class="mt-2">
-                      <summary class="text-xs font-medium text-gray-500 dark:text-gray-400 cursor-pointer hover:text-gray-700"><%= t("pgbus.events.pending_table.headers_section") %></summary>
+                      <summary class="text-xs font-medium text-gray-500 dark:text-gray-400 cursor-pointer hover:text-gray-700 dark:hover:text-gray-200"><%= t("pgbus.events.pending_table.headers_section") %></summary>
                       <pre class="text-xs text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 rounded p-2 mt-1 overflow-x-auto"><%= JSON.pretty_generate(JSON.parse(m[:headers])) rescue m[:headers] %></pre>
                     </details>
                   <% end %>

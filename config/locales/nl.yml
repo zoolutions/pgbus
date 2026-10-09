@@ -231,6 +231,7 @@ nl:
       bulk_select_row: Selecteer %{id}
       bulk_selected: geselecteerd
       pagination:
+        label: Paginering
         next: Volgende
         previous: Vorige
         showing: "%{from}–%{to} van %{total} weergegeven"

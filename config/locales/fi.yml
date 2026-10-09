@@ -231,6 +231,7 @@ fi:
       bulk_select_row: Valitse %{id}
       bulk_selected: valittu
       pagination:
+        label: Sivutus
         next: Seuraava
         previous: Edellinen
         showing: Näytetään %{from}–%{to} / %{total}

@@ -1,5 +1,5 @@
 <div class="mb-3">
-  <%= link_to "← #{t("pgbus.queues.show.back")}", pgbus.queues_path, class: "text-sm text-indigo-600 hover:text-indigo-500 dark:text-indigo-400" %>
+  <%= link_to "← #{t("pgbus.queues.show.back")}", pgbus.queues_path, class: "text-sm text-indigo-600 hover:text-indigo-500 dark:hover:text-indigo-300 dark:text-indigo-400" %>
 </div>
 <div class="flex items-center justify-between mb-6">
   <div>
@@ -106,7 +106,7 @@
               </summary>
               <div class="px-4 pb-4 bg-gray-50 dark:bg-gray-900 border-t border-gray-100 dark:border-gray-700">
                 <div class="flex items-center mt-3 mb-3">
-                  <span class="text-xs font-mono text-gray-400 dark:text-gray-500"><%= t("pgbus.queues.show.job_id") %> <%= payload["job_id"] %></span>
+                  <span class="text-xs font-mono text-gray-500 dark:text-gray-400"><%= t("pgbus.queues.show.job_id") %> <%= payload["job_id"] %></span>
                 </div>
                 <div class="grid grid-cols-2 gap-4 mb-3">
                   <div>
@@ -127,12 +127,12 @@
                   </div>
                 </div>
                 <details class="mt-2">
-                  <summary class="text-xs font-medium text-gray-500 dark:text-gray-400 cursor-pointer hover:text-gray-700"><%= t("pgbus.queues.show.full_json_payload") %></summary>
+                  <summary class="text-xs font-medium text-gray-500 dark:text-gray-400 cursor-pointer hover:text-gray-700 dark:hover:text-gray-200"><%= t("pgbus.queues.show.full_json_payload") %></summary>
                   <pre class="text-xs text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 rounded p-2 mt-1 overflow-x-auto max-h-96"><%= JSON.pretty_generate(payload) rescue m[:message] %></pre>
                 </details>
                 <% if m[:headers] %>
                   <details class="mt-2">
-                    <summary class="text-xs font-medium text-gray-500 dark:text-gray-400 cursor-pointer hover:text-gray-700"><%= t("pgbus.queues.show.headers_section") %></summary>
+                    <summary class="text-xs font-medium text-gray-500 dark:text-gray-400 cursor-pointer hover:text-gray-700 dark:hover:text-gray-200"><%= t("pgbus.queues.show.headers_section") %></summary>
                     <pre class="text-xs text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 rounded p-2 mt-1 overflow-x-auto"><%= JSON.pretty_generate(JSON.parse(m[:headers])) rescue m[:headers] %></pre>
                   </details>
                 <% end %>
@@ -152,7 +152,7 @@
         </tr>
       <% end %>
       <% if @messages.empty? %>
-        <tr><td colspan="5" class="px-4 py-8 text-center text-sm text-gray-400 dark:text-gray-500"><%= t("pgbus.queues.show.empty") %></td></tr>
+        <tr><td colspan="5" class="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400"><%= t("pgbus.queues.show.empty") %></td></tr>
       <% end %>
     </tbody>
   </table>

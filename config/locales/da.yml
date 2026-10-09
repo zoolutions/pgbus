@@ -231,6 +231,7 @@ da:
       bulk_select_row: Vælg %{id}
       bulk_selected: valgt
       pagination:
+        label: Sideinddeling
         next: Næste
         previous: Forrige
         showing: Viser %{from}–%{to} af %{total}

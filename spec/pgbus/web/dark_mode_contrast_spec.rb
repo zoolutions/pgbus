@@ -19,7 +19,7 @@ RSpec.describe "Dashboard dark-mode contrast" do # rubocop:disable RSpec/Describ
   let(:light_rules) do
     {
       /\Atext-gray-[4-9]00\z/ => "text",
-      /\Abg-(white|gray-50|gray-100)\z/ => "bg",
+      /\Abg-(white|gray-50|gray-100|gray-200)\z/ => "bg",
       /\Aborder-gray-(100|200)\z/ => "border",
       /\Aring-gray-200\z/ => "ring",
       /\Abg-[a-z]+-100\z/ => "bg",
@@ -28,14 +28,20 @@ RSpec.describe "Dashboard dark-mode contrast" do # rubocop:disable RSpec/Describ
   end
 
   let(:erb_tag) { /<%.*?%>/m }
+  # Text colours below WCAG AA (4.5:1) for body text on the dashboard's
+  # surfaces: gray-400 on white is ~2.5:1, gray-500/600 on gray-800 ~3:1.
+  # Disabled controls (cursor-not-allowed) are exempt, as WCAG allows.
+  let(:low_contrast_tokens) { %w[text-gray-400 dark:text-gray-500 dark:text-gray-600] }
 
-  # Each class attribute as one token list: the literal text outside ERB tags
-  # plus the single-quoted literals inside them (both ternary branches ship).
+  # Each class attribute as token lists: one per ERB ternary branch (the text
+  # outside ERB tags plus that branch's single-quoted literal), so a dark
+  # token in one branch cannot mask an unpaired light token in another.
   def class_attributes(content)
-    content.scan(/class(?:=|:\s*)"([^"]*)"|class(?:=|:\s*)'([^']*)'/).map do |double, single|
+    content.scan(/class(?:=|:\s*)"([^"]*)"|class(?:=|:\s*)'([^']*)'/).flat_map do |double, single|
       value = (double || single).to_s
-      literals = value.scan(erb_tag).flat_map { |tag| tag.scan(/'([^']*)'/).flatten }
-      [value.gsub(erb_tag, " "), *literals].join(" ").split(/\s+/)
+      base = value.gsub(erb_tag, " ").split(/\s+/)
+      branches = value.scan(erb_tag).flat_map { |tag| tag.scan(/'([^']*)'/).flatten }
+      branches.empty? ? [base] : branches.map { |branch| base + branch.split(/\s+/) }
     end
   end
 
@@ -54,6 +60,35 @@ RSpec.describe "Dashboard dark-mode contrast" do # rubocop:disable RSpec/Describ
     end
   end
 
+  def low_contrast(tokens)
+    return [] if tokens.include?("cursor-not-allowed")
+
+    tokens & low_contrast_tokens
+  end
+
+  # A light hover colour applies in dark mode too unless a dark:hover: partner
+  # overrides it (hover:text-indigo-800 on a gray-800 row is unreadable).
+  def hover_gaps(tokens)
+    tokens.filter_map do |token|
+      property = token[/\Ahover:(text|bg)-(?!white\b|transparent\b)/, 1]
+      next unless property
+      next if property == "bg" && !token.match?(/-(50|100|200)\z/)
+      next if tokens.any? { |t| t.start_with?("dark:hover:#{property}-") }
+
+      token
+    end
+  end
+
+  def offenders(check)
+    found = view_files.flat_map do |file|
+      class_attributes(File.read(file)).flat_map { |tokens| send(check, tokens).map { |t| "#{relative(file)}: #{t}" } }
+    end
+    found += helper_class_strings(File.read(helper_file)).flat_map do |tokens|
+      send(check, tokens).map { |t| "#{relative(helper_file)}: #{t}" }
+    end
+    found.uniq
+  end
+
   def relative(file) = Pathname.new(file).relative_path_from(engine_root).to_s
 
   it "pairs every light colour with a dark variant" do
@@ -69,6 +104,18 @@ RSpec.describe "Dashboard dark-mode contrast" do # rubocop:disable RSpec/Describ
 
         #{missing.uniq.join("\n  ")}
     MSG
+  end
+
+  it "keeps every text colour at WCAG AA contrast in both themes" do
+    found = offenders(:low_contrast)
+
+    expect(found).to be_empty, "#{found.size} low-contrast text token(s):\n  #{found.join("\n  ")}"
+  end
+
+  it "gives every light hover colour a dark:hover: partner" do
+    found = offenders(:hover_gaps)
+
+    expect(found).to be_empty, "#{found.size} hover token(s) with no dark:hover: partner:\n  #{found.join("\n  ")}"
   end
 
   it "never paints a table row darker than its card" do

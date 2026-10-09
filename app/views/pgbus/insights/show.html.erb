@@ -122,7 +122,7 @@
         </tr>
       <% end %>
       <% if @latency_by_queue.empty? %>
-        <tr><td colspan="4" class="px-4 py-8 text-center text-sm text-gray-400 dark:text-gray-500"><%= t("pgbus.insights.show.latency_by_queue.empty") %></td></tr>
+        <tr><td colspan="4" class="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400"><%= t("pgbus.insights.show.latency_by_queue.empty") %></td></tr>
       <% end %>
     </tbody>
   </table>
@@ -153,7 +153,7 @@
         </tr>
       <% end %>
       <% if @slowest.empty? %>
-        <tr><td colspan="4" class="px-4 py-8 text-center text-sm text-gray-400 dark:text-gray-500"><%= t("pgbus.insights.show.slowest.empty") %></td></tr>
+        <tr><td colspan="4" class="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400"><%= t("pgbus.insights.show.slowest.empty") %></td></tr>
       <% end %>
     </tbody>
   </table>
@@ -206,7 +206,7 @@
           </tr>
         <% end %>
         <% if @live_stream_metrics[:streams].empty? %>
-          <tr><td colspan="4" class="px-4 py-8 text-center text-sm text-gray-400 dark:text-gray-500"><%= t("pgbus.insights.show.live_streams.empty") %></td></tr>
+          <tr><td colspan="4" class="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400"><%= t("pgbus.insights.show.live_streams.empty") %></td></tr>
         <% end %>
       </tbody>
     </table>
@@ -265,7 +265,7 @@
           </tr>
         <% end %>
         <% if @top_streams.empty? %>
-          <tr><td colspan="4" class="px-4 py-8 text-center text-sm text-gray-400 dark:text-gray-500"><%= t("pgbus.insights.show.streams.top.empty") %></td></tr>
+          <tr><td colspan="4" class="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400"><%= t("pgbus.insights.show.streams.top.empty") %></td></tr>
         <% end %>
       </tbody>
     </table>
@@ -295,7 +295,7 @@
     })
     .then(data => { chartData = data; renderCharts(data, i18n); })
     .catch(err => {
-      const msg = '<p class="text-center text-sm text-gray-400 dark:text-gray-500 pt-24">' + i18n.failedToLoad + "</p>";
+      const msg = '<p class="text-center text-sm text-gray-500 dark:text-gray-400 pt-24">' + i18n.failedToLoad + "</p>";
       document.querySelectorAll("#throughput-chart, #status-chart, #latency-chart").forEach(el => {
         el.innerHTML = msg;
       });

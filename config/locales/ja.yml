@@ -231,6 +231,7 @@ ja:
       bulk_select_row: "%{id}を選択"
       bulk_selected: 選択済み
       pagination:
+        label: ページ送り
         next: 次へ
         previous: 前へ
         showing: "%{total} 件中 %{from}–%{to} 件を表示"

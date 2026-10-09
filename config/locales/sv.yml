@@ -231,6 +231,7 @@ sv:
       bulk_select_row: Markera %{id}
       bulk_selected: valda
       pagination:
+        label: Sidnumrering
         next: Nästa
         previous: Föregående
         showing: Visar %{from}–%{to} av %{total}

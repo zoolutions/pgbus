@@ -15,7 +15,7 @@
       <%= t("pgbus.helpers.pagination.showing", from: from, to: to, total: has_more ? "#{number_with_delimiter([total_count, to].max)}+" : total_count) %>
     </p>
     <% if total_pages > 1 || has_more %>
-      <nav class="inline-flex rounded-lg shadow-sm" role="navigation" aria-label="Pagination">
+      <nav class="inline-flex rounded-lg shadow-sm" role="navigation" aria-label="<%= t("pgbus.helpers.pagination.label") %>">
         <% if page > 1 %>
           <%= link_to t("pgbus.helpers.pagination.previous"), page_path.call(page - 1),
                 class: "px-3 py-1.5 text-xs font-medium border border-gray-300 dark:border-gray-600 rounded-l-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700" %>

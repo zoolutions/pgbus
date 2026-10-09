@@ -52,7 +52,7 @@
                 </summary>
                 <div class="px-4 pb-4 bg-gray-50 dark:bg-gray-900 border-t border-gray-100 dark:border-gray-700">
                   <div class="flex items-center justify-between mt-3 mb-3">
-                    <span class="text-xs font-mono text-gray-400 dark:text-gray-500"><%= t("pgbus.dead_letter.messages_table.job_id") %> <%= payload["job_id"] %></span>
+                    <span class="text-xs font-mono text-gray-500 dark:text-gray-400"><%= t("pgbus.dead_letter.messages_table.job_id") %> <%= payload["job_id"] %></span>
                     <div class="flex space-x-2">
                       <%= button_to t("pgbus.dead_letter.messages_table.retry"), pgbus.retry_dead_letter_path(m[:msg_id], queue_name: m[:queue_name]), method: :post,
                             class: "rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-500",
@@ -79,12 +79,12 @@
                     </div>
                   </div>
                   <details class="mt-2">
-                    <summary class="text-xs font-medium text-gray-500 dark:text-gray-400 cursor-pointer hover:text-gray-700"><%= t("pgbus.dead_letter.messages_table.full_json_payload") %></summary>
+                    <summary class="text-xs font-medium text-gray-500 dark:text-gray-400 cursor-pointer hover:text-gray-700 dark:hover:text-gray-200"><%= t("pgbus.dead_letter.messages_table.full_json_payload") %></summary>
                     <pre class="text-xs text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 rounded p-2 mt-1 overflow-x-auto max-h-96"><%= JSON.pretty_generate(payload) rescue m[:message] %></pre>
                   </details>
                   <% if m[:headers] %>
                     <details class="mt-2">
-                      <summary class="text-xs font-medium text-gray-500 dark:text-gray-400 cursor-pointer hover:text-gray-700"><%= t("pgbus.dead_letter.messages_table.headers_section") %></summary>
+                      <summary class="text-xs font-medium text-gray-500 dark:text-gray-400 cursor-pointer hover:text-gray-700 dark:hover:text-gray-200"><%= t("pgbus.dead_letter.messages_table.headers_section") %></summary>
                       <pre class="text-xs text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 rounded p-2 mt-1 overflow-x-auto"><%= JSON.pretty_generate(JSON.parse(m[:headers])) rescue m[:headers] %></pre>
                     </details>
                   <% end %>

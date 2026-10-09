@@ -1,5 +1,5 @@
 <div class="mb-6">
-  <%= link_to "\u2190 #{t("pgbus.dead_letter.show.back")}", pgbus.dead_letter_index_path, class: "text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-500" %>
+  <%= link_to "\u2190 #{t("pgbus.dead_letter.show.back")}", pgbus.dead_letter_index_path, class: "text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 dark:hover:text-indigo-300" %>
 </div>
 
 <% if @message %>
@@ -64,6 +64,6 @@
   </div>
 <% else %>
   <div class="text-center py-12">
-    <p class="text-gray-400 dark:text-gray-500"><%= t("pgbus.dead_letter.show.not_found") %></p>
+    <p class="text-gray-500 dark:text-gray-400"><%= t("pgbus.dead_letter.show.not_found") %></p>
   </div>
 <% end %>

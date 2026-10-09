@@ -231,6 +231,7 @@ it:
       bulk_select_row: Seleziona %{id}
       bulk_selected: selezionato
       pagination:
+        label: Paginazione
         next: Avanti
         previous: Indietro
         showing: Visualizzazione %{from}–%{to} di %{total}

@@ -15,7 +15,7 @@
             class: "inline-flex items-center rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700" %>
       <% end %>
       <%= link_to t("pgbus.recurring_tasks.show.back"), pgbus.recurring_tasks_path,
-          class: "inline-flex items-center rounded-md bg-gray-100 dark:bg-gray-700 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-200" %>
+          class: "inline-flex items-center rounded-md bg-gray-100 dark:bg-gray-700 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700" %>
     </div>
   </div>
 </div>
@@ -25,7 +25,7 @@
     <p class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.recurring_tasks.show.schedule") %></p>
     <p class="mt-1 text-lg font-semibold text-gray-900 dark:text-white"><%= @task[:schedule] %></p>
     <% if @task[:human_schedule] && @task[:human_schedule] != @task[:schedule] %>
-      <p class="text-xs text-gray-400 dark:text-gray-500"><%= @task[:human_schedule] %></p>
+      <p class="text-xs text-gray-500 dark:text-gray-400"><%= @task[:human_schedule] %></p>
     <% end %>
   </div>
 
@@ -33,9 +33,9 @@
     <p class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.recurring_tasks.show.next_run") %></p>
     <% if @task[:enabled] && @task[:next_run_at] %>
       <p class="mt-1 text-lg font-semibold text-gray-900 dark:text-white"><%= pgbus_time_ago_future(@task[:next_run_at]) %></p>
-      <p class="text-xs text-gray-400 dark:text-gray-500"><%= @task[:next_run_at]&.strftime("%Y-%m-%d %H:%M:%S %Z") %></p>
+      <p class="text-xs text-gray-500 dark:text-gray-400"><%= @task[:next_run_at]&.strftime("%Y-%m-%d %H:%M:%S %Z") %></p>
     <% else %>
-      <p class="mt-1 text-lg font-semibold text-gray-400 dark:text-gray-500">—</p>
+      <p class="mt-1 text-lg font-semibold text-gray-500 dark:text-gray-400">—</p>
     <% end %>
   </div>
 
