@@ -1,0 +1,66 @@
+app/views/pgbus/processes/_processes_table.html.erb
+  s_b7ecd97068835a::t_1b729e1de201a1 6-11,16,18-19,21-22,28,35
+app/views/pgbus/dashboard/_stats_cards.html.erb
+  s_b7ecd97068835a::t_1b729e1de201a1 24,40
+app/views/pgbus/locks/_concurrency.html.erb
+  s_b7ecd97068835a::t_1b729e1de201a1 61,64,73,79
+app/views/pgbus/dead_letter/_messages_table.html.erb
+  s_b7ecd97068835a::t_1b729e1de201a1 21,24-28,40,49-51,53,55,67-68,71-72,82-83,87-88
+  s_b7ecd97068835a::t_2190807bf7eef2 46
+app/views/pgbus/dashboard/_recent_failures.html.erb
+  s_b7ecd97068835a::t_1b729e1de201a1 6,13-15,21-23,27
+app/views/pgbus/dead_letter/show.html.erb
+  s_b7ecd97068835a::t_1b729e1de201a1 2,11,15,19,23,31,37,47-48,53-54,67
+app/views/pgbus/events/_pending_table.html.erb
+  s_b7ecd97068835a::t_1b729e1de201a1 14,17-21,41,49-52,54,56,71,93-94,97-98,108-109,116,128,132,147-148,152-153
+  s_b7ecd97068835a::t_049a583123873e 47,164
+app/views/pgbus/dashboard/_queues_table.html.erb
+  s_b7ecd97068835a::t_1b729e1de201a1 5,12-17,22,24,27-31,35
+app/views/pgbus/recurring_tasks/index.html.erb
+  s_b7ecd97068835a::t_1b729e1de201a1 3
+app/views/pgbus/queues/_queues_list.html.erb
+  s_b7ecd97068835a::t_1b729e1de201a1 6-13,18,20,26-31,36,41,46,50,56
+  s_b7ecd97068835a::t_e4da63269b683f 23
+app/views/pgbus/dashboard/_processes_table.html.erb
+  s_b7ecd97068835a::t_1b729e1de201a1 8-11,18-19,24
+app/views/pgbus/queues/show.html.erb
+  s_b7ecd97068835a::t_1b729e1de201a1 9,13,51,60-64,87-91,103-105,107,109,113-114,117-118,130-131,135-136,155
+  s_b7ecd97068835a::t_884b4bcb8d4d98 69
+  s_b7ecd97068835a::t_2190807bf7eef2 100
+app/views/pgbus/recurring_tasks/_tasks_table.html.erb
+  s_b7ecd97068835a::t_1b729e1de201a1 4,12-18,23,27,30,32,38,41,44,47,51,58,71
+spec/pgbus/web/dark_mode_contrast_spec.rb
+  s_b7ecd97068835a::t_baccdb7d60a2c3 80-83,89-90
+  s_b7ecd97068835a::t_e29df62e988d71 1-79,84-88,91-97
+app/views/pgbus/events/index.html.erb
+  s_b7ecd97068835a::t_1b729e1de201a1 24-26,31-32,34,38,58-60,65,67-68,72
+app/views/pgbus/recurring_tasks/show.html.erb
+  s_b7ecd97068835a::t_1b729e1de201a1 5,18,25,28,33,36,38,43-44,49,55,60,65,69,74,80,85,93,100-101,106,110,118
+app/views/pgbus/outbox/index.html.erb
+  s_b7ecd97068835a::t_1b729e1de201a1 3,8,12,16,25-30,35-39,42,44,47,51
+app/views/pgbus/events/show.html.erb
+  s_b7ecd97068835a::t_1b729e1de201a1 2,11,15,19,26
+app/views/pgbus/dashboard/_queue_health.html.erb
+  s_b7ecd97068835a::t_1b729e1de201a1 54-59,64
+app/views/pgbus/jobs/show.html.erb
+  s_b7ecd97068835a::t_31bee9a1186223 2,11,15,19-20,23,30-31,36-37,43,49,59-60,72
+app/views/pgbus/locks/_uniqueness.html.erb
+  s_b7ecd97068835a::t_049a583123873e 75
+  s_b7ecd97068835a::t_1b729e1de201a1 37,56,69
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "5a8d28f707a4238a90b2a875060ae758af189459",
+  "prompts": {},
+  "sessions": {
+    "s_b7ecd97068835a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "01d57c90-b286-4047-a3ee-6ef7a4812f48",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
