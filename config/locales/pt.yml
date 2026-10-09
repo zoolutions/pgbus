@@ -333,7 +333,7 @@ pt:
       list:
         arguments: Argumentos
         discard: Descartar
-        discard_all_enqueued: Descartar todos
+        discard_all_enqueued: Descartar todos os enfileirados
         discard_all_enqueued_confirm: Descartar todos os trabalhos na fila e liberar seus bloqueios? Esta ação não pode ser desfeita.
         discard_confirm: Descartar este trabalho?
         empty:

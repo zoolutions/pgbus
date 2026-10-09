@@ -333,7 +333,7 @@ fi:
       list:
         arguments: Argumentit
         discard: Hylkää
-        discard_all_enqueued: Hylkää kaikki
+        discard_all_enqueued: Hylkää kaikki jonossa olevat
         discard_all_enqueued_confirm: Hylkää kaikki jonossa olevat tehtävät ja vapauta lukot? Tätä ei voi perua.
         discard_confirm: Hylätäänkö tämä työ?
         empty:

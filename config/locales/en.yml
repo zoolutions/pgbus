@@ -333,7 +333,7 @@ en:
       list:
         arguments: Arguments
         discard: Discard
-        discard_all_enqueued: Discard All
+        discard_all_enqueued: Discard All Enqueued
         discard_all_enqueued_confirm: Discard all enqueued jobs and release their locks? This cannot be undone.
         discard_confirm: Discard this job?
         empty:

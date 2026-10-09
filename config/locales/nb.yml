@@ -333,7 +333,7 @@ nb:
       list:
         arguments: Argumenter
         discard: Forkast
-        discard_all_enqueued: Forkast alle
+        discard_all_enqueued: Forkast alle i kø
         discard_all_enqueued_confirm: Forkast alle køede jobber og frigi låsene? Dette kan ikke angres.
         discard_confirm: Forkast denne jobben?
         empty:

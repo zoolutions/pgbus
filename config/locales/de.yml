@@ -333,7 +333,7 @@ de:
       list:
         arguments: Argumente
         discard: Verwerfen
-        discard_all_enqueued: Alle verwerfen
+        discard_all_enqueued: Alle eingereihten verwerfen
         discard_all_enqueued_confirm: Alle eingereihten Jobs verwerfen und ihre Sperren freigeben? Dies kann nicht rückgängig gemacht werden.
         discard_confirm: Diesen Job verwerfen?
         empty:

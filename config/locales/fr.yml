@@ -333,7 +333,7 @@ fr:
       list:
         arguments: Arguments
         discard: Ignorer
-        discard_all_enqueued: Tout supprimer
+        discard_all_enqueued: Abandonner tous les jobs en file
         discard_all_enqueued_confirm: Supprimer tous les travaux en file d'attente et libérer leurs verrous ? Cette action est irréversible.
         discard_confirm: Ignorer ce travail ?
         empty:

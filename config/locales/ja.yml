@@ -333,7 +333,7 @@ ja:
       list:
         arguments: 引数
         discard: 破棄
-        discard_all_enqueued: すべて破棄
+        discard_all_enqueued: キュー内のジョブをすべて破棄
         discard_all_enqueued_confirm: キュー内のすべてのジョブを破棄し、ロックを解放しますか？この操作は元に戻せません。
         discard_confirm: このジョブを破棄しますか？
         empty:

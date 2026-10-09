@@ -333,7 +333,7 @@ sv:
       list:
         arguments: Argument
         discard: Kassera
-        discard_all_enqueued: Kassera alla
+        discard_all_enqueued: Kasta alla köade
         discard_all_enqueued_confirm: Kassera alla köade jobb och frigör deras lås? Detta kan inte ångras.
         discard_confirm: Kassera detta jobb?
         empty:

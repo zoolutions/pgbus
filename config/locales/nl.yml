@@ -333,7 +333,7 @@ nl:
       list:
         arguments: Argumenten
         discard: Verwijderen
-        discard_all_enqueued: Alles verwijderen
+        discard_all_enqueued: Alle in wachtrij verwijderen
         discard_all_enqueued_confirm: Alle taken in de wachtrij verwijderen en hun vergrendelingen vrijgeven? Dit kan niet ongedaan worden gemaakt.
         discard_confirm: Deze taak verwijderen?
         empty:

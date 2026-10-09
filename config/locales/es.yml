@@ -333,7 +333,7 @@ es:
       list:
         arguments: Argumentos
         discard: Descartar
-        discard_all_enqueued: Descartar todos
+        discard_all_enqueued: Descartar todos los encolados
         discard_all_enqueued_confirm: "¿Descartar todos los trabajos en cola y liberar sus bloqueos? Esta acción no se puede deshacer."
         discard_confirm: "¿Descartar este trabajo?"
         empty:

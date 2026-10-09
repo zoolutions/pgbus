@@ -333,7 +333,7 @@ da:
       list:
         arguments: Argumenter
         discard: Kassér
-        discard_all_enqueued: Kassér alle
+        discard_all_enqueued: Kassér alle i kø
         discard_all_enqueued_confirm: Kassér alle ventende jobs og frigiv deres låse? Dette kan ikke fortrydes.
         discard_confirm: Kassér dette job?
         empty:
