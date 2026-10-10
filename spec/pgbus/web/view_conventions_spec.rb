@@ -17,9 +17,9 @@ RSpec.describe "Dashboard view conventions" do # rubocop:disable RSpec/DescribeC
   let(:allowlist) do
     {
       empty_row: {
-        "app/views/pgbus/queues/show.html.erb" => "#491 rewrites the queue messages table",
-        "app/views/pgbus/dead_letter/_messages_table.html.erb" => "#495 rewrites the DLQ messages table",
-        "app/views/pgbus/events/_pending_table.html.erb" => "#494 replaces the Events page"
+        "app/views/pgbus/queues/show.html.erb" => "expanded-row colspan cells + inline empty row; #491 rewrites the messages table",
+        "app/views/pgbus/dead_letter/_messages_table.html.erb" => "expanded-row colspan cells; #495 rewrites the DLQ messages table",
+        "app/views/pgbus/events/_pending_table.html.erb" => "expanded-row colspan cells; #494 replaces the Events page"
       },
       chrome: {
         "app/views/pgbus/queues/show.html.erb" => "#491 keeps the py-2 Table Health block"
