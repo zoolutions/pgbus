@@ -48,6 +48,9 @@ bundle exec rake bench:integration        # Real DB benchmarks (requires PGBUS_D
 bundle exec rake bench:streams            # SSE streaming benchmarks (requires PGBUS_DATABASE_URL)
 bundle exec rake bench:worker_profile     # Real Worker: jobs/s + where a job's time goes (requires PGBUS_DATABASE_URL)
 bundle exec rake frontend:css             # Rebuild app/frontend/pgbus/style.css after adding a Tailwind class to a view
+bundle exec rake dummy:server            # Dashboard on http://localhost:3003/pgbus with stub sample data (no database)
+bundle exec rspec spec/system/accessibility_spec.rb  # axe WCAG 2.1 AA gate, every dashboard page, light + dark
+bin/lighthouse [-i N] [--pages /pgbus,…]  # Lighthouse scores per page, against a running dummy:server
 bin/release list                          # Last releases + next patch/minor/major version
 bin/release [minor|major|X.Y.Z] [-n]      # Cut a release (patch by default) via rake release (rakelib/release.rake, shared across the zoolutions gems); -n = dry run
 ```
@@ -177,6 +180,26 @@ change's conventional-commit prefix and the areas from
 the manifest and reach GitHub with `bin/labels sync`, never through the UI.
 Rules: `.github/LABELS.md`. `bin/labels` + `.github/LABELS.md` are the shared
 labels kit (canonical copy in docs-kit): never edit them in place.
+
+## Dashboard changes (quality gates)
+
+Every change to a dashboard view, its CSS, its JS or the badge helpers is tested in this order.
+The long form, with the token rules and how to read a violation, is `.claude/rules/dashboard.md`.
+
+1. **System spec first.** Assert in words: state words, reasons, what-happens-next text, the empty
+   state, the pager, bulk actions. Anything visual is checked in both themes (`visit_dark(path)`).
+2. **Sample data.** Every new data-source method goes into `Pgbus::Test::StubDataSource` (sparse
+   default) and its `SampleData` module (`fill_sample_data!`), so `rake dummy:server`, the axe gate,
+   Lighthouse and the screenshots all show it. There is one stub; the dummy server uses it.
+3. **Contrast.** `spec/pgbus/web/dark_mode_contrast_spec.rb` (static) and
+   `spec/system/accessibility_spec.rb` (axe, light + dark) stay green. No `except:`, no accepted debt:
+   a red page is fixed.
+4. **Build + lint.** `bundle exec rake frontend:css` after any new Tailwind class, `bun run lint:herb`.
+5. **New page?** Add its URL to `lighthouserc.dashboard.json` — the route-coverage example fails
+   otherwise, and that file is the page list for both gates.
+6. **Screenshots.** Before/after, light + dark, on the PR with `gh pr create --attach` (next section).
+7. **Lighthouse** on demand with `bin/lighthouse` against `rake dummy:server`; it also runs monthly
+   in Actions (`.github/workflows/lighthouse.yml`, report-only).
 
 ## Screenshots on PRs and issues (always)
 

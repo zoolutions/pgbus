@@ -1,0 +1,106 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Audit the dashboard with Lighthouse and print the scores as a table.
+#
+# Start the dummy app first, in another terminal:
+#
+#   bundle exec rake dummy:server              # http://localhost:3003/pgbus, stub sample data
+#   bin/lighthouse                             # every page in lighthouserc.dashboard.json
+#   bin/lighthouse -i 3 --pages /pgbus,/pgbus/jobs
+#   bin/lighthouse --base-url http://localhost:4000 --output tmp/lighthouse.json
+#
+# The URLs come from lighthouserc.dashboard.json, so this, the monthly
+# Lighthouse workflow and the axe gate (spec/system/accessibility_spec.rb)
+# always measure the same pages. Needs `bun install` (the lighthouse CLI is a
+# devDependency); CHROME_PATH is honoured by the CLI.
+#
+# Bundler first: a bare `require "json"` activates the newest installed json
+# gem, which then clashes with the version Gemfile.lock pins.
+require "bundler/setup"
+require "json"
+require "optparse"
+require "open3"
+require "tmpdir"
+require "uri"
+
+ROOT = File.expand_path("..", __dir__)
+CONFIG_PATH = File.join(ROOT, "lighthouserc.dashboard.json")
+CATEGORIES = %w[performance accessibility best-practices].freeze
+METRICS = {
+  "first-contentful-paint" => "FCP",
+  "largest-contentful-paint" => "LCP",
+  "total-blocking-time" => "TBT",
+  "cumulative-layout-shift" => "CLS"
+}.freeze
+
+options = { iterations: 1 }
+OptionParser.new do |opts|
+  opts.banner = "Usage: bin/lighthouse [--base-url URL] [--iterations N] [--pages LIST] [--output FILE]"
+  opts.on("--base-url URL", "Origin to audit (default: the config's, http://localhost:3003)") do |url|
+    options[:base_url] = url
+  end
+  opts.on("-i", "--iterations N", Integer, "Runs per URL, averaged (default 1)") { |n| options[:iterations] = n }
+  opts.on("--pages LIST", "Comma-separated paths, e.g. /pgbus,/pgbus/jobs") { |list| options[:pages] = list.split(",") }
+  opts.on("--output FILE", "Write the raw results as JSON") { |file| options[:output] = file }
+  opts.on("-h", "--help", "Show this message") do
+    puts opts
+    exit 0
+  end
+end.parse!
+
+def request_uri(url) = URI.parse(url).request_uri
+
+urls = JSON.parse(File.read(CONFIG_PATH)).dig("ci", "collect", "url")
+urls = urls.map { |url| "#{options[:base_url].chomp("/")}#{request_uri(url)}" } if options[:base_url]
+urls = urls.select { |url| options[:pages].include?(request_uri(url)) } if options[:pages]
+if urls.empty?
+  warn "No URLs matched --pages #{options[:pages]&.join(",")}"
+  exit 1
+end
+
+def audit(url)
+  Dir.mktmpdir do |dir|
+    out = File.join(dir, "report.json")
+    # The CLI by path: with bin/ on PATH a bare `lighthouse` resolves to this script.
+    cmd = [File.join(ROOT, "node_modules/.bin/lighthouse"), url, "--quiet", "--output=json", "--output-path=#{out}",
+           "--only-categories=#{CATEGORIES.join(",")}", "--preset=desktop",
+           "--chrome-flags=--headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage"]
+    _stdout, stderr, status = Open3.capture3(*cmd)
+    return { error: stderr.lines.last(2).join.strip } unless status.success? && File.exist?(out)
+
+    report = JSON.parse(File.read(out))
+    { scores: CATEGORIES.to_h { |c| [c, (report.dig("categories", c, "score") || 0) * 100] },
+      metrics: METRICS.to_h { |id, label| [label, report.dig("audits", id, "numericValue")] } }
+  end
+end
+
+def average(values) = values.compact.sum / values.compact.size.to_f
+
+results = urls.to_h do |url|
+  runs = Array.new(options[:iterations]) { audit(url) }
+  errored = runs.find { |run| run[:error] }
+  next [url, errored] if errored
+
+  [url, {
+    scores: CATEGORIES.to_h { |c| [c, average(runs.map { |run| run[:scores][c] })] },
+    metrics: METRICS.values.to_h { |m| [m, average(runs.map { |run| run[:metrics][m] })] }
+  }]
+end
+
+width = urls.map { |url| request_uri(url).size }.max
+puts format("%-#{width}s  %5s %5s %5s  %8s %8s %8s %8s", "PAGE", "PERF", "A11Y", "BP", *METRICS.values)
+results.each do |url, result|
+  path = request_uri(url)
+  if result[:error]
+    puts format("%-#{width}s  ERROR %s", path, result[:error])
+    next
+  end
+
+  m = result[:metrics]
+  puts format("%-#{width}s  %5d %5d %5d  %6.0fms %6.0fms %6.0fms %8.3f",
+              path, *CATEGORIES.map { |c| result[:scores][c].round }, m["FCP"], m["LCP"], m["TBT"], m["CLS"])
+end
+
+File.write(options[:output], JSON.pretty_generate(results)) if options[:output]
+exit(results.any? { |_url, result| result[:error] } ? 1 : 0)

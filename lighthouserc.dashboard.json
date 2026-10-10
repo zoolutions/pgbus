@@ -1,0 +1,57 @@
+{
+  "ci": {
+    "collect": {
+      "url": [
+        "http://localhost:3003/pgbus",
+        "http://localhost:3003/pgbus/queues",
+        "http://localhost:3003/pgbus/queues/pgbus_default",
+        "http://localhost:3003/pgbus/jobs",
+        "http://localhost:3003/pgbus/jobs?state=ready",
+        "http://localhost:3003/pgbus/jobs?state=scheduled",
+        "http://localhost:3003/pgbus/jobs?state=running",
+        "http://localhost:3003/pgbus/jobs?state=retrying",
+        "http://localhost:3003/pgbus/jobs?state=blocked",
+        "http://localhost:3003/pgbus/jobs/1",
+        "http://localhost:3003/pgbus/recurring_tasks",
+        "http://localhost:3003/pgbus/recurring_tasks/1",
+        "http://localhost:3003/pgbus/processes",
+        "http://localhost:3003/pgbus/events",
+        "http://localhost:3003/pgbus/events/1",
+        "http://localhost:3003/pgbus/batches",
+        "http://localhost:3003/pgbus/batches/a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+        "http://localhost:3003/pgbus/dlq",
+        "http://localhost:3003/pgbus/dlq/501",
+        "http://localhost:3003/pgbus/outbox",
+        "http://localhost:3003/pgbus/locks",
+        "http://localhost:3003/pgbus/insights"
+      ],
+      "numberOfRuns": 3,
+      "settings": {
+        "preset": "desktop",
+        "onlyCategories": ["performance", "accessibility", "best-practices"],
+        "chromeFlags": "--no-sandbox --headless=new --disable-gpu --disable-dev-shm-usage",
+        "skipAudits": ["is-on-https", "redirects-http", "uses-http2", "uses-text-compression", "modern-http-insight"]
+      }
+    },
+    "upload": { "target": "filesystem", "outputDir": ".lighthouseci" },
+    "assert": {
+      "assertions": {
+        "categories:performance": ["error", { "minScore": 0.9 }],
+        "categories:accessibility": ["error", { "minScore": 1 }],
+        "categories:best-practices": ["error", { "minScore": 0.95 }],
+        "largest-contentful-paint": ["error", { "maxNumericValue": 2000 }],
+        "total-blocking-time": ["error", { "maxNumericValue": 300 }],
+        "cumulative-layout-shift": ["error", { "maxNumericValue": 0.1 }],
+        "resource-summary:script:size": ["error", { "maxNumericValue": 850000 }],
+        "total-byte-weight": ["error", { "maxNumericValue": 1200000 }],
+        "color-contrast": "error",
+        "heading-order": "error",
+        "label-content-name-mismatch": "error",
+        "errors-in-console": "error",
+        "unminified-javascript": "warn",
+        "unused-javascript": "warn",
+        "render-blocking-resources": ["warn", { "maxLength": 0 }]
+      }
+    }
+  }
+}
