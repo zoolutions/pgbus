@@ -1,0 +1,29 @@
+spec/system/insights_spec.rb
+  s_4242253cc7e550::t_29fb59c3f5cccf 26
+spec/system/support/accessibility.rb
+  s_4242253cc7e550::t_76089656f5bbd0 71,95
+.claude/rules/dashboard.md
+  s_4242253cc7e550::t_76089656f5bbd0 4
+.gitignore
+  s_4242253cc7e550::t_29fb59c3f5cccf 14
+AGENTS.md
+  s_4242253cc7e550::t_76089656f5bbd0 52
+spec/pgbus/web/lighthouse_runner_spec.rb
+  s_4242253cc7e550::t_29fb59c3f5cccf 14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "d5450dd9e308a6cad0bda5c66e8ed7dc0c5025d3",
+  "prompts": {},
+  "sessions": {
+    "s_4242253cc7e550": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4fe2a4bd-8a7a-43f0-a807-a713cef7f01f",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
