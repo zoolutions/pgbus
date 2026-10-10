@@ -33,8 +33,14 @@ module Pgbus
         drains = if queues == ["*"] then ["drains_all", {}]
                  elsif queues.any? then ["drains", { queues: queues.join(", ") }]
                  end
-        rate = metadata.dig("rates", "processed").to_f if metadata["rates"].is_a?(Hash)
-        [drains, *pool(metadata), buffered(metadata), (["rate", { rate: rate }] if rate&.positive?)].compact
+        [drains, *pool(metadata), buffered(metadata), *rates(metadata["rates"])].compact
+      end
+
+      def rates(rates)
+        return [] unless rates.is_a?(Hash)
+
+        { "rate" => rates["processed"], "failed_rate" => rates["failed"] }
+          .filter_map { |key, rate| [key, { rate: rate.to_f }] if rate.to_f.positive? }
       end
 
       def consumer(metadata)

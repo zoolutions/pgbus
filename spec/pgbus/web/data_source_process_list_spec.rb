@@ -49,6 +49,13 @@ RSpec.describe Pgbus::Web::DataSource::ProcessList do
       expect(data_source.processes[2]).to include(last_heartbeat_at: now - 400, supervisor_pid: nil, started_at: nil)
     end
 
+    it "takes already-decoded metadata and a row without metadata" do
+      rows << db_row(5, "worker", {}).merge("metadata" => { "supervisor_pid" => 7 })
+      rows << db_row(6, "supervisor", {}).merge("metadata" => nil)
+
+      expect(data_source.processes.last(2).map { |p| [p[:status], p[:supervisor_pid]] }).to eq([[:healthy, 7], [:healthy, nil]])
+    end
+
     it "derives against the dashboard's stall_threshold" do
       allow(Pgbus.configuration).to receive(:stall_threshold).and_return(nil)
 

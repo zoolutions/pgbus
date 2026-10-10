@@ -49,6 +49,11 @@ RSpec.describe Pgbus::Web::ProcessActivity do
           .to include(["slots", { count: 2 }])
       end
 
+      it "adds the failure rate when jobs are failing" do
+        parts = activity("worker", metadata.merge("rates" => { "processed" => 12.4, "failed" => 0.2 }))
+        expect(parts.last(2)).to eq([["rate", { rate: 12.4 }], ["failed_rate", { rate: 0.2 }]])
+      end
+
       it "leaves out an empty buffer and a zero or missing rate" do
         parts = activity("worker", metadata.merge("buffered" => 0, "rates" => { "processed" => 0.0 }))
         expect(parts.map(&:first)).to eq(%w[drains busy_threads])
@@ -68,6 +73,10 @@ RSpec.describe Pgbus::Web::ProcessActivity do
         [["consumes", { topics: "orders.*, users.*" }], ["busy_threads", { busy: 1, capacity: 3 }],
          ["handled", { number: 1240 }]]
       )
+    end
+
+    it "says only what a consumer reported" do
+      expect(activity("consumer", { "threads" => 3 })).to eq([["threads", { count: 3 }]])
     end
 
     it "says how often the dispatcher runs maintenance" do
@@ -109,6 +118,10 @@ RSpec.describe Pgbus::Web::ProcessActivity do
         [["jobs", { done: 1240, limit: 10_000 }], ["memory", { used: 310, limit: 512 }],
          ["lifetime", { uptime: 2520, limit: 3600 }]]
       )
+    end
+
+    it "has no value for a limit whose counterpart was not reported" do
+      expect(described_class.recycle({ "max_memory_mb" => 512 }, nil)).to eq([["memory", { used: nil, limit: 512 }]])
     end
 
     it "leaves out limits that are not configured" do

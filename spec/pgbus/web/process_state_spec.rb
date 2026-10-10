@@ -279,6 +279,7 @@ RSpec.describe Pgbus::Web::ProcessState do
     it "parses String metadata and ignores unparseable metadata" do
       expect(present(row("worker", pid: 1, metadata: { "started_at" => now.to_f }.to_json)).uptime_seconds).to eq(0)
       expect(present(row("worker", pid: 1, metadata: "{nope")).uptime_seconds).to be_nil
+      expect(present(row("worker", pid: 1, metadata: "[1]")).uptime_seconds).to be_nil
     end
 
     it "carries the activity and recycle parts" do
