@@ -1,0 +1,31 @@
+spec/pgbus/process/consumer_spec.rb
+  ai_agent 983-1013
+spec/pgbus/process/supervisor_spec.rb
+  ai_agent 308-319
+spec/pgbus/process/dispatcher_spec.rb
+  ai_agent 657
+spec/pgbus/outbox/poller_spec.rb
+  ai_agent 126-136
+lib/pgbus/process/dispatcher.rb
+  ai_agent 700
+lib/pgbus/process/worker.rb
+  ai_agent 836-837,879-880,884-900
+lib/pgbus/recurring/scheduler.rb
+  ai_agent 119-120
+lib/pgbus/process/supervisor.rb
+  ai_agent 906
+spec/pgbus/process/worker_spec.rb
+  ai_agent 159-190
+spec/pgbus/recurring/scheduler_spec.rb
+  ai_agent 150-151
+lib/pgbus/outbox/poller.rb
+  ai_agent 142
+lib/pgbus/process/consumer.rb
+  ai_agent 80-81,618-623,625-626,631-639
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "c06c6d753c91c4f6bb92352bea6ece2ae3283990",
+  "prompts": {}
+}
