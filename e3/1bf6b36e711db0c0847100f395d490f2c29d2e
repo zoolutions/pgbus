@@ -1,0 +1,44 @@
+lib/pgbus/web/data_source/list_counts.rb
+  s_b0a979e77aaac2::t_8210b7063d6b7b 1-40,42-58,67-76
+  s_b0a979e77aaac2::t_01d01ab4ec968a 41,59-66
+lib/pgbus/mcp/tools/recurring_tool.rb
+  s_b0a979e77aaac2::t_2248b8aed362a9 15-18,21-22,24-32,34-49,51
+README.md
+  s_b0a979e77aaac2::t_b4f8018f902bad 1214,1216
+spec/pgbus/mcp/tools_spec.rb
+  s_b0a979e77aaac2::t_2248b8aed362a9 214-217,280-282,284
+  s_b0a979e77aaac2::t_cba6987134b751 226-232
+lib/pgbus/mcp/tools/concurrency_tool.rb
+  s_b0a979e77aaac2::t_2248b8aed362a9 20-22,25-26,28-36,38-46
+spec/pgbus/web/data_source_list_counts_spec.rb
+  s_b0a979e77aaac2::t_5e9c4f1d786d05 1-149
+spec/pgbus/web/batches_data_source_spec.rb
+  s_b0a979e77aaac2::t_3c8124417a2710 33-34,61-62
+spec/pgbus/mcp/concurrency_tool_spec.rb
+  s_b0a979e77aaac2::t_de75aa4798d15c 1-15,19-79
+  s_b0a979e77aaac2::t_160513049c0757 16-18
+spec/pgbus/mcp/locks_tool_spec.rb
+  s_b0a979e77aaac2::t_de75aa4798d15c 1-77
+spec/pgbus/mcp/recurring_tool_spec.rb
+  s_b0a979e77aaac2::t_c1aa044a3beffe 1-89
+lib/pgbus/mcp/tools/locks_tool.rb
+  s_b0a979e77aaac2::t_2248b8aed362a9 15-17,20-21,23-31,33-41
+lib/pgbus/web/data_source.rb
+  s_b0a979e77aaac2::t_d2859c1dc28249 9,509-513,670-671,686-690,762-763,1146,1155,1157
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "e31bf6b36e711db0c0847100f395d490f2c29d2e",
+  "prompts": {},
+  "sessions": {
+    "s_b0a979e77aaac2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1beb5e41-62dd-40e5-aaf9-5b08c42be586",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}

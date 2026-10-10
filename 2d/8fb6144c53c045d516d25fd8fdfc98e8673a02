@@ -1,0 +1,73 @@
+spec/requests/pgbus/batches_controller_spec.rb
+  s_b0a979e77aaac2::t_3473dc64d8ed08 16-47
+app/controllers/pgbus/application_controller.rb
+  s_b0a979e77aaac2::t_7a98d88e936c80 20
+  s_b0a979e77aaac2::t_52863fd0f404a0 79-81
+app/views/pgbus/locks/_concurrency.html.erb
+  s_b0a979e77aaac2::t_fea4212ef4d5d7 44,50-51,58,68-70,72-73,77-78,87
+  s_b0a979e77aaac2::t_b8479498ad780f 1-2,91-93
+spec/system/mobile_labels_spec.rb
+  s_b0a979e77aaac2::t_001295b40c1548 1-50
+app/views/pgbus/recurring_tasks/_tasks_table.html.erb
+  s_b0a979e77aaac2::t_82b9e602274689 4-64,66-73
+  s_b0a979e77aaac2::t_b8479498ad780f 1-2,74-77
+spec/support/pgbus/stub_data_source.rb
+  s_b0a979e77aaac2::t_52863fd0f404a0 24-25,63,113-118,122-132,134-150,230-234,242
+app/controllers/pgbus/batches_controller.rb
+  s_b0a979e77aaac2::t_52863fd0f404a0 6-9
+app/views/pgbus/recurring_tasks/index.html.erb
+  s_b0a979e77aaac2::t_b8479498ad780f 3
+spec/integration/dashboard_list_paging_spec.rb
+  s_b0a979e77aaac2::t_a18b8a458d1996 1-53
+app/frontend/pgbus/style.css
+  s_b0a979e77aaac2::t_822aceabe8ad92 2
+app/controllers/pgbus/locks_controller.rb
+  s_b0a979e77aaac2::t_52863fd0f404a0 6,8-10,13-14
+  s_b0a979e77aaac2::t_b8479498ad780f 7
+app/views/pgbus/locks/_uniqueness.html.erb
+  s_b0a979e77aaac2::t_fea4212ef4d5d7 11-12,14-15,37-38,41,54-57,62-64
+  s_b0a979e77aaac2::t_b8479498ad780f 74-76
+spec/requests/pgbus/outbox_controller_spec.rb
+  s_b0a979e77aaac2::t_3473dc64d8ed08 11-30
+app/views/pgbus/shared/_pager.html.erb
+  s_b0a979e77aaac2::t_e6a1354adb7312 20-21,26-27
+  s_b0a979e77aaac2::t_822aceabe8ad92 23,29
+spec/requests/pgbus/locks_controller_spec.rb
+  s_b0a979e77aaac2::t_3473dc64d8ed08 12-55
+spec/support/pgbus/stub_data_source/sample_data.rb
+  s_b0a979e77aaac2::t_55d402e4e8e1b5 27-29,56-57,104,227-231,246-250,259-263,269-279,319-320,322-323
+  s_b0a979e77aaac2::t_3ace05aaf28dc9 313,315,317,321
+app/controllers/pgbus/outbox_controller.rb
+  s_b0a979e77aaac2::t_52863fd0f404a0 7-9
+app/views/pgbus/outbox/index.html.erb
+  s_b0a979e77aaac2::t_4e0c0fc0ab5a0a 36-40,47,51
+  s_b0a979e77aaac2::t_b8479498ad780f 55
+  s_b0a979e77aaac2::t_faa4b976706fc2 56
+app/views/pgbus/batches/_batches_table.html.erb
+  s_b0a979e77aaac2::t_4e0c0fc0ab5a0a 18-20,22,25,28,37,43,49
+  s_b0a979e77aaac2::t_b8479498ad780f 1-2,53-55
+spec/requests/pgbus/recurring_tasks_controller_spec.rb
+  s_b0a979e77aaac2::t_3473dc64d8ed08 16-38
+spec/system/list_pagers_spec.rb
+  s_b0a979e77aaac2::t_9410eb64894555 1-9,11-52,55-87
+  s_b0a979e77aaac2::t_363f492e743e02 10
+  s_b0a979e77aaac2::t_9de2c4079c5744 53-54
+app/controllers/pgbus/recurring_tasks_controller.rb
+  s_b0a979e77aaac2::t_52863fd0f404a0 6-10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "2d8fb6144c53c045d516d25fd8fdfc98e8673a02",
+  "prompts": {},
+  "sessions": {
+    "s_b0a979e77aaac2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1beb5e41-62dd-40e5-aaf9-5b08c42be586",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
