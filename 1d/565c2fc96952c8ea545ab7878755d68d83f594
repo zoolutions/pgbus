@@ -1,0 +1,9 @@
+lib/pgbus/dead_letter_header.rb
+  ai_agent 87
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "1d565c2fc96952c8ea545ab7878755d68d83f594",
+  "prompts": {}
+}
