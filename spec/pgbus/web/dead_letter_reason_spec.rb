@@ -22,6 +22,7 @@ RSpec.describe Pgbus::Web::DeadLetterReason do
   it "names the error from the last attempt" do
     result = present(headers(error: error))
 
+    expect(result.reason).to eq("max_retries_exceeded")
     expect(result.reason_key).to eq("error")
     expect(result.reason_args).to eq(error_class: "Stripe::CardError", error_message: "Your card was declined",
                                      attempts: 6, max: 5)
@@ -83,7 +84,7 @@ RSpec.describe Pgbus::Web::DeadLetterReason do
 
     expect(result.reason_key).to eq("not_recorded")
     expect(result.reason_args).to eq(version: Pgbus::DeadLetterHeader::SINCE)
-    expect(result).to have_attributes(legacy?: true, attempts: nil, source_queue: "pgbus_default", source: nil)
+    expect(result).to have_attributes(legacy?: true, reason: nil, attempts: nil, source_queue: "pgbus_default", source: nil)
   end
 
   it "reads unrelated headers as legacy too" do

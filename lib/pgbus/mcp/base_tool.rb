@@ -79,6 +79,22 @@ module Pgbus
           count.capped? ? shown == per_page : page * per_page < count.total
         end
 
+        DEAD_LETTER_SUMMARY_KEYS = %w[reason source source_queue attempts max_retries dead_lettered_at
+                                      retries_from_dlq error_class error_attempt error_recorded_at].freeze
+        DEAD_LETTER_ERROR_KEYS = %w[error_message backtrace].freeze
+
+        # Why a DLQ row died, from its DeadLetterHeader block (issue #495), or
+        # nil for a row dead-lettered before the block existed. The error
+        # message and backtrace can quote payload values, and the Redactor
+        # does not know those keys, so they are added only with include_error.
+        def dead_letter_summary(row, include_error:)
+          block = Pgbus::DeadLetterHeader.parse(row[:headers])
+          return unless block
+
+          keys = include_error ? DEAD_LETTER_SUMMARY_KEYS + DEAD_LETTER_ERROR_KEYS : DEAD_LETTER_SUMMARY_KEYS
+          block.slice(*keys)
+        end
+
         # Wrap an error message as an MCP error response (isError: true) so the
         # client surfaces it as a tool failure rather than a normal result.
         def error_response(message)

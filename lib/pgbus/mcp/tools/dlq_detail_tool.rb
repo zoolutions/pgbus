@@ -12,7 +12,7 @@ module Pgbus
         title "Pgbus Dead-Letter Detail"
         description <<~DESC
           Inspect one dead-letter message: read_ct, vt, enqueued_at, source
-          queue. Pass the full physical DLQ queue name (e.g.
+          queue, and a dead_letter summary of why it died. Pass the full physical DLQ queue name (e.g.
           "pgbus_default_dlq") in +queue+ to disambiguate — msg_ids are only
           unique within a single DLQ table, so the same id can exist in more
           than one. Without +queue+ the tool scans every "_dlq" table and
@@ -48,7 +48,9 @@ module Pgbus
           return error_response("Dead-letter message #{msg_id} not found") unless detail
           return detail if detail.is_a?(::MCP::Tool::Response)
 
-          json_response({ message: detail }, server_context: server_context, include_payloads: include_payloads)
+          summary = dead_letter_summary(detail, include_error: payloads_allowed?(server_context, include_payloads))
+          json_response({ message: detail.merge(dead_letter: summary) },
+                        server_context: server_context, include_payloads: include_payloads)
         end
 
         # When the caller didn't specify a queue, scan every DLQ for the id and

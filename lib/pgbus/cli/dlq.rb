@@ -12,7 +12,8 @@ module Pgbus
     module DLQ
       module_function
 
-      ROW_FORMAT = "%-10s %-32s %-28s %-8s %s"
+      ROW_FORMAT = "%-10s %-32s %-28s %-8s %-26s %s"
+      REASON_WIDTH = 40
 
       def start(args, data_source: Pgbus::Web::DataSource.new)
         subcommand = args.first
@@ -41,7 +42,7 @@ module Pgbus
         end
 
         print_list_table(messages)
-        puts "-" * 96
+        puts "-" * 140
         puts "Total dead-letter messages: #{data_source.dlq_total_count} " \
              "(page #{options[:page]}, #{options[:per_page]} per page)"
       end
@@ -56,6 +57,7 @@ module Pgbus
         puts "origin:      #{origin_queue(detail[:queue_name])}"
         puts "read_ct:     #{detail[:read_ct]}"
         puts "enqueued_at: #{detail[:enqueued_at]}"
+        print_dead_letter(Pgbus::Web::DeadLetterReason.present(detail))
         puts "payload:"
         puts Pgbus::Web::PayloadFilter.filter_json(detail[:message])
       end
@@ -120,12 +122,34 @@ module Pgbus
       end
 
       def print_list_table(messages)
-        puts format(ROW_FORMAT, "MSG_ID", "DLQ QUEUE", "ORIGIN QUEUE", "READ_CT", "ENQUEUED_AT")
-        puts "-" * 96
+        puts format(ROW_FORMAT, "MSG_ID", "DLQ QUEUE", "ORIGIN QUEUE", "READ_CT", "ENQUEUED_AT", "REASON")
+        puts "-" * 140
         messages.each do |m|
+          reason = Pgbus::Web::DeadLetterReason.present(m)
           puts format(ROW_FORMAT, m[:msg_id], m[:queue_name], origin_queue(m[:queue_name]),
-                      m[:read_ct], m[:enqueued_at])
+                      m[:read_ct], m[:enqueued_at], (reason.error_class || reason.reason_key).to_s[0, REASON_WIDTH])
         end
+      end
+
+      # Why the message died, from its pgbus_dead_letter header (issue #495).
+      def print_dead_letter(result)
+        if result.legacy?
+          puts "reason:      not recorded (dead-lettered before pgbus #{Pgbus::DeadLetterHeader::SINCE})"
+          return
+        end
+
+        puts "died:        #{result.died_at}"
+        puts "attempts:    #{result.attempts}/#{result.max_retries}"
+        puts "source:      #{result.source_queue}"
+        puts "reason:      #{result.reason}"
+        puts "error:       #{dead_letter_error(result)}"
+        puts "retried:     #{result.retried_before} time(s) from the DLQ before" if result.retried_before
+      end
+
+      def dead_letter_error(result)
+        return "none recorded" unless result.error_class
+
+        "#{result.error_class}: #{result.error_message} (attempt #{result.error_attempt})"
       end
 
       def origin_queue(dlq_queue_name)
