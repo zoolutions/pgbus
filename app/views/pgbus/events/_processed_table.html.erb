@@ -26,7 +26,10 @@
             <td data-label="<%= t("pgbus.events.processed.headers.state") %>" class="px-4 py-3 text-sm"><%= pgbus_processed_event_badge(claim) %></td>
             <td data-label="<%= t("pgbus.events.processed.headers.reason") %>" class="px-4 py-3 text-sm text-gray-700 dark:text-gray-200"><%= pgbus_processed_event_reason(claim) %></td>
             <td data-label="<%= t("pgbus.events.processed.headers.actions") %>" class="px-4 py-3 text-sm text-right">
-              <%= render "pgbus/events/replay", event: e, replay_state: @replay_states[e["id"]] %>
+              <%# An unfinished claim's message is still in its queue: nothing to replay yet. %>
+              <% if claim.state == "completed" %>
+                <%= render "pgbus/events/replay", event: e, replay_state: @replay_states[e["id"]] %>
+              <% end %>
             </td>
           </tr>
         <% end %>

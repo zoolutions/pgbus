@@ -154,7 +154,19 @@ RSpec.describe Pgbus::Web::DataSource::EventList do
       expect(sql).to include("FROM pgmq.a_pgbus_test_order_handler a")
       expect(sql).to include("a.archived_at >= $2::timestamptz", "a.message->>'event_id' = ANY($1::text[])")
       expect(sql).to include("COALESCE(a.message->'headers'->>'routing_key', a.message->>'routing_key') IS NOT NULL")
-      expect(binds).to eq(["{evt-1,evt-2}", (now - 660).utc.iso8601(6)])
+      expect(binds).to eq(['{"evt-1","evt-2"}', (now - 660).utc.iso8601(6)])
+    end
+
+    it "quotes each event_id, so one with a comma, brace or quote still matches" do
+      binds = nil
+      allow(mock_connection).to receive(:select_values) do |_sql, _label, params|
+        binds = params
+        ['a,b}"c\\d']
+      end
+      odd = [{ "id" => 9, "event_id" => 'a,b}"c\\d', "handler_class" => "OrderHandler", "processed_at" => now }]
+
+      expect(data_source.event_replay_states(odd)).to eq(9 => :replayable)
+      expect(binds.first).to eq('{"a,b}\\"c\\\\d"}')
     end
 
     it "reports nothing archived when the archive cannot be read" do

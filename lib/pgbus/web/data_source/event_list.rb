@@ -107,7 +107,7 @@ module Pgbus
         end
 
         def archived_event_ids(queue, events)
-          ids = events.map { |e| e["event_id"].to_s }
+          ids = events.map { |e| text_array_element(e["event_id"]) }
           connection.select_values(<<~SQL, "Pgbus Archived Events", ["{#{ids.join(",")}}", archive_floor(events)]).to_set
             SELECT a.message->>'event_id' FROM pgmq.a_#{sanitize_name(queue)} a
             WHERE a.archived_at >= $2::timestamptz AND a.message->>'event_id' = ANY($1::text[])
@@ -116,6 +116,12 @@ module Pgbus
         rescue StandardError => e
           Pgbus.logger.error { "[Pgbus::Web] Error reading the archive of #{queue}: #{e.class}: #{e.message}" }
           Set.new
+        end
+
+        # event_id is any string an envelope carried (Edit & Retry accepts any
+        # payload), so each element of the bound text[] literal is quoted.
+        def text_array_element(value)
+          %("#{value.to_s.gsub(/["\\]/) { |c| "\\#{c}" }}")
         end
 
         def archived_event(queue, event)

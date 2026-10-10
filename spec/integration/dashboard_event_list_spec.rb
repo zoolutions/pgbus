@@ -107,6 +107,19 @@ RSpec.describe "Dashboard event list (integration)", :integration do
     expect(data_source.job_state_counts(exclude: data_source.handler_queue_physical_names)["retrying"]).to eq(0)
   end
 
+  it "completes the claim a failed attempt left when the operator marks the event handled" do
+    handler_class.failures_left = 1
+    message = publish_and_handle
+
+    expect(data_source.mark_event_handled(physical, message.msg_id, handler_class.name)).to be(true)
+
+    row = data_source.processed_events.first
+    claim = Pgbus::Web::EventState.processed(row, now: Time.now + 3600, claim_window: 20)
+    expect(claim.state).to eq("completed")
+    expect(failed_rows).to be_empty
+    expect(data_source.event_rows).to be_empty
+  end
+
   it "replays a processed event from its archived message under a new event_id" do
     publish_and_handle
     processed = data_source.processed_events.first

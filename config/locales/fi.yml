@@ -244,7 +244,7 @@ fi:
           state: Tila
         headers_section: Otsikot
         mark_handled: Merkitse käsitellyksi
-        mark_handled_confirm: Merkitäänkö tämä tapahtuma käsitellyksi? Se arkistoidaan ja ohitetaan toistossa.
+        mark_handled_confirm: Merkitäänkö tämä tapahtuma käsitellyksi? Viesti arkistoidaan, eikä käsittelijä suorita sitä.
         metadata: Metatiedot
         metadata_labels:
           enqueued: 'Jonoon lisätty:'

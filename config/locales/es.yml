@@ -244,7 +244,7 @@ es:
           state: Estado
         headers_section: Encabezados
         mark_handled: Marcar como manejado
-        mark_handled_confirm: "¿Marcar este evento como manejado? Será archivado y omitido en la reproducción."
+        mark_handled_confirm: "¿Marcar este evento como procesado? Su mensaje se archiva y el handler no lo ejecuta."
         metadata: Metadatos
         metadata_labels:
           enqueued: 'Encolado:'

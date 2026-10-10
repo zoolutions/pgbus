@@ -244,7 +244,7 @@ nl:
           state: Status
         headers_section: Headers
         mark_handled: Markeren als Afgehandeld
-        mark_handled_confirm: Deze gebeurtenis als afgehandeld markeren? Deze wordt gearchiveerd en overgeslagen bij het afspelen.
+        mark_handled_confirm: Dit event als verwerkt markeren? Het bericht wordt gearchiveerd en de handler voert het niet uit.
         metadata: Metadata
         metadata_labels:
           enqueued: 'In wachtrij gezet:'

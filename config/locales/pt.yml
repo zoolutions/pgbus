@@ -244,7 +244,7 @@ pt:
           state: Estado
         headers_section: Cabeçalhos
         mark_handled: Marcar como Tratado
-        mark_handled_confirm: Marcar este evento como tratado? Ele será arquivado e ignorado na reprodução.
+        mark_handled_confirm: Marcar este evento como processado? A mensagem é arquivada e o handler não o executa.
         metadata: Metadados
         metadata_labels:
           enqueued: 'Enfileirado:'

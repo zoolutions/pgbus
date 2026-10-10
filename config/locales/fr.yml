@@ -244,7 +244,7 @@ fr:
           state: État
         headers_section: En-têtes
         mark_handled: Marquer comme traité
-        mark_handled_confirm: Marquer cet événement comme traité ? Il sera archivé et ignoré lors du relecture.
+        mark_handled_confirm: Marquer cet événement comme traité ? Son message est archivé et le handler ne l'exécute pas.
         metadata: Métadonnées
         metadata_labels:
           enqueued: 'Mis en file :'

@@ -244,7 +244,7 @@ ja:
           state: 状態
         headers_section: ヘッダー
         mark_handled: 処理済みとしてマーク
-        mark_handled_confirm: このイベントを処理済みとしてマークしますか？アーカイブされ、再生時にスキップされます。
+        mark_handled_confirm: このイベントを処理済みにしますか？メッセージはアーカイブされ、ハンドラーは実行しません。
         metadata: メタデータ
         metadata_labels:
           enqueued: 'キュー投入:'

@@ -312,6 +312,17 @@ RSpec.describe "Events", type: :system do
       end
     end
 
+    it "offers nothing to replay while a claim is unfinished: its message is still in its queue" do
+      visit "/pgbus/events"
+
+      %w[evt-busy evt-silent].each do |event_id|
+        within("turbo-frame#processed-events tr", text: event_id) do
+          expect(page).to have_no_button("Replay")
+          expect(page).to have_no_text("No longer in the archive")
+        end
+      end
+    end
+
     it "shows a processed event's state on its page" do
       visit "/pgbus/events/1"
 

@@ -1087,7 +1087,7 @@ RSpec.describe Pgbus::Web::DataSource do
       allow(mock_connection).to receive(:exec_delete) { |sql, label, binds| cleared << [sql, label, binds] }
       allow(mock_client).to receive(:archive_message)
       allow(mock_client).to receive(:transaction).and_yield(txn)
-      allow(Pgbus::ProcessedEvent).to receive(:insert)
+      allow(Pgbus::ProcessedEvent).to receive_messages(insert: nil, completion_column?: false)
     end
 
     def expect_cleared
@@ -1155,7 +1155,10 @@ RSpec.describe Pgbus::Web::DataSource do
   end
 
   describe "#mark_event_handled" do
-    before { allow(mock_connection).to receive(:exec_delete) }
+    before do
+      allow(mock_connection).to receive(:exec_delete)
+      allow(Pgbus::ProcessedEvent).to receive(:completion_column?).and_return(false)
+    end
 
     let(:event_detail) do
       {
@@ -1164,6 +1167,30 @@ RSpec.describe Pgbus::Web::DataSource do
         "message" => '{"event_id":"evt-123","pgbus_uniqueness_key":"uk-42","payload":{"foo":"bar"}}',
         "headers" => nil, "last_read_at" => nil
       }
+    end
+
+    # A marked event is done: on a two-phase schema the marker must carry
+    # completed_at, or the audit reads it as a claim that went silent and the
+    # Events page promises a re-run that never comes (issue #494).
+    context "when pgbus_processed_events has completed_at" do
+      before do
+        allow(Pgbus::ProcessedEvent).to receive(:completion_column?).and_return(true)
+        allow(mock_connection).to receive(:select_one)
+          .with(anything, "Pgbus Job Detail", [42]).and_return(event_detail)
+        allow(mock_client).to receive(:archive_message)
+        allow(Pgbus::UniquenessKey).to receive(:release!)
+        allow(Pgbus::ProcessedEvent).to receive(:upsert)
+      end
+
+      it "upserts a completed marker, completing a pending claim left by a failed attempt" do
+        expect(data_source.mark_event_handled("task_completion_handler", 42, "TaskCompletionHandler")).to be(true)
+
+        expect(Pgbus::ProcessedEvent).to have_received(:upsert).with(
+          hash_including(event_id: "evt-123", handler_class: "TaskCompletionHandler",
+                         completed_at: kind_of(Time)),
+          unique_by: %i[event_id handler_class], update_only: [:completed_at]
+        )
+      end
     end
 
     it "performs insert -> release -> archive in strict order" do

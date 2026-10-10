@@ -244,7 +244,7 @@ nb:
           state: Tilstand
         headers_section: Overskrifter
         mark_handled: Merk som håndtert
-        mark_handled_confirm: Merk denne hendelsen som håndtert? Den vil bli arkivert og hoppes over ved avspilling.
+        mark_handled_confirm: Merke denne hendelsen som behandlet? Meldingen arkiveres, og handleren kjører den ikke.
         metadata: Metadata
         metadata_labels:
           enqueued: 'Satt i kø:'

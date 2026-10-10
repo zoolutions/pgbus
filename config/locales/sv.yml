@@ -244,7 +244,7 @@ sv:
           state: Status
         headers_section: Headers
         mark_handled: Markera som hanterad
-        mark_handled_confirm: Markera denna händelse som hanterad? Den kommer att arkiveras och hoppas över vid uppspelning.
+        mark_handled_confirm: Markera den här händelsen som hanterad? Meddelandet arkiveras och hanteraren kör den inte.
         metadata: Metadata
         metadata_labels:
           enqueued: 'Köad:'

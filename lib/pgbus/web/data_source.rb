@@ -900,10 +900,7 @@ module Pgbus
         event_id = raw["event_id"]
         return false unless event_id
 
-        ProcessedEvent.insert(
-          { event_id: event_id, handler_class: handler_class, processed_at: Time.now.utc },
-          unique_by: %i[event_id handler_class]
-        )
+        record_event_handled(event_id, handler_class)
         # Release the uniqueness lock while we still hold the payload in
         # memory — otherwise the message is archived but the lock row stays
         # behind, blocking later publishes with the same key. Mirrors
@@ -972,6 +969,21 @@ module Pgbus
           next
         end
         count
+      end
+
+      # A completed marker on a two-phase schema (completed_at): without it the
+      # audit reads the row as a claim that went silent, and a pending claim
+      # left by a failed attempt would stay pending (issue #494). The legacy
+      # schema keeps the single-phase insert.
+      def record_event_handled(event_id, handler_class)
+        now = Time.now.utc
+        row = { event_id: event_id, handler_class: handler_class, processed_at: now }
+        if ProcessedEvent.completion_column?
+          ProcessedEvent.upsert(row.merge(completed_at: now), unique_by: %i[event_id handler_class],
+                                                              update_only: [:completed_at])
+        else
+          ProcessedEvent.insert(row, unique_by: %i[event_id handler_class])
+        end
       end
 
       # The failed row of an event message an action just took out of its

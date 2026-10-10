@@ -244,7 +244,7 @@ it:
           state: Stato
         headers_section: Intestazioni
         mark_handled: Contrassegna come gestito
-        mark_handled_confirm: Contrassegnare questo evento come gestito? Verrà archiviato e saltato durante la riproduzione.
+        mark_handled_confirm: Segnare questo evento come gestito? Il messaggio viene archiviato e l'handler non lo esegue.
         metadata: Metadati
         metadata_labels:
           enqueued: 'Accodato:'

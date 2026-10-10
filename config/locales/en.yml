@@ -244,7 +244,7 @@ en:
           state: State
         headers_section: Headers
         mark_handled: Mark Handled
-        mark_handled_confirm: Mark this event as handled? It will be archived and skipped on replay.
+        mark_handled_confirm: Mark this event as handled? Its message is archived and the handler does not run it.
         metadata: Metadata
         metadata_labels:
           enqueued: 'Enqueued:'

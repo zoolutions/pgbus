@@ -244,7 +244,7 @@ de:
           state: Zustand
         headers_section: Header
         mark_handled: Als bearbeitet markieren
-        mark_handled_confirm: Dieses Ereignis als bearbeitet markieren? Es wird archiviert und bei der Wiedergabe übersprungen.
+        mark_handled_confirm: Dieses Ereignis als verarbeitet markieren? Die Nachricht wird archiviert und der Handler führt sie nicht aus.
         metadata: Metadaten
         metadata_labels:
           enqueued: 'Eingereiht:'
