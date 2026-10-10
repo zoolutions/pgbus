@@ -25,7 +25,7 @@ under `.claude/`.
 5. **NO unsynchronized shared state** — use Mutex or Concurrent primitives
 6. **NO swallowing errors** — log via `Pgbus.logger`, track in `pgbus_failed_events`
 7. **NO `Record` suffix on model classes** — see Model Naming below
-8. **NO hand-formatted time in the dashboard** — no raw `*_at`/`vt`/`*_age_sec` output, no `strftime`/`time_ago_in_words`: use `pgbus_time` / `pgbus_timestamp` / `pgbus_duration` (`Pgbus::Web::TimeFormat`). Enforced by `Pgbus/DashboardTimeFormatting` (Ruby) and `spec/pgbus/web/time_conventions_spec.rb` (ERB)
+8. **NO hand-formatted time in the dashboard** — no raw `*_at`/`vt`/`*_age_sec` output, no `strftime`/`time_ago_in_words`: use `pgbus_time` / `pgbus_timestamp` / `pgbus_absolute_time` for moments, `pgbus_duration` for seconds and `pgbus_ms_duration` for milliseconds (`Pgbus::Web::TimeFormat`; full mapping in `.claude/rules/dashboard.md`). Enforced by `Pgbus/DashboardTimeFormatting` (Ruby) and `spec/pgbus/web/time_conventions_spec.rb` (ERB)
 
 ### Always Do
 1. **TDD**: Write tests BEFORE implementation
@@ -197,7 +197,8 @@ The long form, with the token rules and how to read a violation, is `.claude/rul
    a red page is fixed.
 4. **Build + lint.** `bundle exec rake frontend:css` after any new Tailwind class, `bun run lint:herb`.
    Every timestamp, age and duration goes through the `TimeFormat` helpers (`pgbus_time`,
-   `pgbus_timestamp`, `pgbus_duration`; table in `.claude/rules/dashboard.md`); the time cop and
+   `pgbus_timestamp`, `pgbus_absolute_time`, `pgbus_duration` for seconds, `pgbus_ms_duration` for
+   milliseconds; table in `.claude/rules/dashboard.md`); the time cop and
    `time_conventions_spec.rb` fail on anything else.
 5. **New page?** Add its URL to `lighthouserc.dashboard.json` — the route-coverage example fails
    otherwise, and that file is the page list for both gates.

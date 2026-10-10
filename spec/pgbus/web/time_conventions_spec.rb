@@ -19,7 +19,7 @@ require "pathname"
 RSpec.describe "Dashboard time conventions" do # rubocop:disable RSpec/DescribeClass
   let(:banned_calls) do
     /\b(strftime|time_ago_in_words|distance_of_time_in_words(?:_to_now)?|to_fs|to_formatted_s|iso8601|
-       pgbus_time_ago(?:_future)?|pgbus_job_eta|localize)\b|(?<![\w.])l\(/x
+       pgbus_time_ago(?:_future)?|pgbus_job_eta|localize)\b|(?<![\w.])l\(|\bI18n\.l\(/x
   end
   let(:time_field) { /(?:_at|\Avt|_age|_sec|_seconds|_ms)\z/ }
   # receiver, then any number of [:key] / ["key"] / .name / &.name accesses
@@ -27,12 +27,14 @@ RSpec.describe "Dashboard time conventions" do # rubocop:disable RSpec/DescribeC
   let(:engine_root) { Pathname.new(__dir__).join("..", "..", "..").expand_path }
   let(:view_files) { Dir[engine_root.join("app", "views", "pgbus", "**", "*.erb")] }
 
+  # A trailing .to_s / .to_i / .to_f still prints the raw value.
   def raw_time_output?(expression)
-    match = expression.strip.match(accessor)
+    expression = expression.strip.sub(/(?:&?\.to_[sif])+\z/, "")
+    match = expression.match(accessor)
     return false unless match
 
     last = match[1].scan(/\[:(\w+)\]|\["(\w+)"\]|\.(\w+)/).last&.compact&.first
-    time_field.match?(last || expression.strip[/\A@?(\w+)/, 1])
+    time_field.match?(last || expression[/\A@?(\w+)/, 1])
   end
 
   def output_tags(source) = source.scan(/<%=(.*?)-?%>/m).flatten
@@ -42,7 +44,8 @@ RSpec.describe "Dashboard time conventions" do # rubocop:disable RSpec/DescribeC
   describe "the raw-time-field rule" do
     it "flags a bare time field, with or without a fallback" do
       ["row[:enqueued_at]", '@job["failed_at"]', "entry.created_at", "m[:vt]",
-       'q[:oldest_claimable_age_sec] || "—"', "@stats[:oldest_unpublished_age]", "row[:avg_ms]"]
+       'q[:oldest_claimable_age_sec] || "—"', "@stats[:oldest_unpublished_age]", "row[:avg_ms]",
+       "row[:created_at].to_s", "m[:vt]&.to_s", "q[:oldest_msg_age_sec].to_i"]
         .each { |expression| expect(raw_time_output?(expression)).to be(true), expression }
     end
 
@@ -56,7 +59,7 @@ RSpec.describe "Dashboard time conventions" do # rubocop:disable RSpec/DescribeC
   describe "the banned-call rule" do
     let(:hand_rolled) do
       ['t.strftime("%H:%M")', "time_ago_in_words(x)", "x.to_fs(:short)", "pgbus_time_ago(x)", "x.iso8601",
-       "l(x, format: :short)"]
+       "l(x, format: :short)", "I18n.l(row[:created_at])"]
     end
 
     it "flags hand-rolled formatting" do
