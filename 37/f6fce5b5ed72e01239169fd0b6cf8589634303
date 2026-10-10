@@ -1,0 +1,37 @@
+bin/lighthouse
+  ai_agent 1-106
+AGENTS.md
+  ai_agent 51-53,184-202
+CHANGELOG.md
+  ai_agent 5-6,31
+spec/system/accessibility_spec.rb
+  ai_agent 1-55
+spec/system/support/accessibility.rb
+  ai_agent 1-104
+.claude/rules/testing.md
+  ai_agent 33,69
+.gitignore
+  ai_agent 21
+spec/pgbus/web/lighthouse_runner_spec.rb
+  ai_agent 1-34
+lighthouserc.dashboard.json
+  ai_agent 1-57
+.github/workflows/lighthouse.yml
+  ai_agent 1-96
+.claude/commands/lfg.md
+  ai_agent 210-219,299
+.claude/rules/dashboard.md
+  ai_agent 1-103
+spec/pgbus/web/lighthouse_config_spec.rb
+  ai_agent 1-67
+bun.lock
+  ai_agent 8-10,16-25,42-145,148-159,162-231,234-263,266-277,282-303,306-335,338-349,352-419,422-451,454-461,464-467,484-501,504-511,516-557,560-577,582-593,596-655,657-970
+package.json
+  ai_agent 11-13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "37f6fce5b5ed72e01239169fd0b6cf8589634303",
+  "prompts": {}
+}
