@@ -441,10 +441,58 @@ RSpec.describe Pgbus::Process::Consumer do
     it "increments jobs_processed when a message is routed to the DLQ (poison queue still recycles)" do
       dlq_message = build_message_double(msg_id: 9, message: message_body, read_ct: 99)
       allow(consumer.config).to receive(:max_retries).and_return(5)
+      allow(Pgbus::FailedEventRecorder).to receive(:last_error).and_return(nil)
 
       expect { consumer.send(:handle_message, dlq_message, "q_orders") }
         .to change(consumer, :jobs_processed).by(1)
-      expect(mock_client).to have_received(:move_to_dead_letter).with("q_orders", dlq_message)
+      expect(mock_client).to have_received(:move_to_dead_letter).with("q_orders", dlq_message, headers: kind_of(String))
+    end
+  end
+
+  describe "dead-letter headers in handle_message (issue #495)" do
+    let(:consumer) { described_class.new(topics: ["orders.#"], queue_names: ["q_orders"]) }
+    let(:message_body) { JSON.generate("headers" => { "routing_key" => "orders.created" }) }
+    let(:dlq_message) { build_message_double(msg_id: 9, message: message_body, read_ct: 6, headers: '{"trace_id":"t"}') }
+    let(:dlq_headers) { [] }
+
+    before do
+      allow(consumer.config).to receive(:max_retries).and_return(5)
+      allow(mock_client).to receive(:move_to_dead_letter) { |*, **kw| dlq_headers << kw[:headers] }
+    end
+
+    def headers = JSON.parse(dlq_headers.last)
+    def block = headers.fetch("pgbus_dead_letter")
+
+    it "writes a consumer block naming the physical queue, attempts and max retries" do
+      allow(Pgbus::FailedEventRecorder).to receive(:last_error).and_return(nil)
+
+      consumer.send(:handle_message, dlq_message, "q_orders")
+
+      expect(block).to include(
+        "reason" => "max_retries_exceeded", "source" => "consumer",
+        "source_queue" => consumer.config.queue_name("q_orders"), "attempts" => 6, "max_retries" => 5
+      )
+      expect(headers).to include("trace_id" => "t")
+    end
+
+    it "writes no error keys while no handler error is recorded" do
+      allow(Pgbus::FailedEventRecorder).to receive(:last_error).and_return(nil)
+
+      consumer.send(:handle_message, dlq_message, "q_orders")
+
+      expect(block.keys.grep(/\Aerror_|backtrace/)).to be_empty
+    end
+
+    it "carries a recorded handler error (once #494 records one), read before the move" do
+      allow(Pgbus::FailedEventRecorder).to receive(:last_error)
+        .and_return(error_class: "KeyError", error_message: "key not found", backtrace: nil,
+                    retry_count: 4, failed_at: "2026-10-10T11:59:00.000000Z")
+
+      consumer.send(:handle_message, dlq_message, "q_orders")
+
+      expect(block).to include("error_class" => "KeyError", "error_attempt" => 5)
+      expect(Pgbus::FailedEventRecorder).to have_received(:last_error).with(queue_name: "q_orders", msg_id: 9).ordered
+      expect(mock_client).to have_received(:move_to_dead_letter).ordered
     end
   end
 

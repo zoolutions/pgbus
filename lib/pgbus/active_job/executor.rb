@@ -26,7 +26,10 @@ module Pgbus
         read_count = message.read_ct.to_i
 
         if read_count > config.max_retries
-          handle_dead_letter(message, queue_name, payload, source_queue: source_queue)
+          # Read the last error before clear! deletes the only row that has
+          # it: the DLQ copy carries it in its headers (issue #495).
+          last_error = FailedEventRecorder.last_error(queue_name: queue_name, msg_id: message.msg_id.to_i)
+          handle_dead_letter(message, queue_name, payload, source_queue: source_queue, last_error: last_error)
           FailedEventRecorder.clear!(queue_name: queue_name, msg_id: message.msg_id.to_i)
           signal_concurrency(payload)
           signal_batch_discarded(payload)
@@ -39,7 +42,8 @@ module Pgbus
             job_id: payload["job_id"],
             provider_job_id: payload["provider_job_id"],
             read_ct: read_count,
-            msg_id: message.msg_id.to_i
+            msg_id: message.msg_id.to_i,
+            error: last_error&.dig(:error_class)
           )
           Pgbus.logger.debug { "[Pgbus::Executor] dead_lettered #{log_tag(message, queue_name)} job_class=#{job_class}" }
           return :dead_lettered
@@ -428,20 +432,26 @@ module Pgbus
         defined?(PGMQ::Errors::ConnectionError) && error.is_a?(PGMQ::Errors::ConnectionError)
       end
 
-      def handle_dead_letter(message, queue_name, payload, source_queue: nil)
+      def handle_dead_letter(message, queue_name, payload, source_queue: nil, last_error: nil)
         Pgbus.logger.warn do
           job_class = payload["job_class"] || "unknown"
-          "[Pgbus] Moving job #{job_class} to dead letter queue after #{message.read_ct} attempts"
+          error = last_error ? " (last error: #{last_error[:error_class]})" : ""
+          "[Pgbus] Moving job #{job_class} to dead letter queue after #{message.read_ct} attempts#{error}"
         end
+        headers = DeadLetterHeader.build(
+          existing: message.headers, reason: DeadLetterHeader::REASON_MAX_RETRIES, source: "worker",
+          source_queue: source_queue || config.queue_name(queue_name), attempts: message.read_ct.to_i,
+          max_retries: config.max_retries, error: last_error
+        )
         if source_queue
           client.ensure_dead_letter_queue(queue_name)
           dlq_name = config.dead_letter_queue_name(queue_name)
           client.transaction do |txn|
-            txn.produce(dlq_name, message.message, headers: message.headers)
+            txn.produce(dlq_name, message.message, headers: headers)
             txn.delete(source_queue, message.msg_id.to_i)
           end
         else
-          client.move_to_dead_letter(queue_name, message)
+          client.move_to_dead_letter(queue_name, message, headers: headers)
         end
       end
     end

@@ -945,6 +945,21 @@ RSpec.describe Pgbus::Client do
       expect(mock_pgmq).to have_received(:produce).with("pgbus_test_default_dlq", '{"data":"test"}', headers: nil)
       expect(mock_pgmq).to have_received(:delete).with("pgbus_test_default", 42)
     end
+
+    it "produces the message's own headers by default" do
+      message = build_message_double(msg_id: 42, message: "{}", headers: '{"trace_id":"t"}')
+      client.move_to_dead_letter("default", message)
+
+      expect(mock_pgmq).to have_received(:produce).with("pgbus_test_default_dlq", "{}", headers: '{"trace_id":"t"}')
+    end
+
+    it "produces the given headers instead when headers: is passed" do
+      message = build_message_double(msg_id: 42, message: "{}", headers: '{"trace_id":"t"}')
+      client.move_to_dead_letter("default", message, headers: '{"pgbus_dead_letter":{}}')
+
+      expect(mock_pgmq).to have_received(:produce)
+        .with("pgbus_test_default_dlq", "{}", headers: '{"pgbus_dead_letter":{}}')
+    end
   end
 
   describe "#metrics" do

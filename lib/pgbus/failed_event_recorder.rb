@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "time"
+
 module Pgbus
   # Records job failures to pgbus_failed_events for dashboard visibility.
   # Uses upsert (INSERT ON CONFLICT UPDATE) keyed on (queue_name, msg_id)
@@ -47,6 +49,31 @@ module Pgbus
         false
       end
 
+      # The message's latest recorded failure, read by a mover just before it
+      # dead-letters the message and clears the row (issue #495). failed_at
+      # comes back as an ISO 8601 UTC string whatever the adapter decodes it
+      # to. A failed read returns nil: it must never stop a dead-letter.
+      def last_error(queue_name:, msg_id:)
+        row = connection.select_one(
+          "SELECT error_class, error_message, backtrace, retry_count, failed_at " \
+          "FROM pgbus_failed_events WHERE queue_name = $1 AND msg_id = $2 LIMIT 1",
+          "FailedEvent Last Error",
+          [queue_name, msg_id.to_i]
+        )
+        return unless row
+
+        {
+          error_class: row["error_class"],
+          error_message: row["error_message"],
+          backtrace: row["backtrace"],
+          retry_count: row["retry_count"].to_i,
+          failed_at: iso_utc(row["failed_at"])
+        }
+      rescue StandardError => e
+        Pgbus.logger.debug { "[Pgbus] FailedEvent last_error read failed: #{e.class}: #{e.message}" }
+        nil
+      end
+
       # Drops every row recorded under any of `queue_names`. Called when a
       # queue is dropped: PGMQ restarts msg_ids on recreate, so a surviving
       # row would aim the dashboard's retry/discard at an unrelated message.
@@ -81,6 +108,13 @@ module Pgbus
       end
 
       private
+
+      def iso_utc(value)
+        time = value.is_a?(String) ? Time.parse(value) : value
+        time&.utc&.iso8601(6)
+      rescue ArgumentError
+        value.to_s
+      end
 
       def connection
         if defined?(BusRecord) && BusRecord.connected?

@@ -1,5 +1,9 @@
 # frozen_string_literal: true
 
+# build_message_double calls Time.current; without this a lone spec file run
+# fails depending on example order.
+require "active_support/core_ext/time"
+
 module PgmqDoubles
   def build_mock_pgmq
     double("PGMQ::Client").tap do |pgmq|
