@@ -96,6 +96,22 @@ sv:
         view_tasks: Visa uppgifter
         visible: synliga
     dead_letter:
+      detail:
+        backtrace: Backtrace (första raderna)
+        died: 'Dog:'
+        dlq: 'Dead letter-kö:'
+        error_from_attempt: Fel från försök %{attempt}; försök %{from}–%{to} registrerade inget fel.
+        source: 'Flyttad av:'
+        sources:
+          consumer: händelsekonsument
+          worker: jobb-worker
+        why: Varför den dog
+      filters:
+        all: Alla
+        clear_error_class: Rensa filter
+        error_class: 'Fel: %{error_class}'
+        filter_error_class: Visa bara %{error_class}
+        label: Filtrera dead letters
       index:
         discard_all: Kassera alla
         discard_all_confirm: Kassera permanent alla DLQ-meddelanden?
@@ -115,10 +131,12 @@ sv:
         empty: Dead letter-kön är tom
         full_json_payload: Fullständig JSON-payload
         headers:
-          enqueued: Inlagda
+          actions: Åtgärder
+          attempts: Försök
+          died: Dog
           id: ID
-          job_class: Jobbklass
-          reads: Läser
+          job: Jobb
+          reason: Orsak
           source_queue: Källkö
         headers_section: Rubriker
         job_id: 'Jobb-ID:'
@@ -131,6 +149,16 @@ sv:
           visible_at: 'Synlig vid:'
         retry: Försök igen
         total_label: meddelanden i dead letter-kö
+        view: Visa
+      reasons:
+        error_earlier_attempt_html: 'Omförsök förbrukade. Senast registrerade fel, från försök %{error_attempt}: %{error_class}: %{error_message}'
+        error_html: 'Omförsök förbrukade. Senaste fel: %{error_class}: %{error_message}'
+        event_no_error_html: Hanteraren misslyckades vid %{attempts} leveranser (max %{max}) — inget hanterarfel registrerades
+        no_error_recorded_html: Överskred %{max} omförsök efter %{attempts} läsningar — inget fel registrerades; varje misslyckat försök kraschade innan det kunde rapportera
+        not_recorded_html: Orsak inte registrerad (flyttad till DLQ före pgbus %{version})
+        retried_before:
+          one: Omförsökt från DLQ en gång tidigare.
+          other: Omförsökt från DLQ %{count} gånger tidigare.
       show:
         back: Tillbaka till DLQ
         context: Kontext
@@ -138,8 +166,10 @@ sv:
         discard_confirm: Kassera permanent?
         headers: Rubriker
         labels:
+          attempts: Försök
+          died: Dog
+          dlq: Dead letter-kö
           enqueued_at: Inlagd den
-          read_count: Antal läsningar
           source_queue: Källkö
           visibility_timeout: Synlighetstidsgräns
         not_found: Meddelande hittades inte

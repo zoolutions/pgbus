@@ -5,19 +5,35 @@
 <% if @message %>
   <h1 class="text-2xl font-bold text-gray-900 dark:text-white mb-6"><%= t("pgbus.dead_letter.show.title", id: @message[:msg_id]) %></h1>
 
+  <div class="rounded-lg bg-white dark:bg-gray-800 shadow ring-1 ring-gray-200 dark:ring-gray-700 p-6 mb-6" data-testid="dead-letter-reason">
+    <h2 class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2"><%= t("pgbus.dead_letter.detail.why") %></h2>
+    <p class="text-sm text-gray-900 dark:text-white mb-3"><%= pgbus_dead_letter_reason(@reason) %></p>
+    <%= render "pgbus/dead_letter/error", reason: @reason %>
+    <dl class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div>
+        <dt class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.dead_letter.show.labels.source_queue") %></dt>
+        <dd class="text-sm text-gray-900 dark:text-white"><%= @reason.source_queue %></dd>
+      </div>
+      <div>
+        <dt class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.dead_letter.show.labels.attempts") %></dt>
+        <dd class="text-sm text-gray-900 dark:text-white"><%= pgbus_dead_letter_attempts(@reason) %></dd>
+      </div>
+      <div>
+        <dt class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.dead_letter.show.labels.died") %></dt>
+        <dd class="text-sm text-gray-900 dark:text-white"><%= pgbus_timestamp(@reason.died_at) %></dd>
+      </div>
+    </dl>
+  </div>
+
   <div class="rounded-lg bg-white dark:bg-gray-800 shadow ring-1 ring-gray-200 dark:ring-gray-700 p-6 mb-6">
     <dl class="grid grid-cols-1 gap-4 sm:grid-cols-2">
       <div>
-        <dt class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.dead_letter.show.labels.source_queue") %></dt>
+        <dt class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.dead_letter.show.labels.dlq") %></dt>
         <dd class="text-sm text-gray-900 dark:text-white"><%= @message[:queue_name] %></dd>
       </div>
       <div>
         <dt class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.dead_letter.show.labels.enqueued_at") %></dt>
         <dd class="text-sm text-gray-900 dark:text-white"><%= pgbus_timestamp(@message[:enqueued_at]) %></dd>
-      </div>
-      <div>
-        <dt class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.dead_letter.show.labels.read_count") %></dt>
-        <dd class="text-sm text-gray-900 dark:text-white"><%= @message[:read_ct] %></dd>
       </div>
       <div>
         <dt class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.dead_letter.show.labels.visibility_timeout") %></dt>
@@ -45,13 +61,13 @@
 
   <div class="rounded-lg bg-white dark:bg-gray-800 shadow ring-1 ring-gray-200 dark:ring-gray-700 p-6 mb-6">
     <h2 class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2"><%= t("pgbus.dead_letter.show.payload") %></h2>
-    <pre class="text-xs text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-900 rounded p-4 overflow-x-auto"><%= JSON.pretty_generate(JSON.parse(@message[:message])) rescue @message[:message] %></pre>
+    <pre tabindex="0" class="text-xs text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-900 rounded p-4 overflow-x-auto"><%= JSON.pretty_generate(JSON.parse(@message[:message])) rescue @message[:message] %></pre>
   </div>
 
   <% if @message[:headers] %>
     <div class="rounded-lg bg-white dark:bg-gray-800 shadow ring-1 ring-gray-200 dark:ring-gray-700 p-6 mb-6">
       <h2 class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2"><%= t("pgbus.dead_letter.show.headers") %></h2>
-      <pre class="text-xs text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-900 rounded p-4 overflow-x-auto"><%= JSON.pretty_generate(JSON.parse(@message[:headers])) rescue @message[:headers] %></pre>
+      <pre tabindex="0" class="text-xs text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-900 rounded p-4 overflow-x-auto"><%= JSON.pretty_generate(JSON.parse(@message[:headers])) rescue @message[:headers] %></pre>
     </div>
   <% end %>
 

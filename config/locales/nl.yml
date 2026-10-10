@@ -96,6 +96,22 @@ nl:
         view_tasks: Bekijk taken
         visible: zichtbaar
     dead_letter:
+      detail:
+        backtrace: Backtrace (eerste regels)
+        died: 'Gestorven:'
+        dlq: 'Dead letter-wachtrij:'
+        error_from_attempt: Fout uit poging %{attempt}; pogingen %{from}–%{to} registreerden geen fout.
+        source: 'Verplaatst door:'
+        sources:
+          consumer: event-consumer
+          worker: job-worker
+        why: Waarom hij stierf
+      filters:
+        all: Alle
+        clear_error_class: Filter wissen
+        error_class: 'Fout: %{error_class}'
+        filter_error_class: Toon alleen %{error_class}
+        label: Dead letters filteren
       index:
         discard_all: Alles weggooien
         discard_all_confirm: Alle DLQ-berichten permanent verwijderen?
@@ -115,10 +131,12 @@ nl:
         empty: Dead letter queue is leeg
         full_json_payload: Volledige JSON-inhoud
         headers:
-          enqueued: In de wachtrij geplaatst
+          actions: Acties
+          attempts: Pogingen
+          died: Gestorven
           id: ID
-          job_class: Taakklasse
-          reads: Leest
+          job: Job
+          reason: Reden
           source_queue: Bronwachtrij
         headers_section: Headers
         job_id: 'Taak-ID:'
@@ -131,6 +149,16 @@ nl:
           visible_at: 'Zichtbaar op:'
         retry: Opnieuw proberen
         total_label: berichten in dead letter-wachtrij
+        view: Bekijk
+      reasons:
+        error_earlier_attempt_html: 'Herhaalpogingen op. Laatst geregistreerde fout, uit poging %{error_attempt}: %{error_class}: %{error_message}'
+        error_html: 'Herhaalpogingen op. Laatste fout: %{error_class}: %{error_message}'
+        event_no_error_html: Handler faalde bij %{attempts} afleveringen (max %{max}) — geen handlerfout geregistreerd
+        no_error_recorded_html: "%{max} herhaalpogingen overschreden na %{attempts} keer lezen — geen fout geregistreerd; elke mislukte poging crashte voordat die kon rapporteren"
+        not_recorded_html: Reden niet geregistreerd (naar de DLQ verplaatst vóór pgbus %{version})
+        retried_before:
+          one: Al eens eerder vanuit de DLQ opnieuw geprobeerd.
+          other: Al %{count} keer eerder vanuit de DLQ opnieuw geprobeerd.
       show:
         back: Terug naar DLQ
         context: Context
@@ -138,8 +166,10 @@ nl:
         discard_confirm: Permanent verwerpen?
         headers: Headers
         labels:
+          attempts: Pogingen
+          died: Gestorven
+          dlq: Dead letter-wachtrij
           enqueued_at: In de wachtrij geplaatst op
-          read_count: Aantal keer gelezen
           source_queue: Bronwachtrij
           visibility_timeout: Zichtbaarheidstijdlimiet
         not_found: Bericht niet gevonden

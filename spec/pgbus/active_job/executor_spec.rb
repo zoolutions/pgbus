@@ -26,7 +26,7 @@ RSpec.describe Pgbus::ActiveJob::Executor do
     stub_const("Pgbus::JobStat", Class.new)
     allow(Pgbus::JobStat).to receive_messages(record!: nil, table_exists?: true)
     # Stub failure tracking
-    allow(Pgbus::FailedEventRecorder).to receive_messages(record!: nil, clear!: nil)
+    allow(Pgbus::FailedEventRecorder).to receive_messages(record!: nil, clear!: nil, last_error: nil)
   end
 
   describe "#execute" do
@@ -146,12 +146,106 @@ RSpec.describe Pgbus::ActiveJob::Executor do
     context "when read_ct exceeds max_retries (DLQ routing)" do
       let(:message) { build_message_double(msg_id: 7, message: message_json, read_ct: config.max_retries + 1) }
 
+      let(:last_error) do
+        { error_class: "Stripe::CardError", error_message: "Your card was declined",
+          backtrace: "app/jobs/pay.rb:12", retry_count: config.max_retries - 1,
+          failed_at: "2026-10-10T11:59:00.000000Z" }
+      end
+
+      let(:dlq_headers) { [] }
+
+      before { allow(mock_client).to receive(:move_to_dead_letter) { |*, **kw| dlq_headers << kw[:headers] } }
+
+      def dead_letter_block = Pgbus::DeadLetterHeader.parse(dlq_headers.last)
+
       it "moves message to dead letter queue and returns :dead_lettered" do
         result = executor.execute(message, queue_name)
 
-        expect(mock_client).to have_received(:move_to_dead_letter).with(queue_name, message)
+        expect(mock_client).to have_received(:move_to_dead_letter).with(queue_name, message, headers: kind_of(String))
         expect(ActiveJob::Base).not_to have_received(:deserialize)
         expect(result).to eq(:dead_lettered)
+      end
+
+      it "writes why the job died into the DLQ message headers" do
+        allow(Pgbus::FailedEventRecorder).to receive(:last_error).and_return(last_error)
+
+        executor.execute(message, queue_name)
+
+        expect(dead_letter_block).to include(
+          "reason" => "max_retries_exceeded", "source" => "worker",
+          "source_queue" => config.queue_name(queue_name),
+          "attempts" => config.max_retries + 1, "max_retries" => config.max_retries,
+          "error_class" => "Stripe::CardError", "error_message" => "Your card was declined",
+          "backtrace" => "app/jobs/pay.rb:12", "error_attempt" => config.max_retries
+        )
+        expect(Pgbus::FailedEventRecorder).to have_received(:last_error).with(queue_name: queue_name, msg_id: 7)
+      end
+
+      it "keeps the message's own headers next to the block" do
+        message = build_message_double(msg_id: 7, message: message_json, read_ct: config.max_retries + 1,
+                                       headers: '{"trace_id":"t-1"}')
+        headers = nil
+        allow(mock_client).to receive(:move_to_dead_letter) { |*, **kw| headers = kw[:headers] }
+
+        executor.execute(message, queue_name)
+
+        expect(JSON.parse(headers)).to include("trace_id" => "t-1", "pgbus_dead_letter" => a_kind_of(Hash))
+      end
+
+      it "reads the last error before clearing its row" do
+        allow(Pgbus::FailedEventRecorder).to receive(:last_error).and_return(last_error)
+
+        executor.execute(message, queue_name)
+
+        expect(Pgbus::FailedEventRecorder).to have_received(:last_error).ordered
+        expect(mock_client).to have_received(:move_to_dead_letter).ordered
+        expect(Pgbus::FailedEventRecorder).to have_received(:clear!).ordered
+      end
+
+      it "writes no error keys when no failure was recorded" do
+        executor.execute(message, queue_name)
+
+        expect(dead_letter_block.keys.grep(/\Aerror_|backtrace/)).to be_empty
+      end
+
+      it "carries the error class on pgbus.job_dead_lettered" do
+        allow(Pgbus::FailedEventRecorder).to receive(:last_error).and_return(last_error)
+
+        executor.execute(message, queue_name)
+
+        expect(ActiveSupport::Notifications).to have_received(:instrument)
+          .with("pgbus.job_dead_lettered", hash_including(error: "Stripe::CardError"))
+      end
+
+      it "carries error: nil on pgbus.job_dead_lettered when nothing was recorded" do
+        executor.execute(message, queue_name)
+
+        expect(ActiveSupport::Notifications).to have_received(:instrument)
+          .with("pgbus.job_dead_lettered", hash_including(error: nil))
+      end
+
+      context "when the worker read from a priority sub-queue" do
+        let(:txn) { double("txn", delete: true) }
+        let(:produced) { [] }
+
+        before do
+          allow(txn).to receive(:produce) { |*, **kw| produced << kw[:headers] }
+          allow(mock_client).to receive(:transaction).and_yield(txn)
+        end
+
+        it "writes the same block, naming the physical sub-queue, and deletes from it" do
+          allow(Pgbus::FailedEventRecorder).to receive(:last_error).and_return(last_error)
+
+          executor.execute(message, queue_name, source_queue: "pgbus_test_default_p2")
+
+          expect(txn).to have_received(:produce)
+            .with(config.dead_letter_queue_name(queue_name), message_json, headers: kind_of(String))
+          expect(txn).to have_received(:delete).with("pgbus_test_default_p2", 7)
+          expect(Pgbus::DeadLetterHeader.parse(produced.last)).to include(
+            "source" => "worker", "source_queue" => "pgbus_test_default_p2", "error_class" => "Stripe::CardError"
+          )
+          expect(mock_client).not_to have_received(:move_to_dead_letter)
+        end
       end
 
       it "clears any prior failed event record" do

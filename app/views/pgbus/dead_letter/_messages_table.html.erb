@@ -1,4 +1,29 @@
-<turbo-frame id="dlq-messages" data-auto-refresh data-src="<%= pgbus.dead_letter_index_path(frame: 'list', page: @page) %>">
+<%# Dead-letter list (issue #495). Every row says why the message died, read
+    from the pgbus_dead_letter header block by DeadLetterReason; a row's
+    expansion is the <tr> after it, shown by CSS (.pgbus-job-detail in
+    tailwind.css) while the ID cell's <details> is open, like the Jobs list.
+    @list_path (->(extra) { url }) carries the dlq/error_class filters into
+    the frame source, the chips and the pager. %>
+<% columns = @messages.any? ? 8 : 7 %>
+<turbo-frame id="dlq-messages" data-auto-refresh data-src="<%= @list_path.call(frame: "list", page: (@page if @page > 1)) %>">
+  <nav class="mb-4 flex flex-wrap items-center gap-2" aria-label="<%= t("pgbus.dead_letter.filters.label") %>" data-testid="dlq-filters">
+    <% [nil, *@dlq_counts.keys].each do |name| %>
+      <% active = name == @dlq %>
+      <a href="<%= @list_path.call(dlq: name, page: nil) %>" data-turbo-frame="_top"
+         aria-current="<%= active ? "page" : "false" %>"
+         class="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium <%= active ? 'bg-gray-800 text-white dark:bg-gray-700' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white' %>">
+        <span><%= name || t("pgbus.dead_letter.filters.all") %></span>
+        <span class="rounded-full px-2 py-0.5 text-xs <%= active ? 'bg-gray-600 text-white' : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200' %>"><%= number_with_delimiter(name ? @dlq_counts[name] : @dlq_counts.values.sum) %></span>
+      </a>
+    <% end %>
+    <% if @error_class %>
+      <span class="inline-flex items-center gap-2 rounded-md bg-red-50 dark:bg-red-900/30 px-3 py-1 text-sm text-red-800 dark:text-red-200" data-testid="dlq-error-filter">
+        <%= t("pgbus.dead_letter.filters.error_class", error_class: @error_class) %>
+        <%= pgbus_link_to t("pgbus.dead_letter.filters.clear_error_class"), @list_path.call(error_class: nil, page: nil),
+              size: :sm, tone: :red, data: { turbo_frame: "_top" } %>
+      </span>
+    <% end %>
+  </nav>
   <%# Count badge lives inside the frame so it refreshes in lockstep with the table. %>
   <% if @total_count && @total_count > 0 %>
     <p class="mb-3 text-sm text-gray-500 dark:text-gray-400">
@@ -21,85 +46,23 @@
                      class="h-4 w-4 rounded border-gray-300 text-indigo-600 dark:text-indigo-400 focus:ring-indigo-600">
             </th>
           <% end %>
-          <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.dead_letter.messages_table.headers.id") %></th>
-          <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.dead_letter.messages_table.headers.job_class") %></th>
-          <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.dead_letter.messages_table.headers.source_queue") %></th>
-          <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.dead_letter.messages_table.headers.enqueued") %></th>
-          <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.dead_letter.messages_table.headers.reads") %></th>
+          <% %w[id job source_queue died attempts reason].each do |header| %>
+            <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.dead_letter.messages_table.headers.#{header}") %></th>
+          <% end %>
+          <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.dead_letter.messages_table.headers.actions") %></th>
         </tr>
       </thead>
       <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
-        <% @messages.each do |m| %>
-          <% payload = pgbus_parse_message(m[:message]) %>
-          <% source_queue = m[:queue_name].to_s.delete_suffix(Pgbus::DEAD_LETTER_SUFFIX) %>
-          <tr>
-            <td class="w-10 px-4 py-3 align-top">
-              <input type="checkbox" data-bulk-item data-pgbus-action="bulk-row-toggle"
-                     aria-label="<%= t("pgbus.helpers.bulk_select_row", id: m[:msg_id]) %>"
-                     data-queue-name="<%= m[:queue_name] %>" data-msg-id="<%= m[:msg_id] %>"
-                     class="h-4 w-4 rounded border-gray-300 text-indigo-600 dark:text-indigo-400 focus:ring-indigo-600 mt-1">
-              <input type="hidden" name="messages[][queue_name]" value="<%= m[:queue_name] %>" form="bulk-discard-dlq-form" disabled>
-              <input type="hidden" name="messages[][msg_id]" value="<%= m[:msg_id] %>" form="bulk-discard-dlq-form" disabled>
-            </td>
-            <td colspan="5" class="p-0">
-              <details class="group">
-                <summary class="flex cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 list-none">
-                  <span class="w-16 shrink-0 px-4 py-3 text-sm font-mono text-gray-900 dark:text-white"><%= m[:msg_id] %></span>
-                  <span class="flex-1 px-4 py-3 text-sm font-medium text-gray-900 dark:text-white"><%= payload["job_class"] || "—" %></span>
-                  <span class="w-40 shrink-0 px-4 py-3 text-sm text-gray-700 dark:text-gray-200"><%= source_queue %></span>
-                  <span class="w-28 shrink-0 px-4 py-3 text-sm text-gray-500 dark:text-gray-400"><%= pgbus_time(m[:enqueued_at]) %></span>
-                  <span class="w-16 shrink-0 px-4 py-3 text-sm text-gray-500 dark:text-gray-400"><%= m[:read_ct] %></span>
-                </summary>
-                <div class="px-4 pb-4 bg-gray-50 dark:bg-gray-900 border-t border-gray-100 dark:border-gray-700">
-                  <div class="flex items-center justify-between mt-3 mb-3">
-                    <span class="text-xs font-mono text-gray-500 dark:text-gray-400"><%= t("pgbus.dead_letter.messages_table.job_id") %> <%= payload["job_id"] %></span>
-                    <div class="flex space-x-2">
-                      <%= pgbus_button_to t("pgbus.dead_letter.messages_table.retry"), pgbus.retry_dead_letter_path(m[:msg_id], queue_name: m[:queue_name]), method: :post,
-                            variant: :primary, size: :sm,
-                            data: { turbo_frame: "_top" } %>
-                      <%= pgbus_button_to t("pgbus.dead_letter.messages_table.discard"), pgbus.discard_dead_letter_path(m[:msg_id], queue_name: m[:queue_name]), method: :post,
-                            variant: :danger, size: :sm,
-                            data: { turbo_confirm: t("pgbus.dead_letter.messages_table.discard_confirm"), turbo_frame: "_top" } %>
-                    </div>
-                  </div>
-                  <div class="grid grid-cols-2 gap-4 mb-3">
-                    <div>
-                      <span class="text-xs font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.dead_letter.messages_table.arguments") %></span>
-                      <pre class="text-xs text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 rounded p-2 mt-1 overflow-x-auto max-h-40"><%= JSON.pretty_generate(payload["arguments"] || []) rescue "—" %></pre>
-                    </div>
-                    <div>
-                      <span class="text-xs font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.dead_letter.messages_table.metadata") %></span>
-                      <div class="text-xs text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 rounded p-2 mt-1 space-y-1">
-                        <% if payload["queue_name"] %><p><strong><%= t("pgbus.dead_letter.messages_table.metadata_labels.queue") %></strong> <%= payload["queue_name"] %></p><% end %>
-                        <% if payload["priority"] %><p><strong><%= t("pgbus.dead_letter.messages_table.metadata_labels.priority") %></strong> <%= payload["priority"] %></p><% end %>
-                        <% if payload["executions"] %><p><strong><%= t("pgbus.dead_letter.messages_table.metadata_labels.executions") %></strong> <%= payload["executions"] %></p><% end %>
-                        <% if m[:vt] %><p><strong><%= t("pgbus.dead_letter.messages_table.metadata_labels.visible_at") %></strong> <%= pgbus_timestamp(m[:vt]) %></p><% end %>
-                        <% if m[:last_read_at] %><p><strong><%= t("pgbus.dead_letter.messages_table.metadata_labels.last_read") %></strong> <%= pgbus_timestamp(m[:last_read_at]) %></p><% end %>
-                      </div>
-                    </div>
-                  </div>
-                  <details class="mt-2">
-                    <summary class="text-xs font-medium text-gray-500 dark:text-gray-400 cursor-pointer hover:text-gray-700 dark:hover:text-gray-200"><%= t("pgbus.dead_letter.messages_table.full_json_payload") %></summary>
-                    <pre class="text-xs text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 rounded p-2 mt-1 overflow-x-auto max-h-96"><%= JSON.pretty_generate(payload) rescue m[:message] %></pre>
-                  </details>
-                  <% if m[:headers] %>
-                    <details class="mt-2">
-                      <summary class="text-xs font-medium text-gray-500 dark:text-gray-400 cursor-pointer hover:text-gray-700 dark:hover:text-gray-200"><%= t("pgbus.dead_letter.messages_table.headers_section") %></summary>
-                      <pre class="text-xs text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 rounded p-2 mt-1 overflow-x-auto"><%= JSON.pretty_generate(JSON.parse(m[:headers])) rescue m[:headers] %></pre>
-                    </details>
-                  <% end %>
-                </div>
-              </details>
-            </td>
-          </tr>
+        <% @dlq_rows.each do |m, reason| %>
+          <%= render "pgbus/dead_letter/row", m: m, reason: reason, columns: columns %>
         <% end %>
         <% if @messages.empty? %>
-          <%# No rows means no checkbox column: five columns. %>
-          <%= render "pgbus/shared/empty_row", colspan: 5, message: t("pgbus.dead_letter.messages_table.empty") %>
+          <%# No rows means no checkbox column. %>
+          <%= render "pgbus/shared/empty_row", colspan: columns, message: t("pgbus.dead_letter.messages_table.empty") %>
         <% end %>
       </tbody>
     </table>
     <%= render "pgbus/shared/pager", page: @page, per_page: @per_page, shown: @messages.size, total_count: @total_count.to_i,
-          page_path: ->(n) { pgbus.dead_letter_index_path(page: n) } %>
+          page_path: ->(n) { @list_path.call(page: n) } %>
   </div>
 </turbo-frame>

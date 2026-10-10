@@ -5,6 +5,7 @@ require "action_view"
 require "active_support/testing/time_helpers"
 
 require_relative "../../../app/helpers/pgbus/application_helper"
+require_relative "../../../app/helpers/pgbus/button_helper"
 require_relative "../../../lib/pgbus/web/payload_filter"
 
 RSpec.describe Pgbus::ApplicationHelper do
@@ -357,6 +358,67 @@ RSpec.describe Pgbus::ApplicationHelper do
         result = helper.pgbus_parse_message(message)
         expect(result["password"]).to eq("s3cret")
       end
+    end
+  end
+
+  describe "dead-letter helpers (issue #495)" do
+    let(:link_helper) do
+      Class.new do
+        include ActionView::Helpers::TagHelper
+        include ActionView::Helpers::OutputSafetyHelper
+        include ActionView::Helpers::TranslationHelper
+        include ActionView::Helpers::UrlHelper
+        include Pgbus::ButtonHelper
+        include Pgbus::ApplicationHelper
+      end.new
+    end
+    let(:error) { { error_class: "Stripe::CardError", error_message: "<b>declined</b>", retry_count: 4 } }
+
+    def reason(headers)
+      Pgbus::Web::DeadLetterReason.present({ queue_name: "pgbus_default_dlq", enqueued_at: nil, headers: headers })
+    end
+
+    def dead(error: nil, existing: nil)
+      Pgbus::DeadLetterHeader.build(existing: existing, reason: "max_retries_exceeded", source: "worker",
+                                    source_queue: "pgbus_default", attempts: 6, max_retries: 5, error: error)
+    end
+
+    it "says what killed the job and escapes the error message" do
+      html = helper.pgbus_dead_letter_reason(reason(dead(error: error)))
+
+      expect(html).to be_html_safe
+      expect(html).to include("Last error: Stripe::CardError: &lt;b&gt;declined&lt;/b&gt;")
+    end
+
+    it "links the error class to the filtered list when given a filter path" do
+      path = ->(extra) { "/pgbus/dlq?error_class=#{extra[:error_class]}" }
+      html = link_helper.pgbus_dead_letter_reason(reason(dead(error: error)), filter_path: path)
+
+      expect(html).to include('href="/pgbus/dlq?error_class=Stripe::CardError"', ">Stripe::CardError</a>")
+    end
+
+    it "appends how often the message came back out of the DLQ" do
+      expect(helper.pgbus_dead_letter_reason(reason(dead(existing: '{"pgbus_dlq_retries":2}'))))
+        .to include("Retried from the DLQ 2 times before.")
+    end
+
+    it "explains a legacy row" do
+      expect(helper.pgbus_dead_letter_reason(reason(nil)))
+        .to eq("Reason not recorded (dead-lettered before pgbus #{Pgbus::DeadLetterHeader::SINCE})")
+    end
+
+    it "shows attempts against the retry limit, or a dash for a legacy row" do
+      expect(helper.pgbus_dead_letter_attempts(reason(dead))).to eq("6/5")
+      expect(helper.pgbus_dead_letter_attempts(reason(nil))).to eq("—")
+    end
+
+    it "names a job by class and an event by routing key, from the raw message" do
+      expect(helper.pgbus_dead_letter_job('{"job_class":"PayJob"}')).to eq("PayJob")
+      expect(helper.pgbus_dead_letter_job('{"headers":{"routing_key":"orders.created"}}')).to eq("orders.created")
+      expect(helper.pgbus_dead_letter_job('{"routing_key":"orders.paid"}')).to eq("orders.paid")
+      expect(helper.pgbus_dead_letter_job('{"headers":"x"}')).to eq("—")
+      expect(helper.pgbus_dead_letter_job("not json")).to eq("—")
+      expect(helper.pgbus_dead_letter_job(nil)).to eq("—")
     end
   end
 end

@@ -75,13 +75,25 @@ module Pgbus
       def failed_events_count = @failed_events_list.size
       def failed_event(id) = @failed_events_list.find { |e| e["id"].to_s == id.to_s }
 
-      def dlq_messages(page: 1, per_page: 25)
+      def dlq_messages(page: 1, per_page: 25, dlq: nil, error_class: nil)
         offset = (page - 1) * per_page
-        @dlq_messages_list.slice(offset, per_page) || []
+        filtered_dlq_messages(dlq, error_class).slice(offset, per_page) || []
       end
 
-      def dlq_total_count = @dlq_messages_list.size
-      def dlq_message_detail(msg_id) = @dlq_messages_list.find { |m| m[:msg_id].to_s == msg_id.to_s }
+      def dlq_total_count(dlq: nil, error_class: nil) = filtered_dlq_messages(dlq, error_class).size
+      def dlq_counts_by_queue = @dlq_messages_list.group_by { |m| m[:queue_name] }.transform_values(&:size)
+
+      def filtered_dlq_messages(dlq, error_class)
+        @dlq_messages_list.select do |m|
+          (dlq.nil? || m[:queue_name] == dlq) &&
+            (error_class.nil? || Pgbus::DeadLetterHeader.parse(m[:headers])&.dig("error_class") == error_class)
+        end
+      end
+
+      def dlq_message_detail(msg_id, queue_name: nil)
+        @dlq_messages_list.find { |m| m[:msg_id].to_s == msg_id.to_s && (queue_name.nil? || m[:queue_name] == queue_name) }
+      end
+
       def processed_events(page: 1, per_page: 25) = @events_list
       def processed_events_count = @events_list.size
       def processed_event(id) = @events_list.find { |e| e["id"].to_s == id.to_s }

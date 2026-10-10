@@ -246,7 +246,7 @@ module Pgbus
 
         if message.read_ct.to_i > config.max_retries
           Pgbus.logger.warn { "[Pgbus] Consumer moving message #{message.msg_id} to DLQ after #{message.read_ct} reads" }
-          Pgbus.client.move_to_dead_letter(queue_name, message)
+          dead_letter(message, queue_name)
           record_stat(message, queue_name, "dead_lettered", execution_start)
           return
         end
@@ -279,6 +279,20 @@ module Pgbus
         # never trip on a poison/all-failing queue: the exact unbounded-memory
         # scenario recycling exists to bound.
         @jobs_processed.increment
+      end
+
+      # Order: read the last error, move with the dead-letter block, then
+      # clear the failed-event row (#494 adds the clear! after the move).
+      # Until #494 records handler failures, last_error is nil and the block
+      # has no error_* keys.
+      def dead_letter(message, queue_name)
+        last_error = FailedEventRecorder.last_error(queue_name: queue_name, msg_id: message.msg_id.to_i)
+        headers = DeadLetterHeader.build(
+          existing: message.headers, reason: DeadLetterHeader::REASON_MAX_RETRIES, source: "consumer",
+          source_queue: config.queue_name(queue_name), attempts: message.read_ct.to_i,
+          max_retries: config.max_retries, error: last_error
+        )
+        Pgbus.client.move_to_dead_letter(queue_name, message, headers: headers)
       end
 
       # Run every handler that owns this message, with the message's visibility

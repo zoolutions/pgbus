@@ -92,6 +92,48 @@ RSpec.describe Pgbus::FailedEventRecorder do
     end
   end
 
+  describe ".last_error" do
+    let(:row) do
+      { "error_class" => "Stripe::CardError", "error_message" => "declined", "backtrace" => "a.rb:1\nb.rb:2",
+        "retry_count" => 4, "failed_at" => Time.utc(2026, 10, 10, 11, 59) }
+    end
+
+    it "returns the recorded error for the message" do
+      allow(mock_connection).to receive(:select_one).and_return(row)
+
+      expect(described_class.last_error(queue_name: "default", msg_id: 42)).to eq(
+        error_class: "Stripe::CardError", error_message: "declined", backtrace: "a.rb:1\nb.rb:2",
+        retry_count: 4, failed_at: "2026-10-10T11:59:00.000000Z"
+      )
+      expect(mock_connection).to have_received(:select_one).with(
+        a_string_including("FROM pgbus_failed_events WHERE queue_name = $1 AND msg_id = $2"),
+        "FailedEvent Last Error",
+        ["default", 42]
+      )
+    end
+
+    it "normalizes a string failed_at to UTC ISO 8601" do
+      allow(mock_connection).to receive(:select_one).and_return(row.merge("failed_at" => "2026-10-10 13:59:00+02"))
+
+      expect(described_class.last_error(queue_name: "default", msg_id: 42)[:failed_at])
+        .to eq("2026-10-10T11:59:00.000000Z")
+    end
+
+    it "returns nil when no failure was recorded" do
+      allow(mock_connection).to receive(:select_one).and_return(nil)
+
+      expect(described_class.last_error(queue_name: "default", msg_id: 42)).to be_nil
+    end
+
+    it "returns nil and logs at debug when the query raises" do
+      allow(mock_connection).to receive(:select_one).and_raise(ActiveRecord::StatementInvalid, "table missing")
+      allow(Pgbus.logger).to receive(:debug)
+
+      expect(described_class.last_error(queue_name: "default", msg_id: 42)).to be_nil
+      expect(Pgbus.logger).to have_received(:debug)
+    end
+  end
+
   describe ".clear!" do
     it "deletes the failed event for the given queue and msg_id" do
       allow(mock_connection).to receive(:exec_delete)

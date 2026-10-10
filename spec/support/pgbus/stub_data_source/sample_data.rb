@@ -121,7 +121,7 @@ module Pgbus
         end
 
         def sample_stats
-          { total_queues: 7, total_depth: 144, total_visible: 114, active_processes: 4, failed_count: 5, dlq_depth: 3,
+          { total_queues: 8, total_depth: 145, total_visible: 115, active_processes: 4, failed_count: 5, dlq_depth: 4,
             recurring_count: PAGED_ROWS, throughput_rate: 42.7, total_dead_tuples: 1_250, tables_needing_vacuum: 1,
             oldest_transaction_age_sec: 8, parked_total: 5, oldest_parked_age_sec: 300, slots_held: 3,
             keys_at_limit: 1 }
@@ -144,7 +144,9 @@ module Pgbus
             { name: "pgbus_default_p1", queue_length: 9, queue_visible_length: 9, parked_length: 0,
               oldest_msg_age_sec: 420, oldest_claimable_age_sec: 420, newest_msg_age_sec: 12, total_messages: 3_900 },
             { name: "pgbus_default_dlq", queue_length: 3, queue_visible_length: 3, parked_length: 0,
-              oldest_msg_age_sec: 7200, oldest_claimable_age_sec: 7200, newest_msg_age_sec: 3600, total_messages: 47 }
+              oldest_msg_age_sec: 18_000, oldest_claimable_age_sec: 18_000, newest_msg_age_sec: 3600, total_messages: 47 },
+            { name: "pgbus_events_dlq", queue_length: 1, queue_visible_length: 1, parked_length: 0,
+              oldest_msg_age_sec: 900, oldest_claimable_age_sec: 900, newest_msg_age_sec: 900, total_messages: 4 }
           ]
         end
 
@@ -224,17 +226,50 @@ module Pgbus
           (now + 120).to_f if index == 3
         end
 
+        # One row per thing the DLQ page explains (issue #495): a job that died
+        # of a recorded error, one whose last attempts crashed silently and was
+        # already retried from the DLQ once, an event whose handler error was
+        # not recorded, and a legacy row dead-lettered before the header existed.
         def sample_dlq_messages(now)
           [
-            { msg_id: 501, queue_name: "pgbus_default_dlq", read_ct: 6, enqueued_at: (now - 7200).utc.iso8601,
-              vt: (now - 3600).utc.iso8601, last_read_at: (now - 3600).utc.iso8601, headers: nil,
+            { msg_id: 501, queue_name: "pgbus_default_dlq", read_ct: 0, enqueued_at: (now - 7200).utc.iso8601,
+              vt: (now - 7200).utc.iso8601, last_read_at: nil,
+              headers: sample_dead_letter(now - 7200, "worker", "pgbus_default",
+                                          error_class: "Stripe::CardError", error_message: "Your card was declined",
+                                          retry_count: 4, backtrace: sample_backtrace("process_payment_job")),
               message: { job_class: "ProcessPaymentJob", job_id: "dlq-aaa", arguments: [{ amount: 99.99 }],
                          priority: 1 }.to_json },
-            { msg_id: 502, queue_name: "pgbus_default_dlq", read_ct: 4, enqueued_at: now - 18_000,
-              vt: now - 14_400, last_read_at: now - 14_400, headers: nil,
+            { msg_id: 502, queue_name: "pgbus_default_dlq", read_ct: 0, enqueued_at: now - 18_000,
+              vt: now - 18_000, last_read_at: nil, headers: nil,
               message: { job_class: "SyncInventoryJob", job_id: "dlq-bbb", arguments: [{ sku: "WIDGET-42" }],
-                         priority: 2 }.to_json }
+                         priority: 2 }.to_json },
+            { msg_id: 503, queue_name: "pgbus_default_dlq", read_ct: 0, enqueued_at: (now - 3600).utc.iso8601,
+              vt: (now - 3600).utc.iso8601, last_read_at: nil,
+              headers: sample_dead_letter(
+                now - 3600, "worker", "pgbus_default_p1",
+                existing: '{"pgbus_dlq_retries":1}', error_class: "PG::ConnectionBad", retry_count: 2,
+                error_message: "connection to server at \"10.0.4.12\", port 5432 failed",
+                backtrace: sample_backtrace("generate_report_job")
+              ),
+              message: { job_class: "GenerateReportJob", job_id: "dlq-ccc", arguments: [{ report_id: 7 }] }.to_json },
+            { msg_id: 41, queue_name: "pgbus_events_dlq", read_ct: 0, enqueued_at: now - 900,
+              vt: now - 900, last_read_at: nil, headers: sample_dead_letter(now - 900, "consumer", "pgbus_events"),
+              message: { event_id: "evt-41", payload: { order_id: 1042 }, published_at: (now - 1500).utc.iso8601,
+                         headers: { routing_key: "orders.created" } }.to_json }
           ]
+        end
+
+        def sample_dead_letter(died_at, source, source_queue, existing: nil, **error)
+          Pgbus::DeadLetterHeader.build(
+            existing: existing, reason: Pgbus::DeadLetterHeader::REASON_MAX_RETRIES, source: source,
+            source_queue: source_queue, attempts: 6, max_retries: 5, now: died_at.utc,
+            error: error.empty? ? nil : error.merge(failed_at: (died_at - 60).utc.iso8601)
+          )
+        end
+
+        def sample_backtrace(file)
+          ["app/jobs/#{file}.rb:14:in 'perform'", "lib/pgbus/active_job/executor.rb:211:in 'execute_job'",
+           "activejob (8.1.0) lib/active_job/execution.rb:32:in 'perform_now'"].join("\n")
         end
 
         def sample_processes(now)

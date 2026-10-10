@@ -2,17 +2,28 @@
 
 module Pgbus
   class DeadLetterController < ApplicationController
+    ERROR_CLASS_MAX = 200
+
     def index
       @page = page_param
       @per_page = per_page
-      @messages = data_source.dlq_messages(page: @page, per_page: @per_page)
-      @total_count = data_source.dlq_total_count
+      @dlq = dlq_param
+      @error_class = error_class_param
+      filters = { dlq: @dlq, error_class: @error_class }
+      @messages = data_source.dlq_messages(page: @page, per_page: @per_page, **filters)
+      @total_count = data_source.dlq_total_count(**filters)
       @total_pages = (@total_count.to_f / @per_page).ceil
+      @dlq_counts = data_source.dlq_counts_by_queue
+      @dlq_rows = @messages.map { |m| [m, Pgbus::Web::DeadLetterReason.present(m)] }
+      # One place builds every list URL (frame source, pager, chips), so the
+      # filters survive refresh and paging.
+      @list_path = ->(extra = {}) { pgbus.dead_letter_index_path(filters.merge(extra).compact) }
       render_frame("pgbus/dead_letter/messages_table") if params[:frame] == "list"
     end
 
     def show
-      @message = data_source.dlq_message_detail(params[:id].to_i)
+      @message = data_source.dlq_message_detail(params[:id].to_i, queue_name: dlq_param(:queue_name))
+      @reason = Pgbus::Web::DeadLetterReason.present(@message) if @message
     end
 
     def retry
@@ -62,6 +73,19 @@ module Pgbus
         count += 1 if data_source.discard_dlq_message(queue_name, sel[:msg_id])
       end
       redirect_to dead_letter_index_path, notice: t("pgbus.dead_letter.index.discarded_selected", count: count)
+    end
+
+    private
+
+    # A full DLQ name or nil; the data source also checks it is a known DLQ.
+    def dlq_param(key = :dlq)
+      name = params[key].to_s
+      name if name.end_with?(Pgbus::DEAD_LETTER_SUFFIX) && name.match?(/\A\w+\z/)
+    end
+
+    def error_class_param
+      value = params[:error_class].to_s
+      value if value.present? && value.length <= ERROR_CLASS_MAX
     end
   end
 end

@@ -592,7 +592,9 @@ module Pgbus
       end
     end
 
-    def move_to_dead_letter(queue_name, message)
+    # headers: what the DLQ copy carries. Movers pass the message's headers
+    # merged with a DeadLetterHeader block; the default copies them verbatim.
+    def move_to_dead_letter(queue_name, message, headers: message.headers)
       dlq_name = config.dead_letter_queue_name(queue_name)
       full_queue = config.queue_name(queue_name)
 
@@ -600,7 +602,7 @@ module Pgbus
         ensure_dead_letter_queue(queue_name)
         synchronized do
           @pgmq.transaction do |txn|
-            txn.produce(dlq_name, message.message, headers: message.headers)
+            txn.produce(dlq_name, message.message, headers: headers)
             txn.delete(full_queue, message.msg_id.to_i)
           end
         end

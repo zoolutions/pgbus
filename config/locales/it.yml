@@ -96,6 +96,22 @@ it:
         view_tasks: Visualizza attività
         visible: visibile
     dead_letter:
+      detail:
+        backtrace: Backtrace (prime righe)
+        died: 'Morto:'
+        dlq: 'Coda dei messaggi morti:'
+        error_from_attempt: Errore dal tentativo %{attempt}; i tentativi %{from}–%{to} non hanno registrato errori.
+        source: 'Spostato da:'
+        sources:
+          consumer: consumer di eventi
+          worker: worker di job
+        why: Perché è morto
+      filters:
+        all: Tutte
+        clear_error_class: Rimuovi filtro
+        error_class: 'Errore: %{error_class}'
+        filter_error_class: Mostra solo %{error_class}
+        label: Filtra i messaggi morti
       index:
         discard_all: Scarta tutto
         discard_all_confirm: Scartare definitivamente tutti i messaggi DLQ?
@@ -115,11 +131,13 @@ it:
         empty: La coda di lettere morte è vuota
         full_json_payload: Payload JSON completo
         headers:
-          enqueued: In coda
+          actions: Azioni
+          attempts: Tentativi
+          died: Morto
           id: ID
-          job_class: Classe lavoro
-          reads: Letture
-          source_queue: Coda sorgente
+          job: Job
+          reason: Motivo
+          source_queue: Coda di origine
         headers_section: Intestazioni
         job_id: 'ID lavoro:'
         metadata: Metadati
@@ -131,6 +149,16 @@ it:
           visible_at: 'Visibile alle:'
         retry: Riprova
         total_label: messaggi nella coda dei messaggi non recapitati
+        view: Vedi
+      reasons:
+        error_earlier_attempt_html: 'Tentativi esauriti. Ultimo errore registrato, dal tentativo %{error_attempt}: %{error_class}: %{error_message}'
+        error_html: 'Tentativi esauriti. Ultimo errore: %{error_class}: %{error_message}'
+        event_no_error_html: L'handler è fallito su %{attempts} consegne (max %{max}) — nessun errore dell'handler registrato
+        no_error_recorded_html: Superati %{max} tentativi dopo %{attempts} letture — nessun errore registrato; ogni tentativo fallito si è interrotto prima di poterlo segnalare
+        not_recorded_html: Motivo non registrato (spostato nella DLQ prima di pgbus %{version})
+        retried_before:
+          one: Già riprovato dalla DLQ una volta.
+          other: Già riprovato dalla DLQ %{count} volte.
       show:
         back: Torna a DLQ
         context: Contesto
@@ -138,8 +166,10 @@ it:
         discard_confirm: Scartare definitivamente?
         headers: Intestazioni
         labels:
+          attempts: Tentativi
+          died: Morto
+          dlq: Coda dei messaggi morti
           enqueued_at: Inserito alle
-          read_count: Conteggio letture
           source_queue: Coda di origine
           visibility_timeout: Timeout di visibilità
         not_found: Messaggio non trovato

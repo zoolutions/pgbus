@@ -96,6 +96,22 @@ fr:
         view_tasks: Voir les tâches
         visible: visible
     dead_letter:
+      detail:
+        backtrace: Backtrace (premières lignes)
+        died: 'Mort :'
+        dlq: 'File de lettres mortes :'
+        error_from_attempt: Erreur de la tentative %{attempt} ; les tentatives %{from}–%{to} n'ont enregistré aucune erreur.
+        source: 'Déplacé par :'
+        sources:
+          consumer: consommateur d'événements
+          worker: worker de jobs
+        why: Pourquoi il est mort
+      filters:
+        all: Toutes
+        clear_error_class: Retirer le filtre
+        error_class: 'Erreur : %{error_class}'
+        filter_error_class: Afficher uniquement %{error_class}
+        label: Filtrer les lettres mortes
       index:
         discard_all: Tout rejeter
         discard_all_confirm: Rejeter définitivement tous les messages DLQ ?
@@ -115,11 +131,13 @@ fr:
         empty: La file d'attente des messages morts est vide
         full_json_payload: Charge utile JSON complète
         headers:
-          enqueued: Enregistré
+          actions: Actions
+          attempts: Tentatives
+          died: Mort
           id: ID
-          job_class: Classe de tâche
-          reads: Lectures
-          source_queue: File d'attente source
+          job: Job
+          reason: Raison
+          source_queue: File source
         headers_section: En-têtes
         job_id: 'ID de la tâche :'
         metadata: Métadonnées
@@ -131,6 +149,16 @@ fr:
           visible_at: 'Visible à :'
         retry: Réessayer
         total_label: messages dans la file de lettres mortes
+        view: Voir
+      reasons:
+        error_earlier_attempt_html: 'Tentatives épuisées. Dernière erreur enregistrée, de la tentative %{error_attempt} : %{error_class}: %{error_message}'
+        error_html: 'Tentatives épuisées. Dernière erreur : %{error_class}: %{error_message}'
+        event_no_error_html: Le handler a échoué sur %{attempts} livraisons (max %{max}) — aucune erreur du handler n'a été enregistrée
+        no_error_recorded_html: "%{max} tentatives dépassées après %{attempts} lectures — aucune erreur enregistrée ; chaque tentative échouée a planté avant de pouvoir la signaler"
+        not_recorded_html: Raison non enregistrée (déplacé en DLQ avant pgbus %{version})
+        retried_before:
+          one: Déjà relancé depuis la DLQ une fois.
+          other: Déjà relancé depuis la DLQ %{count} fois.
       show:
         back: Retour à la DLQ
         context: Contexte
@@ -138,8 +166,10 @@ fr:
         discard_confirm: Ignorer définitivement ?
         headers: En-têtes
         labels:
+          attempts: Tentatives
+          died: Mort
+          dlq: File de lettres mortes
           enqueued_at: Mis en file à
-          read_count: Nombre de lectures
           source_queue: File source
           visibility_timeout: Délai de visibilité
         not_found: Message non trouvé

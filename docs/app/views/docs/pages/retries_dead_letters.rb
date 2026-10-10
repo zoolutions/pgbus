@@ -13,6 +13,7 @@ class Views::Docs::Pages::RetriesDeadLetters < DocsUI::Page
     backoff
     per_job
     dlq
+    why_it_died
   end
 
   private
@@ -91,6 +92,50 @@ class Views::Docs::Pages::RetriesDeadLetters < DocsUI::Page
       DocsUI::Code(<<~RUBY)
         Pgbus.configure { |c| c.max_retries = 3 } # DLQ after 3 failed reads
       RUBY
+    end
+  end
+
+  def why_it_died
+    DocsUI::Section("Why a message died", description: "The pgbus_dead_letter header block.") do
+      md <<~'MD'
+        The process that moves a message to its DLQ — the job worker or the event
+        consumer — writes why into the DLQ copy's PGMQ **headers**, under the
+        `pgbus_dead_letter` key (`Pgbus::DeadLetterHeader::KEY`). Headers the
+        message already carried (trace ids, `x-pgmq-group`) stay next to it;
+        headers that are not a JSON object are kept under `pgbus_original_headers`,
+        with a warning in the log. The
+        dashboard's DLQ page, `pgbus dlq list|show` and the MCP `pgbus_dlq` tools
+        read it back.
+      MD
+      DocsUI::Table(
+        [ "Key", "Value" ],
+        [
+          [ [ :code, "version" ], "1 — bumped when the shape changes." ],
+          [ [ :code, "reason" ], [ :md, "`max_retries_exceeded`, the only reason today." ] ],
+          [ [ :code, "source" ], [ :md, "`worker` (ActiveJob) or `consumer` (event bus)." ] ],
+          [ [ :code, "source_queue" ], [ :md, "The physical queue it was deleted from, a priority sub-queue (`…_p2`) included." ] ],
+          [ [ :code, "attempts" ], [ :md, "`read_ct` of the read that routed it." ] ],
+          [ [ :code, "max_retries" ], [ :md, "`max_retries` at that moment." ] ],
+          [ [ :code, "dead_lettered_at" ], "UTC ISO 8601." ],
+          [ [ :code, "retries_from_dlq" ], "How many times it was retried out of a DLQ before; absent the first time." ],
+          [ [ :code, "error_class" ], [ :md, "The last recorded failure, from `pgbus_failed_events`; absent when none was recorded." ] ],
+          [ [ :code, "error_message" ], "Truncated to 1,000 characters." ],
+          [ [ :code, "backtrace" ], "The first 10 lines, at most 2,000 characters." ],
+          [ [ :code, "error_attempt" ], "The attempt the error came from. A worker that crashed mid-perform records nothing, so it can be earlier than the last one." ],
+          [ [ :code, "error_recorded_at" ], "When that failure was recorded." ]
+        ]
+      )
+      md <<~'MD'
+        **Retry strips it.** Retrying from the DLQ (dashboard, `pgbus dlq retry`,
+        Retry All) re-enqueues the message without the block — a live message must
+        not claim to be dead — and sets `pgbus_dlq_retries` to the trip count, so a
+        second death reads "retried from the DLQ once before".
+
+        Messages dead-lettered before pgbus 0.18.0 have no block and read "Reason
+        not recorded"; they retry and discard as before. An event's handler error is
+        recorded once the consumer writes `pgbus_failed_events` rows; until then a
+        dead event says "no handler error was recorded".
+      MD
     end
   end
 end

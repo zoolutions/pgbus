@@ -68,6 +68,64 @@ RSpec.describe Pgbus::CLI::DLQ do
     end
   end
 
+  describe "why a message died (issue #495)" do
+    let(:dead_message) do
+      dlq_message.merge(
+        headers: Pgbus::DeadLetterHeader.build(
+          existing: nil, reason: "max_retries_exceeded", source: "worker", source_queue: "pgbus_default_p2",
+          attempts: 6, max_retries: 5,
+          error: { error_class: "Stripe::CardError", error_message: "Your card was declined", retry_count: 4 }
+        )
+      )
+    end
+
+    it "adds a reason column to the list: the error class, or the reason key" do
+      legacy = dlq_message.merge(msg_id: 43, headers: nil)
+      no_error = dlq_message.merge(msg_id: 44, headers: Pgbus::DeadLetterHeader.build(
+        existing: nil, reason: "max_retries_exceeded", source: "consumer", source_queue: "pgbus_events",
+        attempts: 6, max_retries: 5
+      ))
+      allow(data_source).to receive_messages(dlq_messages: [dead_message, legacy, no_error], dlq_total_count: 3)
+
+      output = capture(%w[list])
+
+      expect(output).to include("REASON")
+      expect(output.lines.find { |l| l.start_with?("42 ") }).to include("Stripe::CardError")
+      expect(output.lines.find { |l| l.start_with?("43 ") }).to include("not_recorded")
+      expect(output.lines.find { |l| l.start_with?("44 ") }).to include("event_no_error")
+    end
+
+    it "prints died, attempts, source queue, reason and error on show" do
+      allow(data_source).to receive(:dlq_message_detail).with("42").and_return(dead_message)
+
+      output = capture(%w[show 42])
+
+      expect(output).to include("died:", "attempts:    6/5", "source:      pgbus_default_p2",
+                                "reason:      max_retries_exceeded",
+                                "error:       Stripe::CardError: Your card was declined (attempt 5)")
+    end
+
+    it "escapes control characters in the stored error message" do
+      evil = dead_message.merge(headers: Pgbus::DeadLetterHeader.build(
+        existing: nil, reason: "max_retries_exceeded", source: "worker", source_queue: "pgbus_default",
+        attempts: 6, max_retries: 5,
+        error: { error_class: "RuntimeError", error_message: "line1\nline2\e[31mred", retry_count: 4 }
+      ))
+      allow(data_source).to receive(:dlq_message_detail).with("42").and_return(evil)
+
+      output = capture(%w[show 42])
+
+      expect(output).to include('error:       RuntimeError: line1\x0Aline2\x1B[31mred (attempt 5)')
+      expect(output).not_to include("\e[31m")
+    end
+
+    it "says the reason was not recorded for a legacy message" do
+      allow(data_source).to receive(:dlq_message_detail).with("42").and_return(dlq_message.merge(headers: nil))
+
+      expect(capture(%w[show 42])).to include("reason:      not recorded (dead-lettered before pgbus")
+    end
+  end
+
   describe "show" do
     it "prints the payload filtered by PayloadFilter" do
       allow(data_source).to receive(:dlq_message_detail).with("42").and_return(dlq_message)

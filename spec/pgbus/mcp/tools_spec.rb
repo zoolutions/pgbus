@@ -169,6 +169,58 @@ RSpec.describe "Pgbus MCP tools" do # rubocop:disable RSpec/DescribeClass
     end
   end
 
+  describe "dead-letter reason in the DLQ tools (issue #495)" do
+    let(:dead_headers) do
+      Pgbus::DeadLetterHeader.build(
+        existing: nil, reason: "max_retries_exceeded", source: "worker", source_queue: "pgbus_default",
+        attempts: 6, max_retries: 5,
+        error: { error_class: "Stripe::CardError", error_message: "card 4242 declined", backtrace: "a.rb:1", retry_count: 4 }
+      )
+    end
+    let(:rows) { [{ msg_id: 5, message: "{}", headers: dead_headers }, { msg_id: 6, message: "{}", headers: nil }] }
+
+    before { allow(data_source).to receive(:dlq_messages).and_return(rows) }
+
+    it "summarizes why each message died, without the error message or backtrace by default" do
+      result = body(Pgbus::MCP::Tools::DlqTool.call(server_context: context))
+
+      summary = result["messages"].first["dead_letter"]
+      expect(summary).to include("reason" => "max_retries_exceeded", "source" => "worker",
+                                 "source_queue" => "pgbus_default", "attempts" => 6, "max_retries" => 5,
+                                 "error_class" => "Stripe::CardError", "error_attempt" => 5)
+      expect(summary).to have_key("dead_lettered_at")
+      expect(summary).not_to have_key("error_message")
+      expect(summary).not_to have_key("backtrace")
+      expect(result["messages"].first["headers"]).to eq(Pgbus::MCP::Redactor::REDACTED)
+    end
+
+    it "adds the error message and backtrace when payloads are allowed" do
+      result = body(Pgbus::MCP::Tools::DlqTool.call(include_payloads: true, server_context: context_with_payloads))
+
+      expect(result["messages"].first["dead_letter"])
+        .to include("error_message" => "card 4242 declined", "backtrace" => "a.rb:1")
+    end
+
+    it "gives a legacy row dead_letter: nil" do
+      result = body(Pgbus::MCP::Tools::DlqTool.call(server_context: context))
+
+      expect(result["messages"].last).to include("dead_letter" => nil)
+    end
+
+    it "summarizes the detail, through the named DLQ and through the cross-DLQ scan" do
+      allow(data_source).to receive(:job_detail).with("pgbus_default_dlq", 5).and_return(rows.first)
+      allow(data_source).to receive_messages(queues_with_metrics: [], dlq_message_detail: rows.first)
+
+      named = body(Pgbus::MCP::Tools::DlqDetailTool.call(msg_id: 5, queue: "pgbus_default_dlq", server_context: context))
+      scanned = body(Pgbus::MCP::Tools::DlqDetailTool.call(msg_id: 5, server_context: context))
+
+      [named, scanned].each do |result|
+        expect(result["message"]["dead_letter"]).to include("error_class" => "Stripe::CardError")
+        expect(result["message"]["dead_letter"]).not_to have_key("error_message")
+      end
+    end
+  end
+
   describe Pgbus::MCP::Tools::DlqDetailTool do
     it "returns a redacted detail when only one DLQ is present" do
       allow(data_source).to receive_messages(queues_with_metrics: [])
