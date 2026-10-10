@@ -90,7 +90,10 @@ module Pgbus
         end
       end
 
-      def dlq_message_detail(msg_id) = @dlq_messages_list.find { |m| m[:msg_id].to_s == msg_id.to_s }
+      def dlq_message_detail(msg_id, queue_name: nil)
+        @dlq_messages_list.find { |m| m[:msg_id].to_s == msg_id.to_s && (queue_name.nil? || m[:queue_name] == queue_name) }
+      end
+
       def processed_events(page: 1, per_page: 25) = @events_list
       def processed_events_count = @events_list.size
       def processed_event(id) = @events_list.find { |e| e["id"].to_s == id.to_s }

@@ -105,6 +105,20 @@ RSpec.describe Pgbus::CLI::DLQ do
                                 "error:       Stripe::CardError: Your card was declined (attempt 5)")
     end
 
+    it "escapes control characters in the stored error message" do
+      evil = dead_message.merge(headers: Pgbus::DeadLetterHeader.build(
+        existing: nil, reason: "max_retries_exceeded", source: "worker", source_queue: "pgbus_default",
+        attempts: 6, max_retries: 5,
+        error: { error_class: "RuntimeError", error_message: "line1\nline2\e[31mred", retry_count: 4 }
+      ))
+      allow(data_source).to receive(:dlq_message_detail).with("42").and_return(evil)
+
+      output = capture(%w[show 42])
+
+      expect(output).to include('error:       RuntimeError: line1\x0Aline2\x1B[31mred (attempt 5)')
+      expect(output).not_to include("\e[31m")
+    end
+
     it "says the reason was not recorded for a legacy message" do
       allow(data_source).to receive(:dlq_message_detail).with("42").and_return(dlq_message.merge(headers: nil))
 

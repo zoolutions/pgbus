@@ -79,6 +79,12 @@ RSpec.describe Pgbus::Web::DeadLetterReason do
     expect(present(headers).retried_before).to be_nil
   end
 
+  it "does not raise on non-numeric counters in a hand-written block" do
+    result = present('{"pgbus_dead_letter":{"attempts":{"x":1},"retries_from_dlq":[2],"error_attempt":"3"}}')
+
+    expect(result).to have_attributes(attempts: 0, retried_before: 0, error_attempt: 3)
+  end
+
   it "reads a row without the block as legacy" do
     result = present(nil)
 

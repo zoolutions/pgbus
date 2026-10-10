@@ -149,7 +149,10 @@ module Pgbus
       def dead_letter_error(result)
         return "none recorded" unless result.error_class
 
-        "#{result.error_class}: #{result.error_message} (attempt #{result.error_attempt})"
+        error = "#{result.error_class}: #{result.error_message} (attempt #{result.error_attempt})"
+        # A stored message is untrusted: newlines would break the layout and
+        # ANSI sequences could rewrite the operator's terminal.
+        error.gsub(/[\x00-\x1f\x7f]/) { |char| format("\\x%02X", char.ord) }
       end
 
       def origin_queue(dlq_queue_name)

@@ -88,6 +88,12 @@ RSpec.describe Pgbus::DeadLetterHeader do
       expect(parsed[described_class::KEY]["retries_from_dlq"]).to eq(2)
     end
 
+    it "treats a non-numeric retry counter as zero instead of raising" do
+      expect(block_of(build(existing: '{"pgbus_dlq_retries":{"x":1}}'))).not_to have_key("retries_from_dlq")
+      expect(block_of(build(existing: '{"pgbus_dlq_retries":"3"}'))["retries_from_dlq"]).to eq(3)
+      expect(block_of(build(existing: '{"pgbus_dlq_retries":"abc"}'))).not_to have_key("retries_from_dlq")
+    end
+
     it "keeps non-object JSON headers under pgbus_original_headers, with a warning" do
       allow(Pgbus.logger).to receive(:warn)
 
@@ -126,6 +132,18 @@ RSpec.describe Pgbus::DeadLetterHeader do
       parsed = JSON.parse(described_class.strip_for_retry(build(existing: '{"trace_id":"abc"}')))
 
       expect(parsed).to eq("trace_id" => "abc", "pgbus_dlq_retries" => 1)
+    end
+
+    it "restarts the counter when the block's retries_from_dlq is not a number" do
+      expect(JSON.parse(described_class.strip_for_retry('{"pgbus_dead_letter":{"retries_from_dlq":[1]}}')))
+        .to eq("pgbus_dlq_retries" => 1)
+    end
+
+    it "logs malformed headers without their content" do
+      allow(Pgbus.logger).to receive(:warn) { |&blk| expect(blk.call).not_to include("s3cret") }
+
+      build(existing: "{not json s3cret")
+      expect(Pgbus.logger).to have_received(:warn)
     end
 
     it "starts the counter at 1 for nil or legacy headers" do

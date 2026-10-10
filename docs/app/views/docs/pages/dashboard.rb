@@ -36,7 +36,7 @@ class Views::Docs::Pages::Dashboard < DocsUI::Page
           [ "Overview", "Queue depths, enqueued count, active processes, failures, throughput rate, parked jobs." ],
           [ "Queues", "Per-queue metrics with purge / pause / resume / delete." ],
           [ "Jobs", "Enqueued and failed jobs, with retry / discard." ],
-          [ "Dead letter", "Every dead message with why it died — the last error, the attempts, the source queue — filterable by DLQ and error class, with retry / discard and bulk actions." ],
+          [ "Dead letter", "New dead messages show why they died — the last recorded error when available, attempts, and source queue — filterable by DLQ and error class, with retry / discard and bulk actions." ],
           [ "Processes", [ :md, "Active workers, dispatcher, consumers with heartbeat status **and per-worker throughput** (e.g. `12.4/s processed · 0.2/s failed`)." ] ],
           [ "Events", "Registered subscribers and processed events." ],
           [ "Outbox", "Transactional outbox entries pending publication." ],

@@ -101,7 +101,9 @@ class Views::Docs::Pages::RetriesDeadLetters < DocsUI::Page
         The process that moves a message to its DLQ — the job worker or the event
         consumer — writes why into the DLQ copy's PGMQ **headers**, under the
         `pgbus_dead_letter` key (`Pgbus::DeadLetterHeader::KEY`). Headers the
-        message already carried (trace ids, `x-pgmq-group`) stay next to it. The
+        message already carried (trace ids, `x-pgmq-group`) stay next to it;
+        headers that are not a JSON object are kept under `pgbus_original_headers`,
+        with a warning in the log. The
         dashboard's DLQ page, `pgbus dlq list|show` and the MCP `pgbus_dlq` tools
         read it back.
       MD

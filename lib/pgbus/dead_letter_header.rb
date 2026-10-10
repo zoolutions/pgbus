@@ -32,7 +32,7 @@ module Pgbus
     # was recorded. Returns the merged headers as a JSON string.
     def build(existing:, reason:, source:, source_queue:, attempts:, max_retries:, error: nil, now: Time.now.utc)
       headers = decode(existing, warn: true)
-      retries = headers.delete(RETRIES_KEY).to_i
+      retries = count(headers.delete(RETRIES_KEY))
       block = {
         "version" => VERSION,
         "reason" => reason,
@@ -58,11 +58,22 @@ module Pgbus
     # top-level counter (build folded it into the block), so the block is
     # the only place to read the previous count from.
     def strip_for_retry(headers)
-      retries = parse(headers)&.dig("retries_from_dlq").to_i + 1
+      retries = count(parse(headers)&.dig("retries_from_dlq")) + 1
       stripped = decode(headers, warn: false)
       stripped.delete(KEY)
       stripped[RETRIES_KEY] = retries
       JSON.generate(stripped)
+    end
+
+    # A counter read from headers anyone could have written: an Integer or a
+    # numeric String counts, anything else is 0. Never raises, so a bad value
+    # can't stop a dead-letter.
+    def count(value)
+      case value
+      when Integer then value
+      when String then Integer(value, 10, exception: false) || 0
+      else 0
+      end
     end
 
     def error_fields(error)
@@ -110,10 +121,9 @@ module Pgbus
       { ORIGINAL_KEY => parsed }
     end
 
-    def log_kept(raw)
-      Pgbus.logger.warn do
-        "[Pgbus] Dead-letter headers were not a JSON object; kept under #{ORIGINAL_KEY}: #{raw.to_s[0, 200]}"
-      end
+    # The raw value is not logged: headers can carry caller secrets.
+    def log_kept(_raw)
+      Pgbus.logger.warn { "[Pgbus] Dead-letter headers were not a JSON object; kept under #{ORIGINAL_KEY}" }
     end
   end
 end

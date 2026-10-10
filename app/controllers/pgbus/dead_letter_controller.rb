@@ -22,7 +22,7 @@ module Pgbus
     end
 
     def show
-      @message = data_source.dlq_message_detail(params[:id].to_i)
+      @message = data_source.dlq_message_detail(params[:id].to_i, queue_name: dlq_param(:queue_name))
       @reason = Pgbus::Web::DeadLetterReason.present(@message) if @message
     end
 
@@ -78,8 +78,8 @@ module Pgbus
     private
 
     # A full DLQ name or nil; the data source also checks it is a known DLQ.
-    def dlq_param
-      name = params[:dlq].to_s
+    def dlq_param(key = :dlq)
+      name = params[key].to_s
       name if name.end_with?(Pgbus::DEAD_LETTER_SUFFIX) && name.match?(/\A\w+\z/)
     end
 

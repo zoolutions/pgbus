@@ -76,6 +76,18 @@ RSpec.describe "Pgbus::DeadLetterController", type: :request do
         expect(response).to have_http_status(:ok)
       end
 
+      it "shows the message of the DLQ named by queue_name, not the first id match" do
+        @stub_data_source.dlq_messages_list = [
+          { msg_id: 12, queue_name: "pgbus_default_dlq", message: '{"job_class":"DefaultJob"}' },
+          { msg_id: 12, queue_name: "pgbus_orders_dlq", message: '{"job_class":"OrdersJob"}' }
+        ]
+
+        get "/pgbus/dlq/12", params: { queue_name: "pgbus_orders_dlq" }
+
+        expect(response.body).to include("OrdersJob")
+        expect(response.body).not_to include("DefaultJob")
+      end
+
       it "explains a legacy message without a recorded reason" do
         get "/pgbus/dlq/12"
         expect(response.body).to include('data-testid="dead-letter-reason"', "Reason not recorded")

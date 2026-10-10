@@ -31,14 +31,14 @@ module Pgbus
         block = DeadLetterHeader.parse(row[:headers])
         return legacy(row) unless block
 
-        attempts = block["attempts"]&.to_i
-        max = block["max_retries"]&.to_i
+        attempts = number(block["attempts"])
+        max = number(block["max_retries"])
         key, args = reason_for(block, attempts, max)
         Result.new(
           reason: block["reason"], reason_key: key, reason_args: args, legacy: false, source: block["source"],
           source_queue: block["source_queue"], attempts: attempts, max_retries: max,
           error_class: block["error_class"], error_message: block["error_message"], backtrace: block["backtrace"],
-          error_attempt: block["error_attempt"]&.to_i, retried_before: block["retries_from_dlq"]&.to_i,
+          error_attempt: number(block["error_attempt"]), retried_before: number(block["retries_from_dlq"]),
           died_at: row[:enqueued_at]
         )
       end
@@ -52,7 +52,7 @@ module Pgbus
 
         args = { error_class: error_class, error_message: cell_message(block["error_message"]),
                  attempts: attempts, max: max }
-        error_attempt = block["error_attempt"]&.to_i
+        error_attempt = number(block["error_attempt"])
         return ["error", args] unless error_attempt && attempts && error_attempt < attempts - 1
 
         ["error_earlier_attempt", args.merge(error_attempt: error_attempt)]
@@ -65,6 +65,11 @@ module Pgbus
           attempts: nil, max_retries: nil, error_class: nil, error_message: nil, backtrace: nil,
           error_attempt: nil, retried_before: nil, died_at: row[:enqueued_at]
         )
+      end
+
+      # Header values are untrusted: nil stays nil, a non-number counts as 0.
+      def number(value)
+        DeadLetterHeader.count(value) unless value.nil?
       end
 
       def cell_message(message)

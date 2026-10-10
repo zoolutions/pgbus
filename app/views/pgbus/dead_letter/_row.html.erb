@@ -38,7 +38,7 @@
   <td colspan="<%= columns %>" class="px-4 pb-4 bg-gray-50 dark:bg-gray-900 border-t border-gray-100 dark:border-gray-700">
     <div class="flex items-center justify-between mt-3 mb-3">
       <span class="text-xs font-mono text-gray-500 dark:text-gray-400"><%= t("pgbus.dead_letter.messages_table.job_id") %> <%= payload["job_id"] || payload["event_id"] || "—" %></span>
-      <%= pgbus_link_to t("pgbus.dead_letter.messages_table.view"), pgbus.dead_letter_path(m[:msg_id]),
+      <%= pgbus_link_to t("pgbus.dead_letter.messages_table.view"), pgbus.dead_letter_path(m[:msg_id], queue_name: m[:queue_name]),
             size: :sm, data: { turbo_frame: "_top" } %>
     </div>
     <%= render "pgbus/dead_letter/error", reason: reason %>

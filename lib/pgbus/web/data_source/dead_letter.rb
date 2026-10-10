@@ -51,16 +51,16 @@ module Pgbus
           {}
         end
 
-        def dlq_message_detail(msg_id)
-          dlq_suffix = Pgbus::DEAD_LETTER_SUFFIX
-          queues = queues_with_metrics.select { |q| q[:name].end_with?(dlq_suffix) }
-          queues.each do |q|
+        # msg_ids are unique per DLQ table only: queue_name: picks the table;
+        # without it the first DLQ holding the id wins.
+        def dlq_message_detail(msg_id, queue_name: nil)
+          dlq_queue_names(queue_name).each do |name|
             row = connection.select_one(
-              "SELECT * FROM pgmq.q_#{sanitize_name(q[:name])} WHERE msg_id = $1",
+              "SELECT * FROM pgmq.q_#{sanitize_name(name)} WHERE msg_id = $1",
               "Pgbus DLQ Detail",
               [msg_id.to_i]
             )
-            return format_message(row, q[:name]) if row
+            return format_message(row, name) if row
           end
           nil
         rescue StandardError => e

@@ -60,7 +60,7 @@ RSpec.describe Pgbus::Web::DataSource::DeadLetter do
       # Both DLQ tables appear in the SQL; the non-DLQ default queue does not.
       expect(captured_sql).to include("pgmq.q_pgbus_default_dlq")
       expect(captured_sql).to include("pgmq.q_pgbus_low_dlq")
-      expect(captured_sql).not_to include("pgmq.q_pgbus_default ")
+      expect(captured_sql).not_to match(/pgmq\.q_pgbus_default(?![[:alnum:]_])/)
     end
 
     it "binds limit + offset from the page calculation" do
@@ -214,6 +214,34 @@ RSpec.describe Pgbus::Web::DataSource::DeadLetter do
       expect(captured.first).to include("SELECT COUNT(*)")
       expect(captured.first.scan("WHERE headers #>> '{pgbus_dead_letter,error_class}' = $1").size).to eq(2)
       expect(captured.last).to eq(["KeyError"])
+    end
+  end
+
+  describe "#dlq_message_detail" do
+    before do
+      allow(data_source).to receive(:queues_with_metrics).and_return(
+        [{ name: "pgbus_default_dlq", queue_length: 1 }, { name: "pgbus_orders_dlq", queue_length: 1 }]
+      )
+    end
+
+    it "reads only the named DLQ when queue_name: is given" do
+      tables = []
+      allow(mock_connection).to receive(:select_one) do |sql, _name, _binds|
+        tables << sql[/pgmq\.q_\w+/]
+        { "msg_id" => 5, "message" => "{}" }
+      end
+
+      detail = data_source.dlq_message_detail(5, queue_name: "pgbus_orders_dlq")
+
+      expect(tables).to eq(["pgmq.q_pgbus_orders_dlq"])
+      expect(detail[:queue_name]).to eq("pgbus_orders_dlq")
+    end
+
+    it "finds nothing for a queue_name that is not a known DLQ" do
+      allow(mock_connection).to receive(:select_one)
+
+      expect(data_source.dlq_message_detail(5, queue_name: "pgbus_default")).to be_nil
+      expect(mock_connection).not_to have_received(:select_one)
     end
   end
 
