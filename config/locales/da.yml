@@ -193,6 +193,7 @@ da:
         mark_handled_failed: Kunne ikke markere begivenhed som håndteret.
         marked_handled: Begivenhed markeret som håndteret.
         none_selected: Ingen begivenheder valgt.
+        payload_redacted: 'Ikke gemt: payloaden indeholder stadig redigerede ([FILTERED]) værdier, som ville erstatte de rigtige.'
         payload_update_failed: Kunne ikke opdatere payload. Tjek at JSON er gyldig.
         payload_updated: Payload opdateret og begivenhed genindkøet.
         replay_failed: Begivenhed ikke fundet eller kunne ikke afspilles.

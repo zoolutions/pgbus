@@ -193,6 +193,7 @@ it:
         mark_handled_failed: Impossibile contrassegnare l'evento come gestito.
         marked_handled: Evento contrassegnato come gestito.
         none_selected: Nessun evento selezionato.
+        payload_redacted: 'Non salvato: il payload contiene ancora valori oscurati ([FILTERED]) che sostituirebbero quelli reali.'
         payload_update_failed: Impossibile aggiornare il payload. Verifica che il JSON sia valido.
         payload_updated: Payload aggiornato ed evento reinserito in coda.
         replay_failed: Evento non trovato o non riproducibile.

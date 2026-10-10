@@ -193,6 +193,7 @@ nb:
         mark_handled_failed: Kunne ikke merke hendelse som håndtert.
         marked_handled: Hendelse merket som håndtert.
         none_selected: Ingen hendelser valgt.
+        payload_redacted: 'Ikke lagret: payloaden inneholder fortsatt sladdede ([FILTERED]) verdier som ville erstattet de ekte.'
         payload_update_failed: Kunne ikke oppdatere nyttelast. Sjekk at JSON er gyldig.
         payload_updated: Nyttelast oppdatert og hendelse lagt i kø på nytt.
         replay_failed: Hendelse ikke funnet eller kunne ikke spilles av på nytt.

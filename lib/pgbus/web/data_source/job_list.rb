@@ -239,6 +239,8 @@ module Pgbus
 
         def blocked_where(scope)
           if scope[:filtered]
+            return "WHERE false" if scope[:queues].empty?
+
             "WHERE b.queue_name IN (#{quoted_list(scope[:queues].flat_map { |(qtable, logical)| [logical, qtable] })})"
           elsif scope[:excluded].any?
             "WHERE b.queue_name NOT IN (#{quoted_list(scope[:excluded].flat_map { |(qtable, logical)| [logical, qtable] })})"

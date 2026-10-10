@@ -171,6 +171,16 @@ RSpec.describe Pgbus::Web::DataSource::JobList do
       expect(sql).to include("WHERE b.queue_name NOT IN ('mailers', 'pgbus_test_mailers')")
     end
 
+    it "reads no blocked rows, never an empty IN (), when exclude: removes every listed queue" do
+      sql, = captured_sql("Pgbus Job List") do
+        data_source.job_rows(queues: %w[pgbus_test_mailers], exclude: %w[pgbus_test_mailers])
+      end
+
+      expect(sql).to include("FROM pgbus_blocked_executions b")
+      expect(sql).not_to include("IN ()")
+      expect(sql).to include("WHERE false")
+    end
+
     it "counts only the listed queues' fragments" do
       sql, = captured_sql("Pgbus Job State Counts") { data_source.job_state_counts(queues: %w[pgbus_test_mailers]) }
 

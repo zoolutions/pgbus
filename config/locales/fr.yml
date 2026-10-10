@@ -193,6 +193,7 @@ fr:
         mark_handled_failed: Impossible de marquer l'événement comme traité.
         marked_handled: Événement marqué comme traité.
         none_selected: Aucun événement sélectionné.
+        payload_redacted: 'Non enregistré : le payload contient encore des valeurs masquées ([FILTERED]) qui remplaceraient les vraies.'
         payload_update_failed: Impossible de mettre à jour la charge utile. Vérifiez que le JSON est valide.
         payload_updated: Charge utile mise à jour et événement réenregistré.
         replay_failed: Événement non trouvé ou impossible à rejouer.

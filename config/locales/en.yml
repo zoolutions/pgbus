@@ -193,6 +193,7 @@ en:
         mark_handled_failed: Could not mark event as handled.
         marked_handled: Event marked as handled.
         none_selected: No events selected.
+        payload_redacted: 'Not saved: the payload still contains redacted ([FILTERED]) values, which would replace the real ones.'
         payload_update_failed: Could not update payload. Check that the JSON is valid.
         payload_updated: Payload updated and event re-enqueued.
         replay_failed: Event not found or could not be replayed.

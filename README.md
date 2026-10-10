@@ -2175,7 +2175,7 @@ The dashboard is a mountable Rails engine at `/pgbus` with:
 - **Jobs** — one list of every job with its state (Ready / Scheduled / Running / Retrying / Blocked), why it is waiting and when it will run, filter tabs with counts, paging, retry/discard actions
 - **Dead letter** — DLQ messages with retry/discard, bulk actions
 - **Processes** — active workers/dispatcher/consumers with heartbeat status **and per-worker throughput** (e.g. `12.4/s processed · 0.2/s failed`)
-- **Events** — one list of pending events with their state (Ready / Scheduled / Handling / Retrying), the handler that will run each one and why it is waiting (jobs ahead, queue paused, no running consumer subscribes to its pattern), the failed attempt and its error, tabs, paging and the existing actions; the processed-events audit says whether each claim completed, is being handled or went silent, with Replay; subscribers say whether a running consumer drains them
+- **Events** — one list of pending events with their state (Ready / Scheduled / Handling / Retrying), the handler that will run each one and why it is waiting (jobs ahead, queue paused, no running consumer subscribes to its pattern), the failed attempt and its error, tabs, paging and the existing actions; the processed-events audit says whether each claim completed, is being handled or went silent, with Replay for completed claims still in the archive; subscribers say whether a running consumer drains them
 - **Outbox** — transactional outbox entries pending publication
 - **Locks** — active job uniqueness locks with state (queued/executing), owner PID@hostname, age
 - **Insights** — throughput chart (jobs/min), status distribution donut, slowest job classes table

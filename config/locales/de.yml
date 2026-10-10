@@ -193,6 +193,7 @@ de:
         mark_handled_failed: Ereignis konnte nicht als bearbeitet markiert werden.
         marked_handled: Ereignis als bearbeitet markiert.
         none_selected: Keine Ereignisse ausgewählt.
+        payload_redacted: 'Nicht gespeichert: Die Nutzlast enthält noch geschwärzte ([FILTERED]) Werte, die die echten ersetzen würden.'
         payload_update_failed: Nutzlast konnte nicht aktualisiert werden. Überprüfen Sie, ob das JSON gültig ist.
         payload_updated: Nutzlast aktualisiert und Ereignis erneut in die Warteschlange gestellt.
         replay_failed: Ereignis nicht gefunden oder konnte nicht erneut abgespielt werden.

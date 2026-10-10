@@ -193,6 +193,7 @@ pt:
         mark_handled_failed: Não foi possível marcar o evento como tratado.
         marked_handled: Evento marcado como tratado.
         none_selected: Nenhum evento selecionado.
+        payload_redacted: 'Não guardado: o payload ainda contém valores ocultados ([FILTERED]) que substituiriam os reais.'
         payload_update_failed: Não foi possível atualizar o payload. Verifique se o JSON é válido.
         payload_updated: Payload atualizado e evento reenfileirado.
         replay_failed: Evento não encontrado ou não pôde ser reproduzido.

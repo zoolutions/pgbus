@@ -193,6 +193,7 @@ nl:
         mark_handled_failed: Kon gebeurtenis niet als afgehandeld markeren.
         marked_handled: Gebeurtenis als afgehandeld gemarkeerd.
         none_selected: Geen gebeurtenissen geselecteerd.
+        payload_redacted: 'Niet opgeslagen: de payload bevat nog afgeschermde ([FILTERED]) waarden die de echte zouden vervangen.'
         payload_update_failed: Kon payload niet bijwerken. Controleer of de JSON geldig is.
         payload_updated: Payload bijgewerkt en gebeurtenis opnieuw in de wachtrij geplaatst.
         replay_failed: Gebeurtenis niet gevonden of kon niet worden afgespeeld.

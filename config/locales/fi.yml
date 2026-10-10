@@ -193,6 +193,7 @@ fi:
         mark_handled_failed: Tapahtumaa ei voitu merkitä käsitellyksi.
         marked_handled: Tapahtuma merkitty käsitellyksi.
         none_selected: Ei tapahtumia valittuna.
+        payload_redacted: 'Ei tallennettu: payload sisältää yhä peitettyjä ([FILTERED]) arvoja, jotka korvaisivat oikeat.'
         payload_update_failed: Kuormaa ei voitu päivittää. Tarkista, että JSON on kelvollinen.
         payload_updated: Kuorma päivitetty ja tapahtuma uudelleen jonotettu.
         replay_failed: Tapahtumaa ei löytynyt tai sitä ei voitu toistaa.

@@ -58,6 +58,15 @@ RSpec.describe Pgbus::EventsHelper do
     end
   end
 
+  it "escapes an error class in a failed attempt's reason" do
+    html = helper.pgbus_event_reason(
+      result("retrying_due", { handler: "OrderHandler", attempt: 2, max: 5, error: "<script>x</script>" })
+    )
+
+    expect(html).to include("&lt;script&gt;x&lt;/script&gt;")
+    expect(html).not_to include("<script>")
+  end
+
   describe "processed events" do
     def processed(state, key, tone)
       Pgbus::Web::EventState::ProcessedResult.new(

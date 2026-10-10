@@ -140,9 +140,9 @@ RSpec.describe Pgbus::Web::DataSource::EventList do
 
     it "probes each handler's archive once for the page, bounded by the oldest claim" do
       queries = []
-      allow(mock_connection).to receive(:select_values) do |sql, label, binds|
+      allow(mock_connection).to receive(:select_all) do |sql, label, binds|
         queries << [sql, label, binds]
-        ["evt-2"]
+        [{ "event_id" => "evt-2", "routing_key" => "orders.created" }]
       end
 
       states = data_source.event_replay_states(events)
@@ -159,9 +159,9 @@ RSpec.describe Pgbus::Web::DataSource::EventList do
 
     it "quotes each event_id, so one with a comma, brace or quote still matches" do
       binds = nil
-      allow(mock_connection).to receive(:select_values) do |_sql, _label, params|
+      allow(mock_connection).to receive(:select_all) do |_sql, _label, params|
         binds = params
-        ['a,b}"c\\d']
+        [{ "event_id" => 'a,b}"c\\d', "routing_key" => "orders.created" }]
       end
       odd = [{ "id" => 9, "event_id" => 'a,b}"c\\d', "handler_class" => "OrderHandler", "processed_at" => now }]
 
@@ -170,11 +170,30 @@ RSpec.describe Pgbus::Web::DataSource::EventList do
     end
 
     it "reports nothing archived when the archive cannot be read" do
-      allow(mock_connection).to receive(:select_values).and_raise(StandardError, "no table")
+      allow(mock_connection).to receive(:select_all).and_raise(StandardError, "no table")
       allow(Pgbus.logger).to receive(:error)
 
       expect(data_source.event_replay_states(events.first(1))).to eq(1 => :not_archived)
       expect(Pgbus.logger).to have_received(:error)
+    end
+
+    it "is not archived when the archived routing key no longer matches the subscriber's pattern" do
+      allow(mock_connection).to receive(:select_all)
+        .and_return([{ "event_id" => "evt-2", "routing_key" => "webhook.sent" }])
+
+      expect(data_source.event_replay_states(events.first(2))).to eq(1 => :not_archived, 2 => :not_archived)
+    end
+
+    it "probes the queue of the first registration, the one replay_event uses" do
+      allow(data_source).to receive(:registered_subscribers).and_return(
+        [subscribers.first, subscribers.first.merge(pattern: "late.#", physical_queue_name: "pgbus_test_late_handler")]
+      )
+      sqls = []
+      allow(mock_connection).to receive(:select_all) { |sql, *| sqls << sql and [] }
+
+      data_source.event_replay_states(events.first(1))
+
+      expect(sqls.first).to include("FROM pgmq.a_pgbus_test_order_handler a")
     end
 
     it "queries nothing for an empty page" do
@@ -247,6 +266,15 @@ RSpec.describe Pgbus::Web::DataSource::EventList do
         .and_return(archived.merge("message" => { "event_id" => "evt-7", "payload" => {} }.to_json))
 
       expect(data_source.replay_event(event)).to be(false)
+    end
+
+    it "refuses an archived routing key the subscriber's pattern does not match" do
+      allow(mock_connection).to receive(:select_one).and_return(
+        archived.merge("message" => { "event_id" => "evt-7", "routing_key" => "webhook.sent" }.to_json)
+      )
+
+      expect(data_source.replay_event(event)).to be(false)
+      expect(mock_client).not_to have_received(:transaction)
     end
 
     it "logs and refuses when the produce raises" do

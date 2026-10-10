@@ -19,8 +19,9 @@ module Pgbus
           @event_rows_list = sample_event_rows(now)
           @events_ahead_hash = { [INVOICE_QUEUE, 801] => 3 }
           @event_context = @event_context.with(covered_queues: Set[INVOICE_QUEUE, SLACK_QUEUE])
-          @events_list = sample_processed_events(now)
-          @replay_states_hash = { 3 => :not_archived, 5 => :no_handler }
+          # Newest claim first, as DataSource#processed_events orders them.
+          @events_list = sample_processed_events(now).sort_by { |e| -Pgbus::Web::JobState.time(e["processed_at"]).to_f }
+          @replay_states_hash = { 6 => :not_archived, 5 => :no_handler }
         end
 
         def sample_subscribers

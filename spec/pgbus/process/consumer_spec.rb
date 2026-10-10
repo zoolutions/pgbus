@@ -510,13 +510,14 @@ RSpec.describe Pgbus::Process::Consumer do
       allow(Pgbus::FailedEventRecorder).to receive(:last_error).and_return(nil)
     end
 
+    # A real subscriber whose handler raises (or returns), so the failure
+    # comes out of dispatch the way a handler error does.
     def deliver(read_ct:, raising: nil)
       message = build_message_double(msg_id: 11, message: message_body, read_ct: read_ct, headers: '{"trace_id":"t"}')
-      if raising
-        allow(registry).to receive(:handlers_for).and_raise(raising)
-      else
-        allow(registry).to receive(:handlers_for).and_return([])
-      end
+      handler = double("handler")
+      raising ? allow(handler).to(receive(:process).and_raise(raising)) : allow(handler).to(receive(:process))
+      subscriber = instance_double(Pgbus::EventBus::Subscriber, handler_class: double("HandlerClass", new: handler))
+      allow(registry).to receive(:handlers_for).with("orders.created", queue_name: "q_orders").and_return([subscriber])
       consumer.send(:handle_message, message, "q_orders")
       message
     end
@@ -564,12 +565,13 @@ RSpec.describe Pgbus::Process::Consumer do
       expect(Pgbus::FailedEventRecorder).to have_received(:clear!).with(queue_name: "q_orders", msg_id: 11).ordered
     end
 
-    it "keeps the failed row when the DLQ move raises" do
+    it "keeps the handler's failed row, unchanged, when the DLQ move raises" do
       allow(mock_client).to receive(:move_to_dead_letter).and_raise(StandardError, "db gone")
 
       deliver(read_ct: 6)
 
       expect(Pgbus::FailedEventRecorder).not_to have_received(:clear!)
+      expect(Pgbus::FailedEventRecorder).not_to have_received(:record!)
     end
   end
 

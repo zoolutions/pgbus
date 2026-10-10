@@ -193,6 +193,7 @@ ja:
         mark_handled_failed: イベントを処理済みとしてマークできませんでした。
         marked_handled: イベントが処理済みとしてマークされました。
         none_selected: イベントが選択されていません。
+        payload_redacted: '保存されませんでした: ペイロードに伏せ字（[FILTERED]）の値が残っており、本来の値を上書きしてしまいます。'
         payload_update_failed: ペイロードを更新できませんでした。JSONが有効であることを確認してください。
         payload_updated: ペイロードが更新され、イベントが再キューに登録されました。
         replay_failed: イベントが見つからないか再生できませんでした。

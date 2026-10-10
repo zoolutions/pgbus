@@ -6,7 +6,13 @@ require "system_helper"
 # why, and what happens next; a processed-events audit that says whether each
 # claim completed; subscribers that say whether a consumer drains them.
 RSpec.describe "Events", type: :system do
-  let(:now) { Time.now.utc }
+  include ActiveSupport::Testing::TimeHelpers
+
+  # Relative times ("5m ago", "in 1h") are asserted: freeze the clock on a
+  # whole second (.claude/rules/dashboard.md).
+  let(:now) { Time.utc(2026, 10, 10, 12, 0, 0) }
+
+  around { |example| travel_to(now) { example.run } }
 
   it "shows an empty state for subscribers, pending and processed events" do
     visit "/pgbus/events"

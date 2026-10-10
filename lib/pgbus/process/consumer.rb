@@ -273,7 +273,9 @@ module Pgbus
         # Message stays in queue; VT will expire and it becomes available again.
         # read_ct tracks delivery attempts — when it exceeds max_retries,
         # the next read will route to DLQ above.
-        record_failed_event(message, queue_name, e)
+        # A dead-letter read fails only in the move: keep the handler's error
+        # on the row for the next attempt's DLQ block instead of the move's.
+        record_failed_event(message, queue_name, e) unless message.read_ct.to_i > config.max_retries
         @circuit_breaker.record_failure(queue_name)
         record_stat(message, queue_name, "failed", execution_start)
       ensure

@@ -48,13 +48,12 @@ module Pgbus
         # for one page of processed events: one bounded archive probe per
         # handler queue, never one per row.
         def event_replay_states(events)
-          queues = registered_subscribers.to_h { |s| [s[:handler_class], s[:physical_queue_name]] }
-          states = events.to_h { |e| [e["id"], queues[e["handler_class"]] ? :not_archived : :no_handler] }
+          subs = replay_subscribers
+          states = events.to_h { |e| [e["id"], subs[e["handler_class"]] ? :not_archived : :no_handler] }
 
-          events.select { |e| queues[e["handler_class"]] }.group_by { |e| queues[e["handler_class"]] }
-                .each do |queue, rows|
-            found = archived_event_ids(queue, rows)
-            rows.each { |e| states[e["id"]] = :replayable if found.include?(e["event_id"]) }
+          events.select { |e| subs[e["handler_class"]] }.group_by { |e| subs[e["handler_class"]] }.each do |sub, rows|
+            keys = archived_routing_keys(sub[:physical_queue_name], rows)
+            rows.each { |e| states[e["id"]] = :replayable if replayable_key?(sub, keys[e["event_id"]]) }
           end
           states
         end
@@ -64,14 +63,14 @@ module Pgbus
         # links back through replayed_from. Only that handler runs again: a
         # topic publish would re-run every subscriber of the routing key.
         def replay_event(event)
-          sub = registered_subscribers.find { |s| s[:handler_class] == event["handler_class"] }
+          sub = replay_subscribers[event["handler_class"]]
           return false unless sub
 
           archived = archived_event(sub[:physical_queue_name], event)
           return false unless archived
 
           message = JSON.parse(archived["message"])
-          return false unless event_routing_key(message)
+          return false unless replayable_key?(sub, event_routing_key(message))
 
           replay = message.merge("event_id" => SecureRandom.uuid, "replayed_from" => event["event_id"])
           @client.transaction do |txn|
@@ -106,16 +105,31 @@ module Pgbus
                                 .to_set { |s| s[:physical_queue_name] }
         end
 
-        def archived_event_ids(queue, events)
+        # { event_id => routing key } for the page's events still in the archive.
+        def archived_routing_keys(queue, events)
           ids = events.map { |e| text_array_element(e["event_id"]) }
-          connection.select_values(<<~SQL, "Pgbus Archived Events", ["{#{ids.join(",")}}", archive_floor(events)]).to_set
-            SELECT a.message->>'event_id' FROM pgmq.a_#{sanitize_name(queue)} a
+          rows = connection.select_all(<<~SQL, "Pgbus Archived Events", ["{#{ids.join(",")}}", archive_floor(events)])
+            SELECT a.message->>'event_id' AS event_id, #{ROUTING_KEY_SQL} AS routing_key
+            FROM pgmq.a_#{sanitize_name(queue)} a
             WHERE a.archived_at >= $2::timestamptz AND a.message->>'event_id' = ANY($1::text[])
               AND #{ROUTING_KEY_SQL} IS NOT NULL
           SQL
+          rows.to_a.to_h { |r| [r["event_id"], r["routing_key"]] }
         rescue StandardError => e
           Pgbus.logger.error { "[Pgbus::Web] Error reading the archive of #{queue}: #{e.class}: #{e.message}" }
-          Set.new
+          {}
+        end
+
+        # The registration Replay uses per handler class: the first, so the
+        # availability check and the action never disagree.
+        def replay_subscribers
+          registered_subscribers.each_with_object({}) { |s, out| out[s[:handler_class]] ||= s }
+        end
+
+        # A replay the consumer would archive unrouted is no replay: the key
+        # must still match the subscriber's pattern.
+        def replayable_key?(sub, routing_key)
+          !routing_key.nil? && EventBus::Registry.instance.pattern_matches?(sub[:pattern], routing_key)
         end
 
         # event_id is any string an envelope carried (Edit & Retry accepts any

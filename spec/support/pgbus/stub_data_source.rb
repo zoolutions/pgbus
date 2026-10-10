@@ -115,18 +115,19 @@ module Pgbus
       def job_rows(state: nil, queue_name: nil, queues: nil, exclude: nil, page: 1, per_page: 25)
         record(:job_rows, { state: state, queue_name: queue_name, queues: queues, exclude: exclude, page: page,
                             per_page: per_page })
-        page_of(state_rows(job_rows_in(queue_name, exclude), state), page, per_page)
+        page_of(state_rows(job_rows_in(queue_name, exclude, queues), state), page, per_page)
       end
 
       def job_state_counts(queue_name: nil, queues: nil, exclude: nil)
         record(:job_state_counts, { queue_name: queue_name, queues: queues, exclude: exclude })
-        tally(job_rows_in(queue_name, exclude))
+        tally(job_rows_in(queue_name, exclude, queues))
       end
 
       def jobs_ahead(_rows) = @jobs_ahead_hash
 
-      def job_rows_in(queue_name, exclude = nil)
+      def job_rows_in(queue_name, exclude = nil, queues = nil)
         rows = queue_name ? @job_rows_list.select { |r| r[:queue_name] == queue_name } : @job_rows_list
+        rows = rows.select { |r| queues.include?(r[:queue_name]) } if queues
         exclude ? rows.reject { |r| exclude.include?(r[:queue_name]) } : rows
       end
 
@@ -139,8 +140,14 @@ module Pgbus
       def event_state_counts(queue_name: nil) = tally(event_rows_in(queue_name))
       def events_ahead(_rows) = @events_ahead_hash
 
+      # An orphaned failed row carries the logical name, a queue row the
+      # physical one: a queue filter matches both, as the real SQL does.
       def event_rows_in(queue_name)
-        queue_name ? @event_rows_list.select { |r| r[:queue_name] == queue_name } : @event_rows_list
+        return @event_rows_list unless queue_name
+
+        sub = @subscribers_list.find { |s| s[:physical_queue_name] == queue_name || s[:queue_name] == queue_name }
+        names = [queue_name, sub&.dig(:physical_queue_name), sub&.dig(:queue_name)].compact
+        @event_rows_list.select { |r| names.include?(r[:queue_name]) }
       end
 
       def event_list_context(now: Time.now) = @event_context.with(jobs: @event_context.jobs.with(now: now))

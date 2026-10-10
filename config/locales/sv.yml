@@ -193,6 +193,7 @@ sv:
         mark_handled_failed: Kunde inte markera händelsen som hanterad.
         marked_handled: Händelse markerad som hanterad.
         none_selected: Inga händelser valda.
+        payload_redacted: 'Inte sparat: payloaden innehåller fortfarande maskerade ([FILTERED]) värden som skulle ersätta de riktiga.'
         payload_update_failed: Kunde inte uppdatera payload. Kontrollera att JSON är giltig.
         payload_updated: Payload uppdaterad och händelsen återköad.
         replay_failed: Händelsen hittades inte eller kunde inte spelas upp.

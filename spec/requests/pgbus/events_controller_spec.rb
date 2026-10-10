@@ -154,6 +154,30 @@ RSpec.describe "Pgbus::EventsController", type: :request do
     end
   end
 
+  # The editor shows the payload through PayloadFilter; saving it back would
+  # replace every redacted value with the marker (issue #494 review).
+  describe "POST /pgbus/events/:id/edit_payload" do
+    before do
+      @stub_data_source.subscribers_list = [{ physical_queue_name: "pgbus_orders", handler_class: "OrdersHandler" }]
+    end
+
+    it "re-enqueues an edited payload" do
+      post "/pgbus/events/5/edit_payload", params: { queue_name: "pgbus_orders", payload: '{"order_id":2}' }
+
+      expect(flash[:notice]).to be_present
+      expect(@stub_data_source.calls[:edit_event_payload]).to eq([["pgbus_orders", "5", '{"order_id":2}']])
+    end
+
+    it "refuses a payload that still carries a redaction marker" do
+      post "/pgbus/events/5/edit_payload",
+           params: { queue_name: "pgbus_orders", payload: '{"api_key":"[FILTERED]","order_id":2}' }
+
+      expect(response).to redirect_to("/pgbus/events")
+      expect(flash[:alert]).to include("redacted")
+      expect(@stub_data_source.calls).not_to have_key(:edit_event_payload)
+    end
+  end
+
   describe "POST /pgbus/events/:id/reroute" do
     before do
       @stub_data_source.subscribers_list = [

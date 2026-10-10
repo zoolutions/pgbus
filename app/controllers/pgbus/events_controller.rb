@@ -74,6 +74,10 @@ module Pgbus
       return reject_unknown_queue(:payload_update_failed) unless registered_queue?(queue_name)
 
       new_payload = params[:payload].to_s
+      # The editor shows the payload through PayloadFilter: saving a marker
+      # back would overwrite the redacted secret for good.
+      return redirect_to(events_path, alert: t("pgbus.events.flash.payload_redacted")) if new_payload.include?(Web::PayloadFilter::FILTERED)
+
       if data_source.edit_event_payload(queue_name, params[:id], new_payload)
         redirect_to events_path, notice: t("pgbus.events.flash.payload_updated")
       else
