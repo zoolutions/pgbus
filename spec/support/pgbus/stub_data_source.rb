@@ -134,7 +134,7 @@ module Pgbus
 
       def recurring_tasks(page: nil, per_page: nil)
         record(:recurring_tasks, { page: page, per_page: per_page })
-        per_page ? slice(@recurring_tasks_list, page, per_page) : @recurring_tasks_list
+        per_page ? slice(@recurring_tasks_list, page || 1, per_page) : @recurring_tasks_list
       end
 
       def recurring_tasks_count = @recurring_tasks_list.size

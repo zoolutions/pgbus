@@ -25,10 +25,11 @@ RSpec.describe Pgbus::ButtonHelper do
 
   describe "#pgbus_button_classes" do
     {
-      primary: %w[bg-indigo-600 text-white hover:bg-indigo-500],
-      danger: %w[bg-red-600 text-white hover:bg-red-500],
-      success: %w[bg-green-700 text-white hover:bg-green-600],
+      primary: %w[bg-indigo-600 text-white hover:bg-indigo-700],
+      danger: %w[bg-red-600 text-white hover:bg-red-700],
+      success: %w[bg-green-700 text-white hover:bg-green-800],
       warning: %w[bg-yellow-400 text-yellow-950 hover:bg-yellow-300],
+      destructive: %w[bg-red-800 text-white hover:bg-red-900],
       secondary: %w[bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600]
     }.each do |variant, tokens|
       it "styles #{variant} with its colours, a focus ring and a 24 px minimum target in every size" do

@@ -46,7 +46,7 @@ RSpec.describe "Dashboard dark-mode contrast" do # rubocop:disable RSpec/Describ
   # `class:` built from "…" \ "…" continuations is read as one string.
   def class_attributes(content)
     content.scan(/class(?:=|:\s*)((?:"[^"]*"\s*\\\s*)*"[^"]*")|class(?:=|:\s*)'([^']*)'/).flat_map do |double, single|
-      value = double ? double.scan(/"([^"]*)"/).join(" ") : single.to_s
+      value = double ? double.scan(/"([^"]*)"/).join : single.to_s
       base = value.gsub(erb_tag, " ").split(/\s+/)
       branches = value.scan(erb_tag).flat_map { |tag| tag.scan(/'([^']*)'/).flatten }
       branches.empty? ? [base] : branches.map { |branch| base + branch.split(/\s+/) }

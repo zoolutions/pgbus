@@ -33,7 +33,7 @@ RSpec.describe "Pgbus::RecurringTasksController", type: :request do
         get "/pgbus/recurring_tasks", params: { frame: "recurring_tasks", page: 2 }
 
         expect(@stub_data_source.calls[:recurring_tasks]).to eq([[{ page: 2, per_page: 25 }]])
-        expect(response.body).to include('data-turbo-action="advance"', "task_row29")
+        expect(response.body).to include('data-turbo-action="advance"', "task_row29", "page=2")
       end
     end
   end

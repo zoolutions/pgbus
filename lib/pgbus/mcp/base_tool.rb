@@ -71,8 +71,11 @@ module Pgbus
         end
 
         # Past the count cap the total is a lower bound, so only a full page
-        # can have another one behind it.
+        # can have another one behind it. At the page ceiling the next call
+        # would clamp back to this page, so there is no "more" to fetch.
         def more_pages?(count, page:, per_page:, shown:)
+          return false if page >= self::MAX_PAGE
+
           count.capped? ? shown == per_page : page * per_page < count.total
         end
 

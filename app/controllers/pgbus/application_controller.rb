@@ -78,7 +78,8 @@ module Pgbus
 
     # key – the query param; a second list on one page uses <list>_page.
     def page_param(key = :page)
-      [params[key].to_i, 1].max
+      value = params[key]
+      [value.is_a?(String) ? value.to_i : 1, 1].max
     end
 
     def per_page

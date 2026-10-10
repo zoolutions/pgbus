@@ -11,10 +11,13 @@ module Pgbus
            "focus-visible:outline-indigo-600 dark:focus-visible:outline-indigo-400"
 
     VARIANTS = {
-      primary: "bg-indigo-600 text-white hover:bg-indigo-500",
-      danger: "bg-red-600 text-white hover:bg-red-500",
-      # White on green-600 is 3.3:1; green-700 passes AA.
-      success: "bg-green-700 text-white hover:bg-green-600",
+      # Hover goes darker, never lighter: white on red-500 is 3.8:1, on
+      # green-600 3.3:1, both under 4.5:1 for these small labels.
+      primary: "bg-indigo-600 text-white hover:bg-indigo-700",
+      danger: "bg-red-600 text-white hover:bg-red-700",
+      # Permanent and irreversible (Delete queue), set apart from danger.
+      destructive: "bg-red-800 text-white hover:bg-red-900",
+      success: "bg-green-700 text-white hover:bg-green-800",
       # White on yellow fails; yellow buttons carry dark text in both themes.
       warning: "bg-yellow-400 text-yellow-950 hover:bg-yellow-300",
       secondary: "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600",

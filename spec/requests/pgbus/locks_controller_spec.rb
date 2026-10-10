@@ -45,6 +45,13 @@ RSpec.describe "Pgbus::LocksController", type: :request do
         expect(response.body).to include("/pgbus/locks?keys_page=2&amp;page=2", "/pgbus/locks?keys_page=1&amp;page=1")
       end
 
+      it "treats a malformed page param as page 1 instead of failing" do
+        get "/pgbus/locks", params: { keys_page: ["2"], page: { x: "1" } }
+
+        expect(response).to have_http_status(:ok)
+        expect(@stub_data_source.calls[:concurrency_stats]).to eq([[{ page: 1, per_page: 25 }]])
+      end
+
       it "pages the concurrency frame" do
         get "/pgbus/locks", params: { frame: "concurrency", keys_page: 2 }
 

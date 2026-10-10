@@ -55,11 +55,26 @@ RSpec.describe "Compiled dashboard CSS covers the classes views use" do # ruboco
   end
 
   # Helpers build class lists in constants and string literals (the badge
-  # helpers, Pgbus::ButtonHelper). Take every double-quoted literal that reads
-  # like a colour class list.
+  # helpers, Pgbus::ButtonHelper). A literal is a class list when it has two or
+  # more words, every one a static class token, at least one with a hyphen; i18n
+  # keys (dots), SQL and single-word tag or attribute names fail that test.
   def helper_class_tokens(content)
-    content.scan(/"([^"\n]*)"/).flatten.grep(/\b(?:bg|text)-[a-z]+-\d{2,3}\b/)
-           .flat_map(&:split).grep(static_class_token)
+    content.scan(/"([^"\n]*)"/).flatten.map(&:split)
+           .select { |words| words.size > 1 && words.all? { |w| w.match?(static_class_token) && !w.include?(".") } }
+           .select { |words| words.any? { |w| w.include?("-") } }
+           .flatten
+  end
+
+  it "reads helper class lists with no colour utility, and skips other strings" do
+    source = <<~RUBY
+      BASE = "inline-flex items-center min-h-6 font-medium focus-visible:outline-2"
+      LABEL = "pgbus.helpers.pagination.label"
+      SQL = "SELECT 1 FROM pgbus_batches"
+      ATTR = "signed-stream-name"
+    RUBY
+
+    expect(helper_class_tokens(source)).to include("min-h-6", "focus-visible:outline-2")
+    expect(helper_class_tokens(source)).not_to include("pgbus.helpers.pagination.label", "pgbus_batches", "signed-stream-name")
   end
 
   it "emits every static Tailwind class the helpers reference" do

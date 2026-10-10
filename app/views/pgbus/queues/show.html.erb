@@ -33,7 +33,7 @@
           method: :post, variant: :danger,
           data: { turbo_confirm: t("pgbus.queues.show.purge_confirm") } %>
     <%= pgbus_button_to t("pgbus.queues.show.delete_queue"), pgbus.queue_path(name: params[:name]),
-          method: :delete, variant: :danger,
+          method: :delete, variant: :destructive,
           data: { turbo_confirm: t("pgbus.queues.show.delete_confirm") } %>
   </div>
 </div>

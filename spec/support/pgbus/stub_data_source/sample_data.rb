@@ -49,6 +49,9 @@ module Pgbus
           )
           @locks_list = sample_locks(now)
           @concurrency_stats_hash = sample_concurrency(now)
+          # The home card and metrics read the same concurrency aggregates.
+          @stats = @stats.merge(@concurrency_stats_hash.slice(:parked_total, :oldest_parked_age_sec,
+                                                              :slots_held, :keys_at_limit))
           @subscribers_list = sample_subscribers
           @pending_events_list = sample_pending_events(now)
           @events_list = sample_processed_events(now)

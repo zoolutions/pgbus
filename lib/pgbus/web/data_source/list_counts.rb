@@ -3,10 +3,12 @@
 module Pgbus
   module Web
     class DataSource
-      # Row totals for the dashboard's paged lists (issue #496). Each count
+      # Row totals for the dashboard's paged lists (issue #496). list_count
       # stops at COUNT_CAP + 1 rows, so a table with millions of rows costs no
       # more than one with ten thousand; past the cap the pager shows "10,000+".
-      # The same bound JobList uses for its state tabs.
+      # The same bound JobList uses for its state tabs. batches_count and
+      # recurring_tasks_count are exact (summary_stats' badge reads the latter);
+      # they predate the pagers and live here to keep data_source.rb small.
       module ListCounts
         COUNT_CAP = 10_000
 

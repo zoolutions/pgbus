@@ -15,7 +15,8 @@ module Pgbus
           to confirm scheduled work is firing on time. Returns every task unless
           page or per_page is given; then it is paginated (per_page defaults to
           100, capped at 100). The response carries page, per_page, total
-          (capped at 10000) and has_more; per_page is null when unpaginated.
+          (capped at 10000 when paginated; the exact row count when not) and
+          has_more; per_page is null when unpaginated.
         DESC
 
         MAX_PER_PAGE = 100
