@@ -997,6 +997,16 @@ RSpec.describe Pgbus::Process::Consumer do
       end
     end
 
+    it "registers its execution mode so an async consumer counts slots, not threads" do
+      allow(Pgbus::Process::Heartbeat).to receive(:new).and_return(mock_heartbeat)
+      async = described_class.new(topics: ["orders.#"], queue_names: ["q_orders"], execution_mode: :async)
+
+      async.send(:start_heartbeat)
+
+      expect(Pgbus::Process::Heartbeat).to have_received(:new)
+        .with(hash_including(metadata: hash_including(execution_mode: :async)))
+    end
+
     it "supplies handled count, buffer, pool use and memory on every beat" do
       allow(Pgbus::Process::MemoryUsage).to receive(:current_mb).and_return(128)
       allow(mock_pool).to receive(:metadata).and_return({ mode: :threads, capacity: 3, busy: 1 })

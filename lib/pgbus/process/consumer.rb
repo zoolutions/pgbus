@@ -616,7 +616,7 @@ module Pgbus
         @heartbeat = Heartbeat.new(
           kind: "consumer",
           metadata: {
-            topics: topics, threads: threads, pid: ::Process.pid,
+            topics: topics, threads: threads, pid: ::Process.pid, execution_mode: @execution_mode,
             started_at: @started_at.to_f, supervisor_pid: ::Process.ppid,
             max_jobs: config.max_jobs_per_worker, max_memory_mb: config.max_memory_mb,
             max_lifetime: config.max_worker_lifetime
