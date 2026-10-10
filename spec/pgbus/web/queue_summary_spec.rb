@@ -64,8 +64,8 @@ RSpec.describe Pgbus::Web::QueueSummary do
       expect(line(lines, "drained_wildcard").args).to eq(count: 2)
     end
 
-    it "warns in red when nothing is configured to drain the queue" do
-      lines = present(drain: { capsules: [] })
+    it "warns in red when nothing is configured to drain the queue and no worker listens" do
+      lines = present(drain: { capsules: [], live_workers: 0 })
 
       expect(line(lines, "not_drained")).to have_attributes(tone: :red)
     end
@@ -73,7 +73,15 @@ RSpec.describe Pgbus::Web::QueueSummary do
     it "warns in red when no healthy worker runs, with the claimable count" do
       lines = present(drain: { live_workers: 0 })
 
-      expect(line(lines, "no_workers")).to have_attributes(tone: :red, args: { visible: 3 })
+      expect(line(lines, "no_workers")).to have_attributes(tone: :red, args: { count: 3 })
+    end
+
+    # Capsules started with `pgbus --queues …` are not in the web process's
+    # configuration; a live heartbeat for the queue is the better evidence.
+    it "trusts healthy worker heartbeats when the web process sees no capsule config" do
+      lines = present(drain: { capsules: [], live_workers: 2 })
+
+      expect(line(lines, "drained_live")).to have_attributes(tone: :gray, args: { count: 2 })
     end
 
     it "prefers not_drained over no_workers" do

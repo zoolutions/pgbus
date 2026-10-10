@@ -563,7 +563,9 @@ fi:
         delete_confirm: Poista tämä jono pysyvästi? Tätä ei voi kumota.
         delete_queue: Poista jono
         dlq_link: Yritä uudelleen tai hylkää ne Dead Letter -sivulla
-        dlq_pointer: Kuolleiden viestien jono jonolle %{logical} — %{count} viestiä.
+        dlq_pointer:
+          one: Kuolleiden viestien jono jonolle %{logical} — %{count} viesti.
+          other: Kuolleiden viestien jono jonolle %{logical} — %{count} viestiä.
         message_discard_failed: Viestiä ei voitu hylätä.
         message_discarded: Viesti hylätty.
         message_retried: Viestin näkyvyys nollattu.
@@ -588,12 +590,17 @@ fi:
           drained_by:
             one: Tyhjentää %{capsules} (%{count} terve worker)
             other: Tyhjentää %{capsules} (%{count} tervettä workeria)
+          drained_live:
+            one: Tyhjentää %{count} terve worker, joka kuuntelee tätä jonoa
+            other: Tyhjentää %{count} tervettä workeria, jotka kuuntelevat tätä jonoa
           drained_wildcard:
             one: Tyhjentää jokerimerkki-worker-kapseli (%{count} terve worker)
             other: Tyhjentää jokerimerkki-worker-kapseli (%{count} tervettä workeria)
           empty: Mitään ei odota
           handler: Tapahtumankäsittelijän jono — consumerit tyhjentävät (%{count} tervettä)
-          no_workers: Yksikään terve worker ei ole käynnissä — %{visible} työtä on noudettavissa, mutta kukaan ei nouda niitä
+          no_workers:
+            one: Yksikään terve worker ei ole käynnissä — %{count} työ on noudettavissa, mutta kukaan ei nouda sitä
+            other: Yksikään terve worker ei ole käynnissä — %{count} työtä on noudettavissa, mutta kukaan ei nouda niitä
           not_drained: Mikään worker-kapseli ei tyhjennä tätä jonoa — työt odottavat, kunnes sellainen määritetään
           paused_circuit_breaker: 'Keskeytetty automaattisesti %{ago} %{failures} peräkkäisen virheen jälkeen — jatkuu %{time} (laukaisu #%{trip})'
           paused_operator: Keskeytetty %{ago} — %{reason}

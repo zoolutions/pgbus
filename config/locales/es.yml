@@ -563,7 +563,9 @@ es:
         delete_confirm: "¿Eliminar permanentemente esta cola? Esto no se puede deshacer."
         delete_queue: Eliminar cola
         dlq_link: Reintentarlos o descartarlos en la página de Dead Letter
-        dlq_pointer: Cola de mensajes muertos de %{logical} — %{count} mensajes.
+        dlq_pointer:
+          one: Cola de mensajes muertos de %{logical} — %{count} mensaje.
+          other: Cola de mensajes muertos de %{logical} — %{count} mensajes.
         message_discard_failed: No se pudo descartar el mensaje.
         message_discarded: Mensaje descartado.
         message_retried: Visibilidad del mensaje restablecida.
@@ -588,12 +590,17 @@ es:
           drained_by:
             one: La vacía %{capsules} (%{count} worker sano)
             other: La vacía %{capsules} (%{count} workers sanos)
+          drained_live:
+            one: La vacía %{count} worker sano que escucha esta cola
+            other: La vacían %{count} workers sanos que escuchan esta cola
           drained_wildcard:
             one: La vacía una cápsula de workers comodín (%{count} worker sano)
             other: La vacía una cápsula de workers comodín (%{count} workers sanos)
           empty: Nada en espera
           handler: Cola de manejador de eventos — la vacían los consumidores (%{count} sanos)
-          no_workers: Ningún worker sano en ejecución — %{visible} trabajos están disponibles pero nadie los toma
+          no_workers:
+            one: Ningún worker sano en ejecución — %{count} trabajo está disponible pero nadie lo toma
+            other: Ningún worker sano en ejecución — %{count} trabajos están disponibles pero nadie los toma
           not_drained: Ninguna cápsula de workers vacía esta cola — los trabajos esperan hasta que se configure una
           paused_circuit_breaker: 'Pausada automáticamente %{ago} tras %{failures} fallos consecutivos — se reanuda %{time} (disparo #%{trip})'
           paused_operator: Pausada %{ago} — %{reason}

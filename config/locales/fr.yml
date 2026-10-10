@@ -563,7 +563,9 @@ fr:
         delete_confirm: Supprimer définitivement cette file d'attente ? Cette action est irréversible.
         delete_queue: Supprimer la file d'attente
         dlq_link: Les relancer ou les supprimer sur la page Dead Letter
-        dlq_pointer: File de lettres mortes de %{logical} — %{count} messages.
+        dlq_pointer:
+          one: File de lettres mortes de %{logical} — %{count} message.
+          other: File de lettres mortes de %{logical} — %{count} messages.
         message_discard_failed: Impossible de rejeter le message.
         message_discarded: Message rejeté.
         message_retried: Visibilité du message réinitialisée.
@@ -588,12 +590,17 @@ fr:
           drained_by:
             one: Vidée par %{capsules} (%{count} worker sain)
             other: Vidée par %{capsules} (%{count} workers sains)
+          drained_live:
+            one: Vidée par %{count} worker sain qui écoute cette file
+            other: Vidée par %{count} workers sains qui écoutent cette file
           drained_wildcard:
             one: Vidée par une capsule de workers joker (%{count} worker sain)
             other: Vidée par une capsule de workers joker (%{count} workers sains)
           empty: Rien en attente
           handler: File de gestionnaire d'événements — vidée par les consommateurs (%{count} sains)
-          no_workers: Aucun worker sain en cours — %{visible} jobs sont récupérables mais personne ne les prend
+          no_workers:
+            one: Aucun worker sain en cours — %{count} job est récupérable mais personne ne le prend
+            other: Aucun worker sain en cours — %{count} jobs sont récupérables mais personne ne les prend
           not_drained: Aucune capsule de workers ne vide cette file — les jobs attendent qu'une soit configurée
           paused_circuit_breaker: Mise en pause automatiquement %{ago} après %{failures} échecs consécutifs — reprend %{time} (déclenchement n°%{trip})
           paused_operator: En pause %{ago} — %{reason}

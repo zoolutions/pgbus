@@ -58,6 +58,7 @@ RSpec.describe "Pgbus::QueuesController", type: :request do
 
         expect(response.body).not_to include('<turbo-frame id="jobs-list"')
         expect(response.body).to include("/pgbus/dlq?dlq=pgbus_default_dlq")
+        expect(response.body).to include("Dead-letter queue for default — 2 messages.")
         expect(@stub_data_source.calls[:job_rows]).to be_empty
       end
     end

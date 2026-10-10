@@ -43,3 +43,5 @@ ignore_unused:
   # Plural forms reached through the dynamic summary.<key> lookup (issue #491).
   - "pgbus.queues.show.summary.drained_by.*"
   - "pgbus.queues.show.summary.drained_wildcard.*"
+  - "pgbus.queues.show.summary.drained_live.*"
+  - "pgbus.queues.show.summary.no_workers.*"

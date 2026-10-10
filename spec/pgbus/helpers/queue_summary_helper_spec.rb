@@ -37,6 +37,22 @@ RSpec.describe Pgbus::ApplicationHelper do
     end
   end
 
+  describe "plural sentences" do
+    def summary_line(key, **args) = Pgbus::Web::QueueSummary::Line.new(key: key, args: args, tone: :gray)
+
+    it "says job or jobs when no worker runs" do
+      expect(helper.pgbus_queue_summary_line(summary_line("no_workers", count: 1)))
+        .to eq("No healthy worker running — 1 job is claimable but nothing claims it")
+      expect(helper.pgbus_queue_summary_line(summary_line("no_workers", count: 3)))
+        .to eq("No healthy worker running — 3 jobs are claimable but nothing claims them")
+    end
+
+    it "credits live workers when no capsule config is visible" do
+      expect(helper.pgbus_queue_summary_line(summary_line("drained_live", count: 1)))
+        .to eq("Drained by 1 healthy worker listening on this queue")
+    end
+  end
+
   describe "#pgbus_queue_summary_classes" do
     it "gives every tone a dark partner and falls back to gray" do
       expect(helper.pgbus_queue_summary_classes(:red)).to include("text-red-800", "dark:text-red-200")

@@ -51,10 +51,13 @@ module Pgbus
         return line("handler", :gray, count: drainers[:live_consumers].to_i) if drainers[:handler]
 
         capsules = Array(drainers[:capsules])
-        return line("not_drained", :red) if capsules.empty? && !drainers[:wildcard]
-
         live = drainers[:live_workers].to_i
-        return line("no_workers", :red, visible: detail[:queue_visible_length].to_i) if live.zero?
+        if capsules.empty? && !drainers[:wildcard]
+          # Capsules from `pgbus --queues` never reach the web process's
+          # configuration: a healthy heartbeat for this queue outranks it.
+          return live.zero? ? line("not_drained", :red) : line("drained_live", :gray, count: live)
+        end
+        return line("no_workers", :red, count: detail[:queue_visible_length].to_i) if live.zero?
         return line("drained_wildcard", :gray, count: live) if capsules.empty?
 
         line("drained_by", :gray, capsules: capsules.join(", "), count: live)

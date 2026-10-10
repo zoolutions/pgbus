@@ -563,7 +563,9 @@ it:
         delete_confirm: Eliminare permanentemente questa coda? Questa azione non può essere annullata.
         delete_queue: Elimina coda
         dlq_link: Riprovali o scartali nella pagina Dead Letter
-        dlq_pointer: Coda dei messaggi morti di %{logical} — %{count} messaggi.
+        dlq_pointer:
+          one: Coda dei messaggi morti di %{logical} — %{count} messaggio.
+          other: Coda dei messaggi morti di %{logical} — %{count} messaggi.
         message_discard_failed: Impossibile scartare il messaggio.
         message_discarded: Messaggio scartato.
         message_retried: Visibilità del messaggio reimpostata.
@@ -588,12 +590,17 @@ it:
           drained_by:
             one: Svuotata da %{capsules} (%{count} worker sano)
             other: Svuotata da %{capsules} (%{count} worker sani)
+          drained_live:
+            one: Svuotata da %{count} worker sano in ascolto su questa coda
+            other: Svuotata da %{count} worker sani in ascolto su questa coda
           drained_wildcard:
             one: Svuotata da una capsula di worker jolly (%{count} worker sano)
             other: Svuotata da una capsula di worker jolly (%{count} worker sani)
           empty: Niente in attesa
           handler: Coda del gestore di eventi — svuotata dai consumer (%{count} sani)
-          no_workers: Nessun worker sano in esecuzione — %{visible} job sono prelevabili ma nessuno li preleva
+          no_workers:
+            one: Nessun worker sano in esecuzione — %{count} job è prelevabile ma nessuno lo preleva
+            other: Nessun worker sano in esecuzione — %{count} job sono prelevabili ma nessuno li preleva
           not_drained: Nessuna capsula di worker svuota questa coda — i job attendono finché non ne viene configurata una
           paused_circuit_breaker: Messa in pausa automaticamente %{ago} dopo %{failures} errori consecutivi — riprende %{time} (intervento n.%{trip})
           paused_operator: In pausa %{ago} — %{reason}

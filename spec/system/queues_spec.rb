@@ -129,7 +129,7 @@ RSpec.describe "Queues", type: :system do
       end
 
       it "warns when no worker capsule drains the queue" do
-        @stub_data_source.queue_drainers_hash["pgbus_default"] = { capsules: [] }
+        @stub_data_source.queue_drainers_hash["pgbus_default"] = { capsules: [], live_workers: 0 }
 
         visit "/pgbus/queues/pgbus_default"
 
@@ -162,7 +162,7 @@ RSpec.describe "Queues", type: :system do
     it "points a dead-letter queue at the Dead Letter page instead of listing jobs" do
       visit "/pgbus/queues/pgbus_default_dlq"
 
-      expect(page).to have_text("Dead-letter queue for default")
+      expect(page).to have_text("Dead-letter queue for default — 2 messages.")
       expect(page).to have_no_css("turbo-frame#jobs-list")
       expect(page).to have_link("Dead Letter page", href: "/pgbus/dlq?dlq=pgbus_default_dlq")
     end

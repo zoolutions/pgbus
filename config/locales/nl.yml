@@ -563,7 +563,9 @@ nl:
         delete_confirm: Deze wachtrij permanent verwijderen? Dit kan niet ongedaan worden gemaakt.
         delete_queue: Wachtrij verwijderen
         dlq_link: Opnieuw proberen of verwijderen op de Dead Letter-pagina
-        dlq_pointer: Dead-letterwachtrij voor %{logical} — %{count} berichten.
+        dlq_pointer:
+          one: Dead-letterwachtrij voor %{logical} — %{count} bericht.
+          other: Dead-letterwachtrij voor %{logical} — %{count} berichten.
         message_discard_failed: Kon bericht niet verwerpen.
         message_discarded: Bericht verworpen.
         message_retried: Zichtbaarheid van bericht gereset.
@@ -588,12 +590,17 @@ nl:
           drained_by:
             one: Leeggemaakt door %{capsules} (%{count} gezonde worker)
             other: Leeggemaakt door %{capsules} (%{count} gezonde workers)
+          drained_live:
+            one: Leeggemaakt door %{count} gezonde worker die naar deze wachtrij luistert
+            other: Leeggemaakt door %{count} gezonde workers die naar deze wachtrij luisteren
           drained_wildcard:
             one: Leeggemaakt door een wildcard-workercapsule (%{count} gezonde worker)
             other: Leeggemaakt door een wildcard-workercapsule (%{count} gezonde workers)
           empty: Niets in de wacht
           handler: Event-handlerwachtrij — leeggemaakt door consumers (%{count} gezond)
-          no_workers: Geen gezonde worker actief — %{visible} jobs zijn op te pakken maar niemand pakt ze op
+          no_workers:
+            one: Geen gezonde worker actief — %{count} job is op te pakken maar niemand pakt hem op
+            other: Geen gezonde worker actief — %{count} jobs zijn op te pakken maar niemand pakt ze op
           not_drained: Geen workercapsule maakt deze wachtrij leeg — jobs wachten tot er een is geconfigureerd
           paused_circuit_breaker: 'Automatisch gepauzeerd %{ago} na %{failures} opeenvolgende fouten — hervat %{time} (activering #%{trip})'
           paused_operator: Gepauzeerd %{ago} — %{reason}

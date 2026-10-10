@@ -563,7 +563,9 @@ pt:
         delete_confirm: Excluir permanentemente esta fila? Esta ação não pode ser desfeita.
         delete_queue: Excluir fila
         dlq_link: Tente novamente ou descarte-as na página Dead Letter
-        dlq_pointer: Fila de mensagens mortas de %{logical} — %{count} mensagens.
+        dlq_pointer:
+          one: Fila de mensagens mortas de %{logical} — %{count} mensagem.
+          other: Fila de mensagens mortas de %{logical} — %{count} mensagens.
         message_discard_failed: Não foi possível descartar a mensagem.
         message_discarded: Mensagem descartada.
         message_retried: Visibilidade da mensagem redefinida.
@@ -588,12 +590,17 @@ pt:
           drained_by:
             one: Esvaziada por %{capsules} (%{count} worker saudável)
             other: Esvaziada por %{capsules} (%{count} workers saudáveis)
+          drained_live:
+            one: Esvaziada por %{count} worker saudável que escuta esta fila
+            other: Esvaziada por %{count} workers saudáveis que escutam esta fila
           drained_wildcard:
             one: Esvaziada por uma cápsula de workers curinga (%{count} worker saudável)
             other: Esvaziada por uma cápsula de workers curinga (%{count} workers saudáveis)
           empty: Nada à espera
           handler: Fila de handler de eventos — esvaziada pelos consumidores (%{count} saudáveis)
-          no_workers: Nenhum worker saudável em execução — %{visible} jobs estão disponíveis mas ninguém os pega
+          no_workers:
+            one: Nenhum worker saudável em execução — %{count} job está disponível mas ninguém o pega
+            other: Nenhum worker saudável em execução — %{count} jobs estão disponíveis mas ninguém os pega
           not_drained: Nenhuma cápsula de workers esvazia esta fila — os jobs esperam até que uma seja configurada
           paused_circuit_breaker: 'Pausada automaticamente %{ago} após %{failures} falhas consecutivas — retoma %{time} (disparo #%{trip})'
           paused_operator: Pausada %{ago} — %{reason}

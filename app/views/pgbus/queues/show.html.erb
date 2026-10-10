@@ -96,7 +96,7 @@
   <%# DLQ tables are not part of the unified list; their messages live on the Dead Letter page. %>
   <div data-testid="dlq-pointer" class="rounded-lg bg-white dark:bg-gray-800 px-4 py-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
     <p class="text-sm text-gray-700 dark:text-gray-200">
-      <%= t("pgbus.queues.show.dlq_pointer", logical: @drainers[:logical], count: pgbus_number(@queue[:queue_length])) %>
+      <%= t("pgbus.queues.show.dlq_pointer", logical: @drainers[:logical], count: @queue[:queue_length].to_i) %>
       <%= pgbus_link_to t("pgbus.queues.show.dlq_link"), pgbus.dead_letter_index_path(dlq: params[:name]), size: :sm %>
     </p>
   </div>

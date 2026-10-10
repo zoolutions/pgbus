@@ -563,7 +563,9 @@ sv:
         delete_confirm: Ta bort denna kö permanent? Detta kan inte ångras.
         delete_queue: Ta bort kö
         dlq_link: Försök igen eller kassera dem på Dead Letter-sidan
-        dlq_pointer: Dead letter-kö för %{logical} — %{count} meddelanden.
+        dlq_pointer:
+          one: Dead letter-kö för %{logical} — %{count} meddelande.
+          other: Dead letter-kö för %{logical} — %{count} meddelanden.
         message_discard_failed: Kunde inte kassera meddelandet.
         message_discarded: Meddelande kasserat.
         message_retried: Meddelandets synlighet återställd.
@@ -588,12 +590,17 @@ sv:
           drained_by:
             one: Töms av %{capsules} (%{count} frisk worker)
             other: Töms av %{capsules} (%{count} friska workers)
+          drained_live:
+            one: Töms av %{count} frisk worker som lyssnar på den här kön
+            other: Töms av %{count} friska workers som lyssnar på den här kön
           drained_wildcard:
             one: Töms av en jokertecken-worker-kapsel (%{count} frisk worker)
             other: Töms av en jokertecken-worker-kapsel (%{count} friska workers)
           empty: Inget väntar
           handler: Händelsehanterarkö — töms av consumers (%{count} friska)
-          no_workers: Ingen frisk worker körs — %{visible} jobb är hämtbara men inget hämtar dem
+          no_workers:
+            one: Ingen frisk worker körs — %{count} jobb är hämtbart men inget hämtar det
+            other: Ingen frisk worker körs — %{count} jobb är hämtbara men inget hämtar dem
           not_drained: Ingen worker-kapsel tömmer den här kön — jobb väntar tills en är konfigurerad
           paused_circuit_breaker: 'Automatiskt pausad %{ago} efter %{failures} fel i rad — återupptas %{time} (utlösning #%{trip})'
           paused_operator: Pausad %{ago} — %{reason}

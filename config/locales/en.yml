@@ -563,7 +563,9 @@ en:
         delete_confirm: Permanently delete this queue? This cannot be undone.
         delete_queue: Delete Queue
         dlq_link: Retry or discard them on the Dead Letter page
-        dlq_pointer: Dead-letter queue for %{logical} — %{count} messages.
+        dlq_pointer:
+          one: Dead-letter queue for %{logical} — %{count} message.
+          other: Dead-letter queue for %{logical} — %{count} messages.
         message_discard_failed: Could not discard message.
         message_discarded: Message discarded.
         message_retried: Message visibility reset.
@@ -588,12 +590,17 @@ en:
           drained_by:
             one: Drained by %{capsules} (%{count} healthy worker)
             other: Drained by %{capsules} (%{count} healthy workers)
+          drained_live:
+            one: Drained by %{count} healthy worker listening on this queue
+            other: Drained by %{count} healthy workers listening on this queue
           drained_wildcard:
             one: Drained by a wildcard worker capsule (%{count} healthy worker)
             other: Drained by a wildcard worker capsule (%{count} healthy workers)
           empty: Nothing waiting
           handler: Event handler queue — drained by consumers (%{count} healthy)
-          no_workers: No healthy worker running — %{visible} jobs are claimable but nothing claims them
+          no_workers:
+            one: No healthy worker running — %{count} job is claimable but nothing claims it
+            other: No healthy worker running — %{count} jobs are claimable but nothing claims them
           not_drained: No worker capsule drains this queue — jobs wait until one is configured
           paused_circuit_breaker: 'Paused automatically %{ago} after %{failures} consecutive failures — resumes %{time} (trip #%{trip})'
           paused_operator: Paused %{ago} — %{reason}

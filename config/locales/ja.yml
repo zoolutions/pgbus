@@ -563,7 +563,9 @@ ja:
         delete_confirm: このキューを完全に削除しますか？この操作は取り消せません。
         delete_queue: キューを削除
         dlq_link: デッドレターページで再試行または破棄
-        dlq_pointer: "%{logical} のデッドレターキュー — メッセージ %{count} 件。"
+        dlq_pointer:
+          one: "%{logical} のデッドレターキュー — メッセージ %{count} 件。"
+          other: "%{logical} のデッドレターキュー — メッセージ %{count} 件。"
         message_discard_failed: メッセージを破棄できませんでした。
         message_discarded: メッセージを破棄しました。
         message_retried: メッセージの可視性をリセットしました。
@@ -588,12 +590,17 @@ ja:
           drained_by:
             one: "%{capsules} が処理（正常なワーカー %{count}）"
             other: "%{capsules} が処理（正常なワーカー %{count}）"
+          drained_live:
+            one: このキューを監視する正常なワーカー %{count} が処理
+            other: このキューを監視する正常なワーカー %{count} が処理
           drained_wildcard:
             one: ワイルドカードのワーカーカプセルが処理（正常なワーカー %{count}）
             other: ワイルドカードのワーカーカプセルが処理（正常なワーカー %{count}）
           empty: 待機中のものはありません
           handler: イベントハンドラーキュー — コンシューマーが処理（正常 %{count}）
-          no_workers: 正常なワーカーが稼働していません — %{visible} 件のジョブが取得可能ですが、誰も取得していません
+          no_workers:
+            one: 正常なワーカーが稼働していません — %{count} 件のジョブが取得可能ですが、誰も取得していません
+            other: 正常なワーカーが稼働していません — %{count} 件のジョブが取得可能ですが、誰も取得していません
           not_drained: このキューを処理するワーカーカプセルがありません — 設定されるまでジョブは待機します
           paused_circuit_breaker: "%{failures} 回連続の失敗により %{ago} に自動で一時停止 — %{time} に再開（%{trip} 回目の作動）"
           paused_operator: "%{ago} に一時停止 — %{reason}"

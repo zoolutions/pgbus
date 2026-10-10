@@ -563,7 +563,9 @@ de:
         delete_confirm: Diese Warteschlange dauerhaft löschen? Dies kann nicht rückgängig gemacht werden.
         delete_queue: Warteschlange löschen
         dlq_link: Auf der Dead-Letter-Seite wiederholen oder verwerfen
-        dlq_pointer: Dead-Letter-Queue für %{logical} — %{count} Nachrichten.
+        dlq_pointer:
+          one: Dead-Letter-Queue für %{logical} — %{count} Nachricht.
+          other: Dead-Letter-Queue für %{logical} — %{count} Nachrichten.
         message_discard_failed: Nachricht konnte nicht verworfen werden.
         message_discarded: Nachricht verworfen.
         message_retried: Sichtbarkeit der Nachricht zurückgesetzt.
@@ -588,12 +590,17 @@ de:
           drained_by:
             one: Abgearbeitet von %{capsules} (%{count} gesunder Worker)
             other: Abgearbeitet von %{capsules} (%{count} gesunde Worker)
+          drained_live:
+            one: Abgearbeitet von %{count} gesunden Worker, der auf diese Queue hört
+            other: Abgearbeitet von %{count} gesunden Workern, die auf diese Queue hören
           drained_wildcard:
             one: Abgearbeitet von einer Wildcard-Worker-Kapsel (%{count} gesunder Worker)
             other: Abgearbeitet von einer Wildcard-Worker-Kapsel (%{count} gesunde Worker)
           empty: Nichts wartet
           handler: Event-Handler-Queue — von Consumern abgearbeitet (%{count} gesund)
-          no_workers: Kein gesunder Worker läuft — %{visible} Jobs sind abholbar, aber niemand holt sie ab
+          no_workers:
+            one: Kein gesunder Worker läuft — %{count} Job ist abholbar, aber niemand holt ihn ab
+            other: Kein gesunder Worker läuft — %{count} Jobs sind abholbar, aber niemand holt sie ab
           not_drained: Keine Worker-Kapsel arbeitet diese Queue ab — Jobs warten, bis eine konfiguriert ist
           paused_circuit_breaker: 'Automatisch pausiert %{ago} nach %{failures} Fehlern in Folge — wird fortgesetzt %{time} (Auslösung #%{trip})'
           paused_operator: Pausiert %{ago} — %{reason}

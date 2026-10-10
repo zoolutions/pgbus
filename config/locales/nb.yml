@@ -563,7 +563,9 @@ nb:
         delete_confirm: Slette denne køen permanent? Dette kan ikke angres.
         delete_queue: Slett kø
         dlq_link: Prøv på nytt eller forkast dem på Dead Letter-siden
-        dlq_pointer: Dead letter-kø for %{logical} — %{count} meldinger.
+        dlq_pointer:
+          one: Dead letter-kø for %{logical} — %{count} melding.
+          other: Dead letter-kø for %{logical} — %{count} meldinger.
         message_discard_failed: Kunne ikke forkaste meldingen.
         message_discarded: Melding forkastet.
         message_retried: Meldingens synlighet tilbakestilt.
@@ -588,12 +590,17 @@ nb:
           drained_by:
             one: Tømmes av %{capsules} (%{count} frisk worker)
             other: Tømmes av %{capsules} (%{count} friske workers)
+          drained_live:
+            one: Tømmes av %{count} frisk worker som lytter på denne køen
+            other: Tømmes av %{count} friske workers som lytter på denne køen
           drained_wildcard:
             one: Tømmes av en jokertegn-worker-kapsel (%{count} frisk worker)
             other: Tømmes av en jokertegn-worker-kapsel (%{count} friske workers)
           empty: Ingenting venter
           handler: Hendelsesbehandler-kø — tømmes av consumers (%{count} friske)
-          no_workers: Ingen frisk worker kjører — %{visible} jobber kan hentes, men ingenting henter dem
+          no_workers:
+            one: Ingen frisk worker kjører — %{count} jobb kan hentes, men ingenting henter den
+            other: Ingen frisk worker kjører — %{count} jobber kan hentes, men ingenting henter dem
           not_drained: Ingen worker-kapsel tømmer denne køen — jobber venter til en er konfigurert
           paused_circuit_breaker: 'Automatisk satt på pause %{ago} etter %{failures} feil på rad — gjenopptas %{time} (utløsning #%{trip})'
           paused_operator: Satt på pause %{ago} — %{reason}
