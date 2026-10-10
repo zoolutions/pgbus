@@ -76,8 +76,9 @@ module Pgbus
       @data_source ||= Pgbus.configuration.web_data_source || Web::DataSource.new
     end
 
-    def page_param
-      [params[:page].to_i, 1].max
+    # key – the query param; a second list on one page uses <list>_page.
+    def page_param(key = :page)
+      [params[key].to_i, 1].max
     end
 
     def per_page

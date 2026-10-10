@@ -52,4 +52,6 @@
       <% end %>
     </tbody>
   </table>
+  <%= render "pgbus/shared/pager", page: @page, per_page: @per_page, shown: @entries.size,
+        total_count: @stats[:total], page_path: ->(n) { pgbus.outbox_index_path(page: n) } %>
 </div>

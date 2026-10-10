@@ -1,4 +1,5 @@
-<turbo-frame id="batches-list" data-auto-refresh data-src="<%= pgbus.batches_path(frame: 'list') %>">
+<turbo-frame id="batches-list" data-auto-refresh data-turbo-action="advance"
+             data-src="<%= pgbus.batches_path(request.query_parameters.merge(frame: "list")) %>">
   <div class="overflow-hidden rounded-lg bg-white dark:bg-gray-800 shadow ring-1 ring-gray-200 dark:ring-gray-700">
     <table class="pgbus-table min-w-full divide-y divide-gray-200 dark:divide-gray-700">
       <thead class="bg-gray-50 dark:bg-gray-900">
@@ -49,5 +50,8 @@
         <% end %>
       </tbody>
     </table>
+    <%= render "pgbus/shared/pager", page: @page, per_page: @per_page, shown: @batches.size,
+          total_count: @batches_count.total, has_more: @batches_count.capped? && @batches.size == @per_page,
+          page_path: ->(n) { pgbus.batches_path(page: n) } %>
   </div>
 </turbo-frame>

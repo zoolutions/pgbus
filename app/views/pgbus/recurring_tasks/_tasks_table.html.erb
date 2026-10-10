@@ -1,4 +1,5 @@
-<turbo-frame id="recurring-tasks" data-auto-refresh data-src="<%= pgbus.recurring_tasks_path(frame: 'recurring_tasks') %>">
+<turbo-frame id="recurring-tasks" data-auto-refresh data-turbo-action="advance"
+             data-src="<%= pgbus.recurring_tasks_path(request.query_parameters.merge(frame: "recurring_tasks")) %>">
   <div class="rounded-lg bg-white dark:bg-gray-800 shadow ring-1 ring-gray-200 dark:ring-gray-700">
     <table class="pgbus-table min-w-full divide-y divide-gray-200 dark:divide-gray-700">
       <thead class="bg-gray-50 dark:bg-gray-900">
@@ -70,5 +71,9 @@
         <% end %>
       </tbody>
     </table>
+    <%= render "pgbus/shared/pager", page: @page, per_page: @per_page, shown: @recurring_tasks.size,
+          total_count: @recurring_tasks_count.total,
+          has_more: @recurring_tasks_count.capped? && @recurring_tasks.size == @per_page,
+          page_path: ->(n) { pgbus.recurring_tasks_path(page: n) } %>
   </div>
 </turbo-frame>

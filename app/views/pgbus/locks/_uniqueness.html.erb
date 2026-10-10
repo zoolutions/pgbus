@@ -71,5 +71,8 @@
         <% end %>
       </tbody>
     </table>
+    <%= render "pgbus/shared/pager", page: @page, per_page: @per_page, shown: @locks.size,
+          total_count: @locks_count.total, has_more: @locks_count.capped? && @locks.size == @per_page,
+          page_path: ->(n) { pgbus.locks_path(page: n, keys_page: @keys_page) } %>
   </div>
 </div>

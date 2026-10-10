@@ -24,6 +24,9 @@ module Pgbus
           ["*/10 * * * *", "Every 10 minutes"], ["0 6 * * *", "Daily at 6:00 AM"], ["0 1 * * *", "Daily at 1:00 AM"],
           ["*/1 * * * *", "Every minute"]
         ].freeze
+        # Rows per paged list: past one page (web_per_page 25), so page 2 exists
+        # on rake dummy:server and in the screenshots (issue #496).
+        PAGED_ROWS = 30
 
         def fill_sample_data!
           now = Time.now
@@ -49,8 +52,9 @@ module Pgbus
           @subscribers_list = sample_subscribers
           @pending_events_list = sample_pending_events(now)
           @events_list = sample_processed_events(now)
-          @outbox_stats_hash = { unpublished: 1, total: 1250, oldest_unpublished_age: 45 }
           @outbox_entries_list = sample_outbox_entries(now)
+          @outbox_stats_hash = { unpublished: @outbox_entries_list.count { |e| e.published_at.nil? },
+                                 total: @outbox_entries_list.size, oldest_unpublished_age: 45 }
           fill_sample_insights(now)
           @health_stats = sample_health_stats(now)
           @health_detail_hash = { tables: @health_stats[:tables].first(2), oldest_transaction_age_sec: 8 }
@@ -97,7 +101,7 @@ module Pgbus
 
         def sample_stats
           { total_queues: 4, total_depth: 125, total_visible: 96, active_processes: 4, failed_count: 5, dlq_depth: 3,
-            recurring_count: 14, throughput_rate: 42.7, total_dead_tuples: 1_250, tables_needing_vacuum: 1,
+            recurring_count: PAGED_ROWS, throughput_rate: 42.7, total_dead_tuples: 1_250, tables_needing_vacuum: 1,
             oldest_transaction_age_sec: 8, parked_total: 5, oldest_parked_age_sec: 300, slots_held: 3,
             keys_at_limit: 1 }
         end
@@ -220,6 +224,11 @@ module Pgbus
               enabled: i != 1, static: i < 10, next_run_at: i == 1 ? nil : now + (((i * 5) + 1) * 60),
               last_run_at: i.positive? ? now - (i * 180) : nil, created_at: now - (30 * 86_400),
               updated_at: now - 86_400 }
+          end + Array.new(PAGED_ROWS - RECURRING_KEYS.size) do |i|
+            { id: RECURRING_KEYS.size + i + 1, key: format("tenant_%02d_sync", i + 1), class_name: "TenantSyncJob",
+              command: nil, schedule: "0 * * * *", human_schedule: "Every hour", queue_name: "default", priority: 3,
+              description: nil, enabled: true, static: false, next_run_at: now + ((i + 1) * 60),
+              last_run_at: now - 3600 + (i * 60), created_at: now - (7 * 86_400), updated_at: now - 86_400 }
           end
         end
 
@@ -234,7 +243,11 @@ module Pgbus
             { batch_id: "c3d4e5f6-a7b8-9012-cdef-123456789012", description: nil,
               status: "pending", total_jobs: 0, completed_jobs: 0, discarded_jobs: 0, failed_jobs: 0,
               progress_pct: 100, created_at: now - 300, finished_at: now - 300 }
-          ]
+          ] + Array.new(PAGED_ROWS - 3) do |i|
+            { batch_id: format("d%07d-0000-4000-8000-%012d", i, i), description: "Nightly export #{i + 1}",
+              status: "finished", total_jobs: 20, completed_jobs: 20, discarded_jobs: 0, failed_jobs: 0,
+              progress_pct: 100, created_at: now - (86_400 * (i + 1)), finished_at: now - (86_400 * (i + 1)) + 600 }
+          end
         end
 
         def sample_locks(now)
@@ -243,19 +256,27 @@ module Pgbus
               msg_id: 900, created_at: now - 300, age_seconds: 300 },
             { lock_key: "uniqueness:SendWelcomeEmailJob:def456", queue_name: "pgbus_mailers",
               msg_id: 898, created_at: now - 120, age_seconds: 120 }
-          ]
+          ] + Array.new(PAGED_ROWS - 2) do |i|
+            age = 600 + (i * 60)
+            { lock_key: format("uniqueness:SyncInventoryJob:sku-%04d", i + 1), queue_name: "pgbus_default",
+              msg_id: 800 - i, created_at: now - age, age_seconds: age }
+          end
         end
 
         # One key at its limit with a live lease and parked jobs, one whose
         # lease has expired.
         def sample_concurrency(now)
-          { parked_total: 5, oldest_parked_age_sec: 300, slots_held: 3, keys_at_limit: 1,
-            keys: [
-              { key: "ImportCsvJob/account:42", value: 2, max_value: 2, lease_fresh: true,
-                expires_at: now + 240, parked_count: 5, oldest_parked_age_sec: 300 },
-              { key: "SyncInventoryJob/warehouse:US-EAST", value: 1, max_value: 3, lease_fresh: false,
-                expires_at: now - 60, parked_count: 0, oldest_parked_age_sec: nil }
-            ] }
+          keys = [
+            { key: "ImportCsvJob/account:42", value: 2, max_value: 2, lease_fresh: true,
+              expires_at: now + 240, parked_count: 5, oldest_parked_age_sec: 300 },
+            { key: "SyncInventoryJob/warehouse:US-EAST", value: 1, max_value: 3, lease_fresh: false,
+              expires_at: now - 60, parked_count: 0, oldest_parked_age_sec: nil }
+          ] + Array.new(PAGED_ROWS - 2) do |i|
+            { key: format("SendDigestJob/tenant:%02d", i + 1), value: 1, max_value: 2, lease_fresh: true,
+              expires_at: now + 120 + i, parked_count: 0, oldest_parked_age_sec: nil }
+          end
+          { parked_total: 5, oldest_parked_age_sec: 300, slots_held: keys.sum { |k| k[:value] },
+            keys_at_limit: keys.count { |k| k[:value] >= k[:max_value] }, keys: keys }
         end
 
         def sample_subscribers
@@ -289,13 +310,17 @@ module Pgbus
 
         def sample_outbox_entries(now)
           [
-            OutboxRow.new(id: 3, routing_key: "orders.created", queue_name: nil, payload: { order_id: 17 }.to_json,
+            OutboxRow.new(id: 30, routing_key: "orders.created", queue_name: nil, payload: { order_id: 17 }.to_json,
                           priority: 0, published_at: nil, created_at: now - 45),
-            OutboxRow.new(id: 2, routing_key: "orders.paid", queue_name: nil, payload: { order_id: 16 }.to_json,
+            OutboxRow.new(id: 29, routing_key: "orders.paid", queue_name: nil, payload: { order_id: 16 }.to_json,
                           priority: 0, published_at: now - 290, created_at: now - 300),
-            OutboxRow.new(id: 1, routing_key: nil, queue_name: "mailers", payload: { user_id: 42 }.to_json,
+            OutboxRow.new(id: 28, routing_key: nil, queue_name: "mailers", payload: { user_id: 42 }.to_json,
                           priority: 5, published_at: now - 590, created_at: now - 600)
-          ]
+          ] + Array.new(PAGED_ROWS - 3) do |i|
+            age = 900 + (i * 300)
+            OutboxRow.new(id: 27 - i, routing_key: "inventory.adjusted", queue_name: nil, payload: { sku: i + 1 }.to_json,
+                          priority: 0, published_at: now - age + 5, created_at: now - age)
+          end
         end
 
         def sample_health_stats(now)

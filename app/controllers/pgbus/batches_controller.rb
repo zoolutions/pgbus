@@ -3,7 +3,10 @@
 module Pgbus
   class BatchesController < ApplicationController
     def index
-      @batches = data_source.batches
+      @page = page_param
+      @per_page = per_page
+      @batches = data_source.batches(page: @page, per_page: @per_page)
+      @batches_count = data_source.list_count(:batches)
       render_frame("pgbus/batches/batches_table") if params[:frame] == "list"
     end
 

@@ -21,7 +21,8 @@ module Pgbus
                     :pending_events_list, :outbox_stats_hash, :outbox_entries_list,
                     :batches_list, :batch_detail_hash, :concurrency_stats_hash,
                     :promoted_count, :job_rows_list, :jobs_ahead_hash, :job_context,
-                    :recurring_executions_list, :health_stats, :health_detail_hash, :live_stream_metrics_hash
+                    :recurring_executions_list, :health_stats, :health_detail_hash, :live_stream_metrics_hash,
+                    :capped_lists
       attr_reader :calls
 
       def initialize
@@ -59,6 +60,7 @@ module Pgbus
         @health_stats = default_health_stats
         @health_detail_hash = { tables: [], oldest_transaction_age_sec: nil }
         @live_stream_metrics_hash = default_live_stream_metrics
+        @capped_lists = []
         @calls = Hash.new { |h, k| h[k] = [] }
       end
 
@@ -108,14 +110,44 @@ module Pgbus
 
       def job_list_context(now: Time.now) = @job_context.with(now: now)
 
-      def batches(limit: 100) = @batches_list
+      # The paged lists (issue #496) slice and record the way DataSource does.
+      def batches(page: 1, per_page: 25)
+        record(:batches, { page: page, per_page: per_page })
+        slice(@batches_list, page, per_page)
+      end
+
       def batch_detail(batch_id) = @batch_detail_hash
       def batches_count = @batches_list.size
       def active_batches_count = 0
-      def job_locks = @locks_list
-      def concurrency_stats = @concurrency_stats_hash
+
+      def job_locks(page: 1, per_page: 100)
+        record(:job_locks, { page: page, per_page: per_page })
+        slice(@locks_list, page, per_page)
+      end
+
+      def concurrency_stats(page: 1, per_page: 100)
+        record(:concurrency_stats, { page: page, per_page: per_page })
+        @concurrency_stats_hash.merge(keys: slice(@concurrency_stats_hash[:keys], page, per_page))
+      end
+
       def queue_paused?(name) = @paused_queues.include?(name)
-      def recurring_tasks = @recurring_tasks_list
+
+      def recurring_tasks(page: nil, per_page: nil)
+        record(:recurring_tasks, { page: page, per_page: per_page })
+        per_page ? slice(@recurring_tasks_list, page, per_page) : @recurring_tasks_list
+      end
+
+      def recurring_tasks_count = @recurring_tasks_list.size
+
+      # capped_lists names the lists whose count reports "more than COUNT_CAP".
+      def list_count(list)
+        rows = { batches: @batches_list, job_locks: @locks_list, recurring_tasks: @recurring_tasks_list,
+                 concurrency_keys: @concurrency_stats_hash[:keys] }.fetch(list)
+        counts = Pgbus::Web::DataSource::ListCounts
+        return counts::Count.new(total: counts::COUNT_CAP, capped: true) if @capped_lists.include?(list)
+
+        counts::Count.new(total: rows.size, capped: false)
+      end
 
       def recurring_task(id)
         @recurring_tasks_list.find { |t| t[:id].to_s == id.to_s }&.merge(executions: @recurring_executions_list)
@@ -195,13 +227,19 @@ module Pgbus
 
       # Outbox
       def outbox_stats = @outbox_stats_hash
-      def outbox_entries(page: 1, per_page: 25) = @outbox_entries_list
+
+      def outbox_entries(page: 1, per_page: 25)
+        record(:outbox_entries, { page: page, per_page: per_page })
+        slice(@outbox_entries_list, page, per_page)
+      end
 
       # Queue health
       def queue_health_stats = @health_stats
       def queue_health_detail(_name) = @health_detail_hash
 
       private
+
+      def slice(rows, page, per_page) = rows.slice((page - 1) * per_page, per_page) || []
 
       def record(method_name, *args)
         @calls[method_name] << args

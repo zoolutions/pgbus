@@ -13,6 +13,29 @@ RSpec.describe "Pgbus::RecurringTasksController", type: :request do
       get "/pgbus/recurring_tasks", params: { frame: "recurring_tasks" }
       expect(response).to have_http_status(:ok)
     end
+
+    context "with more tasks than one page" do
+      before do
+        @stub_data_source.recurring_tasks_list = Array.new(30) do |i|
+          { id: i + 1, key: format("task_row%02d", i), class_name: "TaskJob", schedule: "* * * * *", enabled: true }
+        end
+      end
+
+      it "pages the tasks, counts all of them, and renders the shared pager" do
+        get "/pgbus/recurring_tasks", params: { page: 2 }
+
+        expect(@stub_data_source.calls[:recurring_tasks]).to eq([[{ page: 2, per_page: 25 }]])
+        expect(response.body).to include("30 tasks configured", "Showing 26–30 of 30", "task_row29")
+        expect(response.body).not_to include("task_row24<")
+      end
+
+      it "pages the auto-refreshed frame" do
+        get "/pgbus/recurring_tasks", params: { frame: "recurring_tasks", page: 2 }
+
+        expect(@stub_data_source.calls[:recurring_tasks]).to eq([[{ page: 2, per_page: 25 }]])
+        expect(response.body).to include('data-turbo-action="advance"', "task_row29")
+      end
+    end
   end
 
   describe "GET /pgbus/recurring_tasks/:id" do

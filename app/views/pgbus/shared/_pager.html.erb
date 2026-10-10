@@ -20,13 +20,13 @@
           <%= pgbus_link_to t("pgbus.helpers.pagination.previous"), page_path.call(page - 1),
                 variant: :outline, size: :sm, class: "rounded-l-lg rounded-r-none" %>
         <% else %>
-          <span class="px-3 py-1.5 text-xs font-medium border border-gray-300 dark:border-gray-600 rounded-l-lg bg-gray-100 dark:bg-gray-900 text-gray-400 dark:text-gray-600 cursor-not-allowed"><%= t("pgbus.helpers.pagination.previous") %></span>
+          <span aria-disabled="true" class="px-3 py-1.5 text-xs font-medium border border-gray-300 dark:border-gray-600 rounded-l-lg bg-gray-100 dark:bg-gray-900 text-gray-600 dark:text-gray-400 cursor-not-allowed"><%= t("pgbus.helpers.pagination.previous") %></span>
         <% end %>
         <% if page < total_pages || has_more %>
           <%= pgbus_link_to t("pgbus.helpers.pagination.next"), page_path.call(page + 1),
                 variant: :outline, size: :sm, class: "-ml-px rounded-r-lg rounded-l-none" %>
         <% else %>
-          <span class="-ml-px px-3 py-1.5 text-xs font-medium border border-gray-300 dark:border-gray-600 rounded-r-lg bg-gray-100 dark:bg-gray-900 text-gray-400 dark:text-gray-600 cursor-not-allowed"><%= t("pgbus.helpers.pagination.next") %></span>
+          <span aria-disabled="true" class="-ml-px px-3 py-1.5 text-xs font-medium border border-gray-300 dark:border-gray-600 rounded-r-lg bg-gray-100 dark:bg-gray-900 text-gray-600 dark:text-gray-400 cursor-not-allowed"><%= t("pgbus.helpers.pagination.next") %></span>
         <% end %>
       </nav>
     <% end %>
