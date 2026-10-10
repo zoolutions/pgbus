@@ -246,6 +246,28 @@ it:
         healthy: Sano
         stale: Obsoleto
         stalled: Bloccato
+      time:
+        absolute_format: "%Y-%m-%d %H:%M:%S %Z"
+        clock_format: "%H:%M"
+        future: tra %{distance}
+        now: ora
+        past: "%{distance} fa"
+        range:
+          days:
+            one: "%{count} giorno"
+            other: "%{count} giorni"
+          hours:
+            one: "%{count} ora"
+            other: "%{count} ore"
+          minutes:
+            one: "%{count} minuto"
+            other: "%{count} minuti"
+        units:
+          days: "%{count}g"
+          hours: "%{count}h"
+          milliseconds: "%{count}ms"
+          minutes: "%{count}m"
+          seconds: "%{count}s"
     insights:
       show:
         charts:

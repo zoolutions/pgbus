@@ -246,6 +246,28 @@ es:
         healthy: Saludable
         stale: Obsoleto
         stalled: Bloqueado
+      time:
+        absolute_format: "%Y-%m-%d %H:%M:%S %Z"
+        clock_format: "%H:%M"
+        future: en %{distance}
+        now: ahora
+        past: hace %{distance}
+        range:
+          days:
+            one: "%{count} día"
+            other: "%{count} días"
+          hours:
+            one: "%{count} hora"
+            other: "%{count} horas"
+          minutes:
+            one: "%{count} minuto"
+            other: "%{count} minutos"
+        units:
+          days: "%{count}d"
+          hours: "%{count}h"
+          milliseconds: "%{count}ms"
+          minutes: "%{count}m"
+          seconds: "%{count}s"
     insights:
       show:
         charts:

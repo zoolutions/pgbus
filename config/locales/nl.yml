@@ -246,6 +246,28 @@ nl:
         healthy: Gezond
         stale: Verouderd
         stalled: Vastgelopen
+      time:
+        absolute_format: "%Y-%m-%d %H:%M:%S %Z"
+        clock_format: "%H:%M"
+        future: over %{distance}
+        now: nu
+        past: "%{distance} geleden"
+        range:
+          days:
+            one: "%{count} dag"
+            other: "%{count} dagen"
+          hours:
+            one: "%{count} uur"
+            other: "%{count} uur"
+          minutes:
+            one: "%{count} minuut"
+            other: "%{count} minuten"
+        units:
+          days: "%{count}d"
+          hours: "%{count}u"
+          milliseconds: "%{count}ms"
+          minutes: "%{count}m"
+          seconds: "%{count}s"
     insights:
       show:
         charts:

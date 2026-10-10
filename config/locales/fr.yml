@@ -246,6 +246,28 @@ fr:
         healthy: Sain
         stale: Obsolète
         stalled: Bloqué
+      time:
+        absolute_format: "%Y-%m-%d %H:%M:%S %Z"
+        clock_format: "%H:%M"
+        future: dans %{distance}
+        now: maintenant
+        past: il y a %{distance}
+        range:
+          days:
+            one: "%{count} jour"
+            other: "%{count} jours"
+          hours:
+            one: "%{count} heure"
+            other: "%{count} heures"
+          minutes:
+            one: "%{count} minute"
+            other: "%{count} minutes"
+        units:
+          days: "%{count}j"
+          hours: "%{count}h"
+          milliseconds: "%{count}ms"
+          minutes: "%{count}min"
+          seconds: "%{count}s"
     insights:
       show:
         charts:

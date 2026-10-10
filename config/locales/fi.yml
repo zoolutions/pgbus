@@ -246,6 +246,28 @@ fi:
         healthy: Toimiva
         stale: Vanha
         stalled: Juuttunut
+      time:
+        absolute_format: "%Y-%m-%d %H:%M:%S %Z"
+        clock_format: "%H:%M"
+        future: "%{distance} päästä"
+        now: nyt
+        past: "%{distance} sitten"
+        range:
+          days:
+            one: "%{count} päivä"
+            other: "%{count} päivää"
+          hours:
+            one: "%{count} tunti"
+            other: "%{count} tuntia"
+          minutes:
+            one: "%{count} minuutti"
+            other: "%{count} minuuttia"
+        units:
+          days: "%{count}pv"
+          hours: "%{count}h"
+          milliseconds: "%{count}ms"
+          minutes: "%{count}min"
+          seconds: "%{count}s"
     insights:
       show:
         charts:

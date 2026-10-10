@@ -246,6 +246,28 @@ sv:
         healthy: Hälsosam
         stale: Föråldrad
         stalled: Fastlåst
+      time:
+        absolute_format: "%Y-%m-%d %H:%M:%S %Z"
+        clock_format: "%H:%M"
+        future: om %{distance}
+        now: nu
+        past: för %{distance} sedan
+        range:
+          days:
+            one: "%{count} dag"
+            other: "%{count} dagar"
+          hours:
+            one: "%{count} timme"
+            other: "%{count} timmar"
+          minutes:
+            one: "%{count} minut"
+            other: "%{count} minuter"
+        units:
+          days: "%{count}d"
+          hours: "%{count}t"
+          milliseconds: "%{count}ms"
+          minutes: "%{count}m"
+          seconds: "%{count}s"
     insights:
       show:
         charts:

@@ -246,6 +246,28 @@ ja:
         healthy: 正常
         stale: 期限切れ
         stalled: 停滞
+      time:
+        absolute_format: "%Y-%m-%d %H:%M:%S %Z"
+        clock_format: "%H:%M"
+        future: "%{distance}後"
+        now: 今
+        past: "%{distance}前"
+        range:
+          days:
+            one: "%{count}日"
+            other: "%{count}日"
+          hours:
+            one: "%{count}時間"
+            other: "%{count}時間"
+          minutes:
+            one: "%{count}分"
+            other: "%{count}分"
+        units:
+          days: "%{count}日"
+          hours: "%{count}時間"
+          milliseconds: "%{count}ms"
+          minutes: "%{count}分"
+          seconds: "%{count}秒"
     insights:
       show:
         charts:

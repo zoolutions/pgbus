@@ -246,6 +246,28 @@ en:
         healthy: Healthy
         stale: Stale
         stalled: Stalled
+      time:
+        absolute_format: "%Y-%m-%d %H:%M:%S %Z"
+        clock_format: "%H:%M"
+        future: in %{distance}
+        now: now
+        past: "%{distance} ago"
+        range:
+          days:
+            one: "%{count} day"
+            other: "%{count} days"
+          hours:
+            one: "%{count} hour"
+            other: "%{count} hours"
+          minutes:
+            one: "%{count} minute"
+            other: "%{count} minutes"
+        units:
+          days: "%{count}d"
+          hours: "%{count}h"
+          milliseconds: "%{count}ms"
+          minutes: "%{count}m"
+          seconds: "%{count}s"
     insights:
       show:
         charts:

@@ -246,6 +246,28 @@ nb:
         healthy: Sunn
         stale: Utdatert
         stalled: Fastlåst
+      time:
+        absolute_format: "%Y-%m-%d %H:%M:%S %Z"
+        clock_format: "%H:%M"
+        future: om %{distance}
+        now: nå
+        past: for %{distance} siden
+        range:
+          days:
+            one: "%{count} dag"
+            other: "%{count} dager"
+          hours:
+            one: "%{count} time"
+            other: "%{count} timer"
+          minutes:
+            one: "%{count} minutt"
+            other: "%{count} minutter"
+        units:
+          days: "%{count}d"
+          hours: "%{count}t"
+          milliseconds: "%{count}ms"
+          minutes: "%{count}m"
+          seconds: "%{count}s"
     insights:
       show:
         charts:
