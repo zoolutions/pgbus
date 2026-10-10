@@ -405,10 +405,17 @@ RSpec.describe Pgbus::Web::DataSource do
     end
   end
 
+  # The Jobs page leaves EventBus handler queues to the Events page (issue
+  # #494), so its bulk actions skip their failed rows and messages too.
   describe "#discard_all_failed" do
+    let(:not_handler) { "NOT (queue_name = ANY($1::text[]))" }
+    let(:handler_names) { ["{orders_handler,pgbus_orders_handler}"] }
+
     before do
+      allow(data_source).to receive(:registered_subscribers)
+        .and_return([{ queue_name: "orders_handler", physical_queue_name: "pgbus_orders_handler" }])
       allow(mock_connection).to receive(:select_all)
-        .with("SELECT payload FROM pgbus_failed_events", "Pgbus Collect Failed Keys")
+        .with("SELECT payload FROM pgbus_failed_events WHERE #{not_handler}", "Pgbus Collect Failed Keys", handler_names)
         .and_return([
                       { "payload" => '{"pgbus_uniqueness_key":"k1"}' },
                       { "payload" => '{"pgbus_uniqueness_key":"k2"}' },
@@ -417,8 +424,8 @@ RSpec.describe Pgbus::Web::DataSource do
 
       allow(mock_connection).to receive(:select_all)
         .with(
-          "SELECT id, queue_name, msg_id FROM pgbus_failed_events WHERE msg_id IS NOT NULL",
-          "Pgbus Collect Failed Messages"
+          "SELECT id, queue_name, msg_id FROM pgbus_failed_events WHERE msg_id IS NOT NULL AND #{not_handler}",
+          "Pgbus Collect Failed Messages", handler_names
         )
         .and_return([
                       { "id" => 1, "queue_name" => "default", "msg_id" => 10 },
@@ -426,16 +433,16 @@ RSpec.describe Pgbus::Web::DataSource do
                       { "id" => 3, "queue_name" => "low", "msg_id" => 99 }
                     ])
 
-      allow(mock_connection).to receive(:execute)
-        .with("DELETE FROM pgbus_failed_events")
-        .and_return(double("result", cmd_tuples: 3))
+      allow(mock_connection).to receive(:exec_delete)
+        .with("DELETE FROM pgbus_failed_events WHERE #{not_handler}", "Pgbus Discard All Failed", handler_names)
+        .and_return(3)
 
       allow(Pgbus::UniquenessKey).to receive(:where).and_return(double(delete_all: 2))
       allow(mock_client).to receive(:archive_batch)
       allow(mock_client).to receive(:archive_message)
     end
 
-    it "releases the uniqueness locks for every failed event" do
+    it "releases the uniqueness locks for every failed job" do
       data_source.discard_all_failed
       expect(Pgbus::UniquenessKey).to have_received(:where).with(lock_key: %w[k1 k2])
     end
@@ -459,23 +466,39 @@ RSpec.describe Pgbus::Web::DataSource do
       expect(mock_client).to have_received(:archive_batch).with("low", [99])
     end
 
-    it "returns the number of rows deleted" do
+    it "returns the number of rows deleted, leaving handler-queue rows to the Events page" do
       expect(data_source.discard_all_failed).to eq(3)
+    end
+  end
+
+  describe "#retry_all_failed" do
+    it "skips failed rows of EventBus handler queues" do
+      allow(data_source).to receive(:registered_subscribers)
+        .and_return([{ queue_name: "orders_handler", physical_queue_name: "pgbus_orders_handler" }])
+      sqls = []
+      allow(mock_connection).to receive(:select_all) do |sql, _label, binds|
+        sqls << [sql, binds]
+        []
+      end
+
+      expect(data_source.retry_all_failed).to eq(0)
+      expect(sqls.first).to eq(["SELECT * FROM pgbus_failed_events WHERE NOT (queue_name = ANY($1::text[])) " \
+                                "ORDER BY id LIMIT 100", ["{orders_handler,pgbus_orders_handler}"]])
     end
   end
 
   describe "#discard_all_enqueued" do
     before do
-      allow(mock_connection).to receive(:select_values).and_return(["pgbus_default"])
+      allow(data_source).to receive(:registered_subscribers)
+        .and_return([{ queue_name: "orders_handler", physical_queue_name: "pgbus_orders_handler" }])
+      allow(mock_connection).to receive(:select_values).and_return(%w[pgbus_default pgbus_orders_handler])
       allow(mock_connection).to receive(:quote) { |v| "'#{v}'" }
       allow(mock_connection).to receive(:select_all)
         .with(anything, "Pgbus Batched Queue Metrics")
-        .and_return(double(to_a: [{
-                             "queue_name" => "pgbus_default",
-                             "queue_length" => 2, "queue_visible_length" => 2,
-                             "oldest_msg_age_sec" => nil, "newest_msg_age_sec" => nil,
-                             "total_messages" => 10
-                           }]))
+        .and_return(double(to_a: %w[pgbus_default pgbus_orders_handler].map do |name|
+          { "queue_name" => name, "queue_length" => 2, "queue_visible_length" => 2,
+            "oldest_msg_age_sec" => nil, "newest_msg_age_sec" => nil, "total_messages" => 10 }
+        end))
 
       allow(mock_connection).to receive(:select_all)
         .with(anything, "Pgbus Queue Messages", anything)
@@ -492,12 +515,18 @@ RSpec.describe Pgbus::Web::DataSource do
       allow(Pgbus::UniquenessKey).to receive(:where).and_return(double(delete_all: 1))
     end
 
-    it "archives all messages from non-DLQ queues and releases locks" do
+    it "archives all messages from non-DLQ job queues and releases locks" do
       count = data_source.discard_all_enqueued
 
       expect(count).to eq(2)
       expect(mock_client).to have_received(:archive_batch).with("pgbus_default", [1, 2], prefixed: false)
       expect(Pgbus::UniquenessKey).to have_received(:where).with(lock_key: ["k1"])
+    end
+
+    it "leaves EventBus handler queues alone" do
+      data_source.discard_all_enqueued
+
+      expect(mock_client).not_to have_received(:archive_batch).with("pgbus_orders_handler", anything, anything)
     end
   end
 
