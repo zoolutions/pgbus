@@ -1,0 +1,28 @@
+gemfiles/rails_7_1.gemfile
+  s_11df82d1e5ec0a::t_3d61aa40153ee0 13
+.claude/commands/github-review-pr.md
+  s_11df82d1e5ec0a::t_3d61aa40153ee0 82-83
+CHANGELOG.md
+  s_11df82d1e5ec0a::t_3d61aa40153ee0 25
+.github/workflows/main.yml
+  s_11df82d1e5ec0a::t_3d61aa40153ee0 153
+  ai_agent 148
+spec/pgbus/ci_coverage_spec.rb
+  s_11df82d1e5ec0a::t_3d61aa40153ee0 10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "d8dd6672fe95b72d9f883b9abf69a3e90c37dc5c",
+  "prompts": {},
+  "sessions": {
+    "s_11df82d1e5ec0a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "61900b5f-cb9d-4cfa-94c4-48d41c649d92",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
