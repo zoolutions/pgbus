@@ -575,51 +575,62 @@ nb:
           visible: Synlig
         pause: Pause
         pause_confirm: Pause behandling for %{name}?
-        paused: Pauset
         purge: Rens
         purge_confirm: Rens alle meldinger fra %{name}?
         resume: Gjenoppta
       show:
-        arguments: Argumenter
         back: Tilbake til køer
         delete_confirm: Slette denne køen permanent? Dette kan ikke angres.
         delete_queue: Slett kø
-        depth: 'Dybde:'
-        discard: Forkast
-        discard_confirm: Forkaste denne meldingen?
-        empty: Køen er tom
-        full_json_payload: Full JSON-payload
-        headers:
-          enqueued: I kø
-          id: ID
-          job_class: Jobbklasse
-          reads: Lesninger
-          vt: VT
-        headers_section: Overskrifter
-        job_id: 'Jobb-ID:'
+        dlq_link: Prøv på nytt eller forkast dem på Dead Letter-siden
+        dlq_pointer:
+          one: Dead letter-kø for %{logical} — %{count} melding.
+          other: Dead letter-kø for %{logical} — %{count} meldinger.
         message_discard_failed: Kunne ikke forkaste meldingen.
         message_discarded: Melding forkastet.
         message_retried: Meldingens synlighet tilbakestilt.
         message_retry_failed: Kunne ikke prøve meldingen igjen.
-        metadata: Metadata
-        metadata_labels:
-          last_read: 'Sist lest:'
-          locale: 'Språk:'
-          priority: 'Prioritet:'
-          queue: 'Kø:'
-          scheduled: 'Planlagt:'
-          timezone: 'Tidssone:'
-          visible_at: 'Synlig fra:'
-        oldest: 'Eldste:'
-        oldest_claimable: 'Eldste tilgjengelig:'
-        parked: 'Parkert:'
+        metrics:
+          claimable: Klare nå
+          depth: Dybde
+          oldest: Eldste
+          oldest_claimable: Eldste klare
+          parked: Parkert
+          total: Totalt noensinne
+        other_levels: 'Andre prioritetsnivåer:'
         pause: Pause
         pause_confirm: Pause behandling?
         purge_confirm: Rens alle meldinger?
         purge_queue: Rens kø
         resume: Gjenoppta
-        retry: Prøv igjen
-        retry_confirm: Tilbakestill synlighetstidsavbrudd og prøv igjen?
+        summary:
+          backlog_html: "%{visible} klare til henting nå, eldste har ventet %{age} · %{parked} parkert (planlagt eller nytt forsøk)"
+          backlog_parked_only_html: Ingenting klart til henting nå · %{parked} parkert (planlagt eller nytt forsøk)
+          dlq_html: 'Dead letter-kø for %{logical}: jobber havner her etter %{max} mislykkede forsøk'
+          drained_by_html:
+            one: Tømmes av %{capsules} (%{count} frisk worker)
+            other: Tømmes av %{capsules} (%{count} friske workers)
+          drained_live_html:
+            one: Tømmes av %{count} frisk worker som lytter på denne køen
+            other: Tømmes av %{count} friske workers som lytter på denne køen
+          drained_wildcard_html:
+            one: Tømmes av en jokertegn-worker-kapsel (%{count} frisk worker)
+            other: Tømmes av en jokertegn-worker-kapsel (%{count} friske workers)
+          empty_html: Ingenting venter
+          handler_html: Hendelsesbehandler-kø — tømmes av consumers (%{count} friske)
+          no_consumers_html:
+            one: Hendelsesbehandler-kø uten frisk consumer — %{count} hendelse venter
+            other: Hendelsesbehandler-kø uten frisk consumer — %{count} hendelser venter
+          no_workers_html:
+            one: Ingen frisk worker kjører — %{count} jobb kan hentes, men ingenting henter den
+            other: Ingen frisk worker kjører — %{count} jobber kan hentes, men ingenting henter dem
+          not_drained_html: Ingen worker-kapsel tømmer denne køen — jobber venter til en er konfigurert
+          paused_circuit_breaker_html: 'Automatisk satt på pause %{ago} etter %{failures} feil på rad — gjenopptas %{time} (utløsning #%{trip})'
+          paused_operator_html: Satt på pause %{ago} — %{reason}
+          paused_operator_no_reason_html: Satt på pause %{ago} av en operatør
+          priority_level_html: Prioritetsnivå %{level} av %{logical}
+          stream_html: Stream-kø — leveres med peek, tømmes ikke av workers
+        summary_label: Køoversikt
         table_health:
           headers:
             bloat: Bloat
@@ -629,8 +640,6 @@ nb:
             table: Tabell
           oldest_txn: 'Eldste åpne transaksjon:'
           title: Tabellhelse
-        total: 'Totalt:'
-        visible: 'Synlig:'
     recurring_tasks:
       index:
         task_count:

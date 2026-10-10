@@ -169,6 +169,31 @@ module Pgbus
       translate("pgbus.jobs.list.reasons.#{result.reason_key}_html", **args)
     end
 
+    # A QueueSummary::Line in words. :ago is a past moment and :time a future
+    # one, both as <time>; :age is a wait in seconds. The _html key lets the
+    # <time> elements through; translate escapes every other argument.
+    def pgbus_queue_summary_line(line)
+      args = line.args.to_h do |key, value|
+        case key
+        when :ago then [key, pgbus_time(value)]
+        when :time then [key, pgbus_time(value, clock: true)]
+        when :age then [key, pgbus_duration(value)]
+        else [key, value]
+        end
+      end
+      translate("pgbus.queues.show.summary.#{line.key}_html", **args)
+    end
+
+    QUEUE_SUMMARY_TONE_CSS = {
+      yellow: "bg-yellow-50 text-yellow-800 ring-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-200 dark:ring-yellow-800",
+      red: "bg-red-50 text-red-800 ring-red-200 dark:bg-red-900/30 dark:text-red-200 dark:ring-red-800",
+      gray: "bg-gray-50 text-gray-700 ring-gray-200 dark:bg-gray-900/40 dark:text-gray-200 dark:ring-gray-700"
+    }.freeze
+
+    def pgbus_queue_summary_classes(tone)
+      QUEUE_SUMMARY_TONE_CSS.fetch(tone, QUEUE_SUMMARY_TONE_CSS[:gray])
+    end
+
     # "2/5" for a job's delivery attempts against max_retries; "—" when the
     # row was never delivered (blocked).
     def pgbus_job_attempts(row, max_retries)

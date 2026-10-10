@@ -7,6 +7,7 @@ module Pgbus
     class DataSource
       include JobList
       include ListCounts
+      include QueueSummary
 
       # Ceiling on how many parked jobs one dashboard release promotes, so a
       # key with thousands parked cannot hold the request open. The dispatcher

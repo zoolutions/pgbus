@@ -575,51 +575,62 @@ da:
           visible: Synlig
         pause: Pause
         pause_confirm: Pause behandling i %{name}?
-        paused: Pauset
         purge: Rens
         purge_confirm: Rens alle beskeder fra %{name}?
         resume: Genoptag
       show:
-        arguments: Argumenter
         back: Tilbage til køer
         delete_confirm: Slet denne kø permanent? Dette kan ikke fortrydes.
         delete_queue: Slet kø
-        depth: 'Dybde:'
-        discard: Kassér
-        discard_confirm: Kassér denne besked?
-        empty: Køen er tom
-        full_json_payload: Fuld JSON-payload
-        headers:
-          enqueued: Sat i kø
-          id: ID
-          job_class: Jobklasse
-          reads: Læsninger
-          vt: VT
-        headers_section: Headers
-        job_id: 'Job ID:'
+        dlq_link: Prøv igen eller kassér dem på Dead Letter-siden
+        dlq_pointer:
+          one: Dead letter-kø for %{logical} — %{count} besked.
+          other: Dead letter-kø for %{logical} — %{count} beskeder.
         message_discard_failed: Kunne ikke kassere besked.
         message_discarded: Besked kasseret.
         message_retried: Beskedens synlighed nulstillet.
         message_retry_failed: Kunne ikke prøve besked igen.
-        metadata: Metadata
-        metadata_labels:
-          last_read: 'Sidst læst:'
-          locale: 'Locale:'
-          priority: 'Prioritet:'
-          queue: 'Kø:'
-          scheduled: 'Planlagt:'
-          timezone: 'Tidszone:'
-          visible_at: 'Synlig fra:'
-        oldest: 'Ældste:'
-        oldest_claimable: 'Ældste tilgængelig:'
-        parked: 'Parkeret:'
+        metrics:
+          claimable: Klar nu
+          depth: Dybde
+          oldest: Ældste
+          oldest_claimable: Ældste klar
+          parked: Parkeret
+          total: Total nogensinde
+        other_levels: 'Andre prioritetsniveauer:'
         pause: Pause
         pause_confirm: Pause behandling?
         purge_confirm: Rens alle beskeder?
         purge_queue: Rens kø
         resume: Genoptag
-        retry: Prøv igen
-        retry_confirm: Nulstil synlighedstimeout og prøv igen?
+        summary:
+          backlog_html: "%{visible} klar til afhentning nu, ældste har ventet %{age} · %{parked} parkeret (planlagt eller genforsøg)"
+          backlog_parked_only_html: Intet klar til afhentning nu · %{parked} parkeret (planlagt eller genforsøg)
+          dlq_html: 'Dead letter-kø for %{logical}: job havner her efter %{max} mislykkede forsøg'
+          drained_by_html:
+            one: Tømmes af %{capsules} (%{count} sund worker)
+            other: Tømmes af %{capsules} (%{count} sunde workers)
+          drained_live_html:
+            one: Tømmes af %{count} sund worker, der lytter på denne kø
+            other: Tømmes af %{count} sunde workers, der lytter på denne kø
+          drained_wildcard_html:
+            one: Tømmes af en wildcard-worker-kapsel (%{count} sund worker)
+            other: Tømmes af en wildcard-worker-kapsel (%{count} sunde workers)
+          empty_html: Intet venter
+          handler_html: Event handler-kø — tømmes af consumers (%{count} sunde)
+          no_consumers_html:
+            one: Event handler-kø uden sund consumer — %{count} event venter
+            other: Event handler-kø uden sund consumer — %{count} events venter
+          no_workers_html:
+            one: Ingen sund worker kører — %{count} job kan afhentes, men intet afhenter det
+            other: Ingen sund worker kører — %{count} job kan afhentes, men intet afhenter dem
+          not_drained_html: Ingen worker-kapsel tømmer denne kø — job venter, indtil en er konfigureret
+          paused_circuit_breaker_html: 'Automatisk sat på pause %{ago} efter %{failures} fejl i træk — genoptages %{time} (udløsning #%{trip})'
+          paused_operator_html: Sat på pause %{ago} — %{reason}
+          paused_operator_no_reason_html: Sat på pause %{ago} af en operatør
+          priority_level_html: Prioritetsniveau %{level} af %{logical}
+          stream_html: Stream-kø — leveres ved peek, tømmes ikke af workers
+        summary_label: Køoversigt
         table_health:
           headers:
             bloat: Bloat
@@ -629,8 +640,6 @@ da:
             table: Tabel
           oldest_txn: 'Ældste åbne transaktion:'
           title: Tabelhelbred
-        total: 'Total:'
-        visible: 'Synlig:'
     recurring_tasks:
       index:
         task_count:

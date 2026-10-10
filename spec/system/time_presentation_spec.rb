@@ -18,15 +18,6 @@ RSpec.describe "Time presentation", type: :system do
   around { |example| travel_to(now) { example.run } }
 
   describe "Jobs" do
-    def job_row(state, **attrs)
-      { source: "queue", id: attrs[:msg_id], queue_name: "pgbus_default", logical_queue: "default",
-        job_class: "#{state.capitalize}Job", read_ct: 0, enqueued_at: now - 60, last_read_at: nil,
-        vt: now - 1, state: state, error_class: nil, error_message: nil, failed_event_id: nil,
-        concurrency_key: nil, slots_held: nil, slots_max: nil,
-        payload: { job_class: "#{state.capitalize}Job", job_id: "job-#{state}", arguments: [42] }.to_json,
-        headers: nil }.merge(attrs)
-    end
-
     before do
       @stub_data_source.job_rows_list = [
         job_row("ready", msg_id: 11),
@@ -89,25 +80,37 @@ RSpec.describe "Time presentation", type: :system do
       expect(page).to have_text("1m 30s")
     end
 
-    context "with a message that becomes visible in the future" do
+    it "renders the pause moment in the queue summary as <time>, escaping the reason" do
+      @stub_data_source.paused_queues = ["pgbus_default"]
+      @stub_data_source.queue_pause_states["pgbus_default"] = { reason: "<b>deploy</b>", paused_at: now - 300 }
+
+      visit "/pgbus/queues/pgbus_default"
+
+      within("[data-testid=queue-summary]") do
+        expect(page).to have_css(stamp, text: "5m ago")
+        expect(page).to have_text("Paused 5m ago — <b>deploy</b>")
+        expect(page).to have_no_css("b")
+      end
+    end
+
+    context "with a job that becomes visible in the future (the old -1d ago defect)" do
+      # vt as an ISO string, the shape PGMQ JSON hands the views.
       before do
-        @stub_data_source.jobs_list = [
-          { msg_id: 42, queue_name: "pgbus_default", read_ct: 1, enqueued_at: (now - 60).iso8601,
-            vt: (now + 3600).iso8601, last_read_at: (now - 30).iso8601,
-            message: '{"job_class":"TestJob","job_id":"abc-123","arguments":[]}' }
+        @stub_data_source.job_rows_list = [
+          job_row("scheduled", msg_id: 42, vt: (now + 3600).iso8601, last_read_at: (now - 30).iso8601)
         ]
       end
 
-      it "says when it becomes visible instead of a negative age" do
+      it "says when it runs instead of a negative age" do
         visit "/pgbus/queues/pgbus_default"
 
-        expect(page).to have_css(stamp, text: "in 1h")
+        within("[data-testid=job-reason]") { expect(page).to have_css(stamp, text: /\Ain 1h \(\d\d:\d\d\)\z/) }
         expect(page).to have_no_text(/-\d+[smhd] ago/)
       end
 
       it "shows the exact visibility time in the expanded row" do
         visit "/pgbus/queues/pgbus_default"
-        find("details.group summary").click
+        first("details[data-job-toggle] summary").click
 
         expect(page).to have_text(/Visible at: \d{4}-\d\d-\d\d \d\d:\d\d:\d\d UTC \(in 1h\)/)
         expect(page).to have_css("time[datetime]", text: absolute, minimum: 2)

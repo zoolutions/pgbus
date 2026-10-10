@@ -575,51 +575,62 @@ it:
           visible: Visibile
         pause: Pausa
         pause_confirm: Mettere in pausa l'elaborazione per %{name}?
-        paused: In pausa
         purge: Pulisci
         purge_confirm: Eliminare tutti i messaggi da %{name}?
         resume: Riprendi
       show:
-        arguments: Argomenti
         back: Torna alle code
         delete_confirm: Eliminare permanentemente questa coda? Questa azione non può essere annullata.
         delete_queue: Elimina coda
-        depth: 'Profondità:'
-        discard: Scarta
-        discard_confirm: Scartare questo messaggio?
-        empty: La coda è vuota
-        full_json_payload: Payload JSON completo
-        headers:
-          enqueued: In coda
-          id: ID
-          job_class: Classe Lavoro
-          reads: Letture
-          vt: VT
-        headers_section: Intestazioni
-        job_id: 'ID Lavoro:'
+        dlq_link: Riprovali o scartali nella pagina Dead Letter
+        dlq_pointer:
+          one: Coda dei messaggi morti di %{logical} — %{count} messaggio.
+          other: Coda dei messaggi morti di %{logical} — %{count} messaggi.
         message_discard_failed: Impossibile scartare il messaggio.
         message_discarded: Messaggio scartato.
         message_retried: Visibilità del messaggio reimpostata.
         message_retry_failed: Impossibile riprovare il messaggio.
-        metadata: Metadati
-        metadata_labels:
-          last_read: 'Ultima lettura:'
-          locale: 'Locale:'
-          priority: 'Priorità:'
-          queue: 'Coda:'
-          scheduled: 'Programmato:'
-          timezone: 'Fuso orario:'
-          visible_at: 'Visibile alle:'
-        oldest: 'Più vecchio:'
-        oldest_claimable: 'Più vecchio disponibile:'
-        parked: 'Posticipati:'
+        metrics:
+          claimable: Prelevabili ora
+          depth: Profondità
+          oldest: Più vecchio
+          oldest_claimable: Più vecchio prelevabile
+          parked: Parcheggiati
+          total: Totale storico
+        other_levels: 'Altri livelli di priorità:'
         pause: Pausa
         pause_confirm: Mettere in pausa l'elaborazione?
         purge_confirm: Eliminare tutti i messaggi?
         purge_queue: Pulisci coda
         resume: Riprendi
-        retry: Riprova
-        retry_confirm: Reimpostare il timeout di visibilità e riprovare?
+        summary:
+          backlog_html: "%{visible} prelevabili ora, il più vecchio attende da %{age} · %{parked} parcheggiati (pianificati o in nuovo tentativo)"
+          backlog_parked_only_html: Niente di prelevabile ora · %{parked} parcheggiati (pianificati o in nuovo tentativo)
+          dlq_html: 'Coda dei messaggi morti di %{logical}: i job arrivano qui dopo %{max} tentativi falliti'
+          drained_by_html:
+            one: Svuotata da %{capsules} (%{count} worker sano)
+            other: Svuotata da %{capsules} (%{count} worker sani)
+          drained_live_html:
+            one: Svuotata da %{count} worker sano in ascolto su questa coda
+            other: Svuotata da %{count} worker sani in ascolto su questa coda
+          drained_wildcard_html:
+            one: Svuotata da una capsula di worker jolly (%{count} worker sano)
+            other: Svuotata da una capsula di worker jolly (%{count} worker sani)
+          empty_html: Niente in attesa
+          handler_html: Coda del gestore di eventi — svuotata dai consumer (%{count} sani)
+          no_consumers_html:
+            one: Coda del gestore di eventi senza consumer sano — %{count} evento in attesa
+            other: Coda del gestore di eventi senza consumer sano — %{count} eventi in attesa
+          no_workers_html:
+            one: Nessun worker sano in esecuzione — %{count} job è prelevabile ma nessuno lo preleva
+            other: Nessun worker sano in esecuzione — %{count} job sono prelevabili ma nessuno li preleva
+          not_drained_html: Nessuna capsula di worker svuota questa coda — i job attendono finché non ne viene configurata una
+          paused_circuit_breaker_html: Messa in pausa automaticamente %{ago} dopo %{failures} errori consecutivi — riprende %{time} (intervento n.%{trip})
+          paused_operator_html: In pausa %{ago} — %{reason}
+          paused_operator_no_reason_html: Messa in pausa %{ago} da un operatore
+          priority_level_html: Livello di priorità %{level} di %{logical}
+          stream_html: Coda di stream — consegnata tramite peek, non svuotata dai worker
+        summary_label: Riepilogo della coda
         table_health:
           headers:
             bloat: Bloat
@@ -629,8 +640,6 @@ it:
             table: Tabella
           oldest_txn: 'Transazione aperta più vecchia:'
           title: Salute delle Tabelle
-        total: 'Totale:'
-        visible: 'Visibile:'
     recurring_tasks:
       index:
         task_count:

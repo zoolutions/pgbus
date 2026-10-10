@@ -2,19 +2,11 @@
 
 module Pgbus
   class JobsController < ApplicationController
-    # Tabs of the unified list (issue #489); "all" is no filter.
-    STATES = ["all", *Web::JobState::STATES].freeze
+    include JobListing
 
     def index
-      @state = job_state_param
       @queue = params[:queue].presence
-      @page = page_param
-      @per_page = per_page
-      @rows = data_source.job_rows(state: (@state unless @state == "all"), queue_name: @queue,
-                                   page: @page, per_page: @per_page)
-      @counts = data_source.job_state_counts(queue_name: @queue)
-      @ahead = data_source.jobs_ahead(@rows)
-      @state_context = data_source.job_list_context
+      load_job_list(queue_name: @queue, list_path: ->(extra) { jobs_path({ queue: @queue }.merge(extra)) })
       @failed_total = @queue ? data_source.failed_events_count : @counts["retrying"]
       render_frame("pgbus/jobs/list") if params[:frame] == "list"
     end
@@ -25,17 +17,17 @@ module Pgbus
 
     def retry
       if data_source.retry_failed_event(params[:id])
-        redirect_to jobs_path, notice: "Job re-enqueued."
+        redirect_after_failed_event_action notice: "Job re-enqueued."
       else
-        redirect_to jobs_path, alert: "Could not retry job."
+        redirect_after_failed_event_action alert: "Could not retry job."
       end
     end
 
     def discard
       if data_source.discard_failed_event(params[:id])
-        redirect_to jobs_path, notice: "Job discarded."
+        redirect_after_failed_event_action notice: "Job discarded."
       else
-        redirect_to jobs_path, alert: "Could not discard job."
+        redirect_after_failed_event_action alert: "Could not discard job."
       end
     end
 
@@ -51,7 +43,7 @@ module Pgbus
 
     def discard_all_enqueued
       count = data_source.discard_all_enqueued
-      redirect_to jobs_path, notice: t("pgbus.jobs.index.discard_all_enqueued_notice", count: count)
+      redirect_back fallback_location: jobs_path, notice: t("pgbus.jobs.index.discard_all_enqueued_notice", count: count)
     end
 
     def discard_selected_failed
@@ -75,20 +67,29 @@ module Pgbus
       selections = selected_messages
       ids = Array(params[:ids]).map(&:to_i).reject(&:zero?)
       if selections.empty? && ids.empty?
-        redirect_to jobs_path, alert: t("pgbus.jobs.index.none_selected")
+        redirect_back fallback_location: jobs_path, alert: t("pgbus.jobs.index.none_selected")
         return
       end
 
       count = ids.count { |id| data_source.discard_failed_event(id) }
       count += selections.count { |sel| data_source.discard_job(sel[:queue_name], sel[:msg_id]) }
-      redirect_to jobs_path, notice: t("pgbus.jobs.index.discarded_selected", count: count)
+      redirect_back fallback_location: jobs_path, notice: t("pgbus.jobs.index.discarded_selected", count: count)
     end
 
     private
 
-    def job_state_param
-      state = params[:state].presence || ("retrying" if params[:status] == "failed")
-      STATES.include?(state) ? state : "all"
+    # Back to the page the action came from (a queue page, the Jobs list),
+    # except the job's own detail page: its failed event is gone now.
+    def redirect_after_failed_event_action(**flash)
+      return redirect_to(jobs_path, **flash) if referer_path == job_path(params[:id])
+
+      redirect_back(fallback_location: jobs_path, **flash)
+    end
+
+    def referer_path
+      URI.parse(request.referer.to_s).path
+    rescue URI::InvalidURIError
+      nil
     end
 
     def selected_messages

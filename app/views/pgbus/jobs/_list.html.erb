@@ -1,11 +1,15 @@
 <%# Unified job list (issue #489). Each row's state comes from SQL; JobState
     adds the reason. A row's expansion is the <tr> after it, shown by CSS
     (.pgbus-job-detail in tailwind.css) while the ID cell's <details> is open,
-    so the auto-refresh pause on `details[open]` keeps working. %>
+    so the auto-refresh pause on `details[open]` keeps working.
+    Reads @list_path (->(extra) { url }) for the frame source and the pager,
+    so the queue page refreshes and pages on its own URL, and @list_scoped:
+    a list cut to one queue offers no "Discard all enqueued", which acts on
+    every queue. %>
 <% selectable = @rows.any? { |r| r[:source] != "blocked" } %>
 <% columns = selectable ? 8 : 7 %>
 <turbo-frame id="jobs-list" data-auto-refresh data-turbo-action="advance"
-             data-src="<%= pgbus.jobs_path(request.query_parameters.merge(frame: "list")) %>">
+             data-src="<%= @list_path.call(page: (@page if @page > 1), frame: "list") %>">
   <div data-bulk-page>
     <div class="flex items-center justify-end mb-3 space-x-2">
       <div data-bulk-actions class="hidden flex items-center space-x-2">
@@ -14,7 +18,7 @@
               confirm: t("pgbus.jobs.index.discard_selected_confirm") %>
       </div>
       <%# Blocked and orphaned rows are not queue messages: the action archives none of them. %>
-      <% if %w[ready scheduled running retrying].sum { |s| @counts[s] }.positive? %>
+      <% if !@list_scoped && %w[ready scheduled running retrying].sum { |s| @counts[s] }.positive? %>
         <%= pgbus_button_to t("pgbus.jobs.list.discard_all_enqueued"), pgbus.discard_all_enqueued_jobs_path, method: :post,
               variant: :danger,
               data: { turbo_confirm: t("pgbus.jobs.list.discard_all_enqueued_confirm"), turbo_frame: "_top" } %>
@@ -54,7 +58,7 @@
       </table>
       <%= render "pgbus/shared/pager", page: @page, per_page: @per_page, shown: @rows.size,
             total_count: @counts[@state], has_more: @counts.capped?(@state) && @rows.size == @per_page,
-            page_path: ->(n) { pgbus.jobs_path(state: (@state unless @state == "all"), queue: @queue, page: n) } %>
+            page_path: ->(n) { @list_path.call(page: n) } %>
     </div>
   </div>
 </turbo-frame>
