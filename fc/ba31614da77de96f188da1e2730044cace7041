@@ -1,0 +1,21 @@
+spec/pgbus/helpers/application_helper_spec.rb
+  s_4ad0484223837f::t_38498fe5f7ecac 54,56-58
+app/helpers/pgbus/application_helper.rb
+  s_4ad0484223837f::t_53239f7c1cc669 9,21,28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "fcba31614da77de96f188da1e2730044cace7041",
+  "prompts": {},
+  "sessions": {
+    "s_4ad0484223837f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3ed0f016-1f17-4322-be29-e4daa76de66d",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
