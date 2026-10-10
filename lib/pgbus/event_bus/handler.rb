@@ -15,6 +15,23 @@ module Pgbus
         def dedup_cache
           @dedup_cache ||= DedupCache.new
         end
+
+        # How long a pending claim may stay silent before its holder counts as
+        # dead. ClaimBeat refreshes a live claim from the visibility heartbeat,
+        # which lands every extension inside [interval, 1.5 * interval] of the
+        # previous one — two intervals leaves margin for a late beat without
+        # stretching the window past the visibility timeout it rides on.
+        #
+        # With the heartbeat disabled a claim is never refreshed, so the window
+        # degrades to "roughly the first two thirds of one visibility timeout
+        # after the claim" — a redelivery, which cannot arrive before the VT has
+        # lapsed, still re-runs exactly as it did before issue #470.
+        #
+        # The dashboard reads the same window to tell a claim being handled
+        # from one that went silent (issue #494).
+        def claim_ownership_window
+          Pgbus.configuration.effective_visibility_heartbeat_interval * 2
+        end
       end
 
       # Outcome of the two-phase claim. `age` is how long the losing delivery
@@ -196,18 +213,8 @@ module Pgbus
         ClaimResult.new(status: :claimed, age: age)
       end
 
-      # How long a pending claim may stay silent before its holder counts as
-      # dead. ClaimBeat refreshes a live claim from the visibility heartbeat,
-      # which lands every extension inside [interval, 1.5 * interval] of the
-      # previous one — two intervals leaves margin for a late beat without
-      # stretching the window past the visibility timeout it rides on.
-      #
-      # With the heartbeat disabled a claim is never refreshed, so the window
-      # degrades to "roughly the first two thirds of one visibility timeout
-      # after the claim" — a redelivery, which cannot arrive before the VT has
-      # lapsed, still re-runs exactly as it did before issue #470.
       def claim_ownership_window
-        Pgbus.configuration.effective_visibility_heartbeat_interval * 2
+        self.class.claim_ownership_window
       end
 
       # Register this claim with the message's beat for exactly the duration of

@@ -263,6 +263,9 @@ module Pgbus
         end
 
         Pgbus.client.archive_message(queue_name, message.msg_id.to_i)
+        # A redelivery that succeeds leaves no stale failure behind. First
+        # deliveries never had one: no query on the hot path (#484's gate).
+        FailedEventRecorder.clear!(queue_name: queue_name, msg_id: message.msg_id.to_i) if message.read_ct.to_i > 1
         @circuit_breaker.record_success(queue_name)
         record_stat(message, queue_name, "success", execution_start)
       rescue StandardError => e
@@ -270,6 +273,7 @@ module Pgbus
         # Message stays in queue; VT will expire and it becomes available again.
         # read_ct tracks delivery attempts — when it exceeds max_retries,
         # the next read will route to DLQ above.
+        record_failed_event(message, queue_name, e)
         @circuit_breaker.record_failure(queue_name)
         record_stat(message, queue_name, "failed", execution_start)
       ensure
@@ -282,9 +286,8 @@ module Pgbus
       end
 
       # Order: read the last error, move with the dead-letter block, then
-      # clear the failed-event row (#494 adds the clear! after the move).
-      # Until #494 records handler failures, last_error is nil and the block
-      # has no error_* keys.
+      # clear the failed-event row. A move that raises keeps the row, so the
+      # next attempt still carries the reason.
       def dead_letter(message, queue_name)
         last_error = FailedEventRecorder.last_error(queue_name: queue_name, msg_id: message.msg_id.to_i)
         headers = DeadLetterHeader.build(
@@ -293,6 +296,18 @@ module Pgbus
           max_retries: config.max_retries, error: last_error
         )
         Pgbus.client.move_to_dead_letter(queue_name, message, headers: headers)
+        FailedEventRecorder.clear!(queue_name: queue_name, msg_id: message.msg_id.to_i)
+      end
+
+      # The executor's handle_failure, for events (issue #494): one upsert per
+      # failure, under the LOGICAL queue name, so the dashboard reads the event
+      # as retrying with its error. No ErrorReporter call: Handler#process!
+      # already instruments pgbus.event_failed, which feeds the reporters.
+      def record_failed_event(message, queue_name, error)
+        FailedEventRecorder.record!(
+          queue_name: queue_name, msg_id: message.msg_id.to_i, payload: message.message,
+          headers: message.headers, error: error, retry_count: [message.read_ct.to_i - 1, 0].max
+        )
       end
 
       # Run every handler that owns this message, with the message's visibility
