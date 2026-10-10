@@ -1,0 +1,19 @@
+spec/pgbus/web/data_source_list_counts_spec.rb
+  s_b0a979e77aaac2::t_de4be7ee598810 71-72
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "3a8177735c42c7f90713b42a93a5abc42aaed704",
+  "prompts": {},
+  "sessions": {
+    "s_b0a979e77aaac2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1beb5e41-62dd-40e5-aaf9-5b08c42be586",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
