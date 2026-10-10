@@ -14,14 +14,24 @@ RSpec.describe "Dashboard accessibility", type: :system do
       it_behaves_like "an accessible page", path, :dark
     end
 
-    # The one state Lighthouse cannot reach: an expanded job row (and the
-    # hover tint the pointer leaves on it).
+    # The one state Lighthouse cannot reach: an expanded job or event row (and
+    # the hover tint the pointer leaves on it).
     %i[light dark].each do |mode|
       it_behaves_like "an accessible page", "/pgbus/jobs", mode do
         let(:interaction) do
           lambda do
             first("details[data-job-toggle] summary").click
             page.assert_selector("tr[data-job-detail]", visible: :visible)
+          end
+        end
+      end
+
+      # The expanded event row (issue #494): error line, reroute, edit form.
+      it_behaves_like "an accessible page", "/pgbus/events", mode do
+        let(:interaction) do
+          lambda do
+            first("tr[data-state=retrying] details[data-job-toggle] summary").click
+            page.assert_selector("tr[data-event-detail]", visible: :visible)
           end
         end
       end

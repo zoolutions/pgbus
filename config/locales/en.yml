@@ -200,56 +200,118 @@ en:
         reroute_failed: Could not reroute event.
         rerouted: Event rerouted to target handler.
       index:
-        discard_selected: Discard Selected
-        discard_selected_confirm: Discard selected events?
-        pending_empty: No pending events
-        pending_headers:
-          enqueued: Enqueued
-          handler_queue: Handler Queue
-          id: ID
-          reads: Reads
-          routing_key: Routing Key
         pending_title: Pending Events
-        processed_empty: No events processed yet
-        processed_headers:
-          event_id: Event ID
-          handler: Handler
-          processed_at: Processed At
         processed_title: Processed Events
+        subscribers:
+          covered: Drained by a running consumer
+          uncovered: No running consumer covers this pattern
+          unknown: Consumer coverage unknown
+          view_pending: View pending
         subscribers_empty: No subscribers registered
         subscribers_headers:
+          consumer: Consumer
           handler: Handler
           pattern: Pattern
+          pending: Pending
           queue: Queue
         subscribers_title: Registered Subscribers
         title: Events
-      pending_table:
-        arguments: Payload
+      list:
         context: Context
         discard: Discard
         discard_confirm: Discard this event? It will be archived.
+        discard_failure_confirm: Discard this failed event? Its message is no longer in the queue.
+        discard_selected: Discard Selected
+        discard_selected_confirm: Discard selected events?
         edit_payload: Edit & Retry
         edit_payload_confirm: Update payload and re-enqueue this event?
         edit_payload_label: 'JSON Payload:'
+        empty:
+          all: No pending events
+          ready: No events waiting to be handled
+          retrying: No events waiting to retry
+          running: No events being handled
+          scheduled: No scheduled events
         event_id: 'Event ID:'
         full_json_payload: Full JSON Payload
+        headers:
+          actions: Actions
+          attempts: Attempts
+          event: Event
+          handler: Handler
+          id: ID
+          reason: Next run / Reason
+          state: State
         headers_section: Headers
         mark_handled: Mark Handled
         mark_handled_confirm: Mark this event as handled? It will be archived and skipped on replay.
         metadata: Metadata
         metadata_labels:
+          enqueued: 'Enqueued:'
           last_read: 'Last read:'
+          published: 'Published:'
           read_count: 'Read count:'
           visible_at: 'Visible at:'
+        payload: Payload
+        reasons:
+          handling_html: Being handled by %{handler} — claimed %{ago} · lease expires %{time}
+          lease_expired_html: Lease expired (consumer likely died) — redelivering to %{handler}, attempt %{attempt}
+          no_consumer_for_queue_html: No running consumer subscribes to %{pattern} (%{handler})
+          no_consumers_html: No healthy consumer running
+          orphaned_html: Failed with %{error} in %{handler} — message no longer in queue
+          paused_html: Queue paused
+          retrying_dlq_html: "%{handler} attempt %{attempt}/%{max} failed: %{error} — next read moves it to the DLQ"
+          retrying_due_html: "%{handler} attempt %{attempt}/%{max} failed: %{error} — next attempt due now"
+          retrying_html: "%{handler} attempt %{attempt}/%{max} failed: %{error} — next attempt %{time}"
+          scheduled_html: Scheduled — handled by %{handler} %{time}
+          waiting_html: 'Waiting — %{count} ahead · next: %{handler}'
+          waiting_unknown_html: Waiting for %{handler}
         reroute: Reroute
         reroute_confirm: Reroute this event to a different handler?
         reroute_label: 'Target handler:'
+        states:
+          ready: Ready
+          retrying: Retrying
+          running: Handling
+          scheduled: Scheduled
+        tabs:
+          all: All
+          ready: Ready
+          retrying: Retrying
+          running: Handling
+          scheduled: Scheduled
+        tabs_label: Event states
+        view_failure: View failure
+      processed:
+        empty: No events processed yet
+        headers:
+          actions: Actions
+          event_id: Event ID
+          handler: Handler
+          reason: Reason
+          state: State
+        reasons:
+          abandoned_html: Claim went silent %{ago} — the next delivery re-runs the handler
+          completed_html: Completed %{ago}
+          completed_legacy_html: Recorded %{ago} (single-phase claim; upgrade with pgbus:add_processed_event_completion)
+          handling_html: Being handled — claim refreshed %{ago}
+        replay: Replay
+        replay_confirm: Re-deliver this event to its handler under a new event ID? The handler runs again.
+        replay_unavailable:
+          no_handler: Handler no longer registered
+          not_archived: No longer in the archive
+        states:
+          abandoned: Silent
+          completed: Completed
+          handling: Handling
       show:
         back: Back to Events
         labels:
+          completed_at: Completed At
           event_id: Event ID
           handler: Handler
           processed_at: Processed At
+          state: State
         not_found: Event not found
         title: Event %{event_id}
     helpers:

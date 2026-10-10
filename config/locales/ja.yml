@@ -200,56 +200,118 @@ ja:
         reroute_failed: イベントをルーティングできませんでした。
         rerouted: イベントがターゲットハンドラーにルーティングされました。
       index:
-        discard_selected: 選択を破棄
-        discard_selected_confirm: 選択したイベントを破棄しますか？
-        pending_empty: 保留中のイベントはありません
-        pending_headers:
-          enqueued: キューに登録済み
-          handler_queue: ハンドラーキュー
-          id: ID
-          reads: 読み取り数
-          routing_key: ルーティングキー
         pending_title: 保留中のイベント
-        processed_empty: まだ処理されたイベントはありません
-        processed_headers:
-          event_id: イベントID
-          handler: ハンドラー
-          processed_at: 処理日時
         processed_title: 処理済みイベント
+        subscribers:
+          covered: 実行中のコンシューマーが処理中
+          uncovered: このパターンを担当する実行中のコンシューマーがありません
+          unknown: コンシューマーの担当状況は不明
+          view_pending: 保留中を表示
         subscribers_empty: 登録された購読者がいません
         subscribers_headers:
+          consumer: コンシューマー
           handler: ハンドラー
           pattern: パターン
+          pending: 保留中
           queue: キュー
         subscribers_title: 登録された購読者
         title: イベント
-      pending_table:
-        arguments: ペイロード
+      list:
         context: コンテキスト
         discard: 破棄
         discard_confirm: このイベントを破棄しますか？アーカイブされます。
+        discard_failure_confirm: この失敗したイベントを破棄しますか？メッセージはもうキューにありません。
+        discard_selected: 選択を破棄
+        discard_selected_confirm: 選択したイベントを破棄しますか？
         edit_payload: 編集して再試行
         edit_payload_confirm: ペイロードを更新してこのイベントを再キューに登録しますか？
         edit_payload_label: 'JSONペイロード:'
+        empty:
+          all: 保留中のイベントはありません
+          ready: 処理待ちのイベントはありません
+          retrying: 再試行待ちのイベントはありません
+          running: 処理中のイベントはありません
+          scheduled: 予定されたイベントはありません
         event_id: 'イベントID:'
         full_json_payload: 完全なJSONペイロード
+        headers:
+          actions: アクション
+          attempts: 試行回数
+          event: イベント
+          handler: ハンドラー
+          id: ID
+          reason: 次回実行 / 理由
+          state: 状態
         headers_section: ヘッダー
         mark_handled: 処理済みとしてマーク
         mark_handled_confirm: このイベントを処理済みとしてマークしますか？アーカイブされ、再生時にスキップされます。
         metadata: メタデータ
         metadata_labels:
+          enqueued: 'キュー投入:'
           last_read: 最終読み取り：
+          published: '発行:'
           read_count: 読み取り回数：
           visible_at: 表示日時：
+        payload: ペイロード
+        reasons:
+          handling_html: "%{handler} が処理中 — %{ago} に取得 · リース期限 %{time}"
+          lease_expired_html: リースが期限切れ（コンシューマーが停止した可能性） — %{handler} へ再配信中、試行 %{attempt}
+          no_consumer_for_queue_html: "%{pattern} を購読する実行中のコンシューマーがありません（%{handler}）"
+          no_consumers_html: 正常なコンシューマーが動いていません
+          orphaned_html: "%{handler} で %{error} により失敗 — メッセージはもうキューにありません"
+          paused_html: キューは一時停止中
+          retrying_dlq_html: "%{handler} の試行 %{attempt}/%{max} が失敗: %{error} — 次の読み取りで DLQ に移動します"
+          retrying_due_html: "%{handler} の試行 %{attempt}/%{max} が失敗: %{error} — 次の試行は今"
+          retrying_html: "%{handler} の試行 %{attempt}/%{max} が失敗: %{error} — 次の試行 %{time}"
+          scheduled_html: 予定済み — %{handler} が %{time} に処理
+          waiting_html: '待機中 — 前に %{count} 件 · 次: %{handler}'
+          waiting_unknown_html: "%{handler} を待機中"
         reroute: ルーティング変更
         reroute_confirm: このイベントを別のハンドラーにルーティングしますか？
         reroute_label: 'ターゲットハンドラー:'
+        states:
+          ready: 実行待ち
+          retrying: 再試行中
+          running: 処理中
+          scheduled: 予約済み
+        tabs:
+          all: すべて
+          ready: 実行待ち
+          retrying: 再試行中
+          running: 処理中
+          scheduled: 予約済み
+        tabs_label: イベントの状態
+        view_failure: 失敗を表示
+      processed:
+        empty: まだ処理されたイベントはありません
+        headers:
+          actions: アクション
+          event_id: イベントID
+          handler: ハンドラー
+          reason: 理由
+          state: 状態
+        reasons:
+          abandoned_html: クレームが %{ago} から応答なし — 次の配信でハンドラーが再実行されます
+          completed_html: "%{ago} に完了"
+          completed_legacy_html: "%{ago} に記録（単一フェーズのクレーム。pgbus:add_processed_event_completion でアップグレード）"
+          handling_html: 処理中 — クレーム更新 %{ago}
+        replay: 再実行
+        replay_confirm: このイベントを新しいイベント ID でハンドラーに再配信しますか？ハンドラーが再度実行されます。
+        replay_unavailable:
+          no_handler: ハンドラーは登録されていません
+          not_archived: アーカイブにもうありません
+        states:
+          abandoned: 応答なし
+          completed: 完了
+          handling: 処理中
       show:
         back: イベントに戻る
         labels:
+          completed_at: 完了日時
           event_id: イベントID
           handler: ハンドラー
           processed_at: 処理日時
+          state: 状態
         not_found: イベントが見つかりません
         title: イベント %{event_id}
     helpers:

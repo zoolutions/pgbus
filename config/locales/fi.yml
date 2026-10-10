@@ -200,56 +200,118 @@ fi:
         reroute_failed: Tapahtumaa ei voitu uudelleenreitittää.
         rerouted: Tapahtuma uudelleenreititetty kohdekäsittelijälle.
       index:
-        discard_selected: Hylkää valitut
-        discard_selected_confirm: Hylätäänkö valitut tapahtumat?
-        pending_empty: Ei odottavia tapahtumia
-        pending_headers:
-          enqueued: Jonotettu
-          handler_queue: Käsittelijäjono
-          id: ID
-          reads: Lukukerrat
-          routing_key: Reitityksen avain
         pending_title: Odotettavat tapahtumat
-        processed_empty: Ei vielä käsiteltyjä tapahtumia
-        processed_headers:
-          event_id: Tapahtuman tunnus
-          handler: Käsittelijä
-          processed_at: Käsitelty klo
         processed_title: Käsitellyt tapahtumat
+        subscribers:
+          covered: Käynnissä oleva consumer käsittelee
+          uncovered: Mikään käynnissä oleva consumer ei kata tätä mallia
+          unknown: Consumer-kattavuus tuntematon
+          view_pending: Näytä odottavat
         subscribers_empty: Ei rekisteröityjä tilaajia
         subscribers_headers:
+          consumer: Consumer
           handler: Käsittelijä
           pattern: Malli
+          pending: Odottavat
           queue: Jono
         subscribers_title: Rekisteröidyt tilaajat
         title: Tapahtumat
-      pending_table:
-        arguments: Kuorma
+      list:
         context: Konteksti
         discard: Hylkää
         discard_confirm: Hylätäänkö tämä tapahtuma? Se arkistoidaan.
+        discard_failure_confirm: Hylätäänkö tämä epäonnistunut tapahtuma? Sen viesti ei ole enää jonossa.
+        discard_selected: Hylkää valitut
+        discard_selected_confirm: Hylätäänkö valitut tapahtumat?
         edit_payload: Muokkaa ja yritä uudelleen
         edit_payload_confirm: Päivitetäänkö kuorma ja uudelleen jonotetaanko tämä tapahtuma?
         edit_payload_label: 'JSON-kuorma:'
+        empty:
+          all: Ei odottavia tapahtumia
+          ready: Ei käsittelyä odottavia tapahtumia
+          retrying: Ei uudelleenyritystä odottavia tapahtumia
+          running: Ei käsittelyssä olevia tapahtumia
+          scheduled: Ei ajastettuja tapahtumia
         event_id: 'Tapahtuman ID:'
         full_json_payload: Täysi JSON-kuorma
+        headers:
+          actions: Toiminnot
+          attempts: Yritykset
+          event: Tapahtuma
+          handler: Käsittelijä
+          id: ID
+          reason: Seuraava ajo / Syy
+          state: Tila
         headers_section: Otsikot
         mark_handled: Merkitse käsitellyksi
         mark_handled_confirm: Merkitäänkö tämä tapahtuma käsitellyksi? Se arkistoidaan ja ohitetaan toistossa.
         metadata: Metatiedot
         metadata_labels:
+          enqueued: 'Jonoon lisätty:'
           last_read: 'Viimeksi luettu:'
+          published: 'Julkaistu:'
           read_count: 'Lukukerrat:'
           visible_at: 'Näkyvissä:'
+        payload: Kuorma
+        reasons:
+          handling_html: "%{handler} käsittelee — haettu %{ago} · lease päättyy %{time}"
+          lease_expired_html: Lease päättyi (consumer luultavasti kaatui) — toimitetaan uudelleen käsittelijälle %{handler}, yritys %{attempt}
+          no_consumer_for_queue_html: Mikään käynnissä oleva consumer ei tilaa mallia %{pattern} (%{handler})
+          no_consumers_html: Yhtään tervettä consumeria ei ole käynnissä
+          orphaned_html: Epäonnistui virheellä %{error} käsittelijässä %{handler} — viesti ei ole enää jonossa
+          paused_html: Jono on keskeytetty
+          retrying_dlq_html: "%{handler} yritys %{attempt}/%{max} epäonnistui: %{error} — seuraava luku siirtää sen DLQ:hun"
+          retrying_due_html: "%{handler} yritys %{attempt}/%{max} epäonnistui: %{error} — seuraava yritys nyt"
+          retrying_html: "%{handler} yritys %{attempt}/%{max} epäonnistui: %{error} — seuraava yritys %{time}"
+          scheduled_html: Ajastettu — %{handler} käsittelee %{time}
+          waiting_html: 'Odottaa — %{count} edellä · seuraavaksi: %{handler}'
+          waiting_unknown_html: Odottaa käsittelijää %{handler}
         reroute: Uudelleenreititys
         reroute_confirm: Uudelleenreititetäänkö tämä tapahtuma toiselle käsittelijälle?
         reroute_label: 'Kohdekäsittelijä:'
+        states:
+          ready: Valmiina
+          retrying: Uudelleenyritys
+          running: Käsittelyssä
+          scheduled: Ajastettu
+        tabs:
+          all: Kaikki
+          ready: Valmiina
+          retrying: Uudelleenyritys
+          running: Käsittelyssä
+          scheduled: Ajastetut
+        tabs_label: Tapahtumien tilat
+        view_failure: Näytä virhe
+      processed:
+        empty: Ei vielä käsiteltyjä tapahtumia
+        headers:
+          actions: Toiminnot
+          event_id: Tapahtuman tunnus
+          handler: Käsittelijä
+          reason: Syy
+          state: Tila
+        reasons:
+          abandoned_html: Claim hiljeni %{ago} — seuraava toimitus suorittaa käsittelijän uudelleen
+          completed_html: Valmis %{ago}
+          completed_legacy_html: Kirjattu %{ago} (yksivaiheinen claim; päivitä komennolla pgbus:add_processed_event_completion)
+          handling_html: Käsittelyssä — claim päivitetty %{ago}
+        replay: Toista
+        replay_confirm: Toimitetaanko tämä tapahtuma uudelleen käsittelijälleen uudella tapahtumatunnuksella? Käsittelijä suoritetaan uudelleen.
+        replay_unavailable:
+          no_handler: Käsittelijä ei ole enää rekisteröity
+          not_archived: Ei enää arkistossa
+        states:
+          abandoned: Hiljainen
+          completed: Valmis
+          handling: Käsittelyssä
       show:
         back: Takaisin tapahtumiin
         labels:
+          completed_at: Valmistui
           event_id: Tapahtuman tunnus
           handler: Käsittelijä
           processed_at: Käsitelty klo
+          state: Tila
         not_found: Tapahtumaa ei löytynyt
         title: Tapahtuma %{event_id}
     helpers:

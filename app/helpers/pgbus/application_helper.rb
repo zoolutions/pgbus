@@ -147,7 +147,8 @@ module Pgbus
       gray: "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300",
       indigo: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300",
       yellow: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
-      purple: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400"
+      purple: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
+      green: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
     }.freeze
 
     def pgbus_job_state_badge(state)
@@ -159,14 +160,19 @@ module Pgbus
     # ("in 2h (21:40)"), :ago a past one ("5m ago"), both as <time>. The
     # _html key lets them through; translate escapes every other argument.
     def pgbus_job_reason(result)
-      args = result.reason_args.to_h do |key, value|
+      translate("pgbus.jobs.list.reasons.#{result.reason_key}_html", **pgbus_reason_args(result.reason_args))
+    end
+
+    # Reason arguments ready for an _html key: :time (future) and :ago (past)
+    # as <time>, everything else as given for translate to escape.
+    def pgbus_reason_args(args)
+      args.to_h do |key, value|
         case key
         when :time then [key, pgbus_time(value, clock: true)]
         when :ago then [key, pgbus_time(value)]
         else [key, value]
         end
       end
-      translate("pgbus.jobs.list.reasons.#{result.reason_key}_html", **args)
     end
 
     # A QueueSummary::Line in words. :ago is a past moment and :time a future

@@ -200,56 +200,118 @@ it:
         reroute_failed: Impossibile reindirizzare l'evento.
         rerouted: Evento reindirizzato al gestore di destinazione.
       index:
-        discard_selected: Scarta selezionati
-        discard_selected_confirm: Scartare gli eventi selezionati?
-        pending_empty: Nessun evento in sospeso
-        pending_headers:
-          enqueued: In coda
-          handler_queue: Coda del gestore
-          id: ID
-          reads: Letture
-          routing_key: Chiave di routing
         pending_title: Eventi in sospeso
-        processed_empty: Nessun evento elaborato ancora
-        processed_headers:
-          event_id: ID evento
-          handler: Gestore
-          processed_at: Elaborato alle
         processed_title: Eventi elaborati
+        subscribers:
+          covered: Elaborato da un consumer in esecuzione
+          uncovered: Nessun consumer in esecuzione copre questo pattern
+          unknown: Copertura dei consumer sconosciuta
+          view_pending: Mostra in attesa
         subscribers_empty: Nessun iscritto registrato
         subscribers_headers:
+          consumer: Consumer
           handler: Gestore
           pattern: Modello
+          pending: In attesa
           queue: Coda
         subscribers_title: Iscritti registrati
         title: Eventi
-      pending_table:
-        arguments: Payload
+      list:
         context: Contesto
         discard: Scarta
         discard_confirm: Scartare questo evento? Verrà archiviato.
+        discard_failure_confirm: Scartare questo evento fallito? Il suo messaggio non è più nella coda.
+        discard_selected: Scarta selezionati
+        discard_selected_confirm: Scartare gli eventi selezionati?
         edit_payload: Modifica e riprova
         edit_payload_confirm: Aggiornare il payload e reinserire questo evento in coda?
         edit_payload_label: 'Payload JSON:'
+        empty:
+          all: Nessun evento in sospeso
+          ready: Nessun evento in attesa di essere gestito
+          retrying: Nessun evento in attesa di un nuovo tentativo
+          running: Nessun evento in gestione
+          scheduled: Nessun evento pianificato
         event_id: 'ID evento:'
         full_json_payload: Payload JSON completo
+        headers:
+          actions: Azioni
+          attempts: Tentativi
+          event: Evento
+          handler: Gestore
+          id: ID
+          reason: Prossima esecuzione / Motivo
+          state: Stato
         headers_section: Intestazioni
         mark_handled: Contrassegna come gestito
         mark_handled_confirm: Contrassegnare questo evento come gestito? Verrà archiviato e saltato durante la riproduzione.
         metadata: Metadati
         metadata_labels:
+          enqueued: 'Accodato:'
           last_read: 'Ultima lettura:'
+          published: 'Pubblicato:'
           read_count: 'Conteggio letture:'
           visible_at: 'Visibile il:'
+        payload: Payload
+        reasons:
+          handling_html: In gestione da %{handler} — prelevato %{ago} · il lease scade %{time}
+          lease_expired_html: Lease scaduto (il consumer è probabilmente morto) — nuova consegna a %{handler}, tentativo %{attempt}
+          no_consumer_for_queue_html: Nessun consumer in esecuzione è iscritto a %{pattern} (%{handler})
+          no_consumers_html: Nessun consumer sano in esecuzione
+          orphaned_html: Fallito con %{error} in %{handler} — il messaggio non è più nella coda
+          paused_html: Coda in pausa
+          retrying_dlq_html: "%{handler} tentativo %{attempt}/%{max} fallito: %{error} — la prossima lettura lo sposta nella DLQ"
+          retrying_due_html: "%{handler} tentativo %{attempt}/%{max} fallito: %{error} — prossimo tentativo ora"
+          retrying_html: "%{handler} tentativo %{attempt}/%{max} fallito: %{error} — prossimo tentativo %{time}"
+          scheduled_html: Pianificato — gestito da %{handler} %{time}
+          waiting_html: 'In attesa — %{count} davanti · prossimo: %{handler}'
+          waiting_unknown_html: In attesa di %{handler}
         reroute: Reindirizza
         reroute_confirm: Reindirizzare questo evento a un gestore diverso?
         reroute_label: 'Gestore di destinazione:'
+        states:
+          ready: Pronto
+          retrying: In ripetizione
+          running: In gestione
+          scheduled: Pianificato
+        tabs:
+          all: Tutti
+          ready: Pronti
+          retrying: In ripetizione
+          running: In gestione
+          scheduled: Pianificati
+        tabs_label: Stati degli eventi
+        view_failure: Vedi errore
+      processed:
+        empty: Nessun evento elaborato ancora
+        headers:
+          actions: Azioni
+          event_id: ID evento
+          handler: Gestore
+          reason: Motivo
+          state: Stato
+        reasons:
+          abandoned_html: Il claim è rimasto in silenzio %{ago} — la prossima consegna riesegue l'handler
+          completed_html: Completato %{ago}
+          completed_legacy_html: Registrato %{ago} (claim a fase singola; aggiorna con pgbus:add_processed_event_completion)
+          handling_html: In gestione — claim aggiornato %{ago}
+        replay: Riproduci
+        replay_confirm: Riconsegnare questo evento al suo handler con un nuovo ID evento? L'handler viene eseguito di nuovo.
+        replay_unavailable:
+          no_handler: Handler non più registrato
+          not_archived: Non più nell'archivio
+        states:
+          abandoned: Silente
+          completed: Completato
+          handling: In gestione
       show:
         back: Torna agli eventi
         labels:
+          completed_at: Completato il
           event_id: ID evento
           handler: Gestore
           processed_at: Elaborato alle
+          state: Stato
         not_found: Evento non trovato
         title: Evento %{event_id}
     helpers:

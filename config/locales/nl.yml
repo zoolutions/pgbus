@@ -200,56 +200,118 @@ nl:
         reroute_failed: Kon gebeurtenis niet omleiden.
         rerouted: Gebeurtenis omgeleid naar doelhandler.
       index:
-        discard_selected: Geselecteerde Verwijderen
-        discard_selected_confirm: Geselecteerde gebeurtenissen verwijderen?
-        pending_empty: Geen openstaande gebeurtenissen
-        pending_headers:
-          enqueued: In de wachtrij geplaatst
-          handler_queue: Handler Wachtrij
-          id: ID
-          reads: Lezingen
-          routing_key: Routing Key
         pending_title: Openstaande Gebeurtenissen
-        processed_empty: Nog geen gebeurtenissen verwerkt
-        processed_headers:
-          event_id: Gebeurtenis ID
-          handler: Handler
-          processed_at: Verwerkt op
         processed_title: Verwerkte gebeurtenissen
+        subscribers:
+          covered: Verwerkt door een draaiende consumer
+          uncovered: Geen draaiende consumer dekt dit patroon
+          unknown: Consumerdekking onbekend
+          view_pending: Wachtende tonen
         subscribers_empty: Geen geregistreerde abonnees
         subscribers_headers:
+          consumer: Consumer
           handler: Handler
           pattern: Patroon
+          pending: Wachtend
           queue: Wachtrij
         subscribers_title: Geregistreerde abonnees
         title: Gebeurtenissen
-      pending_table:
-        arguments: Payload
+      list:
         context: Context
         discard: Verwijderen
         discard_confirm: Deze gebeurtenis verwijderen? Deze wordt gearchiveerd.
+        discard_failure_confirm: Dit mislukte event verwijderen? Het bericht staat niet meer in de wachtrij.
+        discard_selected: Geselecteerde Verwijderen
+        discard_selected_confirm: Geselecteerde gebeurtenissen verwijderen?
         edit_payload: Bewerken & Opnieuw Proberen
         edit_payload_confirm: Payload bijwerken en deze gebeurtenis opnieuw in de wachtrij plaatsen?
         edit_payload_label: 'JSON Payload:'
+        empty:
+          all: Geen openstaande gebeurtenissen
+          ready: Geen events die wachten op verwerking
+          retrying: Geen events die wachten op een nieuwe poging
+          running: Geen events in verwerking
+          scheduled: Geen geplande events
         event_id: 'Gebeurtenis ID:'
         full_json_payload: Volledige JSON Payload
+        headers:
+          actions: Acties
+          attempts: Pogingen
+          event: Event
+          handler: Handler
+          id: ID
+          reason: Volgende run / Reden
+          state: Status
         headers_section: Headers
         mark_handled: Markeren als Afgehandeld
         mark_handled_confirm: Deze gebeurtenis als afgehandeld markeren? Deze wordt gearchiveerd en overgeslagen bij het afspelen.
         metadata: Metadata
         metadata_labels:
+          enqueued: 'In wachtrij gezet:'
           last_read: 'Laatst gelezen:'
+          published: 'Gepubliceerd:'
           read_count: 'Aantal lezingen:'
           visible_at: 'Zichtbaar op:'
+        payload: Payload
+        reasons:
+          handling_html: In verwerking door %{handler} — opgehaald %{ago} · lease verloopt %{time}
+          lease_expired_html: Lease verlopen (consumer waarschijnlijk gestopt) — opnieuw afgeleverd aan %{handler}, poging %{attempt}
+          no_consumer_for_queue_html: Geen draaiende consumer is geabonneerd op %{pattern} (%{handler})
+          no_consumers_html: Geen gezonde consumer actief
+          orphaned_html: Mislukt met %{error} in %{handler} — bericht staat niet meer in de wachtrij
+          paused_html: Wachtrij gepauzeerd
+          retrying_dlq_html: "%{handler} poging %{attempt}/%{max} mislukt: %{error} — de volgende leesactie verplaatst het naar de DLQ"
+          retrying_due_html: "%{handler} poging %{attempt}/%{max} mislukt: %{error} — volgende poging nu"
+          retrying_html: "%{handler} poging %{attempt}/%{max} mislukt: %{error} — volgende poging %{time}"
+          scheduled_html: Gepland — verwerkt door %{handler} %{time}
+          waiting_html: 'Wacht — %{count} ervoor · volgende: %{handler}'
+          waiting_unknown_html: Wacht op %{handler}
         reroute: Omleiden
         reroute_confirm: Deze gebeurtenis omleiden naar een andere handler?
         reroute_label: 'Doelhandler:'
+        states:
+          ready: Gereed
+          retrying: Opnieuw
+          running: In verwerking
+          scheduled: Gepland
+        tabs:
+          all: Alle
+          ready: Gereed
+          retrying: Opnieuw
+          running: In verwerking
+          scheduled: Gepland
+        tabs_label: Eventstatussen
+        view_failure: Fout bekijken
+      processed:
+        empty: Nog geen gebeurtenissen verwerkt
+        headers:
+          actions: Acties
+          event_id: Gebeurtenis ID
+          handler: Handler
+          reason: Reden
+          state: Status
+        reasons:
+          abandoned_html: Claim werd stil %{ago} — de volgende aflevering voert de handler opnieuw uit
+          completed_html: Voltooid %{ago}
+          completed_legacy_html: Vastgelegd %{ago} (claim in één fase; upgrade met pgbus:add_processed_event_completion)
+          handling_html: In verwerking — claim ververst %{ago}
+        replay: Opnieuw afspelen
+        replay_confirm: Dit event opnieuw afleveren aan zijn handler onder een nieuw event-ID? De handler draait opnieuw.
+        replay_unavailable:
+          no_handler: Handler niet meer geregistreerd
+          not_archived: Niet meer in het archief
+        states:
+          abandoned: Stil
+          completed: Voltooid
+          handling: In verwerking
       show:
         back: Terug naar gebeurtenissen
         labels:
+          completed_at: Voltooid op
           event_id: Gebeurtenis ID
           handler: Handler
           processed_at: Verwerkt op
+          state: Status
         not_found: Gebeurtenis niet gevonden
         title: Gebeurtenis %{event_id}
     helpers:

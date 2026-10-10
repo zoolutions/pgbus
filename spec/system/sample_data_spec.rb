@@ -16,8 +16,9 @@ RSpec.describe "Dashboard sample data", type: :system do
   it "fills Events with subscribers, pending and processed events" do
     visit "/pgbus/events"
     expect(page).to have_text("Billing::InvoiceHandler")
-    expect(page).to have_text("evt-pending-1")
+    expect(page).to have_text("evt-pending-801")
     expect(page).to have_text("evt-processed-1")
+    expect(page).to have_text("No running consumer subscribes to webhook.#")
   end
 
   it "fills the Outbox with entries" do

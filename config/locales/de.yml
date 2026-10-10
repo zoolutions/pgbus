@@ -200,56 +200,118 @@ de:
         reroute_failed: Ereignis konnte nicht umgeleitet werden.
         rerouted: Ereignis an Ziel-Handler umgeleitet.
       index:
-        discard_selected: Ausgewählte verwerfen
-        discard_selected_confirm: Ausgewählte Ereignisse verwerfen?
-        pending_empty: Keine ausstehenden Ereignisse
-        pending_headers:
-          enqueued: In die Warteschlange gestellt
-          handler_queue: Handler-Warteschlange
-          id: ID
-          reads: Lesevorgänge
-          routing_key: Routing-Schlüssel
         pending_title: Ausstehende Ereignisse
-        processed_empty: Noch keine Ereignisse verarbeitet
-        processed_headers:
-          event_id: Ereignis-ID
-          handler: Handler
-          processed_at: Verarbeitet am
         processed_title: Verarbeitete Ereignisse
+        subscribers:
+          covered: Von einem laufenden Consumer abgearbeitet
+          uncovered: Kein laufender Consumer deckt dieses Muster ab
+          unknown: Consumer-Abdeckung unbekannt
+          view_pending: Ausstehende anzeigen
         subscribers_empty: Keine Abonnenten registriert
         subscribers_headers:
+          consumer: Consumer
           handler: Handler
           pattern: Muster
+          pending: Ausstehend
           queue: Warteschlange
         subscribers_title: Registrierte Abonnenten
         title: Ereignisse
-      pending_table:
-        arguments: Nutzlast
+      list:
         context: Kontext
         discard: Verwerfen
         discard_confirm: Dieses Ereignis verwerfen? Es wird archiviert.
+        discard_failure_confirm: Dieses fehlgeschlagene Ereignis verwerfen? Seine Nachricht ist nicht mehr in der Warteschlange.
+        discard_selected: Ausgewählte verwerfen
+        discard_selected_confirm: Ausgewählte Ereignisse verwerfen?
         edit_payload: Bearbeiten & erneut versuchen
         edit_payload_confirm: Nutzlast aktualisieren und dieses Ereignis erneut in die Warteschlange stellen?
         edit_payload_label: 'JSON-Nutzlast:'
+        empty:
+          all: Keine ausstehenden Ereignisse
+          ready: Keine Ereignisse warten auf Verarbeitung
+          retrying: Keine Ereignisse warten auf einen neuen Versuch
+          running: Keine Ereignisse in Verarbeitung
+          scheduled: Keine geplanten Ereignisse
         event_id: 'Ereignis-ID:'
         full_json_payload: Vollständige JSON-Nutzlast
+        headers:
+          actions: Aktionen
+          attempts: Versuche
+          event: Ereignis
+          handler: Handler
+          id: ID
+          reason: Nächster Lauf / Grund
+          state: Zustand
         headers_section: Header
         mark_handled: Als bearbeitet markieren
         mark_handled_confirm: Dieses Ereignis als bearbeitet markieren? Es wird archiviert und bei der Wiedergabe übersprungen.
         metadata: Metadaten
         metadata_labels:
+          enqueued: 'Eingereiht:'
           last_read: 'Zuletzt gelesen:'
+          published: 'Veröffentlicht:'
           read_count: 'Leseanzahl:'
           visible_at: 'Sichtbar ab:'
+        payload: Nutzlast
+        reasons:
+          handling_html: Wird von %{handler} verarbeitet — abgeholt %{ago} · Lease läuft ab %{time}
+          lease_expired_html: Lease abgelaufen (Consumer vermutlich abgestürzt) — wird erneut an %{handler} zugestellt, Versuch %{attempt}
+          no_consumer_for_queue_html: Kein laufender Consumer abonniert %{pattern} (%{handler})
+          no_consumers_html: Kein gesunder Consumer läuft
+          orphaned_html: Fehlgeschlagen mit %{error} in %{handler} — Nachricht nicht mehr in der Warteschlange
+          paused_html: Warteschlange pausiert
+          retrying_dlq_html: "%{handler} Versuch %{attempt}/%{max} fehlgeschlagen: %{error} — der nächste Lesevorgang verschiebt es in die DLQ"
+          retrying_due_html: "%{handler} Versuch %{attempt}/%{max} fehlgeschlagen: %{error} — nächster Versuch jetzt fällig"
+          retrying_html: "%{handler} Versuch %{attempt}/%{max} fehlgeschlagen: %{error} — nächster Versuch %{time}"
+          scheduled_html: Geplant — wird von %{handler} verarbeitet %{time}
+          waiting_html: 'Wartet — %{count} davor · als Nächstes: %{handler}'
+          waiting_unknown_html: Wartet auf %{handler}
         reroute: Umleiten
         reroute_confirm: Dieses Ereignis an einen anderen Handler umleiten?
         reroute_label: 'Ziel-Handler:'
+        states:
+          ready: Bereit
+          retrying: Wiederholung
+          running: In Verarbeitung
+          scheduled: Geplant
+        tabs:
+          all: Alle
+          ready: Bereit
+          retrying: Wiederholung
+          running: In Verarbeitung
+          scheduled: Geplant
+        tabs_label: Ereigniszustände
+        view_failure: Fehler anzeigen
+      processed:
+        empty: Noch keine Ereignisse verarbeitet
+        headers:
+          actions: Aktionen
+          event_id: Ereignis-ID
+          handler: Handler
+          reason: Grund
+          state: Zustand
+        reasons:
+          abandoned_html: Claim verstummt %{ago} — die nächste Zustellung führt den Handler erneut aus
+          completed_html: Abgeschlossen %{ago}
+          completed_legacy_html: Erfasst %{ago} (einphasiger Claim; Upgrade mit pgbus:add_processed_event_completion)
+          handling_html: In Verarbeitung — Claim aufgefrischt %{ago}
+        replay: Erneut abspielen
+        replay_confirm: Dieses Ereignis unter einer neuen Ereignis-ID erneut an seinen Handler zustellen? Der Handler läuft erneut.
+        replay_unavailable:
+          no_handler: Handler nicht mehr registriert
+          not_archived: Nicht mehr im Archiv
+        states:
+          abandoned: Verstummt
+          completed: Abgeschlossen
+          handling: In Verarbeitung
       show:
         back: Zurück zu Ereignissen
         labels:
+          completed_at: Abgeschlossen am
           event_id: Ereignis-ID
           handler: Handler
           processed_at: Verarbeitet am
+          state: Status
         not_found: Ereignis nicht gefunden
         title: Ereignis %{event_id}
     helpers:

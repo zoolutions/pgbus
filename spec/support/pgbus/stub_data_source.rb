@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "stub_data_source/sample_data"
+require_relative "stub_data_source/sample_events"
 
 module Pgbus
   module Test
@@ -11,6 +12,7 @@ module Pgbus
     # right arguments.
     class StubDataSource
       include SampleData
+      include SampleEvents
 
       attr_accessor :stats, :queues, :processes_list, :failed_events_list,
                     :dlq_messages_list, :events_list, :subscribers_list, :jobs_list,
@@ -18,11 +20,12 @@ module Pgbus
                     :insights_summary, :insights_slowest, :insights_latency_by_queue,
                     :insights_latency_trend, :insights_throughput, :insights_status_counts,
                     :stream_stats_available, :stream_summary, :top_streams_list,
-                    :pending_events_list, :outbox_stats_hash, :outbox_entries_list,
+                    :outbox_stats_hash, :outbox_entries_list,
                     :batches_list, :batch_detail_hash, :concurrency_stats_hash,
                     :promoted_count, :job_rows_list, :jobs_ahead_hash, :job_context,
                     :recurring_executions_list, :health_stats, :health_detail_hash, :live_stream_metrics_hash,
-                    :capped_lists, :queue_pause_states, :queue_drainers_hash
+                    :capped_lists, :queue_pause_states, :queue_drainers_hash,
+                    :event_rows_list, :events_ahead_hash, :event_context, :replay_states_hash
       attr_reader :calls
 
       def initialize
@@ -46,7 +49,6 @@ module Pgbus
         @stream_stats_available = false
         @stream_summary = default_stream_summary
         @top_streams_list = []
-        @pending_events_list = []
         @outbox_stats_hash = default_outbox_stats
         @outbox_entries_list = []
         @batches_list = []
@@ -63,6 +65,10 @@ module Pgbus
         @capped_lists = []
         @queue_pause_states = {}
         @queue_drainers_hash = {}
+        @event_rows_list = []
+        @events_ahead_hash = {}
+        @event_context = default_event_context
+        @replay_states_hash = {}
         @calls = Hash.new { |h, k| h[k] = [] }
       end
 
@@ -94,7 +100,11 @@ module Pgbus
         @dlq_messages_list.find { |m| m[:msg_id].to_s == msg_id.to_s && (queue_name.nil? || m[:queue_name] == queue_name) }
       end
 
-      def processed_events(page: 1, per_page: 25) = @events_list
+      def processed_events(page: 1, per_page: 25)
+        record(:processed_events, { page: page, per_page: per_page })
+        slice(@events_list, page, per_page)
+      end
+
       def processed_events_count = @events_list.size
       def processed_event(id) = @events_list.find { |e| e["id"].to_s == id.to_s }
       def registered_subscribers = @subscribers_list
@@ -102,24 +112,42 @@ module Pgbus
 
       # Unified Jobs list (issue #489). Rows carry their SQL-derived :state;
       # the stub filters and pages them the way DataSource#job_rows does.
-      def job_rows(state: nil, queue_name: nil, page: 1, per_page: 25)
-        record(:job_rows, { state: state, queue_name: queue_name, page: page, per_page: per_page })
-        rows = job_rows_in(queue_name)
-        rows = rows.select { |r| r[:state] == state } if state
-        rows.slice((page - 1) * per_page, per_page) || []
+      def job_rows(state: nil, queue_name: nil, queues: nil, exclude: nil, page: 1, per_page: 25)
+        record(:job_rows, { state: state, queue_name: queue_name, queues: queues, exclude: exclude, page: page,
+                            per_page: per_page })
+        page_of(state_rows(job_rows_in(queue_name, exclude), state), page, per_page)
       end
 
-      def job_state_counts(queue_name: nil)
-        rows = job_rows_in(queue_name)
-        counts = rows.group_by { |r| r[:state] }.transform_values(&:size)
-        Pgbus::Web::DataSource::JobList::StateCounts.new(counts: counts.merge("all" => rows.size),
-                                                         capped: Set.new)
+      def job_state_counts(queue_name: nil, queues: nil, exclude: nil)
+        record(:job_state_counts, { queue_name: queue_name, queues: queues, exclude: exclude })
+        tally(job_rows_in(queue_name, exclude))
       end
 
       def jobs_ahead(_rows) = @jobs_ahead_hash
 
-      def job_rows_in(queue_name)
-        queue_name ? @job_rows_list.select { |r| r[:queue_name] == queue_name } : @job_rows_list
+      def job_rows_in(queue_name, exclude = nil)
+        rows = queue_name ? @job_rows_list.select { |r| r[:queue_name] == queue_name } : @job_rows_list
+        exclude ? rows.reject { |r| exclude.include?(r[:queue_name]) } : rows
+      end
+
+      # The Events page's list (issue #494): rows already carry :handler_class.
+      def event_rows(state: nil, queue_name: nil, page: 1, per_page: 25)
+        record(:event_rows, { state: state, queue_name: queue_name, page: page, per_page: per_page })
+        page_of(state_rows(event_rows_in(queue_name), state), page, per_page)
+      end
+
+      def event_state_counts(queue_name: nil) = tally(event_rows_in(queue_name))
+      def events_ahead(_rows) = @events_ahead_hash
+
+      def event_rows_in(queue_name)
+        queue_name ? @event_rows_list.select { |r| r[:queue_name] == queue_name } : @event_rows_list
+      end
+
+      def event_list_context(now: Time.now) = @event_context.with(jobs: @event_context.jobs.with(now: now))
+
+      # Every processed event is replayable unless replay_states_hash says otherwise.
+      def event_replay_states(events)
+        events.to_h { |e| [e["id"], @replay_states_hash.fetch(e["id"], :replayable)] }
       end
 
       def job_list_context(now: Time.now) = @job_context.with(now: now)
@@ -179,7 +207,7 @@ module Pgbus
       # capped_lists names the lists whose count reports "more than COUNT_CAP".
       def list_count(list)
         rows = { batches: @batches_list, job_locks: @locks_list, recurring_tasks: @recurring_tasks_list,
-                 outbox: @outbox_entries_list,
+                 outbox: @outbox_entries_list, processed_events: @events_list,
                  concurrency_keys: @concurrency_stats_hash[:keys] }.fetch(list)
         counts = Pgbus::Web::DataSource::ListCounts
         return counts::Count.new(total: counts::COUNT_CAP, capped: true) if @capped_lists.include?(list)
@@ -217,7 +245,6 @@ module Pgbus
       def discard_dlq_message(queue_name, msg_id) = record(:discard_dlq_message, queue_name, msg_id)
       def retry_all_dlq              = record(:retry_all_dlq) && @dlq_messages_list.size
       def discard_all_dlq            = record(:discard_all_dlq) && @dlq_messages_list.size
-      def pending_events(page: 1, per_page: 25) = @pending_events_list
       def replay_event(event) = record(:replay_event, event)
       def discard_event(queue_name, msg_id) = record(:discard_event, queue_name, msg_id)
       def mark_event_handled(queue_name, msg_id, handler_class) = record(:mark_event_handled, queue_name, msg_id, handler_class)
@@ -278,6 +305,14 @@ module Pgbus
       private
 
       def slice(rows, page, per_page) = rows.slice((page - 1) * per_page, per_page) || []
+      alias page_of slice
+
+      def state_rows(rows, state) = state ? rows.select { |r| r[:state] == state } : rows
+
+      def tally(rows)
+        counts = rows.group_by { |r| r[:state] }.transform_values(&:size)
+        Pgbus::Web::DataSource::JobList::StateCounts.new(counts: counts.merge("all" => rows.size), capped: Set.new)
+      end
 
       def record(method_name, *args)
         @calls[method_name] << args
@@ -325,6 +360,10 @@ module Pgbus
       def default_job_context
         Pgbus::Web::JobState::Context.new(now: Time.now, max_retries: 5, paused: Set.new, drained: nil,
                                           workers_alive: true, handler_queues: Set.new, consumers_alive: true)
+      end
+
+      def default_event_context
+        Pgbus::Web::EventState::Context.new(jobs: default_job_context, covered_queues: nil, claim_window: 60)
       end
 
       def default_health_stats

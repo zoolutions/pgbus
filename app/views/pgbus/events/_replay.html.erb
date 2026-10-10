@@ -1,0 +1,10 @@
+<%# Replay for one processed event, or in words why there is none. Locals:
+    event (a pgbus_processed_events row), replay_state (:replayable,
+    :not_archived or :no_handler, from DataSource#event_replay_states). %>
+<% if replay_state == :replayable %>
+  <%= pgbus_button_to t("pgbus.events.processed.replay"), pgbus.replay_event_path(event["id"]),
+        method: :post, variant: :link, size: :sm,
+        data: { turbo_confirm: t("pgbus.events.processed.replay_confirm"), turbo_frame: "_top" } %>
+<% else %>
+  <span class="text-xs text-gray-600 dark:text-gray-300"><%= t("pgbus.events.processed.replay_unavailable.#{replay_state || :not_archived}") %></span>
+<% end %>
