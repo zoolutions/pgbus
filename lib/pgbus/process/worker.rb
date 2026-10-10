@@ -35,7 +35,8 @@ module Pgbus
                      rate_counter: nil, wake_signal: nil, stat_buffer: :default,
                      notify_listener: nil, notify_retry_at: 0.0,
                      notify_retry_backoff: NOTIFY_RETRY_BASE_SECONDS,
-                     started_at_monotonic: nil, wake_pipe: nil, read_ahead: nil)
+                     started_at_monotonic: nil, wake_pipe: nil, read_ahead: nil,
+                     recycle_limits: {}, capsule: nil, process: nil)
         @queues = Array(queues)
         @initial_queues = @queues.dup.freeze
         @wildcard = @queues.include?("*")
@@ -68,6 +69,11 @@ module Pgbus
         # in_flight counts every claimed message: buffered and running.
         @in_flight = Concurrent::AtomicFixnum.new(0)
         @read_ahead = read_ahead || config.read_ahead
+        # Capsule-level recycle limits (issue #503); each unset key falls back
+        # to the global value at check time, so a config change still applies.
+        @recycle_limits = recycle_limits
+        @capsule = capsule
+        @process = process
         @claim_buffer = ClaimBuffer.new(config: config)
         @loop_tick_at = Concurrent::AtomicReference.new(nil)
         @rate_counter = rate_counter || RateCounter.new(:processed, :failed, :dequeued)
@@ -644,24 +650,31 @@ module Pgbus
       end
 
       def exceeded_max_jobs?
-        return false unless config.max_jobs_per_worker && @jobs_processed.value >= config.max_jobs_per_worker
+        limit = recycle_limit(:max_jobs_per_worker)
+        return false unless limit && @jobs_processed.value >= limit
 
         Pgbus.logger.info { "[Pgbus] Worker recycling: max_jobs reached (#{@jobs_processed.value})" }
         true
       end
 
       def exceeded_max_memory?
-        return false unless config.max_memory_mb && current_memory_mb > config.max_memory_mb
+        limit = recycle_limit(:max_memory_mb)
+        return false unless limit && current_memory_mb > limit
 
-        Pgbus.logger.info { "[Pgbus] Worker recycling: memory limit (#{current_memory_mb}MB > #{config.max_memory_mb}MB)" }
+        Pgbus.logger.info { "[Pgbus] Worker recycling: memory limit (#{current_memory_mb}MB > #{limit}MB)" }
         true
       end
 
       def exceeded_max_lifetime?
-        return false unless config.max_worker_lifetime && (monotonic_now - @started_at_monotonic) > config.max_worker_lifetime
+        limit = recycle_limit(:max_worker_lifetime)
+        return false unless limit && (monotonic_now - @started_at_monotonic) > limit
 
         Pgbus.logger.info { "[Pgbus] Worker recycling: lifetime exceeded" }
         true
+      end
+
+      def recycle_limit(key)
+        config.recycle_limit_for(@recycle_limits, key)
       end
 
       # Instrumentation payload may report a value up to MEMORY_CHECK_TTL seconds old.
@@ -816,10 +829,12 @@ module Pgbus
       def start_heartbeat
         @heartbeat = Heartbeat.new(
           kind: "worker",
+          # capsule/process lead: the dashboard's metadata cell truncates.
           metadata: {
+            capsule: @capsule, process: @process,
             queues: queues, threads: threads, pid: ::Process.pid,
             execution_mode: @execution_mode, consumer_priority: @consumer_priority
-          },
+          }.compact,
           on_beat: -> { on_heartbeat },
           loop_tick_supplier: -> { @loop_tick_at.get },
           metadata_supplier: -> { throughput_metadata }

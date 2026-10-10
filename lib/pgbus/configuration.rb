@@ -590,6 +590,21 @@ module Pgbus
       entry.fetch(:read_ahead, nil) || read_ahead
     end
 
+    # Recycle limits a capsule may set for its own workers (issue #503).
+    RECYCLE_LIMIT_KEYS = %i[max_jobs_per_worker max_memory_mb max_worker_lifetime].freeze
+
+    # How many identical worker processes the supervisor forks for one
+    # capsule (issue #503). Default 1.
+    def processes_for(entry)
+      entry.fetch(:processes, nil) || 1
+    end
+
+    # One recycle limit for a capsule, falling back to the global value
+    # (mirrors read_ahead_for). nil means the limit is off.
+    def recycle_limit_for(entry, key)
+      entry.fetch(key, nil) || public_send(key)
+    end
+
     # Returns the execution mode for a specific worker config hash,
     # falling back to the global execution_mode setting.
     def execution_mode_for(worker_config)
@@ -846,6 +861,7 @@ module Pgbus
       end
 
       validate_read_ahead!
+      validate_capsule_processes!
 
       if priority_levels && !(priority_levels.is_a?(Integer) && priority_levels >= 1 && priority_levels <= 10)
         raise Pgbus::ConfigurationError, "priority_levels must be an integer between 1 and 10"
@@ -877,6 +893,27 @@ module Pgbus
         raise Pgbus::ConfigurationError, "#{name} must be a non-negative Integer (got #{value.inspect})"
       end
       warn_read_ahead_without_heartbeat(settings)
+    end
+
+    # Per-capsule processes (a positive Integer) and recycle limits (a positive
+    # number; unset falls back to the global value). The Array form of
+    # +workers=+ bypasses +capsule+, so both are checked here (issue #503).
+    def validate_capsule_processes!
+      Array(workers).each do |w|
+        validate_processes!(w[:processes]) unless w[:processes].nil?
+        RECYCLE_LIMIT_KEYS.each do |key|
+          value = w[key]
+          next if value.nil? || (value.is_a?(Numeric) && value.positive?)
+
+          raise Pgbus::ConfigurationError, "capsule #{key} must be a positive number (got #{value.inspect})"
+        end
+      end
+    end
+
+    def validate_processes!(value)
+      return if value.is_a?(Integer) && value.positive?
+
+      raise Pgbus::ConfigurationError, "capsule processes must be a positive Integer (got #{value.inspect})"
     end
 
     # Buffered claims are kept invisible only by the visibility heartbeat.
@@ -1209,14 +1246,22 @@ module Pgbus
     #
     #   c.capsule :critical, queues: %w[critical], threads: 5
     #   c.capsule :gated, queues: %w[gated], threads: 1, single_active_consumer: true
+    #   c.capsule :render, queues: %w[render], threads: 1, processes: 4,
+    #             max_memory_mb: 1_536, max_worker_lifetime: 6.hours
+    #
+    # processes: N forks N identical workers for the capsule (CPU-bound jobs:
+    # threads share one GVL, processes do not). The capsule-level recycle
+    # limits override the global ones for this capsule's workers only.
     #
     # Names must be unique. Queues must not overlap with capsules already
     # defined (would cause double-processing). Composes with the string DSL —
     # +c.workers "..."+ followed by +c.capsule :name, ...+ appends the
     # named capsule to the list parsed from the string.
-    def capsule(name, queues:, threads:, **)
+    def capsule(name, queues:, threads:, **options)
       raise Pgbus::ConfigurationError, "capsule queues must be a non-empty Array" unless queues.is_a?(Array) && queues.any?
       raise Pgbus::ConfigurationError, "capsule threads must be a positive Integer" unless threads.is_a?(Integer) && threads.positive?
+
+      validate_processes!(options[:processes]) if options.key?(:processes)
 
       normalized_name = name.to_s
       @workers ||= []
@@ -1227,7 +1272,7 @@ module Pgbus
 
       validate_no_queue_overlap!(queues)
 
-      @workers << { name: normalized_name, queues: queues, threads: threads, ** }
+      @workers << { name: normalized_name, queues: queues, threads: threads, **options }
     end
 
     # Look up a capsule by its name. Accepts symbol or string. Returns the

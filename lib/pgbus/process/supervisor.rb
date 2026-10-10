@@ -195,9 +195,11 @@ module Pgbus
           name = worker_config[:name] || worker_config["name"] || "anonymous"
           queues = worker_config[:queues] || worker_config["queues"] || [config.default_queue]
           threads = worker_config[:threads] || worker_config["threads"] || 5
+          processes = config.processes_for(worker_config)
           mode = banner_field { config.execution_mode_for(worker_config) }
           Pgbus.logger.info do
-            "[Pgbus] boot: capsule=#{name} queues=#{Array(queues).join(",")} threads=#{threads} mode=#{mode}"
+            "[Pgbus] boot: capsule=#{name} queues=#{Array(queues).join(",")} threads=#{threads} " \
+              "processes=#{processes} mode=#{mode}"
           end
         end
       end
@@ -284,12 +286,7 @@ module Pgbus
         # --dispatcher-only CLI flags). Each role is gated by
         # config.role_enabled?, which returns true unless +config.roles+ has
         # been narrowed.
-        if config.role_enabled?(:workers)
-          # slot is the child's position in the config array — it keys the
-          # crash-streak tracking so identically-configured siblings don't
-          # share (and reset) each other's restart backoff.
-          Array(config.workers).each_with_index { |worker_config, slot| fork_worker(worker_config, slot: slot) }
-        end
+        boot_workers if config.role_enabled?(:workers)
 
         fork_dispatcher if config.role_enabled?(:dispatcher)
         boot_scheduler if config.role_enabled?(:scheduler)
@@ -297,7 +294,22 @@ module Pgbus
         boot_outbox_poller if config.role_enabled?(:outbox)
       end
 
-      def fork_worker(worker_config, slot: nil)
+      # A capsule with processes: N forks N identical workers (issue #503).
+      # slot numbers every worker fork across all capsules — it keys the
+      # crash-streak tracking so identically-configured siblings (in one
+      # capsule or in several) don't share or reset each other's restart
+      # backoff. process_index is the fork's position within its capsule.
+      def boot_workers
+        slot = 0
+        Array(config.workers).each do |worker_config|
+          config.processes_for(worker_config).times do |process_index|
+            fork_worker(worker_config, slot: slot, process_index: process_index)
+            slot += 1
+          end
+        end
+      end
+
+      def fork_worker(worker_config, slot: nil, process_index: 0)
         note_intended_child
         queues = worker_config[:queues] || [config.default_queue]
         threads = worker_config[:threads] || 5
@@ -331,6 +343,8 @@ module Pgbus
             single_active_consumer: single_active, consumer_priority: priority,
             execution_mode: exec_mode, group_mode: grp_mode,
             read_ahead: config.read_ahead_for(worker_config),
+            recycle_limits: worker_config.slice(*Configuration::RECYCLE_LIMIT_KEYS),
+            capsule: worker_config[:name], process: process_label(worker_config, process_index),
             liveness_pipe: liveness_writer, wake_pipe: wake_reader
           )
           worker.run
@@ -352,7 +366,7 @@ module Pgbus
         close_pipe(wake_reader)
         register_fork_with_hub(pid, wake_writer, queues)
         @forks[pid] = {
-          type: :worker, config: worker_config, slot: slot, spawned_at: monotonic_now,
+          type: :worker, config: worker_config, slot: slot, process_index: process_index, spawned_at: monotonic_now,
           liveness_reader: liveness_reader, last_pipe_tick_at: monotonic_now, pipe_seen: false,
           wake_writer: wake_writer
         }
@@ -363,6 +377,13 @@ module Pgbus
         close_pipe(wake_reader)
         close_pipe(wake_writer)
         ErrorReporter.report(e, { action: "fork_worker", queues: queues })
+      end
+
+      # "2/4" for the second of a capsule's four processes; nil for a
+      # single-process capsule, where it would only add noise.
+      def process_label(worker_config, process_index)
+        total = config.processes_for(worker_config)
+        "#{process_index + 1}/#{total}" if total > 1
       end
 
       # Hand the hub a worker fork's routing entry: explicit queues as
@@ -682,7 +703,7 @@ module Pgbus
       def restart_child(info)
         case info[:type]
         when :worker
-          fork_worker(info[:config], slot: info[:slot])
+          fork_worker(info[:config], slot: info[:slot], process_index: info[:process_index] || 0)
         when :dispatcher
           fork_dispatcher
         when :scheduler

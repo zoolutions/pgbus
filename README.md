@@ -574,6 +574,38 @@ end
 
 When a limit is hit, the worker drains its thread pool, exits, and the supervisor forks a fresh process. RSS memory is sampled from `/proc/self/statm` (Linux) or `ps -o rss` (macOS).
 
+A capsule can set its own limits. They apply to that capsule's workers only, and any limit it leaves unset falls back to the global value. One heavyweight capsule no longer forces a high global limit on the lightweight ones:
+
+```ruby
+Pgbus.configure do |config|
+  config.max_memory_mb = 512                      # every other capsule
+  config.capsule :render, queues: %w[render], threads: 1, processes: 4,
+                 max_memory_mb: 1_536, max_worker_lifetime: 6.hours
+end
+```
+
+### Threads vs processes
+
+A capsule is one forked process with `threads:` threads by default. Ruby threads in one process share the GVL, so threads help when jobs wait on I/O (HTTP, mail, the database) and do not help when jobs burn CPU (template rendering, report or PDF generation, image work, large serialization): a capsule with `threads: 8` running CPU-bound jobs still uses about one core.
+
+`processes: N` forks N identical workers for one capsule. Each is its own process with its own GVL, so N processes use up to N cores:
+
+```ruby
+config.capsule :render, queues: %w[render], threads: 1, processes: 4
+```
+
+| Jobs are mostly… | Use |
+|---|---|
+| Waiting on I/O | `threads:` (or `execution_mode: :async`), `processes: 1` |
+| Burning CPU | `processes:` up to the cores you can give the capsule, `threads: 1`–`2` |
+
+- **One queue, N processes.** All N workers read the same queues with `FOR UPDATE SKIP LOCKED`; there is no sharding, so enqueue-time uniqueness and concurrency controls behave as with one process. The queue-overlap rule for named capsules is unchanged: the forks belong to one capsule.
+- **Each fork is supervised on its own.** It has its own restart backoff, liveness pipe, wake pipe and `pgbus_processes` row. A crashed fork restarts alone; its siblings keep running. The boot banner prints `processes=N`, readiness counts every fork, and the dashboard's Processes page labels each row `capsule: render` and `process: 2/4`.
+- **Memory.** Budget roughly `boot RSS + peak job RSS` per process. The forks share the booted app's memory copy-on-write until they write to it, so N forks cost less than N separate supervisors, which each boot the app.
+- **Connections.** Every process has its own pool (`pool=` in the boot banner), so a host holds about `processes × pool_size` connections for the capsule. Under the default `worker_notify_scope: :supervisor` the host still holds one LISTEN connection; under `:fork` each fork holds its own, and `pgbus doctor`'s connection budget counts them.
+- **Shutdown.** The stop timeout applies to every fork at once, so N forks drain in parallel and need no longer `shutdown_timeout`.
+- `processes:` must be a positive Integer (default `1`, so existing configs are unchanged). It is set on `c.capsule` or on an Array-form `workers` entry; the string DSL has no syntax for it.
+
 ### Retry backoff
 
 When a job fails, Pgbus extends the PGMQ visibility timeout with exponential backoff so retries are spread out instead of bunched at fixed intervals:
@@ -1340,11 +1372,11 @@ If the orchestrator's stop grace period is *shorter* than `shutdown_timeout`, do
 [Pgbus] boot: pgmq_schema_mode=auto pgmq_version=1.4.0
 [Pgbus] boot: listen_notify=true worker_notify_wakeup=true
 [Pgbus] boot: roles=workers,dispatcher,scheduler
-[Pgbus] boot: capsule=critical queues=critical threads=5 mode=threads
-[Pgbus] boot: capsule=default queues=default,mailers threads=10 mode=threads
+[Pgbus] boot: capsule=critical queues=critical threads=5 processes=1 mode=threads
+[Pgbus] boot: capsule=default queues=default,mailers threads=10 processes=1 mode=threads
 ```
 
-It states: the pgbus version; the connection target reduced to `host/dbname` (never the password) across all three `connection_options` forms (`database_url` string, `connection_params` hash, AR-derived hash); the resolved pool size; `pgmq_schema_mode` and the installed PGMQ version (best-effort — `unknown` on any error); `listen_notify` and `worker_notify_wakeup?`; the roles that will actually boot (honoring `config.roles`); and one line per worker capsule (name, queues, threads, execution mode) and per event consumer (topics, threads).
+It states: the pgbus version; the connection target reduced to `host/dbname` (never the password) across all three `connection_options` forms (`database_url` string, `connection_params` hash, AR-derived hash); the resolved pool size; `pgmq_schema_mode` and the installed PGMQ version (best-effort — `unknown` on any error); `listen_notify` and `worker_notify_wakeup?`; the roles that will actually boot (honoring `config.roles`); and one line per worker capsule (name, queues, threads, processes, execution mode) and per event consumer (topics, threads).
 
 Every DB-dependent field is wrapped so a transient failure degrades that field to `unknown` — the banner can never abort boot.
 
@@ -2276,9 +2308,9 @@ Curated headline options for the README. The full operator reference (with types
 | `retry_backoff` | `5` | Base delay in seconds for VT-based retry backoff (exponential: `base * 2^(attempt-1)`) |
 | `retry_backoff_max` | `300` | Maximum retry delay in seconds (caps the exponential curve) |
 | `retry_backoff_jitter` | `0.15` | Jitter factor (0-1) added to retry delays to spread retries |
-| `max_jobs_per_worker` | `nil` | Recycle worker after N jobs (nil = unlimited) |
-| `max_memory_mb` | `nil` | Recycle worker when memory exceeds N MB |
-| `max_worker_lifetime` | `nil` | Recycle worker after N seconds. Accepts seconds or Duration. |
+| `max_jobs_per_worker` | `nil` | Recycle worker after N jobs (nil = unlimited). Overridable per capsule. |
+| `max_memory_mb` | `nil` | Recycle worker when memory exceeds N MB. Overridable per capsule. |
+| `max_worker_lifetime` | `nil` | Recycle worker after N seconds. Accepts seconds or Duration. Overridable per capsule. |
 | `listen_notify` | `true` | Use PGMQ's LISTEN/NOTIFY for instant wake-up |
 | `worker_notify_wakeup` | `nil` (follows `listen_notify`) | Dedicated LISTEN connection for worker wake-up. `nil` follows `listen_notify`; set `false` to force polling. |
 | `worker_notify_host` / `worker_notify_port` / `worker_notify_database_url` | `nil` | Override host/port/URL for the worker notify LISTEN connection (e.g. direct primary port when jobs go through PgBouncer) |

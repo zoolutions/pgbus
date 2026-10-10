@@ -201,7 +201,13 @@ module Pgbus
               last_heartbeat_at: now - 10, healthy: true, created_at: now - 7200 },
             { id: 2, kind: "worker", hostname: "worker-01.prod", pid: 67_890,
               metadata: { "queues" => "events", "threads" => 3 },
-              last_heartbeat_at: now - 45, healthy: true, created_at: now - 86_400 }
+              last_heartbeat_at: now - 45, healthy: true, created_at: now - 86_400 },
+            # A processes: 2 capsule (issue #503): one row per fork.
+            *[1, 2].map do |n|
+              { id: 2 + n, kind: "worker", hostname: "worker-02.prod", pid: 70_000 + n,
+                metadata: { "capsule" => "render", "process" => "#{n}/2", "queues" => "render", "threads" => 1 },
+                last_heartbeat_at: now - (5 * n), healthy: true, created_at: now - 3600 }
+            end
           ]
         end
 

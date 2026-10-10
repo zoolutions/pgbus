@@ -554,6 +554,22 @@ RSpec.describe Pgbus::Doctor do
       expect(budget_check[:detail]).to match(/\A5 direct LISTEN connections pinned \(scope=fork/)
     end
 
+    # Issue #503: every fork of a processes: N capsule holds its own LISTEN.
+    it "counts each process of a multi-process capsule under :fork scope" do
+      config.worker_notify_scope = :fork
+      config.workers.first[:processes] = 3
+
+      expect(budget_check[:detail]).to match(/\A7 direct LISTEN connections pinned \(scope=fork/)
+      expect(budget_check[:detail]).to include("3 capsules (5 worker processes) + 2 consumers")
+    end
+
+    it "still shares 1 connection across every process under :supervisor scope" do
+      config.worker_notify_scope = :supervisor
+      config.workers.first[:processes] = 3
+
+      expect(budget_check[:detail]).to match(/\A1 direct LISTEN connection pinned/)
+    end
+
     it "reports 0 when worker notify wakeup is off" do
       config.listen_notify = false
 

@@ -31,7 +31,7 @@ module ConfigReference
       { name: "current_attributes", type: "Symbol, Array, Hash, nil", default: "nil", desc: "Persist ActiveSupport::CurrentAttributes across enqueue → perform: :auto (every subclass), an Array of classes/names, or a Hash of class => { only: }/{ except: }. Restored around the whole perform_now, and around event handlers (captured at publish into the event envelope)." }
     ],
     "Workers" => [
-      { name: "workers", type: "String / Array", default: "default: 5", desc: "Worker capsule definitions (string DSL or array)." },
+      { name: "workers", type: "String / Array", default: "default: 5", desc: "Worker capsule definitions (string DSL or array). A capsule's processes: N forks N identical workers for CPU-bound queues." },
       { name: "event_consumers", type: "String / Array, nil", default: "nil", desc: "Event-consumer process definitions." },
       { name: "roles", type: "Array, nil", default: "nil (all)", desc: "Supervisor role filter — usually set via CLI flags." },
       { name: "execution_mode", type: "Symbol", default: ":threads", desc: "Global execution mode (:threads or :async)." },
@@ -44,7 +44,7 @@ module ConfigReference
     ],
     "Worker recycling" => [
       { name: "max_jobs_per_worker", type: "Integer, nil", default: "nil", desc: "Recycle a worker after N jobs." },
-      { name: "max_memory_mb", type: "Integer, nil", default: "nil", desc: "Recycle a worker above N MB RSS." },
+      { name: "max_memory_mb", type: "Integer, nil", default: "nil", desc: "Recycle a worker above N MB RSS. Overridable per capsule (max_memory_mb:), as are max_jobs_per_worker and max_worker_lifetime." },
       { name: "max_worker_lifetime", type: "Duration, nil", default: "nil", desc: "Recycle a worker after N seconds." }
     ],
     "Retries & reliability" => [
