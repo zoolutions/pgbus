@@ -1,100 +1,142 @@
 // Charts module for the Pgbus Insights page.
-// Loaded only on the insights page via an inline <script type="module">.
+// Loaded only on the insights page via an inline <script type="module">, which
+// passes it the series the page embeds. The page renders each chart's caption,
+// data table and empty state; this module only draws into the containers that
+// exist, and redraws them when <html class="dark"> toggles.
 
-function getThemeColors() {
-  const isDark = document.documentElement.classList.contains("dark");
+// Colours for both themes in one place (issue #492). card is the chart card's
+// own background (white / gray-800): the donut's slice separators use it so
+// they read as gaps, not white lines, in dark mode.
+function palette(isDark) {
   return {
-    isDark,
-    text: isDark ? "#9ca3af" : "#6b7280",
+    mode: isDark ? "dark" : "light",
+    text: isDark ? "#d1d5db" : "#4b5563",
     grid: isDark ? "#374151" : "#e5e7eb",
-    tooltip: isDark ? "dark" : "light",
-    dataLabel: isDark ? "#fff" : "#000",
+    axis: isDark ? "#4b5563" : "#d1d5db",
+    card: isDark ? "#1f2937" : "#ffffff",
+    throughput: isDark ? "#818cf8" : "#6366f1",
+    latencyAvg: isDark ? "#818cf8" : "#6366f1",
+    latencyP95: isDark ? "#fbbf24" : "#f59e0b",
+    status: {
+      success: "#10b981",
+      failed: "#ef4444",
+      dead_lettered: "#f97316",
+    },
+    other: isDark ? "#9ca3af" : "#6b7280",
   };
 }
 
-let throughputChart, statusChart, latencyChart;
+function reducedMotion() {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+// Options every chart shares: theme, text, axes, grid, tooltip, animation.
+function baseOptions(id, type, colors) {
+  return {
+    chart: {
+      id,
+      type,
+      height: 280,
+      toolbar: { show: false },
+      background: "transparent",
+      foreColor: colors.text,
+      animations: { enabled: !reducedMotion() },
+    },
+    theme: { mode: colors.mode },
+    tooltip: { theme: colors.mode },
+    grid: { borderColor: colors.grid },
+    legend: { labels: { colors: colors.text } },
+    dataLabels: { enabled: false },
+  };
+}
+
+function timeAxis(colors) {
+  return {
+    type: "datetime",
+    labels: { style: { colors: colors.text } },
+    axisBorder: { color: colors.axis },
+    axisTicks: { color: colors.axis },
+    tooltip: { enabled: false },
+  };
+}
+
+function valueAxis(colors, formatter) {
+  return {
+    labels: { style: { colors: colors.text }, formatter },
+    axisBorder: { show: true, color: colors.axis },
+  };
+}
+
+function points(series, key) {
+  return series.map((p) => ({ x: new Date(p.time).getTime(), y: p[key] }));
+}
+
+const charts = {};
+
+function draw(id, options) {
+  if (charts[id]) charts[id].destroy();
+  delete charts[id];
+
+  const el = document.getElementById(id);
+  if (!el) return;
+
+  charts[id] = new ApexCharts(el, options);
+  charts[id].render();
+}
 
 export function renderCharts(data, i18n) {
-  const t = getThemeColors();
+  const colors = palette(document.documentElement.classList.contains("dark"));
 
-  if (throughputChart) throughputChart.destroy();
-  if (statusChart) statusChart.destroy();
-  if (latencyChart) latencyChart.destroy();
-
-  const throughputData = data.throughput.map(p => ({
-    x: new Date(p.time).getTime(),
-    y: p.count,
-  }));
-
-  throughputChart = new ApexCharts(document.querySelector("#throughput-chart"), {
-    series: [{ name: i18n.seriesName || "Jobs", data: throughputData }],
-    chart: { type: "area", height: 280, toolbar: { show: false }, background: "transparent", foreColor: t.text },
+  draw("throughput-chart", {
+    ...baseOptions("throughput-chart", "area", colors),
+    series: [{ name: i18n.seriesName, data: points(data.throughput || [], "count") }],
     stroke: { curve: "smooth", width: 2 },
     fill: { type: "gradient", gradient: { shadeIntensity: 1, opacityFrom: 0.4, opacityTo: 0.05, stops: [0, 100] } },
-    colors: ["#6366f1"],
-    xaxis: { type: "datetime", labels: { style: { colors: t.text } } },
-    yaxis: { labels: { style: { colors: t.text } } },
-    grid: { borderColor: t.grid },
-    tooltip: { theme: t.tooltip },
-    dataLabels: { enabled: false },
-  });
-  throughputChart.render();
-
-  const statusLabels = Object.keys(data.status_counts);
-  const statusValues = Object.values(data.status_counts);
-  const statusColors = statusLabels.map(s => {
-    if (s === "success") return "#10b981";
-    if (s === "failed") return "#ef4444";
-    if (s === "dead_lettered") return "#f97316";
-    return "#6b7280";
+    colors: [colors.throughput],
+    xaxis: timeAxis(colors),
+    yaxis: valueAxis(colors, (v) => Math.round(v)),
   });
 
-  if (statusLabels.length > 0) {
-    statusChart = new ApexCharts(document.querySelector("#status-chart"), {
-      series: statusValues,
-      labels: statusLabels,
-      chart: { type: "donut", height: 280, background: "transparent", foreColor: t.text },
-      colors: statusColors,
-      legend: { position: "bottom", labels: { colors: t.text } },
-      plotOptions: { pie: { donut: { size: "60%" } } },
-      dataLabels: { style: { colors: [t.dataLabel] } },
-      tooltip: { theme: t.tooltip },
-    });
-    statusChart.render();
-  } else {
-    const el = document.querySelector("#status-chart");
-    if (el) el.innerHTML = `<p class="text-center text-sm text-gray-400 dark:text-gray-500 pt-24">${i18n.noData || "No data"}</p>`;
-  }
+  const statuses = Object.keys(data.status_counts || {});
+  draw("status-chart", {
+    ...baseOptions("status-chart", "donut", colors),
+    series: statuses.map((s) => data.status_counts[s]),
+    labels: statuses.map((s) => (i18n.statuses && i18n.statuses[s]) || s),
+    colors: statuses.map((s) => colors.status[s] || colors.other),
+    stroke: { colors: [colors.card] },
+    legend: { position: "bottom", labels: { colors: colors.text } },
+    plotOptions: {
+      pie: {
+        donut: {
+          size: "60%",
+          labels: {
+            show: true,
+            name: { color: colors.text },
+            value: { color: colors.text },
+            total: { show: true, color: colors.text },
+          },
+        },
+      },
+    },
+  });
 
-  // Latency chart (only if data is available)
-  const latencyEl = document.querySelector("#latency-chart");
-  if (latencyEl && data.latency_trend && data.latency_trend.length > 0) {
-    const avgData = data.latency_trend.map(p => ({ x: new Date(p.time).getTime(), y: p.avg_ms }));
-    const p95Data = data.latency_trend.map(p => ({ x: new Date(p.time).getTime(), y: p.p95_ms }));
-
-    latencyChart = new ApexCharts(latencyEl, {
-      series: [
-        { name: i18n.latencyAvg || "Avg", data: avgData },
-        { name: i18n.latencyP95 || "P95", data: p95Data },
-      ],
-      chart: { type: "line", height: 280, toolbar: { show: false }, background: "transparent", foreColor: t.text },
-      stroke: { curve: "smooth", width: [2, 2], dashArray: [0, 5] },
-      colors: ["#6366f1", "#f59e0b"],
-      xaxis: { type: "datetime", labels: { style: { colors: t.text } } },
-      yaxis: { labels: { style: { colors: t.text }, formatter: v => Math.round(v) + "ms" } },
-      grid: { borderColor: t.grid },
-      tooltip: { theme: t.tooltip },
-      dataLabels: { enabled: false },
-      legend: { position: "top", labels: { colors: t.text } },
-    });
-    latencyChart.render();
-  } else if (latencyEl) {
-    latencyEl.innerHTML = `<p class="text-center text-sm text-gray-400 dark:text-gray-500 pt-24">${i18n.noData || "No data"}</p>`;
-  }
+  draw("latency-chart", {
+    ...baseOptions("latency-chart", "line", colors),
+    series: [
+      { name: i18n.latencyAvg, data: points(data.latency_trend || [], "avg_ms") },
+      { name: i18n.latencyP95, data: points(data.latency_trend || [], "p95_ms") },
+    ],
+    stroke: { curve: "smooth", width: [2, 2], dashArray: [0, 5] },
+    colors: [colors.latencyAvg, colors.latencyP95],
+    xaxis: timeAxis(colors),
+    yaxis: valueAxis(colors, (v) => i18n.milliseconds.replace("%n", Math.round(v))),
+    legend: { position: "top", labels: { colors: colors.text } },
+  });
 }
 
 let themeObserver = null;
 
+// The page toggles dark mode with a class on <html>; redraw in the new palette.
 export function observeThemeChanges(getDataFn, i18n) {
   if (themeObserver) themeObserver.disconnect();
 

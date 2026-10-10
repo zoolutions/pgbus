@@ -41,6 +41,7 @@ it:
         title: Processi attivi
       queue_health:
         dead_tuples: Tuple morte
+        empty: Ancora nessuna tabella di coda da misurare
         headers:
           bloat: Bloat
           dead: Morte
@@ -60,6 +61,25 @@ it:
           one: "%{count} tabella necessita di vacuum"
           other: "%{count} tabelle necessitano di vacuum"
         title: Salute delle Code
+        words:
+          bloat:
+            critical: "%{ratio} su %{table} — le letture rallentano; esegui subito il vacuum (critico oltre %{critical}, avviso oltre %{warn})"
+            none: Ancora nulla da misurare
+            ok: "%{ratio} su %{table} — ok (avviso oltre %{warn}, critico oltre %{critical})"
+            warn: "%{ratio} su %{table} — vacuum necessario (avviso oltre %{warn}, critico oltre %{critical})"
+          dead_tuples:
+            ok: Ok — avviso oltre %{limit} righe morte
+            warn: Oltre %{limit} — l'autovacuum è in ritardo; la tabella qui sotto mostra dove
+          transaction:
+            critical: Oltre %{critical} — il vacuum non può recuperare righe finché non termina; trovala in pg_stat_activity (avviso a %{warn}; il verdetto di salute peggiora dopo %{verdict})
+            none: Nessuna transazione aperta — il vacuum può recuperare ogni riga morta (avviso a %{warn}, allarme a %{critical}; il verdetto di salute peggiora dopo %{verdict})
+            ok: Ok — avviso a %{warn}, allarme a %{critical}; il verdetto di salute peggiora dopo %{verdict}
+            warn: Oltre %{warn} — una transazione lunga impedisce al vacuum di recuperare righe (allarme a %{critical}; il verdetto di salute peggiora dopo %{verdict})
+          vacuum:
+            critical: Oltre %{critical} — l'autovacuum non raggiunge queste tabelle; controlla le sue impostazioni (avviso dopo %{warn})
+            ok: Ok — avviso dopo %{warn}, critico dopo %{critical}
+            unknown: Mai sottoposta a vacuum, oppure le statistiche non sono disponibili
+            warn: Oltre %{warn} — l'autovacuum potrebbe essere in ritardo (critico dopo %{critical})
         worst_bloat: Peggior Bloat
       queues_table:
         empty: Nessuna coda trovata
@@ -68,6 +88,7 @@ it:
           oldest_claimable: Più vecchio disponibile
           parked: Posticipati
           queue: Coda
+          status: Stato
           total: Totale
           visible: Visibile
         title: Code
@@ -75,7 +96,9 @@ it:
       recent_failures:
         empty: Nessun errore
         headers:
+          attempt: Tentativo
           error: Errore
+          job: Job
           queue: Coda
           when: Quando
         title: Errori recenti
@@ -83,18 +106,55 @@ it:
       show:
         title: Cruscotto
       stats_cards:
+        dead_lettered: In dead-letter
+        dlq_newest_html: 'più recente: %{error_class} in %{job} %{ago}'
+        dlq_newest_legacy_html: 'più recente: %{job} %{ago} — nessun motivo registrato'
+        dlq_newest_no_error_html: 'più recente: %{job} %{ago} — nessun errore registrato'
+        dlq_none: Nulla in dead-letter
+        dlq_see_why: apri la pagina dead-letter per vedere perché ciascuno è morto
         enqueued: In coda
-        failed_dlq: Falliti / DLQ
-        failed_dlq_labels: Falliti / Dead Lettered
+        enqueued_detail: "%{claimable} disponibili ora · %{waiting} pianificati, in esecuzione o in ripetizione"
+        enqueued_paused:
+          one: "%{count} in code in pausa"
+          other: "%{count} in code in pausa"
         parked_jobs: Job parcheggiati
         parked_jobs_oldest: il più vecchio %{age}
         processes: Processi
+        processes_detail: "%{healthy} sani · %{stalled} bloccati · %{stale} obsoleti"
+        processes_none: Nulla è in esecuzione — nessun job viene preso in carico
+        processes_stale: i processi obsoleti hanno smesso di inviare l'heartbeat; i loro job in corso vengono rieseguiti alla scadenza del visibility timeout
         queues: Code
+        queues_detail: "%{paused} in pausa · %{dlq} in dead-letter"
+        queues_undrained:
+          one: "%{count} contiene job che nessuno svuota"
+          other: "%{count} contengono job che nessuno svuota"
         recurring: Ricorrente
+        recurring_detail: Attività che lo scheduler mette in coda secondo la pianificazione
+        retrying: In ripetizione
+        retrying_due:
+          one: "%{count} da eseguire ora"
+          other: "%{count} da eseguire ora"
+        retrying_newest: errore più recente %{error_class}
+        retrying_next_html: prossimo tentativo %{time}
+        retrying_none: Nulla è in ripetizione
         throughput: Throughput
-        throughput_unit: msg/s
-        view_tasks: Visualizza attività
-        visible: visibile
+        throughput_detail: lavori/min negli ultimi %{minutes} min
+        throughput_unavailable: richiede le statistiche dei job (rails g pgbus:add_job_stats)
+      verdict:
+        links:
+          dlq: Dead letter
+          processes: Processi
+        look_at: 'Da controllare:'
+        meaning:
+          degraded: Qualcosa richiede attenzione, ma i job scorrono ancora. /readyz risponde ancora pronto.
+          ok: Ogni coda con lavoro in sospeso viene svuotata e ogni processo invia l'heartbeat. /readyz risponde pronto.
+          stalled: Ci sono job in attesa e nessuno li prende in carico. /readyz risponde non pronto (503).
+        statuses:
+          degraded: DEGRADED
+          ok: OK
+          stalled: STALLED
+        title: 'Salute: %{status}'
+        unavailable: Verdetto di salute non disponibile — non è stato possibile leggere i controlli su cui si basa; vedi il log
     dead_letter:
       detail:
         backtrace: Backtrace (prime righe)
@@ -364,21 +424,25 @@ it:
     insights:
       show:
         charts:
-          failed_to_load: Impossibile caricare i dati del grafico
-          latency: Latenza in coda (ms)
+          captions:
+            latency: I job hanno atteso in media %{avg} prima che un worker li prendesse in carico, p95 %{p95}
+            status: "%{success} riusciti, %{failed} falliti, %{dead_lettered} in dead-letter"
+            throughput_html: "%{total} lavori negli ultimi %{range}, picco di %{peak} lavori/min %{at}"
+          data_table: Tabella dati
+          latency: Latenza in coda
           latency_avg: Media
           latency_p95: P95
           no_data: Nessun dato ancora
           series_name: Lavori/min
           status_distribution: Distribuzione stato
-          throughput: Throughput (lavori/min)
+          throughput: Throughput
         description_html: Metriche di rendimento lavorativo per gli ultimi %{range}
         latency_by_queue:
           empty: Nessun dato di latenza disponibile
           headers:
-            avg: Media (ms)
+            avg: Media
             count: Conteggio
-            p95: P95 (ms)
+            p95: P95
             queue: Coda
           title: Latenza per coda
         live_streams:
@@ -398,6 +462,10 @@ it:
             job_class: Classe lavoro
             max: Massimo
           title: Classi di Lavoro Più Lente (durata media)
+        statuses:
+          dead_lettered: In dead-letter
+          failed: Falliti
+          success: Riusciti
         streams:
           summary:
             active: Attivo
@@ -426,6 +494,20 @@ it:
           p99_latency: Latenza P99
           succeeded: Riusciti
           total_jobs: Totale Lavori
+        tables:
+          captions:
+            latency_minute: Latenza in coda al minuto
+            latency_step: Latenza in coda per %{step}
+            status: Job per stato finale
+            throughput_minute: Job al minuto
+            throughput_step: Job per %{step}
+          headers:
+            avg: Media
+            from: Da
+            highest_p95: P95 massimo
+            jobs: Job
+            share: Quota
+            status: Stato
         time_ranges:
           1h: 1h
           24h: 24h

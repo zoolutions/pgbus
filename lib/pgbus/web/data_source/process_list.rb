@@ -10,8 +10,7 @@ module Pgbus
         # thresholds: pass the ones the caller puts the rows in words with, so
         # badge and sentence share one now.
         def processes(thresholds: process_thresholds)
-          rows = connection.select_all("SELECT * FROM pgbus_processes ORDER BY kind, created_at")
-          rows.to_a.map { |r| format_process(r, thresholds) }
+          process_rows.map { |r| format_process(r, thresholds) }
         rescue StandardError => e
           Pgbus.logger.debug { "[Pgbus::Web] Error fetching processes: #{e.message}" }
           []
@@ -34,6 +33,14 @@ module Pgbus
         end
 
         private
+
+        # The raw rows, memoized per instance like queues_with_metrics (cleared
+        # by reset_cache!): the home page reads them for the stats, the signals,
+        # the health verdict, the queue lines and the panel (issue #492). Only
+        # the rows: each caller derives statuses against its own thresholds.
+        def process_rows
+          @process_rows ||= connection.select_all("SELECT * FROM pgbus_processes ORDER BY kind, created_at").to_a
+        end
 
         def format_process(row, thresholds)
           heartbeat = JobState.time(row["last_heartbeat_at"])

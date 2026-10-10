@@ -1,0 +1,21 @@
+<%# One Insights chart (issue #492): the caption says what it shows, the
+    chart div is one img for assistive tech (role + the caption as its name)
+    and the yielded data table is the full alternative. Locals: id, title,
+    caption, empty. Without data the card says so instead of drawing. %>
+<div class="rounded-lg bg-white dark:bg-gray-800 p-5 shadow ring-1 ring-gray-200 dark:ring-gray-700">
+  <h2 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4"><%= title %></h2>
+  <% if empty %>
+    <p data-testid="chart-empty" class="py-24 text-center text-sm text-gray-500 dark:text-gray-400"><%= t("pgbus.insights.show.charts.no_data") %></p>
+  <% else %>
+    <figure>
+      <div id="<%= id %>" role="img" aria-label="<%= strip_tags(caption).to_str %>" style="height: 280px;"></div>
+      <figcaption class="mt-3 text-sm text-gray-700 dark:text-gray-300"><%= caption %></figcaption>
+      <details class="mt-3">
+        <summary class="inline-flex min-h-6 cursor-pointer items-center text-sm font-medium text-indigo-700 hover:text-indigo-900 dark:text-indigo-300 dark:hover:text-indigo-200"><%= t("pgbus.insights.show.charts.data_table") %></summary>
+        <div class="mt-2 overflow-hidden rounded-lg ring-1 ring-gray-200 dark:ring-gray-700">
+          <%= yield %>
+        </div>
+      </details>
+    </figure>
+  <% end %>
+</div>

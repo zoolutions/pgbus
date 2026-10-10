@@ -11,6 +11,7 @@ module Pgbus
       include QueueSummary
       include EventList
       include ProcessList
+      include DashboardSignals
 
       # pgbus_failed_events rows outside the EventBus handler queues; binds
       # handler_queue_names_literal as $1.
@@ -62,6 +63,9 @@ module Pgbus
       def reset_cache!
         @queues_with_metrics = nil
         @concurrency_summary = nil
+        @queue_health_stats = nil
+        @process_rows = nil
+        @stream_queue_names = nil
         self
       end
 
@@ -97,13 +101,18 @@ module Pgbus
       # archive msg_id index fingerprint (issue #366). Stream delivery is a
       # non-consuming peek, so stream messages sit visible with read_ct=0
       # forever — health verdicts must not read that as a wedge (issue #359).
-      # Loaded fresh per call (reset + registry + fingerprint queries):
-      # verdicts run on coarse intervals and a long-lived process must see
-      # streams registered since the last check. Degrades to an empty Set
-      # when the registry/pgmq schema is absent or unreadable.
+      # Loaded fresh per instance (reset + registry + fingerprint queries),
+      # then memoized until reset_cache!: the home page asks three times per
+      # render (issue #492). A long-lived holder (the MCP server, the AppSignal
+      # probe) calls reset_cache! per check and HealthApp builds a DataSource
+      # per check, so each verdict still sees streams registered since the
+      # last one. Degrades to an empty Set when the registry/pgmq schema is
+      # absent or unreadable.
       def stream_queue_names
-        StreamQueue.reset_cache!
-        StreamQueue.known_names
+        @stream_queue_names ||= begin
+          StreamQueue.reset_cache!
+          StreamQueue.known_names
+        end
       end
 
       # Fingerprint-matched stream queues missing from the registry (issue #366).
@@ -716,6 +725,11 @@ module Pgbus
         []
       end
 
+      # Whether job stats record enqueue latency (rails g pgbus:add_job_stats_latency).
+      def latency_available?
+        JobStat.latency_columns?
+      end
+
       def latency_trend(minutes: 60)
         JobStat.latency_trend(minutes: minutes)
       rescue StandardError => e
@@ -733,7 +747,13 @@ module Pgbus
       # Queue health — vacuum stats, dead tuples, bloat, MVCC horizon.
       # Returns aggregate health across all queue and archive tables, plus
       # the oldest open transaction age (MVCC horizon pinning risk).
+      # Memoized per instance like queues_with_metrics: the home page reads it
+      # for the stats, the Queue Health panel and the health verdict.
       def queue_health_stats
+        @queue_health_stats ||= fetch_queue_health_stats
+      end
+
+      def fetch_queue_health_stats
         tables = fetch_all_table_stats
 
         total_dead = tables.sum { |t| t[:dead_tuples] }
@@ -759,6 +779,7 @@ module Pgbus
           oldest_transaction_age_sec: nil, tables: []
         }
       end
+      private :fetch_queue_health_stats
 
       # Per-queue health stats for the queue detail view.
       def queue_health_detail(queue_name)

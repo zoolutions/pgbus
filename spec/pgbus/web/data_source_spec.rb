@@ -60,7 +60,7 @@ RSpec.describe Pgbus::Web::DataSource do
 
   describe "#stream_queue_names" do
     it "returns the freshly-loaded known set (registry ∪ fingerprints, issues #359/#366)" do
-      # Fresh per call: the health verdict runs on coarse intervals, and a
+      # Fresh per instance: the health verdict runs on coarse intervals, and a
       # long-lived process must see streams registered since the last check.
       # known_names also includes dormant pre-registry streams by fingerprint.
       allow(Pgbus::StreamQueue).to receive(:reset_cache!)
@@ -71,6 +71,18 @@ RSpec.describe Pgbus::Web::DataSource do
         .to eq(Set.new(%w[pgbus_chat_1_messages pgbus_dormant_99]))
       expect(Pgbus::StreamQueue).to have_received(:reset_cache!).ordered
       expect(Pgbus::StreamQueue).to have_received(:known_names).ordered
+    end
+
+    # The home page asks three times per render (issue #492).
+    it "loads once per instance until reset_cache!" do
+      allow(Pgbus::StreamQueue).to receive(:reset_cache!)
+      allow(Pgbus::StreamQueue).to receive(:known_names).and_return(Set.new)
+
+      2.times { data_source.stream_queue_names }
+      data_source.reset_cache!
+      data_source.stream_queue_names
+
+      expect(Pgbus::StreamQueue).to have_received(:known_names).twice
     end
   end
 
@@ -131,6 +143,17 @@ RSpec.describe Pgbus::Web::DataSource do
       allow(mock_connection).to receive(:select_all).and_raise(StandardError)
 
       expect(data_source.processes).to eq([])
+    end
+
+    # The home page reads the rows five times per render (issue #492).
+    it "queries the rows once per instance until reset_cache!" do
+      allow(mock_connection).to receive(:select_all).and_return(double(to_a: [process_row]))
+
+      2.times { data_source.processes }
+      data_source.reset_cache!
+      data_source.processes
+
+      expect(mock_connection).to have_received(:select_all).twice
     end
   end
 
@@ -894,6 +917,18 @@ RSpec.describe Pgbus::Web::DataSource do
       expect(result[:oldest_vacuum_ago_sec]).to eq(300)
       expect(result[:oldest_transaction_age_sec]).to eq(5)
       expect(result[:tables].size).to eq(2)
+    end
+
+    # The home page reads it three times: stats, Queue Health and the verdict.
+    it "runs the table-stats query once per instance until reset_cache!" do
+      allow(mock_connection).to receive(:select_all).with(anything, "Pgbus All Table Health").and_return(all_table_rows)
+      allow(mock_connection).to receive(:select_one).with(anything, "Pgbus Oldest Transaction").and_return(nil)
+
+      2.times { data_source.queue_health_stats }
+      data_source.reset_cache!
+      data_source.queue_health_stats
+
+      expect(mock_connection).to have_received(:select_all).with(anything, "Pgbus All Table Health").twice
     end
 
     it "returns zero defaults on error" do

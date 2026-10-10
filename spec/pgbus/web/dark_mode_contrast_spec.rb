@@ -14,6 +14,10 @@ RSpec.describe "Dashboard dark-mode contrast" do # rubocop:disable RSpec/Describ
   let(:engine_root) { Pathname.new(__dir__).join("..", "..", "..").expand_path }
   let(:view_files) { Dir[engine_root.join("app", "views", "pgbus", "**", "*.erb")].sort }
   let(:helper_files) { Dir[engine_root.join("app", "helpers", "pgbus", "*.rb")].sort }
+  # Dashboard JS modules build markup too (charts.js painted its "No data"
+  # fallback in text-gray-400 / dark:text-gray-500, issue #492); the vendored
+  # libraries are not ours to scan.
+  let(:js_files) { Dir[engine_root.join("app", "frontend", "pgbus", "modules", "*.js")].sort }
 
   # Light tokens that need a dark partner for the same property.
   let(:light_rules) do
@@ -56,6 +60,18 @@ RSpec.describe "Dashboard dark-mode contrast" do # rubocop:disable RSpec/Describ
   # Helpers also build class lists in constants and string concatenations.
   def helper_class_strings(content)
     content.scan(/"([^"\n]*)"/).flatten.grep(/\b(?:bg|text)-[a-z]+-\d{2,3}\b/).map(&:split)
+  end
+
+  # JS strings in any quote style: "…", '…' and `…` template literals. A
+  # template's ${…} expressions are read as their own strings, so a class
+  # chosen inside one (`${on ? 'text-gray-400' : ''}`) is checked too.
+  def js_class_strings(content)
+    content.scan(/"([^"\n]*)"|'([^'\n]*)'|`([^`]*)`/).flat_map do |double, single, template|
+      next [double || single] unless template
+
+      expressions = template.scan(/\$\{(.*?)\}/m).flatten
+      [template.gsub(/\$\{.*?\}/m, " "), *expressions.flat_map { |e| e.scan(/"([^"\n]*)"|'([^'\n]*)'/).flatten.compact }]
+    end.grep(/\b(?:bg|text)-[a-z]+-\d{2,3}\b/).map(&:split)
   end
 
   def gaps(tokens)
@@ -110,6 +126,26 @@ RSpec.describe "Dashboard dark-mode contrast" do # rubocop:disable RSpec/Describ
     end
   end
 
+  describe "JS module strings" do
+    it "reads class lists from every quote style, without template interpolations" do
+      js = <<~JS
+        el.innerHTML = `<p class="text-sm text-gray-400 ${extra}">${msg}</p>`;
+        const a = 'bg-red-100 text-red-800';
+      JS
+
+      template, single = js_class_strings(js)
+
+      expect(template).to include("text-gray-400").and(satisfy { |tokens| tokens.none? { |t| t.include?("${") } })
+      expect(single).to eq(%w[bg-red-100 text-red-800])
+    end
+
+    it "reads the class literals chosen inside a template's interpolations" do
+      js = "el.innerHTML = `<p class=\"text-sm ${dim ? 'text-gray-400' : 'text-gray-700 dark:text-gray-300'}\">x</p>`;"
+
+      expect(js_class_strings(js)).to include(%w[text-gray-400], %w[text-gray-700 dark:text-gray-300])
+    end
+  end
+
   describe "low-contrast shades" do
     it "flags small -500 text and warm -600 text in light mode" do
       expect(low_contrast_pairing(%w[text-xs text-blue-500 dark:text-blue-400])).to eq(%w[text-blue-500])
@@ -146,6 +182,9 @@ RSpec.describe "Dashboard dark-mode contrast" do # rubocop:disable RSpec/Describ
     found += helper_files.flat_map do |file|
       helper_class_strings(File.read(file)).flat_map { |tokens| send(check, tokens).map { |t| "#{relative(file)}: #{t}" } }
     end
+    found += js_files.flat_map do |file|
+      js_class_strings(File.read(file)).flat_map { |tokens| send(check, tokens).map { |t| "#{relative(file)}: #{t}" } }
+    end
     found.uniq
   end
 
@@ -157,6 +196,9 @@ RSpec.describe "Dashboard dark-mode contrast" do # rubocop:disable RSpec/Describ
     end
     missing += helper_files.flat_map do |file|
       helper_class_strings(File.read(file)).flat_map { |tokens| gaps(tokens).map { |t| "#{relative(file)}: #{t}" } }
+    end
+    missing += js_files.flat_map do |file|
+      js_class_strings(File.read(file)).flat_map { |tokens| gaps(tokens).map { |t| "#{relative(file)}: #{t}" } }
     end
 
     expect(missing.uniq).to be_empty, <<~MSG

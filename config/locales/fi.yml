@@ -41,6 +41,7 @@ fi:
         title: Aktiiviset prosessit
       queue_health:
         dead_tuples: Kuolleet tuplat
+        empty: Ei vielä mitattavia jonotauluja
         headers:
           bloat: Bloat
           dead: Kuolleet
@@ -60,6 +61,25 @@ fi:
           one: "%{count} taulu tarvitsee vacuum-käsittelyn"
           other: "%{count} taulua tarvitsee vacuum-käsittelyn"
         title: Jonon kunto
+        words:
+          bloat:
+            critical: "%{ratio} taulussa %{table} — lukeminen hidastuu; aja vacuum nyt (kriittinen yli %{critical}, varoittaa yli %{warn})"
+            none: Ei vielä mitattavaa
+            ok: "%{ratio} taulussa %{table} — kunnossa (varoittaa yli %{warn}, kriittinen yli %{critical})"
+            warn: "%{ratio} taulussa %{table} — vacuum tarpeen (varoittaa yli %{warn}, kriittinen yli %{critical})"
+          dead_tuples:
+            ok: Kunnossa — varoittaa yli %{limit} kuolleesta rivistä
+            warn: Yli %{limit} — autovacuum on jäljessä; alla oleva taulu näyttää missä
+          transaction:
+            critical: Yli %{critical} — vacuum ei voi vapauttaa rivejä ennen kuin se päättyy; etsi se pg_stat_activity-näkymästä (varoittaa %{warn} kohdalla; kuntoarvio heikkenee %{verdict} jälkeen)
+            none: Ei avointa transaktiota — vacuum voi vapauttaa kaikki kuolleet rivit (varoittaa %{warn} kohdalla, hälyttää %{critical} kohdalla; kuntoarvio heikkenee %{verdict} jälkeen)
+            ok: Kunnossa — varoittaa %{warn} kohdalla, hälyttää %{critical} kohdalla; kuntoarvio heikkenee %{verdict} jälkeen
+            warn: Yli %{warn} — pitkä transaktio estää vacuumia vapauttamasta rivejä (hälyttää %{critical} kohdalla; kuntoarvio heikkenee %{verdict} jälkeen)
+          vacuum:
+            critical: Yli %{critical} — autovacuum ei yllä näihin tauluihin; tarkista sen asetukset (varoittaa %{warn} jälkeen)
+            ok: Kunnossa — varoittaa %{warn} jälkeen, kriittinen %{critical} jälkeen
+            unknown: Vacuumia ei ole koskaan ajettu, tai tilastot eivät ole saatavilla
+            warn: Yli %{warn} — autovacuum saattaa jäädä jälkeen (kriittinen %{critical} jälkeen)
         worst_bloat: Pahin Bloat
       queues_table:
         empty: Jonot eivät löytyneet
@@ -68,6 +88,7 @@ fi:
           oldest_claimable: Vanhin saatavilla
           parked: Pysäköidyt
           queue: Jono
+          status: Tila
           total: Yhteensä
           visible: Näkyvissä
         title: Jonot
@@ -75,7 +96,9 @@ fi:
       recent_failures:
         empty: Ei virheitä
         headers:
+          attempt: Yritys
           error: Virhe
+          job: Job
           queue: Jono
           when: Milloin
         title: Viimeaikaiset virheet
@@ -83,18 +106,55 @@ fi:
       show:
         title: Kojelauta
       stats_cards:
+        dead_lettered: Dead-lettered
+        dlq_newest_html: 'uusin: %{error_class} työssä %{job} %{ago}'
+        dlq_newest_legacy_html: 'uusin: %{job} %{ago} — syytä ei tallennettu'
+        dlq_newest_no_error_html: 'uusin: %{job} %{ago} — virhettä ei tallennettu'
+        dlq_none: Mikään ei ole dead-lettered
+        dlq_see_why: avaa dead letter -sivu nähdäksesi, miksi kukin kuoli
         enqueued: Lisätty jonoon
-        failed_dlq: Epäonnistuneet / DLQ
-        failed_dlq_labels: Epäonnistuneet / Dead Lettered
+        enqueued_detail: "%{claimable} otettavissa nyt · %{waiting} ajastettu, käynnissä tai uudelleenyrityksessä"
+        enqueued_paused:
+          one: "%{count} keskeytetyissä jonoissa"
+          other: "%{count} keskeytetyissä jonoissa"
         parked_jobs: Pysäköidyt työt
         parked_jobs_oldest: vanhin %{age}
         processes: Prosessit
+        processes_detail: "%{healthy} terveitä · %{stalled} jumissa · %{stale} vanhentunutta"
+        processes_none: Mikään ei ole käynnissä — yhtään työtä ei oteta
+        processes_stale: vanhentuneet prosessit ovat lakanneet lähettämästä sydämenlyöntejä; niiden käynnissä olevat työt ajetaan uudelleen, kun niiden visibility timeout umpeutuu
         queues: Jonot
+        queues_detail: "%{paused} keskeytetty · %{dlq} dead letter"
+        queues_undrained:
+          one: "%{count} sisältää töitä, joita mikään ei tyhjennä"
+          other: "%{count} sisältää töitä, joita mikään ei tyhjennä"
         recurring: Toistuva
+        recurring_detail: Tehtävät, jotka ajastin lisää jonoon aikataulunsa mukaan
+        retrying: Uudelleenyrityksessä
+        retrying_due:
+          one: "%{count} erääntyy nyt"
+          other: "%{count} erääntyy nyt"
+        retrying_newest: uusin virhe %{error_class}
+        retrying_next_html: seuraava yritys %{time}
+        retrying_none: Mikään ei ole uudelleenyrityksessä
         throughput: Läpäisykyky
-        throughput_unit: viestit/s
-        view_tasks: Näytä tehtävät
-        visible: näkyvissä
+        throughput_detail: tehtäviä/min viimeisen %{minutes} min aikana
+        throughput_unavailable: vaatii työtilastot (rails g pgbus:add_job_stats)
+      verdict:
+        links:
+          dlq: Dead letterit
+          processes: Prosessit
+        look_at: 'Katso:'
+        meaning:
+          degraded: Jokin vaatii huomiota, mutta työt etenevät yhä. /readyz vastaa yhä valmis.
+          ok: Jokainen jono, jossa on työtä, tyhjenee, ja jokainen prosessi lähettää sydämenlyöntejä. /readyz vastaa valmis.
+          stalled: Töitä odottaa, eikä mikään ota niitä. /readyz vastaa ei valmis (503).
+        statuses:
+          degraded: DEGRADED
+          ok: OK
+          stalled: STALLED
+        title: 'Kunto: %{status}'
+        unavailable: Kuntoarvio ei ole saatavilla — sen taustalla olevia tarkistuksia ei voitu lukea; katso loki
     dead_letter:
       detail:
         backtrace: Backtrace (ensimmäiset rivit)
@@ -364,21 +424,25 @@ fi:
     insights:
       show:
         charts:
-          failed_to_load: Latauksen kaavioaineisto epäonnistui
-          latency: Jon viive (ms)
+          captions:
+            latency: Työt odottivat keskimäärin %{avg}, ennen kuin worker otti ne, p95 %{p95}
+            status: "%{success} onnistui, %{failed} epäonnistui, %{dead_lettered} dead-lettered"
+            throughput_html: "%{total} työtä viimeisen %{range} aikana, huippu %{peak} tehtävää/min %{at}"
+          data_table: Taulukko
+          latency: Jonon viive
           latency_avg: Keskim.
           latency_p95: P95
           no_data: Ei vielä tietoja
           series_name: Tehtäviä/min
           status_distribution: Tilajakauma
-          throughput: Kapasiteetti (tehtäviä/min)
+          throughput: Läpäisykyky
         description_html: Työsuorituksen mittarit viimeiseltä %{range}
         latency_by_queue:
           empty: Ei viivetietoja vielä
           headers:
-            avg: Keskim. (ms)
+            avg: Keskim.
             count: Määrä
-            p95: P95 (ms)
+            p95: P95
             queue: Jono
           title: Viive jonon mukaan
         live_streams:
@@ -398,6 +462,10 @@ fi:
             job_class: Tehtäväluokka
             max: Maksimi
           title: Hitaimmat työn luokat (keskimääräinen kesto)
+        statuses:
+          dead_lettered: Dead-lettered
+          failed: Epäonnistui
+          success: Onnistui
         streams:
           summary:
             active: Aktiivinen
@@ -426,6 +494,20 @@ fi:
           p99_latency: P99-viive
           succeeded: Onnistuneet
           total_jobs: Yhteensä töitä
+        tables:
+          captions:
+            latency_minute: Jonon viive minuutissa
+            latency_step: Jonon viive per %{step}
+            status: Työt lopullisen tilan mukaan
+            throughput_minute: Töitä minuutissa
+            throughput_step: Töitä per %{step}
+          headers:
+            avg: Keskim.
+            from: Alkaen
+            highest_p95: Korkein p95
+            jobs: Työt
+            share: Osuus
+            status: Tila
         time_ranges:
           1h: 1h
           24h: 24h

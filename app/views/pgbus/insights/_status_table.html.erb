@@ -1,0 +1,19 @@
+<table class="pgbus-table min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+  <caption class="sr-only"><%= t("pgbus.insights.show.tables.captions.status") %></caption>
+  <thead class="bg-gray-50 dark:bg-gray-900">
+    <tr>
+      <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.insights.show.tables.headers.status") %></th>
+      <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.insights.show.tables.headers.jobs") %></th>
+      <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.insights.show.tables.headers.share") %></th>
+    </tr>
+  </thead>
+  <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+    <% @charts[:status].rows.each do |row| %>
+      <tr>
+        <td data-label="<%= t("pgbus.insights.show.tables.headers.status") %>" class="px-4 py-2 text-sm text-gray-700 dark:text-gray-300"><%= pgbus_job_stat_status(row[:status]) %></td>
+        <td data-label="<%= t("pgbus.insights.show.tables.headers.jobs") %>" class="px-4 py-2 text-sm text-right font-mono text-gray-700 dark:text-gray-300"><%= number_with_delimiter(row[:count]) %></td>
+        <td data-label="<%= t("pgbus.insights.show.tables.headers.share") %>" class="px-4 py-2 text-sm text-right font-mono text-gray-700 dark:text-gray-300"><%= pgbus_percent(row[:share]) %></td>
+      </tr>
+    <% end %>
+  </tbody>
+</table>

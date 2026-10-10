@@ -100,6 +100,8 @@ module Pgbus
           @insights_latency_trend = minutes.each_with_index.map { |t, i| { time: t, avg_ms: 60 + (i * 3), p95_ms: 250 + (i * 7) } }
           @insights_throughput = minutes.each_with_index.map { |t, i| { time: t, count: 20 + ((i * 7) % 15) } }
           @insights_status_counts = { "success" => 335, "failed" => 5, "dead_lettered" => 2 }
+          @throughput_signal = { available: true, jobs_per_minute: 38.2, window_minutes: 5 }
+          @insights_latency_available = true
           @stream_stats_available = true
           @stream_summary = { broadcasts: 1_248, connects: 92, disconnects: 87, active_estimate: 5,
                               avg_fanout: 7.3, avg_broadcast_ms: 4.1, avg_connect_ms: 12.6 }

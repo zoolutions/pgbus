@@ -41,6 +41,7 @@ ja:
         title: アクティブなプロセス
       queue_health:
         dead_tuples: デッドタプル
+        empty: 計測できるキューテーブルはまだありません
         headers:
           bloat: Bloat
           dead: デッド
@@ -60,6 +61,25 @@ ja:
           one: "%{count} テーブルがvacuumを必要としています"
           other: "%{count} テーブルがvacuumを必要としています"
         title: キューの健全性
+        words:
+          bloat:
+            critical: "%{table} で %{ratio} — 読み取りが遅くなっています。今すぐ vacuum してください (%{critical} 超で危険、%{warn} 超で警告)"
+            none: 計測できるものはまだありません
+            ok: "%{table} で %{ratio} — 問題なし (%{warn} 超で警告、%{critical} 超で危険)"
+            warn: "%{table} で %{ratio} — vacuum が必要です (%{warn} 超で警告、%{critical} 超で危険)"
+          dead_tuples:
+            ok: 問題なし — デッド行が %{limit} を超えると警告
+            warn: "%{limit} 超 — autovacuum が遅れています。下の表で場所を確認してください"
+          transaction:
+            critical: "%{critical} 超 — 終了するまで vacuum は行を回収できません。pg_stat_activity で探してください (%{warn} で警告。%{verdict} 経過でヘルス判定が DEGRADED になります)"
+            none: 開いているトランザクションはありません — vacuum はすべてのデッド行を回収できます (%{warn} で警告、%{critical} でアラート。%{verdict} 経過でヘルス判定が DEGRADED になります)
+            ok: 問題なし — %{warn} で警告、%{critical} でアラート。%{verdict} 経過でヘルス判定が DEGRADED になります
+            warn: "%{warn} 超 — 長いトランザクションがあると vacuum が行を回収できません (%{critical} でアラート。%{verdict} 経過でヘルス判定が DEGRADED になります)"
+          vacuum:
+            critical: "%{critical} 超 — autovacuum がこれらのテーブルに届いていません。設定を確認してください (%{warn} 経過で警告)"
+            ok: 問題なし — %{warn} 経過で警告、%{critical} 経過で危険
+            unknown: vacuum 実行履歴がないか、統計を取得できません
+            warn: "%{warn} 超 — autovacuum が遅れている可能性があります (%{critical} 経過で危険)"
         worst_bloat: 最悪のBloat
       queues_table:
         empty: キューが見つかりません
@@ -68,6 +88,7 @@ ja:
           oldest_claimable: 取得可能な最古
           parked: 待機中
           queue: キュー
+          status: ステータス
           total: 合計
           visible: 表示中
         title: キュー
@@ -75,7 +96,9 @@ ja:
       recent_failures:
         empty: 失敗はありません
         headers:
+          attempt: 試行
           error: エラー
+          job: ジョブ
           queue: キュー
           when: 日時
         title: 最近の失敗
@@ -83,18 +106,55 @@ ja:
       show:
         title: ダッシュボード
       stats_cards:
+        dead_lettered: デッドレター
+        dlq_newest_html: '最新: %{job} の %{error_class} %{ago}'
+        dlq_newest_legacy_html: '最新: %{job} %{ago} — 理由は記録されていません'
+        dlq_newest_no_error_html: '最新: %{job} %{ago} — エラーは記録されていません'
+        dlq_none: デッドレターはありません
+        dlq_see_why: デッドレターのページで、それぞれが失敗した理由を確認できます
         enqueued: キューに追加済み
-        failed_dlq: 失敗 / DLQ
-        failed_dlq_labels: 失敗 / Dead Lettered
+        enqueued_detail: 今すぐ取得可能 %{claimable} 件 · スケジュール済み・実行中・再試行待ち %{waiting} 件
+        enqueued_paused:
+          one: 一時停止中のキューに %{count} 件
+          other: 一時停止中のキューに %{count} 件
         parked_jobs: 待機中のジョブ
         parked_jobs_oldest: 最古 %{age}
         processes: プロセス
+        processes_detail: 正常 %{healthy} · 停滞 %{stalled} · 期限切れ %{stale}
+        processes_none: 何も実行されていません — ジョブは取得されていません
+        processes_stale: 期限切れのプロセスはハートビートを停止しています。実行中のジョブは可視性タイムアウトの経過後に再実行されます
         queues: キュー
+        queues_detail: "%{paused} 件が一時停止 · %{dlq} 件がデッドレター"
+        queues_undrained:
+          one: "%{count} 件のキューに処理されないジョブがあります"
+          other: "%{count} 件のキューに処理されないジョブがあります"
         recurring: 繰り返し
+        recurring_detail: スケジューラがスケジュールに従ってエンキューするタスク
+        retrying: 再試行中
+        retrying_due:
+          one: "%{count} 件が今すぐ実行対象"
+          other: "%{count} 件が今すぐ実行対象"
+        retrying_newest: 最新のエラー %{error_class}
+        retrying_next_html: 次の試行 %{time}
+        retrying_none: 再試行中のものはありません
         throughput: スループット
-        throughput_unit: メッセージ/秒
-        view_tasks: タスクを表示
-        visible: 表示中
+        throughput_detail: 過去 %{minutes} 分のジョブ/分
+        throughput_unavailable: ジョブ統計が必要です (rails g pgbus:add_job_stats)
+      verdict:
+        links:
+          dlq: デッドレター
+          processes: プロセス
+        look_at: '確認先:'
+        meaning:
+          degraded: 対応が必要な点がありますが、ジョブは流れています。/readyz は引き続き ready を返します。
+          ok: ジョブのあるすべてのキューが処理されており、すべてのプロセスがハートビートを送っています。/readyz は ready を返します。
+          stalled: ジョブが待機していますが、誰も取得していません。/readyz は not ready (503) を返します。
+        statuses:
+          degraded: DEGRADED
+          ok: OK
+          stalled: STALLED
+        title: 'ヘルス: %{status}'
+        unavailable: ヘルス判定を表示できません — 判定の元になるチェックを読み取れませんでした。ログを確認してください
     dead_letter:
       detail:
         backtrace: バックトレース（先頭行）
@@ -364,21 +424,25 @@ ja:
     insights:
       show:
         charts:
-          failed_to_load: チャートデータの読み込みに失敗しました
-          latency: キュー遅延 (ms)
+          captions:
+            latency: ジョブはワーカーに取得されるまで平均 %{avg} 待機しました。p95 は %{p95}
+            status: 成功 %{success} 件、失敗 %{failed} 件、デッドレター %{dead_lettered} 件
+            throughput_html: 過去 %{range} で %{total} 件のジョブ、ピークは %{at} の %{peak} ジョブ/分
+          data_table: データ表
+          latency: キュー遅延
           latency_avg: 平均
           latency_p95: P95
           no_data: まだデータがありません
           series_name: ジョブ/分
           status_distribution: ステータス分布
-          throughput: スループット（ジョブ/分）
+          throughput: スループット
         description_html: 過去%{range}の仕事のパフォーマンス指標
         latency_by_queue:
           empty: まだ遅延データがありません
           headers:
-            avg: 平均 (ms)
+            avg: 平均
             count: 件数
-            p95: P95 (ms)
+            p95: P95
             queue: キュー
           title: キュー別遅延
         live_streams:
@@ -398,6 +462,10 @@ ja:
             job_class: ジョブクラス
             max: 最大
           title: 最も遅いジョブクラス（平均実行時間）
+        statuses:
+          dead_lettered: デッドレター
+          failed: 失敗
+          success: 成功
         streams:
           summary:
             active: アクティブ
@@ -426,6 +494,20 @@ ja:
           p99_latency: P99遅延
           succeeded: 成功した
           total_jobs: 合計ジョブ数
+        tables:
+          captions:
+            latency_minute: 1 分あたりのキュー遅延
+            latency_step: "%{step} あたりのキュー遅延"
+            status: 最終ステータス別のジョブ数
+            throughput_minute: 1 分あたりのジョブ数
+            throughput_step: "%{step} あたりのジョブ数"
+          headers:
+            avg: 平均
+            from: 開始
+            highest_p95: 最大 P95
+            jobs: ジョブ
+            share: 割合
+            status: ステータス
         time_ranges:
           1h: 1時間
           24h: 24時間

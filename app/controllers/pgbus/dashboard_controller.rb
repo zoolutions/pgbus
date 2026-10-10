@@ -7,10 +7,10 @@ module Pgbus
     def show
       case params[:frame]
       when "stats"
-        @stats = data_source.summary_stats
+        load_stats
         render_frame("pgbus/dashboard/stats_cards")
       when "queues"
-        @queues = data_source.queues_with_metrics
+        load_queues
         render_frame("pgbus/dashboard/queues_table")
       when "processes"
         load_processes
@@ -22,12 +22,24 @@ module Pgbus
         @health = data_source.queue_health_stats
         render_frame("pgbus/dashboard/queue_health")
       else
-        @stats = data_source.summary_stats
-        @queues = data_source.queues_with_metrics
+        load_stats
+        load_queues
         load_processes
         @recent_failures = data_source.failed_events(page: 1, per_page: 5)
         @health = data_source.queue_health_stats
       end
+    end
+
+    private
+
+    def load_stats
+      @stats = data_source.summary_stats
+      @signals = data_source.dashboard_signals
+    end
+
+    def load_queues
+      @queues = data_source.queues_with_metrics
+      @queue_lines = data_source.queue_status_lines
     end
   end
 end

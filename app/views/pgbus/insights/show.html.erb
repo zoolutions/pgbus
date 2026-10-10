@@ -64,7 +64,7 @@
   </dl>
   <dl class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
     <dt class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.insights.show.summary.p95_latency") %></dt>
-    <dd class="mt-1 text-2xl font-semibold text-yellow-600 dark:text-yellow-400"><%= pgbus_ms_duration(@summary[:p95_latency_ms]) %></dd>
+    <dd class="mt-1 text-2xl font-semibold text-yellow-700 dark:text-yellow-400"><%= pgbus_ms_duration(@summary[:p95_latency_ms]) %></dd>
   </dl>
   <dl class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
     <dt class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.insights.show.summary.p99_latency") %></dt>
@@ -79,23 +79,20 @@
 
 <!-- Charts -->
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-  <div class="rounded-lg bg-white dark:bg-gray-800 p-5 shadow ring-1 ring-gray-200 dark:ring-gray-700">
-    <h2 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4"><%= t("pgbus.insights.show.charts.throughput") %></h2>
-    <div id="throughput-chart" style="height: 280px;"></div>
-  </div>
-  <div class="rounded-lg bg-white dark:bg-gray-800 p-5 shadow ring-1 ring-gray-200 dark:ring-gray-700">
-    <h2 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4"><%= t("pgbus.insights.show.charts.status_distribution") %></h2>
-    <div id="status-chart" style="height: 280px;"></div>
-  </div>
+  <%= render layout: "pgbus/insights/chart_card", locals: { id: "throughput-chart", title: t("pgbus.insights.show.charts.throughput"), empty: @charts[:throughput].empty?, caption: (pgbus_throughput_caption(@charts[:throughput], @minutes) unless @charts[:throughput].empty?) } do %>
+    <%= render "pgbus/insights/throughput_table" %>
+  <% end %>
+  <%= render layout: "pgbus/insights/chart_card", locals: { id: "status-chart", title: t("pgbus.insights.show.charts.status_distribution"), empty: @charts[:status].empty?, caption: (pgbus_status_caption(@charts[:status]) unless @charts[:status].empty?) } do %>
+    <%= render "pgbus/insights/status_table" %>
+  <% end %>
 </div>
 
 <% if @latency_available %>
 <!-- Latency chart -->
 <div class="grid grid-cols-1 gap-6 mb-8">
-  <div class="rounded-lg bg-white dark:bg-gray-800 p-5 shadow ring-1 ring-gray-200 dark:ring-gray-700">
-    <h2 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4"><%= t("pgbus.insights.show.charts.latency") %></h2>
-    <div id="latency-chart" style="height: 280px;"></div>
-  </div>
+  <%= render layout: "pgbus/insights/chart_card", locals: { id: "latency-chart", title: t("pgbus.insights.show.charts.latency"), empty: @charts[:latency].empty?, caption: (pgbus_latency_caption(@summary) unless @charts[:latency].empty?) } do %>
+    <%= render "pgbus/insights/latency_table" %>
+  <% end %>
 </div>
 
 <!-- Latency by queue -->
@@ -273,31 +270,17 @@
 </div>
 <% end %>
 
+<%# The chart series, embedded once (issue #492): charts.js reads them here
+    instead of fetching /pgbus/api/insights. json_escape keeps a value from
+    closing the tag; a data block needs no nonce. %>
+<%= tag.script(json_escape(@chart_payload.to_json).html_safe, type: "application/json", id: "pgbus-insights-data") %> <%# herb:disable erb-no-unsafe-raw %>
+
 <script type="module" nonce="<%= content_security_policy_nonce %>">
   import { renderCharts, observeThemeChanges } from "charts";
 
-  const i18n = {
-    seriesName: <%= t("pgbus.insights.show.charts.series_name").to_json.html_safe %>,
-    noData: <%= t("pgbus.insights.show.charts.no_data").to_json.html_safe %>,
-    failedToLoad: <%= t("pgbus.insights.show.charts.failed_to_load").to_json.html_safe %>,
-    latencyAvg: <%= t("pgbus.insights.show.charts.latency_avg").to_json.html_safe %>,
-    latencyP95: <%= t("pgbus.insights.show.charts.latency_p95").to_json.html_safe %>,
-  };
+  const i18n = <%= json_escape(pgbus_chart_i18n.to_json).html_safe %>;
+  const data = JSON.parse(document.getElementById("pgbus-insights-data").textContent);
 
-  let chartData = null;
-
-  observeThemeChanges(() => chartData, i18n);
-
-  fetch(<%= pgbus.api_insights_path(minutes: @minutes).to_json.html_safe %>)
-    .then(r => {
-      if (!r.ok) throw new Error("HTTP " + r.status);
-      return r.json();
-    })
-    .then(data => { chartData = data; renderCharts(data, i18n); })
-    .catch(err => {
-      const msg = '<p class="text-center text-sm text-gray-500 dark:text-gray-400 pt-24">' + i18n.failedToLoad + "</p>";
-      document.querySelectorAll("#throughput-chart, #status-chart, #latency-chart").forEach(el => {
-        el.innerHTML = msg;
-      });
-    });
+  renderCharts(data, i18n);
+  observeThemeChanges(() => data, i18n);
 </script>

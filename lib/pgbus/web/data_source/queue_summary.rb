@@ -12,25 +12,29 @@ module Pgbus
         # Pause state is kept per logical queue, so every priority level and
         # the bare table share it.
         def queue_pause_state(name)
-          state = QueueState.find_by(queue_name: logical_queue_name(name))
-          return RUNNING unless state&.paused
-
-          { paused: true, reason: state.paused_reason, paused_at: state.paused_at,
-            resumes_at: state.circuit_breaker_resume_at, trip_count: state.circuit_breaker_trip_count.to_i }
+          pause_state_of(QueueState.find_by(queue_name: logical_queue_name(name)))
         rescue StandardError => e
           Pgbus.logger.error { "[Pgbus::Web] Error reading pause state for #{name}: #{e.class}: #{e.message}" }
           RUNNING
         end
 
-        def queue_drainers(name)
+        # { physical name => pause state } for many queues in one query (the
+        # home page's queues table, issue #492). Raises: the caller degrades.
+        def queue_pause_states(names)
+          states = QueueState.where(queue_name: names.map { |n| logical_queue_name(n) }.uniq).index_by(&:queue_name)
+          names.to_h { |name| [name, pause_state_of(states[logical_queue_name(name)])] }
+        end
+
+        # healthy: and streams: let a caller describing many queues load the
+        # process rows and the stream registry once (issue #492).
+        def queue_drainers(name, healthy: processes.select { |p| p[:healthy] }, streams: stream_queue_names)
           table = name.to_s.delete_suffix(Pgbus::DEAD_LETTER_SUFFIX)
           level = priority_level_of(table)
           logical = level ? logical_queue_name(table) : table.delete_prefix("#{Pgbus.configuration.queue_prefix}_")
           capsules, wildcard = draining_capsules(name)
-          healthy = processes.select { |p| p[:healthy] }
           {
             logical: logical, capsules: capsules, wildcard: wildcard,
-            handler: handler_queue_physical_names.include?(name), stream: stream_queue_names.include?(name),
+            handler: handler_queue_physical_names.include?(name), stream: streams.include?(name),
             live_workers: healthy.count { |p| p[:kind].to_s == "worker" && worker_drains?(p, logical) },
             live_consumers: healthy.count { |p| p[:kind].to_s == "consumer" && consumer_drains?(p, name) },
             siblings: level ? priority_siblings(name, logical) : [], priority_level: level
@@ -38,6 +42,13 @@ module Pgbus
         end
 
         private
+
+        def pause_state_of(state)
+          return RUNNING unless state&.paused
+
+          { paused: true, reason: state.paused_reason, paused_at: state.paused_at,
+            resumes_at: state.circuit_breaker_resume_at, trip_count: state.circuit_breaker_trip_count.to_i }
+        end
 
         # The level of a priority sub-table, or nil. `_pN` is legal in an
         # ordinary queue name, so only a table the queue strategy creates for

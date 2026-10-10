@@ -29,6 +29,7 @@ RSpec.describe Pgbus::Web::HealthApp do
 
   before do
     allow(Pgbus::MCP::HealthAnalyzer).to receive(:new).with(data_source).and_return(analyzer)
+    allow(data_source).to receive(:reset_cache!).and_return(data_source)
   end
 
   describe "GET /livez" do
@@ -47,6 +48,7 @@ RSpec.describe Pgbus::Web::HealthApp do
       get("/livez")
 
       expect(Pgbus::MCP::HealthAnalyzer).not_to have_received(:new)
+      expect(data_source).not_to have_received(:reset_cache!)
     end
   end
 
@@ -217,6 +219,19 @@ RSpec.describe Pgbus::Web::HealthApp do
         expect(JSON.parse(body_of(get("/readyz")))["status"]).to eq("ERROR")
         expect(Pgbus.logger).to have_received(:error).at_least(:once)
       end
+    end
+  end
+
+  describe "injected DataSource" do
+    # DataSource memoizes queues, processes, stream names and table stats per
+    # instance; a long-lived injected one must not serve the first check's
+    # facts forever (issue #492).
+    it "drops its per-instance memos before every check" do
+      allow(analyzer).to receive(:verdict).and_return(status: "OK", reasons: [])
+
+      2.times { get("/readyz") }
+
+      expect(data_source).to have_received(:reset_cache!).twice
     end
   end
 

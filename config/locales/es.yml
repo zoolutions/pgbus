@@ -41,6 +41,7 @@ es:
         title: Procesos activos
       queue_health:
         dead_tuples: Tuplas muertas
+        empty: Aún no hay tablas de cola que medir
         headers:
           bloat: Bloat
           dead: Muertas
@@ -60,6 +61,25 @@ es:
           one: "%{count} tabla necesita vacuum"
           other: "%{count} tablas necesitan vacuum"
         title: Salud de Colas
+        words:
+          bloat:
+            critical: "%{ratio} en %{table} — las lecturas se ralentizan; ejecuta vacuum ahora (crítico por encima de %{critical}, avisa por encima de %{warn})"
+            none: Aún nada que medir
+            ok: "%{ratio} en %{table} — bien (avisa por encima de %{warn}, crítico por encima de %{critical})"
+            warn: "%{ratio} en %{table} — toca vacuum (avisa por encima de %{warn}, crítico por encima de %{critical})"
+          dead_tuples:
+            ok: Bien — avisa por encima de %{limit} filas muertas
+            warn: Por encima de %{limit} — autovacuum va retrasado; la tabla de abajo muestra dónde
+          transaction:
+            critical: Más de %{critical} — vacuum no puede recuperar filas hasta que termine; búscala en pg_stat_activity (avisa a los %{warn}; el veredicto de salud se degrada tras %{verdict})
+            none: Ninguna transacción abierta — vacuum puede recuperar todas las filas muertas (avisa a los %{warn}, alerta a los %{critical}; el veredicto de salud se degrada tras %{verdict})
+            ok: Bien — avisa a los %{warn}, alerta a los %{critical}; el veredicto de salud se degrada tras %{verdict}
+            warn: Más de %{warn} — una transacción larga impide que vacuum recupere filas (alerta a los %{critical}; el veredicto de salud se degrada tras %{verdict})
+          vacuum:
+            critical: Más de %{critical} — autovacuum no llega a estas tablas; revisa su configuración (avisa tras %{warn})
+            ok: Bien — avisa tras %{warn}, crítico tras %{critical}
+            unknown: Nunca se ha ejecutado vacuum, o las estadísticas no están disponibles
+            warn: Más de %{warn} — puede que autovacuum se esté retrasando (crítico tras %{critical})
         worst_bloat: Peor Bloat
       queues_table:
         empty: No se encontraron colas
@@ -68,6 +88,7 @@ es:
           oldest_claimable: Más antiguo disponible
           parked: Aparcados
           queue: Cola
+          status: Estado
           total: Total
           visible: Visible
         title: Colas
@@ -75,7 +96,9 @@ es:
       recent_failures:
         empty: Sin fallos
         headers:
+          attempt: Intento
           error: Error
+          job: Job
           queue: Cola
           when: Cuándo
         title: Fallos recientes
@@ -83,18 +106,55 @@ es:
       show:
         title: Panel de control
       stats_cards:
+        dead_lettered: En mensajes muertos
+        dlq_newest_html: 'más reciente: %{error_class} en %{job} %{ago}'
+        dlq_newest_legacy_html: 'más reciente: %{job} %{ago} — sin motivo registrado'
+        dlq_newest_no_error_html: 'más reciente: %{job} %{ago} — sin error registrado'
+        dlq_none: Nada en mensajes muertos
+        dlq_see_why: abre la página de mensajes muertos para ver por qué murió cada uno
         enqueued: Encolado
-        failed_dlq: Fallidos / DLQ
-        failed_dlq_labels: Fallidos / Dead Lettered
+        enqueued_detail: "%{claimable} disponibles ahora · %{waiting} programados, en ejecución o reintentando"
+        enqueued_paused:
+          one: "%{count} en colas en pausa"
+          other: "%{count} en colas en pausa"
         parked_jobs: Trabajos aparcados
         parked_jobs_oldest: más antiguo %{age}
         processes: Procesos
+        processes_detail: "%{healthy} sanos · %{stalled} bloqueados · %{stale} obsoletos"
+        processes_none: No hay nada en ejecución — no se toma ningún trabajo
+        processes_stale: los procesos obsoletos dejaron de enviar latidos; sus trabajos en curso se ejecutan de nuevo cuando vence su visibility timeout
         queues: Colas
+        queues_detail: "%{paused} en pausa · %{dlq} mensajes muertos"
+        queues_undrained:
+          one: "%{count} tiene trabajos que nadie vacía"
+          other: "%{count} tienen trabajos que nadie vacía"
         recurring: Recurrente
+        recurring_detail: Tareas que el scheduler encola según su programación
+        retrying: Reintentando
+        retrying_due:
+          one: "%{count} vence ahora"
+          other: "%{count} vencen ahora"
+        retrying_newest: error más reciente %{error_class}
+        retrying_next_html: próximo intento %{time}
+        retrying_none: Nada se está reintentando
         throughput: Rendimiento
-        throughput_unit: msgs/s
-        view_tasks: Ver tareas
-        visible: visible
+        throughput_detail: trabajos/min en los últimos %{minutes} min
+        throughput_unavailable: requiere estadísticas de trabajos (rails g pgbus:add_job_stats)
+      verdict:
+        links:
+          dlq: Mensajes muertos
+          processes: Procesos
+        look_at: 'Mira:'
+        meaning:
+          degraded: Algo requiere atención, pero los trabajos siguen fluyendo. /readyz sigue respondiendo listo.
+          ok: Toda cola con trabajo se está vaciando y todos los procesos envían latidos. /readyz responde listo.
+          stalled: Hay trabajos esperando y nadie los toma. /readyz responde no listo (503).
+        statuses:
+          degraded: DEGRADED
+          ok: OK
+          stalled: STALLED
+        title: 'Salud: %{status}'
+        unavailable: Veredicto de salud no disponible — no se pudieron leer las comprobaciones en que se basa; consulta el log
     dead_letter:
       detail:
         backtrace: Backtrace (primeras líneas)
@@ -364,21 +424,25 @@ es:
     insights:
       show:
         charts:
-          failed_to_load: Error al cargar datos del gráfico
-          latency: Latencia de Cola (ms)
+          captions:
+            latency: Los trabajos esperaron %{avg} de media antes de que un worker los tomara, p95 %{p95}
+            status: "%{success} correctos, %{failed} fallidos, %{dead_lettered} en mensajes muertos"
+            throughput_html: "%{total} trabajos en los últimos %{range}, pico de %{peak} trabajos/min %{at}"
+          data_table: Tabla de datos
+          latency: Latencia de Cola
           latency_avg: Promedio
           latency_p95: P95
           no_data: Aún no hay datos
           series_name: Trabajos/min
           status_distribution: Distribución de estado
-          throughput: Rendimiento (trabajos/min)
+          throughput: Rendimiento
         description_html: Métricas de desempeño laboral para los últimos %{range}
         latency_by_queue:
           empty: Aún no hay datos de latencia
           headers:
-            avg: Promedio (ms)
+            avg: Promedio
             count: Cantidad
-            p95: P95 (ms)
+            p95: P95
             queue: Cola
           title: Latencia por Cola
         live_streams:
@@ -398,6 +462,10 @@ es:
             job_class: Clase de trabajo
             max: Máximo
           title: Clases de Trabajo Más Lentas (duración promedio)
+        statuses:
+          dead_lettered: En mensajes muertos
+          failed: Fallidos
+          success: Correctos
         streams:
           summary:
             active: Activo
@@ -426,6 +494,20 @@ es:
           p99_latency: Latencia P99
           succeeded: Exitoso
           total_jobs: Total de Trabajos
+        tables:
+          captions:
+            latency_minute: Latencia de cola por minuto
+            latency_step: Latencia de cola por %{step}
+            status: Trabajos por estado final
+            throughput_minute: Trabajos por minuto
+            throughput_step: Trabajos por %{step}
+          headers:
+            avg: Promedio
+            from: Desde
+            highest_p95: p95 más alto
+            jobs: Trabajos
+            share: Proporción
+            status: Estado
         time_ranges:
           1h: 1h
           24h: 24h

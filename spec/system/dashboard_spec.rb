@@ -12,9 +12,13 @@ RSpec.describe "Dashboard", type: :system do
     expect(page).to have_text("Queues")
     expect(page).to have_text("Enqueued")
     expect(page).to have_text("Processes")
-    expect(page).to have_text("Failed / DLQ")
-    expect(page).to have_text("15")
-    expect(page).to have_text("3 / 2") # failed / dlq
+
+    # The sparse stub: 10 jobs in pgbus_default, none retrying, 2 dead-lettered.
+    within("turbo-frame#dashboard-stats div.grid") do
+      expect(find("a[href='/pgbus/jobs?state=ready']")).to have_text("Enqueued").and have_text("10")
+      expect(find("a[href='/pgbus/jobs?state=retrying']")).to have_text("Retrying").and have_text("0")
+      expect(find("a[href='/pgbus/dlq']")).to have_text("Dead-lettered").and have_text("2")
+    end
   end
 
   context "with parked jobs" do

@@ -10,6 +10,7 @@
         <thead class="bg-gray-50 dark:bg-gray-900">
           <tr>
             <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.queues_table.headers.queue") %></th>
+            <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.queues_table.headers.status") %></th>
             <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.queues_table.headers.depth") %></th>
             <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.queues_table.headers.visible") %></th>
             <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.queues_table.headers.parked") %></th>
@@ -24,6 +25,7 @@
                 <%= pgbus_link_to q[:name], pgbus.queue_path(name: q[:name]), data: { turbo_frame: "_top" } %>
                 <%= pgbus_queue_badge(q[:name]) %>
               </td>
+              <td data-label="<%= t("pgbus.dashboard.queues_table.headers.status") %>" class="px-4 py-3 text-sm"><%= pgbus_queue_status(@queue_lines[q[:name]]) %></td>
               <td data-label="<%= t("pgbus.dashboard.queues_table.headers.depth") %>" class="px-4 py-3 text-sm text-right text-gray-700 dark:text-gray-200"><%= pgbus_number(q[:queue_length]) %></td>
               <td data-label="<%= t("pgbus.dashboard.queues_table.headers.visible") %>" class="px-4 py-3 text-sm text-right text-gray-700 dark:text-gray-200"><%= pgbus_number(q[:queue_visible_length]) %></td>
               <td data-label="<%= t("pgbus.dashboard.queues_table.headers.parked") %>" class="px-4 py-3 text-sm text-right text-gray-500 dark:text-gray-400"><%= pgbus_number(q[:parked_length]) %></td>
@@ -32,7 +34,7 @@
             </tr>
           <% end %>
           <% if @queues.empty? %>
-            <%= render "pgbus/shared/empty_row", colspan: 6, message: t("pgbus.dashboard.queues_table.empty") %>
+            <%= render "pgbus/shared/empty_row", colspan: 7, message: t("pgbus.dashboard.queues_table.empty") %>
           <% end %>
         </tbody>
       </table>
