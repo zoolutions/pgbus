@@ -388,21 +388,21 @@ fi:
           timezone: 'Aikavyöhyke:'
           visible_at: 'Näkyvissä:'
         reasons:
-          blocked: Odottaa rinnakkaisuuspaikkaa avaimelle %{key} (varattu %{held}/%{limit}) · pysäköity %{ago}
-          blocked_no_slots: Odottaa rinnakkaisuuspaikkaa avaimelle %{key} · pysäköity %{ago}
-          lease_expired: Vuokra vanhentui (worker luultavasti kaatui) — toimitetaan uudelleen, yritys %{attempt}
-          no_workers: Yksikään terve worker ei ole käynnissä
-          not_drained: Mikään worker ei käsittele tätä jonoa
-          orphaned: 'Epäonnistui: %{error} — viesti ei ole enää jonossa'
-          paused: Jono on keskeytetty
-          retrying: 'Yritys %{attempt}/%{max} epäonnistui: %{error} — seuraava yritys %{time}'
-          retrying_dlq: 'Yritys %{attempt}/%{max} epäonnistui: %{error} — seuraava luku siirtää sen DLQ:hun'
-          retrying_due: 'Yritys %{attempt}/%{max} epäonnistui: %{error} — seuraava yritys nyt'
-          running: Noudettu %{ago} · vuokra vanhenee %{time}
-          scheduled: Ajastettu — ajetaan %{time}
-          waiting: Odottaa — %{count} edellä
-          waiting_priority: Odottaa — %{count} edellä tällä prioriteetilla
-          waiting_unknown: Odottaa noutoa
+          blocked_html: Odottaa rinnakkaisuuspaikkaa avaimelle %{key} (varattu %{held}/%{limit}) · pysäköity %{ago}
+          blocked_no_slots_html: Odottaa rinnakkaisuuspaikkaa avaimelle %{key} · pysäköity %{ago}
+          lease_expired_html: Vuokra vanhentui (worker luultavasti kaatui) — toimitetaan uudelleen, yritys %{attempt}
+          no_workers_html: Yksikään terve worker ei ole käynnissä
+          not_drained_html: Mikään worker ei käsittele tätä jonoa
+          orphaned_html: 'Epäonnistui: %{error} — viesti ei ole enää jonossa'
+          paused_html: Jono on keskeytetty
+          retrying_dlq_html: 'Yritys %{attempt}/%{max} epäonnistui: %{error} — seuraava luku siirtää sen DLQ:hun'
+          retrying_due_html: 'Yritys %{attempt}/%{max} epäonnistui: %{error} — seuraava yritys nyt'
+          retrying_html: 'Yritys %{attempt}/%{max} epäonnistui: %{error} — seuraava yritys %{time}'
+          running_html: Noudettu %{ago} · vuokra vanhenee %{time}
+          scheduled_html: Ajastettu — ajetaan %{time}
+          waiting_html: Odottaa — %{count} edellä
+          waiting_priority_html: Odottaa — %{count} edellä tällä prioriteetilla
+          waiting_unknown_html: Odottaa noutoa
         retry: Yritä uudelleen
         retry_confirm: Nollaa näkyvyysaika ja yritä uudelleen?
         states:
@@ -533,8 +533,6 @@ fi:
         pending: Odottaa
         published: Julkaistu
         stats:
-          no_age: "—"
-          oldest_age: "%{seconds}s"
           oldest_unpublished: Vanhin julkaisematon
           total: Yhteensä
           unpublished: Julkaisematon

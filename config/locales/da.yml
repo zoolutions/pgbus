@@ -388,21 +388,21 @@ da:
           timezone: 'Tidszone:'
           visible_at: 'Synlig fra:'
         reasons:
-          blocked: Venter på en samtidighedsplads på %{key} (optaget %{held}/%{limit}) · parkeret %{ago}
-          blocked_no_slots: Venter på en samtidighedsplads på %{key} · parkeret %{ago}
-          lease_expired: Lease udløbet (worker er sandsynligvis død) — leveres igen, forsøg %{attempt}
-          no_workers: Ingen sund worker kører
-          not_drained: Ingen worker tømmer denne kø
-          orphaned: Fejlede med %{error} — beskeden er ikke længere i køen
-          paused: Køen er sat på pause
-          retrying: 'Forsøg %{attempt}/%{max} fejlede: %{error} — næste forsøg %{time}'
-          retrying_dlq: 'Forsøg %{attempt}/%{max} fejlede: %{error} — næste læsning flytter den til DLQ'
-          retrying_due: 'Forsøg %{attempt}/%{max} fejlede: %{error} — næste forsøg nu'
-          running: Hentet %{ago} · lease udløber %{time}
-          scheduled: Planlagt — kører %{time}
-          waiting: Venter — %{count} foran
-          waiting_priority: Venter — %{count} foran med denne prioritet
-          waiting_unknown: Venter på at blive hentet
+          blocked_html: Venter på en samtidighedsplads på %{key} (optaget %{held}/%{limit}) · parkeret %{ago}
+          blocked_no_slots_html: Venter på en samtidighedsplads på %{key} · parkeret %{ago}
+          lease_expired_html: Lease udløbet (worker er sandsynligvis død) — leveres igen, forsøg %{attempt}
+          no_workers_html: Ingen sund worker kører
+          not_drained_html: Ingen worker tømmer denne kø
+          orphaned_html: Fejlede med %{error} — beskeden er ikke længere i køen
+          paused_html: Køen er sat på pause
+          retrying_dlq_html: 'Forsøg %{attempt}/%{max} fejlede: %{error} — næste læsning flytter den til DLQ'
+          retrying_due_html: 'Forsøg %{attempt}/%{max} fejlede: %{error} — næste forsøg nu'
+          retrying_html: 'Forsøg %{attempt}/%{max} fejlede: %{error} — næste forsøg %{time}'
+          running_html: Hentet %{ago} · lease udløber %{time}
+          scheduled_html: Planlagt — kører %{time}
+          waiting_html: Venter — %{count} foran
+          waiting_priority_html: Venter — %{count} foran med denne prioritet
+          waiting_unknown_html: Venter på at blive hentet
         retry: Forsøg igen
         retry_confirm: Nulstil synlighedstimeout og prøv igen?
         states:
@@ -533,8 +533,6 @@ da:
         pending: Afventer
         published: Publiceret
         stats:
-          no_age: "—"
-          oldest_age: "%{seconds}s"
           oldest_unpublished: Ældste upublicerede
           total: Total
           unpublished: Upubliceret

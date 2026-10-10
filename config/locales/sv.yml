@@ -388,21 +388,21 @@ sv:
           timezone: 'Tidszon:'
           visible_at: 'Synlig vid:'
         reasons:
-          blocked: Väntar på en samtidighetsplats för %{key} (upptagna %{held}/%{limit}) · parkerad %{ago}
-          blocked_no_slots: Väntar på en samtidighetsplats för %{key} · parkerad %{ago}
-          lease_expired: Lease har gått ut (workern dog troligen) — levereras igen, försök %{attempt}
-          no_workers: Ingen frisk worker körs
-          not_drained: Ingen worker tömmer den här kön
-          orphaned: Misslyckades med %{error} — meddelandet finns inte längre i kön
-          paused: Kön är pausad
-          retrying: 'Försök %{attempt}/%{max} misslyckades: %{error} — nästa försök %{time}'
-          retrying_dlq: 'Försök %{attempt}/%{max} misslyckades: %{error} — nästa läsning flyttar den till DLQ'
-          retrying_due: 'Försök %{attempt}/%{max} misslyckades: %{error} — nästa försök nu'
-          running: Hämtad %{ago} · lease går ut %{time}
-          scheduled: Schemalagd — körs %{time}
-          waiting: Väntar — %{count} före
-          waiting_priority: Väntar — %{count} före med den här prioriteten
-          waiting_unknown: Väntar på att hämtas
+          blocked_html: Väntar på en samtidighetsplats för %{key} (upptagna %{held}/%{limit}) · parkerad %{ago}
+          blocked_no_slots_html: Väntar på en samtidighetsplats för %{key} · parkerad %{ago}
+          lease_expired_html: Lease har gått ut (workern dog troligen) — levereras igen, försök %{attempt}
+          no_workers_html: Ingen frisk worker körs
+          not_drained_html: Ingen worker tömmer den här kön
+          orphaned_html: Misslyckades med %{error} — meddelandet finns inte längre i kön
+          paused_html: Kön är pausad
+          retrying_dlq_html: 'Försök %{attempt}/%{max} misslyckades: %{error} — nästa läsning flyttar den till DLQ'
+          retrying_due_html: 'Försök %{attempt}/%{max} misslyckades: %{error} — nästa försök nu'
+          retrying_html: 'Försök %{attempt}/%{max} misslyckades: %{error} — nästa försök %{time}'
+          running_html: Hämtad %{ago} · lease går ut %{time}
+          scheduled_html: Schemalagd — körs %{time}
+          waiting_html: Väntar — %{count} före
+          waiting_priority_html: Väntar — %{count} före med den här prioriteten
+          waiting_unknown_html: Väntar på att hämtas
         retry: Försök igen
         retry_confirm: Återställ synlighetstimeout och försök igen?
         states:
@@ -533,8 +533,6 @@ sv:
         pending: Väntande
         published: Publicerad
         stats:
-          no_age: "—"
-          oldest_age: "%{seconds}s"
           oldest_unpublished: Äldsta opublicerade
           total: Totalt
           unpublished: Opublicerad

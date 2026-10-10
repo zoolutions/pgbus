@@ -13,7 +13,7 @@
       </div>
       <div>
         <dt class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.dead_letter.show.labels.enqueued_at") %></dt>
-        <dd class="text-sm text-gray-900 dark:text-white"><%= @message[:enqueued_at] %></dd>
+        <dd class="text-sm text-gray-900 dark:text-white"><%= pgbus_timestamp(@message[:enqueued_at]) %></dd>
       </div>
       <div>
         <dt class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.dead_letter.show.labels.read_count") %></dt>
@@ -21,7 +21,7 @@
       </div>
       <div>
         <dt class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.dead_letter.show.labels.visibility_timeout") %></dt>
-        <dd class="text-sm text-gray-900 dark:text-white"><%= @message[:vt] %></dd>
+        <dd class="text-sm text-gray-900 dark:text-white"><%= pgbus_timestamp(@message[:vt]) %></dd>
       </div>
     </dl>
   </div>

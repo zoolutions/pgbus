@@ -48,7 +48,7 @@
                   <span class="w-16 shrink-0 px-4 py-3 text-sm font-mono text-gray-900 dark:text-white"><%= m[:msg_id] %></span>
                   <span class="flex-1 px-4 py-3 text-sm font-mono text-indigo-600 dark:text-indigo-400 truncate"><%= payload["routing_key"] || payload["event_id"] || "—" %></span>
                   <span class="w-40 shrink-0 px-4 py-3 text-sm text-gray-700 dark:text-gray-200"><%= m[:queue_name] %></span>
-                  <span class="w-28 shrink-0 px-4 py-3 text-sm text-gray-500 dark:text-gray-400"><%= pgbus_time_ago(m[:enqueued_at]) %></span>
+                  <span class="w-28 shrink-0 px-4 py-3 text-sm text-gray-500 dark:text-gray-400"><%= pgbus_time(m[:enqueued_at]) %></span>
                   <span class="w-16 shrink-0 px-4 py-3 text-sm text-gray-500 dark:text-gray-400"><%= m[:read_ct] %></span>
                 </summary>
                 <div class="px-4 pb-4 bg-gray-50 dark:bg-gray-900 border-t border-gray-100 dark:border-gray-700">
@@ -97,8 +97,8 @@
                       <span class="text-xs font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.events.pending_table.metadata") %></span>
                       <div class="text-xs text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 rounded p-2 mt-1 space-y-1">
                         <% if m[:read_ct] %><p><strong><%= t("pgbus.events.pending_table.metadata_labels.read_count") %></strong> <%= m[:read_ct] %></p><% end %>
-                        <% if m[:vt] %><p><strong><%= t("pgbus.events.pending_table.metadata_labels.visible_at") %></strong> <%= m[:vt] %></p><% end %>
-                        <% if m[:last_read_at] %><p><strong><%= t("pgbus.events.pending_table.metadata_labels.last_read") %></strong> <%= m[:last_read_at] %></p><% end %>
+                        <% if m[:vt] %><p><strong><%= t("pgbus.events.pending_table.metadata_labels.visible_at") %></strong> <%= pgbus_timestamp(m[:vt]) %></p><% end %>
+                        <% if m[:last_read_at] %><p><strong><%= t("pgbus.events.pending_table.metadata_labels.last_read") %></strong> <%= pgbus_timestamp(m[:last_read_at]) %></p><% end %>
                       </div>
                     </div>
                   </div>

@@ -388,21 +388,21 @@ pt:
           timezone: 'Fuso horário:'
           visible_at: 'Visível em:'
         reasons:
-          blocked: Aguardando um slot de concorrência em %{key} (ocupados %{held}/%{limit}) · estacionado %{ago}
-          blocked_no_slots: Aguardando um slot de concorrência em %{key} · estacionado %{ago}
-          lease_expired: Concessão expirada (o worker provavelmente morreu) — reentregando, tentativa %{attempt}
-          no_workers: Nenhum worker saudável em execução
-          not_drained: Nenhum worker processa esta fila
-          orphaned: Falhou com %{error} — a mensagem não está mais na fila
-          paused: Fila pausada
-          retrying: 'A tentativa %{attempt}/%{max} falhou: %{error} — próxima tentativa %{time}'
-          retrying_dlq: 'A tentativa %{attempt}/%{max} falhou: %{error} — a próxima leitura o move para a DLQ'
-          retrying_due: 'A tentativa %{attempt}/%{max} falhou: %{error} — próxima tentativa agora'
-          running: Coletado %{ago} · a concessão expira %{time}
-          scheduled: Agendado — executa %{time}
-          waiting: Aguardando — %{count} à frente
-          waiting_priority: Aguardando — %{count} à frente nesta prioridade
-          waiting_unknown: Aguardando ser coletado
+          blocked_html: Aguardando um slot de concorrência em %{key} (ocupados %{held}/%{limit}) · estacionado %{ago}
+          blocked_no_slots_html: Aguardando um slot de concorrência em %{key} · estacionado %{ago}
+          lease_expired_html: Concessão expirada (o worker provavelmente morreu) — reentregando, tentativa %{attempt}
+          no_workers_html: Nenhum worker saudável em execução
+          not_drained_html: Nenhum worker processa esta fila
+          orphaned_html: Falhou com %{error} — a mensagem não está mais na fila
+          paused_html: Fila pausada
+          retrying_dlq_html: 'A tentativa %{attempt}/%{max} falhou: %{error} — a próxima leitura o move para a DLQ'
+          retrying_due_html: 'A tentativa %{attempt}/%{max} falhou: %{error} — próxima tentativa agora'
+          retrying_html: 'A tentativa %{attempt}/%{max} falhou: %{error} — próxima tentativa %{time}'
+          running_html: Coletado %{ago} · a concessão expira %{time}
+          scheduled_html: Agendado — executa %{time}
+          waiting_html: Aguardando — %{count} à frente
+          waiting_priority_html: Aguardando — %{count} à frente nesta prioridade
+          waiting_unknown_html: Aguardando ser coletado
         retry: Tentar Novamente
         retry_confirm: Redefinir tempo de visibilidade e tentar novamente?
         states:
@@ -533,8 +533,6 @@ pt:
         pending: Pendente
         published: Publicado
         stats:
-          no_age: "—"
-          oldest_age: "%{seconds}s"
           oldest_unpublished: Mais antigo não publicado
           total: Total
           unpublished: Não publicado

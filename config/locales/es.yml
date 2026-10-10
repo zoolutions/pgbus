@@ -388,21 +388,21 @@ es:
           timezone: 'Zona horaria:'
           visible_at: 'Visible en:'
         reasons:
-          blocked: Esperando un hueco de concurrencia en %{key} (ocupados %{held}/%{limit}) · aparcado %{ago}
-          blocked_no_slots: Esperando un hueco de concurrencia en %{key} · aparcado %{ago}
-          lease_expired: Concesión expirada (el worker probablemente murió) — reentregando, intento %{attempt}
-          no_workers: No hay ningún worker sano en ejecución
-          not_drained: Ningún worker procesa esta cola
-          orphaned: Falló con %{error} — el mensaje ya no está en la cola
-          paused: Cola en pausa
-          retrying: 'El intento %{attempt}/%{max} falló: %{error} — próximo intento %{time}'
-          retrying_dlq: 'El intento %{attempt}/%{max} falló: %{error} — la próxima lectura lo mueve a la DLQ'
-          retrying_due: 'El intento %{attempt}/%{max} falló: %{error} — el próximo intento es ahora'
-          running: Reclamado %{ago} · la concesión expira %{time}
-          scheduled: Programado — se ejecuta %{time}
-          waiting: Esperando — %{count} por delante
-          waiting_priority: Esperando — %{count} por delante con esta prioridad
-          waiting_unknown: Esperando a ser recogido
+          blocked_html: Esperando un hueco de concurrencia en %{key} (ocupados %{held}/%{limit}) · aparcado %{ago}
+          blocked_no_slots_html: Esperando un hueco de concurrencia en %{key} · aparcado %{ago}
+          lease_expired_html: Concesión expirada (el worker probablemente murió) — reentregando, intento %{attempt}
+          no_workers_html: No hay ningún worker sano en ejecución
+          not_drained_html: Ningún worker procesa esta cola
+          orphaned_html: Falló con %{error} — el mensaje ya no está en la cola
+          paused_html: Cola en pausa
+          retrying_dlq_html: 'El intento %{attempt}/%{max} falló: %{error} — la próxima lectura lo mueve a la DLQ'
+          retrying_due_html: 'El intento %{attempt}/%{max} falló: %{error} — el próximo intento es ahora'
+          retrying_html: 'El intento %{attempt}/%{max} falló: %{error} — próximo intento %{time}'
+          running_html: Reclamado %{ago} · la concesión expira %{time}
+          scheduled_html: Programado — se ejecuta %{time}
+          waiting_html: Esperando — %{count} por delante
+          waiting_priority_html: Esperando — %{count} por delante con esta prioridad
+          waiting_unknown_html: Esperando a ser recogido
         retry: Reintentar
         retry_confirm: "¿Restablecer tiempo de visibilidad y reintentar?"
         states:
@@ -533,8 +533,6 @@ es:
         pending: Pendiente
         published: Publicado
         stats:
-          no_age: "—"
-          oldest_age: "%{seconds}s"
           oldest_unpublished: Más antiguo no publicado
           total: Total
           unpublished: No publicado

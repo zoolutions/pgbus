@@ -388,21 +388,21 @@ de:
           timezone: 'Zeitzone:'
           visible_at: 'Sichtbar ab:'
         reasons:
-          blocked: Wartet auf einen Nebenläufigkeits-Slot für %{key} (belegt %{held}/%{limit}) · geparkt %{ago}
-          blocked_no_slots: Wartet auf einen Nebenläufigkeits-Slot für %{key} · geparkt %{ago}
-          lease_expired: Lease abgelaufen (Worker vermutlich abgestürzt) — wird erneut zugestellt, Versuch %{attempt}
-          no_workers: Kein gesunder Worker läuft
-          not_drained: Kein Worker arbeitet diese Warteschlange ab
-          orphaned: Fehlgeschlagen mit %{error} — Nachricht nicht mehr in der Warteschlange
-          paused: Warteschlange pausiert
-          retrying: 'Versuch %{attempt}/%{max} fehlgeschlagen: %{error} — nächster Versuch %{time}'
-          retrying_dlq: 'Versuch %{attempt}/%{max} fehlgeschlagen: %{error} — der nächste Lesevorgang verschiebt ihn in die DLQ'
-          retrying_due: 'Versuch %{attempt}/%{max} fehlgeschlagen: %{error} — nächster Versuch jetzt fällig'
-          running: Abgeholt %{ago} · Lease läuft ab %{time}
-          scheduled: Geplant — läuft %{time}
-          waiting: Wartet — %{count} davor
-          waiting_priority: Wartet — %{count} davor mit dieser Priorität
-          waiting_unknown: Wartet auf Abholung
+          blocked_html: Wartet auf einen Nebenläufigkeits-Slot für %{key} (belegt %{held}/%{limit}) · geparkt %{ago}
+          blocked_no_slots_html: Wartet auf einen Nebenläufigkeits-Slot für %{key} · geparkt %{ago}
+          lease_expired_html: Lease abgelaufen (Worker vermutlich abgestürzt) — wird erneut zugestellt, Versuch %{attempt}
+          no_workers_html: Kein gesunder Worker läuft
+          not_drained_html: Kein Worker arbeitet diese Warteschlange ab
+          orphaned_html: Fehlgeschlagen mit %{error} — Nachricht nicht mehr in der Warteschlange
+          paused_html: Warteschlange pausiert
+          retrying_dlq_html: 'Versuch %{attempt}/%{max} fehlgeschlagen: %{error} — der nächste Lesevorgang verschiebt ihn in die DLQ'
+          retrying_due_html: 'Versuch %{attempt}/%{max} fehlgeschlagen: %{error} — nächster Versuch jetzt fällig'
+          retrying_html: 'Versuch %{attempt}/%{max} fehlgeschlagen: %{error} — nächster Versuch %{time}'
+          running_html: Abgeholt %{ago} · Lease läuft ab %{time}
+          scheduled_html: Geplant — läuft %{time}
+          waiting_html: Wartet — %{count} davor
+          waiting_priority_html: Wartet — %{count} davor mit dieser Priorität
+          waiting_unknown_html: Wartet auf Abholung
         retry: Wiederholen
         retry_confirm: Sichtbarkeits-Timeout zurücksetzen und erneut versuchen?
         states:
@@ -533,8 +533,6 @@ de:
         pending: Ausstehend
         published: Veröffentlicht
         stats:
-          no_age: "—"
-          oldest_age: "%{seconds}s"
           oldest_unpublished: Ältester unveröffentlichter
           total: Gesamt
           unpublished: Unveröffentlicht

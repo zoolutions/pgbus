@@ -47,7 +47,7 @@
                   <span class="w-16 shrink-0 px-4 py-3 text-sm font-mono text-gray-900 dark:text-white"><%= m[:msg_id] %></span>
                   <span class="flex-1 px-4 py-3 text-sm font-medium text-gray-900 dark:text-white"><%= payload["job_class"] || "—" %></span>
                   <span class="w-40 shrink-0 px-4 py-3 text-sm text-gray-700 dark:text-gray-200"><%= source_queue %></span>
-                  <span class="w-28 shrink-0 px-4 py-3 text-sm text-gray-500 dark:text-gray-400"><%= pgbus_time_ago(m[:enqueued_at]) %></span>
+                  <span class="w-28 shrink-0 px-4 py-3 text-sm text-gray-500 dark:text-gray-400"><%= pgbus_time(m[:enqueued_at]) %></span>
                   <span class="w-16 shrink-0 px-4 py-3 text-sm text-gray-500 dark:text-gray-400"><%= m[:read_ct] %></span>
                 </summary>
                 <div class="px-4 pb-4 bg-gray-50 dark:bg-gray-900 border-t border-gray-100 dark:border-gray-700">
@@ -73,8 +73,8 @@
                         <% if payload["queue_name"] %><p><strong><%= t("pgbus.dead_letter.messages_table.metadata_labels.queue") %></strong> <%= payload["queue_name"] %></p><% end %>
                         <% if payload["priority"] %><p><strong><%= t("pgbus.dead_letter.messages_table.metadata_labels.priority") %></strong> <%= payload["priority"] %></p><% end %>
                         <% if payload["executions"] %><p><strong><%= t("pgbus.dead_letter.messages_table.metadata_labels.executions") %></strong> <%= payload["executions"] %></p><% end %>
-                        <% if m[:vt] %><p><strong><%= t("pgbus.dead_letter.messages_table.metadata_labels.visible_at") %></strong> <%= m[:vt] %></p><% end %>
-                        <% if m[:last_read_at] %><p><strong><%= t("pgbus.dead_letter.messages_table.metadata_labels.last_read") %></strong> <%= m[:last_read_at] %></p><% end %>
+                        <% if m[:vt] %><p><strong><%= t("pgbus.dead_letter.messages_table.metadata_labels.visible_at") %></strong> <%= pgbus_timestamp(m[:vt]) %></p><% end %>
+                        <% if m[:last_read_at] %><p><strong><%= t("pgbus.dead_letter.messages_table.metadata_labels.last_read") %></strong> <%= pgbus_timestamp(m[:last_read_at]) %></p><% end %>
                       </div>
                     </div>
                   </div>

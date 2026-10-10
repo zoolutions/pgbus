@@ -14,7 +14,7 @@
   </dl>
   <dl class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
     <dt class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.outbox.index.stats.oldest_unpublished") %></dt>
-    <dd class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white"><%= @stats[:oldest_unpublished_age] ? t("pgbus.outbox.index.stats.oldest_age", seconds: @stats[:oldest_unpublished_age]) : t("pgbus.outbox.index.stats.no_age") %></dd>
+    <dd class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white"><%= pgbus_duration(@stats[:oldest_unpublished_age]) %></dd>
   </dl>
 </div>
 
@@ -44,7 +44,7 @@
               <span class="inline-flex items-center rounded-full bg-yellow-100 dark:bg-yellow-900/30 px-2 py-0.5 text-xs font-medium text-yellow-800 dark:text-yellow-400"><%= t("pgbus.outbox.index.pending") %></span>
             <% end %>
           </td>
-          <td data-label="Created" class="px-4 py-3 text-sm text-right text-gray-500 dark:text-gray-400"><%= pgbus_time_ago(entry.created_at) %></td>
+          <td data-label="Created" class="px-4 py-3 text-sm text-right text-gray-500 dark:text-gray-400"><%= pgbus_time(entry.created_at) %></td>
         </tr>
       <% end %>
       <% if @entries.empty? %>

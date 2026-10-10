@@ -13,7 +13,7 @@
       </div>
       <div>
         <dt class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.jobs.show.labels.failed_at") %></dt>
-        <dd class="text-sm text-gray-900 dark:text-white"><%= @job["failed_at"] %></dd>
+        <dd class="text-sm text-gray-900 dark:text-white"><%= pgbus_timestamp(@job["failed_at"]) %></dd>
       </div>
       <div>
         <dt class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.jobs.show.labels.error_class") %></dt>

@@ -388,21 +388,21 @@ ja:
           timezone: タイムゾーン：
           visible_at: 表示可能日時：
         reasons:
-          blocked: "%{key} の同時実行枠を待機中（使用中 %{held}/%{limit}） · 待機開始 %{ago}"
-          blocked_no_slots: "%{key} の同時実行枠を待機中 · 待機開始 %{ago}"
-          lease_expired: リースが期限切れ（ワーカーが停止した可能性） — 再配信中、試行 %{attempt}
-          no_workers: 正常なワーカーが動いていません
-          not_drained: このキューを処理するワーカーがいません
-          orphaned: "%{error} で失敗 — メッセージはもうキューにありません"
-          paused: キューは一時停止中
-          retrying: '試行 %{attempt}/%{max} が失敗: %{error} — 次の試行 %{time}'
-          retrying_dlq: '試行 %{attempt}/%{max} が失敗: %{error} — 次の読み取りで DLQ に移動'
-          retrying_due: '試行 %{attempt}/%{max} が失敗: %{error} — 次の試行は今'
-          running: "%{ago} に取得 · リース期限 %{time}"
-          scheduled: 予約済み — 実行予定 %{time}
-          waiting: 待機中 — 前に %{count} 件
-          waiting_priority: 待機中 — この優先度で前に %{count} 件
-          waiting_unknown: 取得待ち
+          blocked_html: "%{key} の同時実行枠を待機中（使用中 %{held}/%{limit}） · 待機開始 %{ago}"
+          blocked_no_slots_html: "%{key} の同時実行枠を待機中 · 待機開始 %{ago}"
+          lease_expired_html: リースが期限切れ（ワーカーが停止した可能性） — 再配信中、試行 %{attempt}
+          no_workers_html: 正常なワーカーが動いていません
+          not_drained_html: このキューを処理するワーカーがいません
+          orphaned_html: "%{error} で失敗 — メッセージはもうキューにありません"
+          paused_html: キューは一時停止中
+          retrying_dlq_html: '試行 %{attempt}/%{max} が失敗: %{error} — 次の読み取りで DLQ に移動'
+          retrying_due_html: '試行 %{attempt}/%{max} が失敗: %{error} — 次の試行は今'
+          retrying_html: '試行 %{attempt}/%{max} が失敗: %{error} — 次の試行 %{time}'
+          running_html: "%{ago} に取得 · リース期限 %{time}"
+          scheduled_html: 予約済み — 実行予定 %{time}
+          waiting_html: 待機中 — 前に %{count} 件
+          waiting_priority_html: 待機中 — この優先度で前に %{count} 件
+          waiting_unknown_html: 取得待ち
         retry: リトライ
         retry_confirm: 可視性タイムアウトをリセットしてリトライしますか？
         states:
@@ -533,8 +533,6 @@ ja:
         pending: 保留中
         published: 公開済み
         stats:
-          no_age: "—"
-          oldest_age: "%{seconds}秒"
           oldest_unpublished: 最も古い未公開
           total: 合計
           unpublished: 未公開

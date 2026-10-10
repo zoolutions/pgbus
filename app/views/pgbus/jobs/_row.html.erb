@@ -85,10 +85,10 @@
           <% if payload["priority"] %><p><strong><%= t("pgbus.jobs.list.metadata_labels.priority") %></strong> <%= payload["priority"] %></p><% end %>
           <% if payload["locale"] %><p><strong><%= t("pgbus.jobs.list.metadata_labels.locale") %></strong> <%= payload["locale"] %></p><% end %>
           <% if payload["timezone"] %><p><strong><%= t("pgbus.jobs.list.metadata_labels.timezone") %></strong> <%= payload["timezone"] %></p><% end %>
-          <% if payload["scheduled_at"] %><p><strong><%= t("pgbus.jobs.list.metadata_labels.scheduled") %></strong> <%= payload["scheduled_at"] %></p><% end %>
-          <% if row[:enqueued_at] %><p><strong><%= t("pgbus.jobs.list.metadata_labels.enqueued") %></strong> <%= row[:enqueued_at] %></p><% end %>
-          <% if row[:vt] %><p><strong><%= t("pgbus.jobs.list.metadata_labels.visible_at") %></strong> <%= row[:vt] %></p><% end %>
-          <% if row[:last_read_at] %><p><strong><%= t("pgbus.jobs.list.metadata_labels.last_read") %></strong> <%= row[:last_read_at] %></p><% end %>
+          <% if payload["scheduled_at"] %><p><strong><%= t("pgbus.jobs.list.metadata_labels.scheduled") %></strong> <%= pgbus_timestamp(payload["scheduled_at"]) %></p><% end %>
+          <% if row[:enqueued_at] %><p><strong><%= t("pgbus.jobs.list.metadata_labels.enqueued") %></strong> <%= pgbus_timestamp(row[:enqueued_at]) %></p><% end %>
+          <% if row[:vt] %><p><strong><%= t("pgbus.jobs.list.metadata_labels.visible_at") %></strong> <%= pgbus_timestamp(row[:vt]) %></p><% end %>
+          <% if row[:last_read_at] %><p><strong><%= t("pgbus.jobs.list.metadata_labels.last_read") %></strong> <%= pgbus_timestamp(row[:last_read_at]) %></p><% end %>
           <% if row[:concurrency_key] %><p><strong><%= t("pgbus.jobs.list.metadata_labels.concurrency_key") %></strong> <%= row[:concurrency_key] %></p><% end %>
         </div>
       </div>

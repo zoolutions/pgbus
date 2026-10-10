@@ -388,21 +388,21 @@ nl:
           timezone: 'Tijdzone:'
           visible_at: 'Zichtbaar op:'
         reasons:
-          blocked: Wacht op een gelijktijdigheidsslot voor %{key} (bezet %{held}/%{limit}) · geparkeerd %{ago}
-          blocked_no_slots: Wacht op een gelijktijdigheidsslot voor %{key} · geparkeerd %{ago}
-          lease_expired: Lease verlopen (worker waarschijnlijk gestopt) — opnieuw afgeleverd, poging %{attempt}
-          no_workers: Geen gezonde worker actief
-          not_drained: Geen worker verwerkt deze wachtrij
-          orphaned: Mislukt met %{error} — bericht staat niet meer in de wachtrij
-          paused: Wachtrij gepauzeerd
-          retrying: 'Poging %{attempt}/%{max} mislukt: %{error} — volgende poging %{time}'
-          retrying_dlq: 'Poging %{attempt}/%{max} mislukt: %{error} — de volgende lezing verplaatst hem naar de DLQ'
-          retrying_due: 'Poging %{attempt}/%{max} mislukt: %{error} — volgende poging nu'
-          running: Opgepakt %{ago} · lease verloopt %{time}
-          scheduled: Gepland — draait %{time}
-          waiting: Wacht — %{count} ervoor
-          waiting_priority: Wacht — %{count} ervoor met deze prioriteit
-          waiting_unknown: Wacht om opgepakt te worden
+          blocked_html: Wacht op een gelijktijdigheidsslot voor %{key} (bezet %{held}/%{limit}) · geparkeerd %{ago}
+          blocked_no_slots_html: Wacht op een gelijktijdigheidsslot voor %{key} · geparkeerd %{ago}
+          lease_expired_html: Lease verlopen (worker waarschijnlijk gestopt) — opnieuw afgeleverd, poging %{attempt}
+          no_workers_html: Geen gezonde worker actief
+          not_drained_html: Geen worker verwerkt deze wachtrij
+          orphaned_html: Mislukt met %{error} — bericht staat niet meer in de wachtrij
+          paused_html: Wachtrij gepauzeerd
+          retrying_dlq_html: 'Poging %{attempt}/%{max} mislukt: %{error} — de volgende lezing verplaatst hem naar de DLQ'
+          retrying_due_html: 'Poging %{attempt}/%{max} mislukt: %{error} — volgende poging nu'
+          retrying_html: 'Poging %{attempt}/%{max} mislukt: %{error} — volgende poging %{time}'
+          running_html: Opgepakt %{ago} · lease verloopt %{time}
+          scheduled_html: Gepland — draait %{time}
+          waiting_html: Wacht — %{count} ervoor
+          waiting_priority_html: Wacht — %{count} ervoor met deze prioriteit
+          waiting_unknown_html: Wacht om opgepakt te worden
         retry: Opnieuw proberen
         retry_confirm: Zichtbaarheidstimeout resetten en opnieuw proberen?
         states:
@@ -533,8 +533,6 @@ nl:
         pending: In afwachting
         published: Gepubliceerd
         stats:
-          no_age: "—"
-          oldest_age: "%{seconds}s"
           oldest_unpublished: Oudste niet-gepubliceerde
           total: Totaal
           unpublished: Niet gepubliceerd

@@ -388,21 +388,21 @@ fr:
           timezone: 'Fuseau horaire :'
           visible_at: 'Visible à :'
         reasons:
-          blocked: En attente d'un créneau de concurrence sur %{key} (occupés %{held}/%{limit}) · mis en attente %{ago}
-          blocked_no_slots: En attente d'un créneau de concurrence sur %{key} · mis en attente %{ago}
-          lease_expired: Bail expiré (le worker est probablement mort) — nouvelle livraison, tentative %{attempt}
-          no_workers: Aucun worker sain en cours d'exécution
-          not_drained: Aucun worker ne traite cette file
-          orphaned: Échec avec %{error} — le message n'est plus dans la file
-          paused: File en pause
-          retrying: 'La tentative %{attempt}/%{max} a échoué : %{error} — prochaine tentative %{time}'
-          retrying_dlq: 'La tentative %{attempt}/%{max} a échoué : %{error} — la prochaine lecture le déplace vers la DLQ'
-          retrying_due: 'La tentative %{attempt}/%{max} a échoué : %{error} — prochaine tentative maintenant'
-          running: Réclamé %{ago} · le bail expire %{time}
-          scheduled: Planifié — s'exécute %{time}
-          waiting: En attente — %{count} devant
-          waiting_priority: En attente — %{count} devant à cette priorité
-          waiting_unknown: En attente de prise en charge
+          blocked_html: En attente d'un créneau de concurrence sur %{key} (occupés %{held}/%{limit}) · mis en attente %{ago}
+          blocked_no_slots_html: En attente d'un créneau de concurrence sur %{key} · mis en attente %{ago}
+          lease_expired_html: Bail expiré (le worker est probablement mort) — nouvelle livraison, tentative %{attempt}
+          no_workers_html: Aucun worker sain en cours d'exécution
+          not_drained_html: Aucun worker ne traite cette file
+          orphaned_html: Échec avec %{error} — le message n'est plus dans la file
+          paused_html: File en pause
+          retrying_dlq_html: 'La tentative %{attempt}/%{max} a échoué : %{error} — la prochaine lecture le déplace vers la DLQ'
+          retrying_due_html: 'La tentative %{attempt}/%{max} a échoué : %{error} — prochaine tentative maintenant'
+          retrying_html: 'La tentative %{attempt}/%{max} a échoué : %{error} — prochaine tentative %{time}'
+          running_html: Réclamé %{ago} · le bail expire %{time}
+          scheduled_html: Planifié — s'exécute %{time}
+          waiting_html: En attente — %{count} devant
+          waiting_priority_html: En attente — %{count} devant à cette priorité
+          waiting_unknown_html: En attente de prise en charge
         retry: Réessayer
         retry_confirm: Réinitialiser le délai de visibilité et réessayer ?
         states:
@@ -533,8 +533,6 @@ fr:
         pending: En attente
         published: Publié
         stats:
-          no_age: "—"
-          oldest_age: "%{seconds}s"
           oldest_unpublished: Plus ancien non publié
           total: Total
           unpublished: Non publié

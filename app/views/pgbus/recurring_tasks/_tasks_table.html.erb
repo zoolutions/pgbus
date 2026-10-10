@@ -42,11 +42,11 @@
                 <%= task[:queue_name] || t("pgbus.recurring_tasks.tasks_table.default_queue") %>
               </td>
               <td data-label="Last Run" class="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
-                <%= task[:last_run_at] ? pgbus_time_ago(task[:last_run_at]) : t("pgbus.recurring_tasks.tasks_table.never") %>
+                <%= task[:last_run_at] ? pgbus_time(task[:last_run_at]) : t("pgbus.recurring_tasks.tasks_table.never") %>
               </td>
               <td data-label="Next Run" class="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
                 <% if task[:enabled] && task[:next_run_at] %>
-                  <%= pgbus_time_ago_future(task[:next_run_at]) %>
+                  <%= pgbus_time(task[:next_run_at]) %>
                 <% else %>
                   <span class="text-gray-500 dark:text-gray-400">—</span>
                 <% end %>
