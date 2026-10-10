@@ -1,0 +1,46 @@
+config/locales/sv.yml
+  s_4ad0484223837f::t_c2fbc0c4ab47e1 249-270
+config/locales/fi.yml
+  s_4ad0484223837f::t_c2fbc0c4ab47e1 249-270
+config/locales/fr.yml
+  s_4ad0484223837f::t_c2fbc0c4ab47e1 249-270
+config/locales/da.yml
+  s_4ad0484223837f::t_c2fbc0c4ab47e1 249-270
+config/locales/pt.yml
+  s_4ad0484223837f::t_c2fbc0c4ab47e1 249-270
+spec/pgbus/web/time_format_spec.rb
+  s_4ad0484223837f::t_ac27318e851846 1-143
+config/locales/es.yml
+  s_4ad0484223837f::t_c2fbc0c4ab47e1 249-270
+config/locales/it.yml
+  s_4ad0484223837f::t_c2fbc0c4ab47e1 249-270
+lib/pgbus/web/time_format.rb
+  s_4ad0484223837f::t_f57c9bb743a9d5 1-4,6-120
+  s_4ad0484223837f::t_f93c31ff3f97e5 5
+config/locales/de.yml
+  s_4ad0484223837f::t_c2fbc0c4ab47e1 249-270
+config/locales/nb.yml
+  s_4ad0484223837f::t_c2fbc0c4ab47e1 249-270
+config/locales/en.yml
+  s_4ad0484223837f::t_c2fbc0c4ab47e1 249-270
+config/locales/nl.yml
+  s_4ad0484223837f::t_c2fbc0c4ab47e1 249-270
+config/locales/ja.yml
+  s_4ad0484223837f::t_c2fbc0c4ab47e1 249-270
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "a10907ce8cb97e9cb889050648941286b8b3fe08",
+  "prompts": {},
+  "sessions": {
+    "s_4ad0484223837f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3ed0f016-1f17-4322-be29-e4daa76de66d",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
