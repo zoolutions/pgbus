@@ -11,6 +11,7 @@ module Pgbus
       include QueueSummary
       include EventList
       include ProcessList
+      include DashboardSignals
 
       # pgbus_failed_events rows outside the EventBus handler queues; binds
       # handler_queue_names_literal as $1.
@@ -62,6 +63,7 @@ module Pgbus
       def reset_cache!
         @queues_with_metrics = nil
         @concurrency_summary = nil
+        @queue_health_stats = nil
         self
       end
 
@@ -733,7 +735,13 @@ module Pgbus
       # Queue health — vacuum stats, dead tuples, bloat, MVCC horizon.
       # Returns aggregate health across all queue and archive tables, plus
       # the oldest open transaction age (MVCC horizon pinning risk).
+      # Memoized per instance like queues_with_metrics: the home page reads it
+      # for the stats, the Queue Health panel and the health verdict.
       def queue_health_stats
+        @queue_health_stats ||= fetch_queue_health_stats
+      end
+
+      def fetch_queue_health_stats
         tables = fetch_all_table_stats
 
         total_dead = tables.sum { |t| t[:dead_tuples] }
@@ -759,6 +767,7 @@ module Pgbus
           oldest_transaction_age_sec: nil, tables: []
         }
       end
+      private :fetch_queue_health_stats
 
       # Per-queue health stats for the queue detail view.
       def queue_health_detail(queue_name)

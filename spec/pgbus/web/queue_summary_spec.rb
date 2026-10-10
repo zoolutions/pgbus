@@ -148,4 +148,26 @@ RSpec.describe Pgbus::Web::QueueSummary do
       expect(keys(lines)).not_to include("priority_level")
     end
   end
+
+  describe ".headline" do
+    it "picks what needs attention first: a pause, then a queue nothing drains" do
+      paused = present(pause: { paused: true, reason: "maintenance", paused_at: now - 300 })
+      expect(described_class.headline(paused).key).to eq("paused_operator")
+
+      expect(described_class.headline(present(drain: { live_workers: 0 })).key).to eq("no_workers")
+    end
+
+    it "otherwise says what is waiting" do
+      expect(described_class.headline(present).key).to eq("backlog")
+      expect(described_class.headline(present(detail: detail.merge(queue_visible_length: 0, parked_length: 0))).key)
+        .to eq("empty")
+    end
+
+    it "falls back to what the queue is when it has no backlog line" do
+      dlq = present(detail: detail.merge(name: "pgbus_default_dlq"))
+      expect(described_class.headline(dlq).key).to eq("dlq")
+
+      expect(described_class.headline(present(drain: { stream: true })).key).to eq("stream")
+    end
+  end
 end

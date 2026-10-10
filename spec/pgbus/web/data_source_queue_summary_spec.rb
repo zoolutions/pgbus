@@ -51,6 +51,21 @@ RSpec.describe Pgbus::Web::DataSource::QueueSummary do
     end
   end
 
+  describe "#queue_pause_states" do
+    it "reads every queue's state in one query, keyed by physical name" do
+      state = double("Pgbus::QueueState", queue_name: "mailers", paused: true, paused_reason: "maintenance",
+                                          paused_at: Time.utc(2026, 10, 10, 11), circuit_breaker_resume_at: nil,
+                                          circuit_breaker_trip_count: 0)
+      allow(Pgbus::QueueState).to receive(:where).with(queue_name: %w[default mailers]).and_return([state])
+
+      states = data_source.queue_pause_states(%w[pgbus_test_default pgbus_test_mailers_p0 pgbus_test_mailers_p1])
+
+      expect(states["pgbus_test_default"]).to include(paused: false)
+      expect(states["pgbus_test_mailers_p0"]).to include(paused: true, reason: "maintenance")
+      expect(states["pgbus_test_mailers_p1"]).to eq(states["pgbus_test_mailers_p0"])
+    end
+  end
+
   describe "#queue_drainers" do
     let(:workers) { [{ name: "critical", queues: %w[default] }, { queues: %w[mailers] }] }
     let(:processes) do

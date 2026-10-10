@@ -896,6 +896,18 @@ RSpec.describe Pgbus::Web::DataSource do
       expect(result[:tables].size).to eq(2)
     end
 
+    # The home page reads it three times: stats, Queue Health and the verdict.
+    it "runs the table-stats query once per instance until reset_cache!" do
+      allow(mock_connection).to receive(:select_all).with(anything, "Pgbus All Table Health").and_return(all_table_rows)
+      allow(mock_connection).to receive(:select_one).with(anything, "Pgbus Oldest Transaction").and_return(nil)
+
+      2.times { data_source.queue_health_stats }
+      data_source.reset_cache!
+      data_source.queue_health_stats
+
+      expect(mock_connection).to have_received(:select_all).with(anything, "Pgbus All Table Health").twice
+    end
+
     it "returns zero defaults on error" do
       allow(mock_connection).to receive(:select_all)
         .with(anything, "Pgbus All Table Health")

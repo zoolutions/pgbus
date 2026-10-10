@@ -15,6 +15,7 @@ module Pgbus
 
       PRIORITY_LEVEL = /_p(\d+)\z/
       FAILURES = /(\d+) consecutive failures/
+      BACKLOG_KEYS = %w[backlog backlog_parked_only empty].freeze
 
       module_function
 
@@ -86,6 +87,13 @@ module Pgbus
         return unless level
 
         line("priority_level", :gray, level: level, logical: drainers[:logical])
+      end
+
+      # The one line a queue row has room for (the home page's queues table,
+      # issue #492): whatever needs attention (a pause, nothing draining it),
+      # else what is waiting, else what the queue is.
+      def headline(lines)
+        lines.find { |l| l.tone != :gray } || lines.find { |l| BACKLOG_KEYS.include?(l.key) } || lines.first
       end
 
       def line(key, tone, **args)

@@ -3,6 +3,7 @@
 require_relative "stub_data_source/sample_data"
 require_relative "stub_data_source/sample_events"
 require_relative "stub_data_source/sample_processes"
+require_relative "stub_data_source/dashboard_signals"
 
 module Pgbus
   module Test
@@ -15,6 +16,7 @@ module Pgbus
       include SampleData
       include SampleEvents
       include SampleProcesses
+      include DashboardSignals
 
       attr_accessor :stats, :queues, :processes_list, :failed_events_list,
                     :dlq_messages_list, :events_list, :subscribers_list, :jobs_list,
@@ -28,7 +30,7 @@ module Pgbus
                     :recurring_executions_list, :health_stats, :health_detail_hash, :live_stream_metrics_hash,
                     :capped_lists, :queue_pause_states, :queue_drainers_hash,
                     :event_rows_list, :events_ahead_hash, :event_context, :replay_states_hash,
-                    :process_thresholds_overrides
+                    :process_thresholds_overrides, :dashboard_signals_overrides, :throughput_signal
       attr_reader :calls
 
       def initialize
@@ -73,6 +75,8 @@ module Pgbus
         @event_context = default_event_context
         @replay_states_hash = {}
         @process_thresholds_overrides = {}
+        @dashboard_signals_overrides = {}
+        @throughput_signal = { available: false, jobs_per_minute: nil, window_minutes: 5 }
         @calls = Hash.new { |h, k| h[k] = [] }
       end
 
@@ -406,8 +410,8 @@ module Pgbus
 
       def default_queues
         [
-          { name: "pgbus_default", queue_length: 10, queue_visible_length: 8, parked_length: 2,
-            oldest_msg_age_sec: 120, oldest_claimable_age_sec: 90,
+          { name: "pgbus_default", queue_length: 10, queue_visible_length: 8, visible_unread_length: 0,
+            parked_length: 2, oldest_msg_age_sec: 120, oldest_claimable_age_sec: 90,
             newest_msg_age_sec: 5, total_messages: 500 },
           { name: "pgbus_default_dlq", queue_length: 2, queue_visible_length: 2, parked_length: 0,
             oldest_msg_age_sec: 3600, oldest_claimable_age_sec: 3600,
