@@ -1,0 +1,41 @@
+rubocop/pgbus.rb
+  s_4ad0484223837f::t_5d19b4467e2d6d 6
+spec/pgbus/web/time_conventions_spec.rb
+  s_4ad0484223837f::t_07018d989941d0 14
+  s_4ad0484223837f::t_af66183df85762 20-24,26-30,32,35,39-40,46,52,72,83-84
+  s_4ad0484223837f::t_43347d9d9be900 57-61,63
+  s_4ad0484223837f::t_455e0ba8f22202 1-13,15-19,25,31,33-34,36-38,41-43,45,47-51,53-56,62,64-71,73-82,85-91
+  s_4ad0484223837f::t_808a25ab53c0c0 44
+.rubocop.yml
+  s_4ad0484223837f::t_5d19b4467e2d6d 33-43
+.claude/rules/dashboard.md
+  s_4ad0484223837f::t_db7e604129a07d 11-12,53-70,73-76
+  s_4ad0484223837f::t_07018d989941d0 71
+  s_4ad0484223837f::t_0793d76a4f856d 72
+AGENTS.md
+  s_4ad0484223837f::t_db7e604129a07d 28,199-201
+spec/rubocop/cop/pgbus/dashboard_time_formatting_spec.rb
+  s_4ad0484223837f::t_07018d989941d0 44-50
+  s_4ad0484223837f::t_6cf08d617460bb 1-43,51-58
+rubocop/cop/pgbus/dashboard_time_formatting.rb
+  s_4ad0484223837f::t_23a3b641da0c68 1-37,39-48
+  s_4ad0484223837f::t_07018d989941d0 38
+CHANGELOG.md
+  ai_agent 31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "16c419a48289d0e2b2470004cfadf10581d406d7",
+  "prompts": {},
+  "sessions": {
+    "s_4ad0484223837f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3ed0f016-1f17-4322-be29-e4daa76de66d",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
