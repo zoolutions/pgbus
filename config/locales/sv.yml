@@ -193,6 +193,7 @@ sv:
         mark_handled_failed: Kunde inte markera händelsen som hanterad.
         marked_handled: Händelse markerad som hanterad.
         none_selected: Inga händelser valda.
+        payload_redacted: 'Inte sparat: payloaden innehåller fortfarande maskerade ([FILTERED]) värden som skulle ersätta de riktiga.'
         payload_update_failed: Kunde inte uppdatera payload. Kontrollera att JSON är giltig.
         payload_updated: Payload uppdaterad och händelsen återköad.
         replay_failed: Händelsen hittades inte eller kunde inte spelas upp.
@@ -200,56 +201,118 @@ sv:
         reroute_failed: Kunde inte omdirigera händelsen.
         rerouted: Händelsen omdirigerades till målhanteraren.
       index:
-        discard_selected: Kassera valda
-        discard_selected_confirm: Kassera valda händelser?
-        pending_empty: Inga väntande händelser
-        pending_headers:
-          enqueued: Köad
-          handler_queue: Handler-kö
-          id: ID
-          reads: Läsningar
-          routing_key: Routing-nyckel
         pending_title: Väntande händelser
-        processed_empty: Inga händelser behandlade än
-        processed_headers:
-          event_id: Händelse-ID
-          handler: Hanterare
-          processed_at: Behandlad den
         processed_title: Behandlade händelser
+        subscribers:
+          covered: Hanteras av en körande consumer
+          uncovered: Ingen körande consumer täcker det här mönstret
+          unknown: Consumer-täckning okänd
+          view_pending: Visa väntande
         subscribers_empty: Inga registrerade prenumeranter
         subscribers_headers:
+          consumer: Consumer
           handler: Hanterare
           pattern: Mönster
+          pending: Väntande
           queue: Kö
         subscribers_title: Registrerade prenumeranter
         title: Händelser
-      pending_table:
-        arguments: Payload
+      list:
         context: Kontext
         discard: Kassera
         discard_confirm: Kassera denna händelse? Den kommer att arkiveras.
+        discard_failure_confirm: Kassera den här misslyckade händelsen? Dess meddelande finns inte längre i kön.
+        discard_selected: Kassera valda
+        discard_selected_confirm: Kassera valda händelser?
         edit_payload: Redigera & Försök igen
         edit_payload_confirm: Uppdatera payload och återköa denna händelse?
         edit_payload_label: 'JSON Payload:'
+        empty:
+          all: Inga väntande händelser
+          ready: Inga händelser väntar på att hanteras
+          retrying: Inga händelser väntar på nytt försök
+          running: Inga händelser hanteras
+          scheduled: Inga schemalagda händelser
         event_id: 'Händelse-ID:'
         full_json_payload: Fullständig JSON Payload
+        headers:
+          actions: Åtgärder
+          attempts: Försök
+          event: Händelse
+          handler: Hanterare
+          id: ID
+          reason: Nästa körning / Orsak
+          state: Status
         headers_section: Headers
         mark_handled: Markera som hanterad
-        mark_handled_confirm: Markera denna händelse som hanterad? Den kommer att arkiveras och hoppas över vid uppspelning.
+        mark_handled_confirm: Markera den här händelsen som hanterad? Meddelandet arkiveras och hanteraren kör den inte.
         metadata: Metadata
         metadata_labels:
+          enqueued: 'Köad:'
           last_read: 'Senast läst:'
+          published: 'Publicerad:'
           read_count: 'Läsantal:'
           visible_at: 'Synlig vid:'
+        payload: Payload
+        reasons:
+          handling_html: Hanteras av %{handler} — hämtad %{ago} · lease går ut %{time}
+          lease_expired_html: Lease har gått ut (consumern dog troligen) — levereras igen till %{handler}, försök %{attempt}
+          no_consumer_for_queue_html: Ingen körande consumer prenumererar på %{pattern} (%{handler})
+          no_consumers_html: Ingen frisk consumer körs
+          orphaned_html: Misslyckades med %{error} i %{handler} — meddelandet finns inte längre i kön
+          paused_html: Kön är pausad
+          retrying_dlq_html: "%{handler} försök %{attempt}/%{max} misslyckades: %{error} — nästa läsning flyttar den till DLQ"
+          retrying_due_html: "%{handler} försök %{attempt}/%{max} misslyckades: %{error} — nästa försök nu"
+          retrying_html: "%{handler} försök %{attempt}/%{max} misslyckades: %{error} — nästa försök %{time}"
+          scheduled_html: Schemalagd — hanteras av %{handler} %{time}
+          waiting_html: 'Väntar — %{count} före · nästa: %{handler}'
+          waiting_unknown_html: Väntar på %{handler}
         reroute: Omdirigera
         reroute_confirm: Omdirigera denna händelse till en annan hanterare?
         reroute_label: 'Målhanterare:'
+        states:
+          ready: Redo
+          retrying: Försöker igen
+          running: Hanteras
+          scheduled: Schemalagd
+        tabs:
+          all: Alla
+          ready: Redo
+          retrying: Försöker igen
+          running: Hanteras
+          scheduled: Schemalagda
+        tabs_label: Händelsetillstånd
+        view_failure: Visa fel
+      processed:
+        empty: Inga händelser behandlade än
+        headers:
+          actions: Åtgärder
+          event_id: Händelse-ID
+          handler: Hanterare
+          reason: Orsak
+          state: Status
+        reasons:
+          abandoned_html: Claimen tystnade %{ago} — nästa leverans kör hanteraren igen
+          completed_html: Klar %{ago}
+          completed_legacy_html: Registrerad %{ago} (enfas-claim; uppgradera med pgbus:add_processed_event_completion)
+          handling_html: Hanteras — claim förnyad %{ago}
+        replay: Spela upp igen
+        replay_confirm: Leverera den här händelsen till sin hanterare igen med ett nytt händelse-ID? Hanteraren körs igen.
+        replay_unavailable:
+          no_handler: Hanteraren är inte längre registrerad
+          not_archived: Finns inte längre i arkivet
+        states:
+          abandoned: Tyst
+          completed: Klar
+          handling: Hanteras
       show:
         back: Tillbaka till händelser
         labels:
+          completed_at: Klar
           event_id: Händelse-ID
           handler: Hanterare
           processed_at: Behandlad den
+          state: Tillstånd
         not_found: Händelse hittades inte
         title: Händelse %{event_id}
     helpers:

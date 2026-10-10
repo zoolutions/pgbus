@@ -51,9 +51,7 @@ module Pgbus
           # The home card and metrics read the same concurrency aggregates.
           @stats = @stats.merge(@concurrency_stats_hash.slice(:parked_total, :oldest_parked_age_sec,
                                                               :slots_held, :keys_at_limit))
-          @subscribers_list = sample_subscribers
-          @pending_events_list = sample_pending_events(now)
-          @events_list = sample_processed_events(now)
+          fill_sample_events!(now.utc)
           @outbox_entries_list = sample_outbox_entries(now)
           @outbox_stats_hash = { unpublished: @outbox_entries_list.count { |e| e.published_at.nil? },
                                  total: @outbox_entries_list.size, oldest_unpublished_age: 45 }
@@ -351,36 +349,6 @@ module Pgbus
           end
           { parked_total: 5, oldest_parked_age_sec: 300, slots_held: keys.sum { |k| k[:value] },
             keys_at_limit: keys.count { |k| k[:value] >= k[:max_value] }, keys: keys }
-        end
-
-        def sample_subscribers
-          [
-            { pattern: "invoice.*", handler_class: "Billing::InvoiceHandler", queue_name: "billing_invoice_handler",
-              physical_queue_name: "pgbus_billing_invoice_handler" },
-            { pattern: "user.signed_up", handler_class: "Notifications::SlackHandler",
-              queue_name: "notifications_slack_handler", physical_queue_name: "pgbus_notifications_slack_handler" }
-          ]
-        end
-
-        def sample_pending_events(now)
-          [
-            ["evt-pending-1", "invoice.created", "pgbus_billing_invoice_handler", { invoice_id: 7 }],
-            ["evt-pending-2", "user.signed_up", "pgbus_notifications_slack_handler", { user_id: 42 }]
-          ].each_with_index.map do |(event_id, type, queue, payload), i|
-            enqueued_at = now - (600 * (i + 1))
-            { msg_id: 701 + i, read_ct: i + 1, queue_name: queue, enqueued_at: i.zero? ? enqueued_at.utc.iso8601 : enqueued_at,
-              last_read_at: (now - 60).utc.iso8601, vt: (now + 30).utc.iso8601, headers: nil,
-              message: { event_id: event_id, event_type: type, payload: payload,
-                         published_at: (now - (600 * (i + 1))).utc.iso8601 }.to_json }
-          end
-        end
-
-        def sample_processed_events(now)
-          [["Billing::InvoiceHandler", 120], ["Notifications::SlackHandler", 900],
-           ["Billing::InvoiceHandler", 3600]].each_with_index.map do |(handler, ago), i|
-            { "id" => i + 1, "event_id" => "evt-processed-#{i + 1}", "handler_class" => handler,
-              "processed_at" => i.zero? ? now - ago : (now - ago).utc.iso8601 }
-          end
         end
 
         def sample_outbox_entries(now)

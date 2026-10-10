@@ -2,14 +2,35 @@
 
 module Pgbus
   class EventsController < ApplicationController
+    # Tabs of the pending list; "all" is no filter.
+    STATES = ["all", *Web::EventState::STATES].freeze
+
+    # One pending-events list (the job list scoped to the handler queues) and
+    # the processed-events audit, each in its own auto-refreshing frame with
+    # its own pager (page / processed_page), issue #494.
     def index
-      @events = data_source.processed_events(page: page_param, per_page: per_page)
-      @subscribers = data_source.registered_subscribers
-      @pending = data_source.pending_events(page: page_param, per_page: per_page)
+      @state = STATES.include?(params[:state]) ? params[:state] : "all"
+      @queue = params[:queue].presence
+      @page = page_param
+      @processed_page = page_param(:processed_page)
+      @per_page = per_page
+      if params[:frame] == "processed"
+        load_processed_events
+        return render_frame("pgbus/events/processed_table")
+      end
+
+      load_pending_events
+      return render_frame("pgbus/events/list") if params[:frame] == "list"
+
+      load_processed_events
     end
 
     def show
       @event = data_source.processed_event(params[:id])
+      return unless @event
+
+      @claim = Web::EventState.processed(@event, now: Time.now, claim_window: EventBus::Handler.claim_ownership_window)
+      @replay_state = data_source.event_replay_states([@event])[@event["id"]]
     end
 
     def replay
@@ -53,6 +74,10 @@ module Pgbus
       return reject_unknown_queue(:payload_update_failed) unless registered_queue?(queue_name)
 
       new_payload = params[:payload].to_s
+      # The editor shows the payload through PayloadFilter: saving a marker
+      # back would overwrite the redacted secret for good.
+      return redirect_to(events_path, alert: t("pgbus.events.flash.payload_redacted")) if new_payload.include?(Web::PayloadFilter::FILTERED)
+
       if data_source.edit_event_payload(queue_name, params[:id], new_payload)
         redirect_to events_path, notice: t("pgbus.events.flash.payload_updated")
       else
@@ -103,6 +128,30 @@ module Pgbus
     end
 
     private
+
+    def load_pending_events
+      @rows = data_source.event_rows(state: (@state unless @state == "all"), queue_name: @queue,
+                                     page: @page, per_page: @per_page)
+      @counts = data_source.event_state_counts(queue_name: @queue)
+      @ahead = data_source.events_ahead(@rows)
+      @state_context = data_source.event_list_context
+      @subscribers = data_source.registered_subscribers
+    end
+
+    def load_processed_events
+      @events = data_source.processed_events(page: @processed_page, per_page: @per_page)
+      @processed_count = data_source.list_count(:processed_events)
+      @replay_states = data_source.event_replay_states(@events)
+      @claim_window = EventBus::Handler.claim_ownership_window
+    end
+
+    # Every list link keeps the other list's page, so paging one frame never
+    # resets the other.
+    def events_list_path(extra = {})
+      events_path({ state: (@state unless @state == "all"), queue: @queue, page: (@page if @page > 1),
+                    processed_page: (@processed_page if @processed_page > 1) }.merge(extra).compact)
+    end
+    helper_method :events_list_path
 
     def registered_queues
       @registered_queues ||= data_source.handler_queue_physical_names

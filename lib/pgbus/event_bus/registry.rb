@@ -125,6 +125,12 @@ module Pgbus
           subscription_pattern.start_with?(topic_filter.delete_suffix(".#"))
       end
 
+      # Whether +routing_key+ matches a subscription +pattern+ ("*" one word,
+      # "#" any). The dashboard checks a replay with it (issue #494).
+      def pattern_matches?(pattern, routing_key)
+        matches?(pattern, routing_key)
+      end
+
       private
 
       # True when running inside a rake schema/asset task, where setup_all!(safe:)

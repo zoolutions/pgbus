@@ -193,6 +193,7 @@ es:
         mark_handled_failed: No se pudo marcar el evento como manejado.
         marked_handled: Evento marcado como manejado.
         none_selected: No hay eventos seleccionados.
+        payload_redacted: 'No guardado: el payload aún contiene valores ocultos ([FILTERED]) que reemplazarían los reales.'
         payload_update_failed: No se pudo actualizar la carga útil. Verifique que el JSON sea válido.
         payload_updated: Carga útil actualizada y evento reenviado a la cola.
         replay_failed: Evento no encontrado o no se pudo reproducir.
@@ -200,56 +201,118 @@ es:
         reroute_failed: No se pudo redirigir el evento.
         rerouted: Evento redirigido al manejador objetivo.
       index:
-        discard_selected: Descartar seleccionados
-        discard_selected_confirm: "¿Descartar eventos seleccionados?"
-        pending_empty: No hay eventos pendientes
-        pending_headers:
-          enqueued: En cola
-          handler_queue: Cola del manejador
-          id: ID
-          reads: Lecturas
-          routing_key: Clave de enrutamiento
         pending_title: Eventos pendientes
-        processed_empty: No se han procesado eventos aún
-        processed_headers:
-          event_id: ID del evento
-          handler: Manejador
-          processed_at: Procesado en
         processed_title: Eventos procesados
+        subscribers:
+          covered: Procesado por un consumer en ejecución
+          uncovered: Ningún consumer en ejecución cubre este patrón
+          unknown: Cobertura de consumers desconocida
+          view_pending: Ver pendientes
         subscribers_empty: No hay suscriptores registrados
         subscribers_headers:
+          consumer: Consumer
           handler: Manejador
           pattern: Patrón
+          pending: Pendientes
           queue: Cola
         subscribers_title: Suscriptores registrados
         title: Eventos
-      pending_table:
-        arguments: Carga útil
+      list:
         context: Contexto
         discard: Descartar
         discard_confirm: "¿Descartar este evento? Será archivado."
+        discard_failure_confirm: "¿Descartar este evento fallido? Su mensaje ya no está en la cola."
+        discard_selected: Descartar seleccionados
+        discard_selected_confirm: "¿Descartar eventos seleccionados?"
         edit_payload: Editar y reintentar
         edit_payload_confirm: "¿Actualizar la carga útil y reenviar este evento a la cola?"
         edit_payload_label: 'Carga útil JSON:'
+        empty:
+          all: No hay eventos pendientes
+          ready: No hay eventos esperando a ser procesados
+          retrying: No hay eventos esperando reintento
+          running: No hay eventos en proceso
+          scheduled: No hay eventos programados
         event_id: 'ID del evento:'
         full_json_payload: Carga útil JSON completa
+        headers:
+          actions: Acciones
+          attempts: Intentos
+          event: Evento
+          handler: Manejador
+          id: ID
+          reason: Próxima ejecución / Motivo
+          state: Estado
         headers_section: Encabezados
         mark_handled: Marcar como manejado
-        mark_handled_confirm: "¿Marcar este evento como manejado? Será archivado y omitido en la reproducción."
+        mark_handled_confirm: "¿Marcar este evento como procesado? Su mensaje se archiva y el handler no lo ejecuta."
         metadata: Metadatos
         metadata_labels:
+          enqueued: 'Encolado:'
           last_read: 'Última lectura:'
+          published: 'Publicado:'
           read_count: 'Cantidad de lecturas:'
           visible_at: 'Visible en:'
+        payload: Carga útil
+        reasons:
+          handling_html: En proceso por %{handler} — reclamado %{ago} · el lease vence %{time}
+          lease_expired_html: Lease vencido (el consumer probablemente murió) — reentregando a %{handler}, intento %{attempt}
+          no_consumer_for_queue_html: Ningún consumer en ejecución se suscribe a %{pattern} (%{handler})
+          no_consumers_html: No hay ningún consumer sano en ejecución
+          orphaned_html: Falló con %{error} en %{handler} — el mensaje ya no está en la cola
+          paused_html: Cola en pausa
+          retrying_dlq_html: "%{handler} intento %{attempt}/%{max} falló: %{error} — la próxima lectura lo mueve a la DLQ"
+          retrying_due_html: "%{handler} intento %{attempt}/%{max} falló: %{error} — el próximo intento toca ahora"
+          retrying_html: "%{handler} intento %{attempt}/%{max} falló: %{error} — próximo intento %{time}"
+          scheduled_html: Programado — lo procesa %{handler} %{time}
+          waiting_html: 'Esperando — %{count} delante · siguiente: %{handler}'
+          waiting_unknown_html: Esperando a %{handler}
         reroute: Redirigir
         reroute_confirm: "¿Redirigir este evento a un manejador diferente?"
         reroute_label: 'Manejador objetivo:'
+        states:
+          ready: Listo
+          retrying: Reintentando
+          running: En proceso
+          scheduled: Programado
+        tabs:
+          all: Todos
+          ready: Listos
+          retrying: Reintentando
+          running: En proceso
+          scheduled: Programados
+        tabs_label: Estados de eventos
+        view_failure: Ver fallo
+      processed:
+        empty: No se han procesado eventos aún
+        headers:
+          actions: Acciones
+          event_id: ID del evento
+          handler: Manejador
+          reason: Motivo
+          state: Estado
+        reasons:
+          abandoned_html: El claim quedó en silencio %{ago} — la próxima entrega vuelve a ejecutar el handler
+          completed_html: Completado %{ago}
+          completed_legacy_html: Registrado %{ago} (claim de una fase; actualiza con pgbus:add_processed_event_completion)
+          handling_html: En proceso — claim renovado %{ago}
+        replay: Reproducir
+        replay_confirm: "¿Volver a entregar este evento a su handler con un nuevo ID de evento? El handler se ejecuta de nuevo."
+        replay_unavailable:
+          no_handler: El handler ya no está registrado
+          not_archived: Ya no está en el archivo
+        states:
+          abandoned: En silencio
+          completed: Completado
+          handling: En proceso
       show:
         back: Volver a eventos
         labels:
+          completed_at: Completado el
           event_id: ID del evento
           handler: Manejador
           processed_at: Procesado en
+          state: Estado
         not_found: Evento no encontrado
         title: Evento %{event_id}
     helpers:

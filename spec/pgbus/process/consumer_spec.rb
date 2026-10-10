@@ -496,6 +496,85 @@ RSpec.describe Pgbus::Process::Consumer do
     end
   end
 
+  # A failed handler leaves the same trace a failed job does (issue #494), so
+  # the dashboard can say "attempt N/max failed with <error>" for an event.
+  describe "failed-event recording in handle_message (issue #494)" do
+    let(:consumer) { described_class.new(topics: ["orders.#"], queue_names: ["q_orders"]) }
+    let(:message_body) { JSON.generate("event_id" => "evt-1", "headers" => { "routing_key" => "orders.created" }) }
+    let(:error) { KeyError.new("key not found") }
+
+    before do
+      allow(consumer.config).to receive(:max_retries).and_return(5)
+      allow(Pgbus::FailedEventRecorder).to receive(:record!)
+      allow(Pgbus::FailedEventRecorder).to receive(:clear!)
+      allow(Pgbus::FailedEventRecorder).to receive(:last_error).and_return(nil)
+    end
+
+    # A real subscriber whose handler raises (or returns), so the failure
+    # comes out of dispatch the way a handler error does.
+    def deliver(read_ct:, raising: nil)
+      message = build_message_double(msg_id: 11, message: message_body, read_ct: read_ct, headers: '{"trace_id":"t"}')
+      handler = double("handler")
+      raising ? allow(handler).to(receive(:process).and_raise(raising)) : allow(handler).to(receive(:process))
+      subscriber = instance_double(Pgbus::EventBus::Subscriber, handler_class: double("HandlerClass", new: handler))
+      allow(registry).to receive(:handlers_for).with("orders.created", queue_name: "q_orders").and_return([subscriber])
+      consumer.send(:handle_message, message, "q_orders")
+      message
+    end
+
+    it "records the failure in pgbus_failed_events when a handler raises" do
+      deliver(read_ct: 3, raising: error)
+
+      expect(Pgbus::FailedEventRecorder).to have_received(:record!).with(
+        queue_name: "q_orders", msg_id: 11, payload: message_body, headers: '{"trace_id":"t"}',
+        error: error, retry_count: 2
+      )
+    end
+
+    it "records retry_count 0 on the first delivery" do
+      deliver(read_ct: 1, raising: error)
+
+      expect(Pgbus::FailedEventRecorder).to have_received(:record!).with(hash_including(retry_count: 0))
+    end
+
+    it "still trips the breaker and counts the message after recording" do
+      allow(consumer.circuit_breaker).to receive(:record_failure)
+
+      expect { deliver(read_ct: 1, raising: error) }.to change(consumer, :jobs_processed).by(1)
+      expect(consumer.circuit_breaker).to have_received(:record_failure).with("q_orders")
+    end
+
+    it "clears the failed row when a redelivered message succeeds" do
+      deliver(read_ct: 2)
+
+      expect(Pgbus::FailedEventRecorder).to have_received(:clear!).with(queue_name: "q_orders", msg_id: 11)
+    end
+
+    it "does not touch pgbus_failed_events on a first-delivery success (no hot-path query)" do
+      deliver(read_ct: 1)
+
+      expect(Pgbus::FailedEventRecorder).not_to have_received(:clear!)
+      expect(Pgbus::FailedEventRecorder).not_to have_received(:record!)
+    end
+
+    it "clears the failed row after moving a message to the DLQ: read, move, then clear" do
+      deliver(read_ct: 6)
+
+      expect(Pgbus::FailedEventRecorder).to have_received(:last_error).ordered
+      expect(mock_client).to have_received(:move_to_dead_letter).ordered
+      expect(Pgbus::FailedEventRecorder).to have_received(:clear!).with(queue_name: "q_orders", msg_id: 11).ordered
+    end
+
+    it "keeps the handler's failed row, unchanged, when the DLQ move raises" do
+      allow(mock_client).to receive(:move_to_dead_letter).and_raise(StandardError, "db gone")
+
+      deliver(read_ct: 6)
+
+      expect(Pgbus::FailedEventRecorder).not_to have_received(:clear!)
+      expect(Pgbus::FailedEventRecorder).not_to have_received(:record!)
+    end
+  end
+
   describe "#wake_timeout (private)" do
     let(:consumer) { described_class.new(topics: ["orders.#"]) }
 

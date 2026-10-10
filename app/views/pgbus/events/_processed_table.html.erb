@@ -1,0 +1,45 @@
+<%# Processed events (issue #494): the pgbus_processed_events audit, each
+    claim in words (completed, being handled, went silent) and a Replay where
+    the handler is still registered and the archive still holds the event.
+    Pages on processed_page, so the pending list keeps its own page. %>
+<turbo-frame id="processed-events" data-auto-refresh data-turbo-action="advance"
+             data-src="<%= events_list_path(frame: "processed") %>">
+  <div class="overflow-hidden rounded-lg bg-white dark:bg-gray-800 shadow ring-1 ring-gray-200 dark:ring-gray-700">
+    <table class="pgbus-table min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+      <thead class="bg-gray-50 dark:bg-gray-900">
+        <tr>
+          <% %w[event_id handler state reason].each do |header| %>
+            <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.events.processed.headers.#{header}") %></th>
+          <% end %>
+          <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.events.processed.headers.actions") %></th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+        <% now = Time.now %>
+        <% @events.each do |e| %>
+          <% claim = Pgbus::Web::EventState.processed(e, now: now, claim_window: @claim_window) %>
+          <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50" data-processed-event data-state="<%= claim.state %>">
+            <td data-label="<%= t("pgbus.events.processed.headers.event_id") %>" class="px-4 py-3 text-sm font-mono">
+              <%= pgbus_link_to e["event_id"], pgbus.event_path(e["id"]), variant: :link, size: :sm, data: { turbo_frame: "_top" } %>
+            </td>
+            <td data-label="<%= t("pgbus.events.processed.headers.handler") %>" class="px-4 py-3 text-sm text-gray-700 dark:text-gray-200"><%= e["handler_class"] %></td>
+            <td data-label="<%= t("pgbus.events.processed.headers.state") %>" class="px-4 py-3 text-sm"><%= pgbus_processed_event_badge(claim) %></td>
+            <td data-label="<%= t("pgbus.events.processed.headers.reason") %>" class="px-4 py-3 text-sm text-gray-700 dark:text-gray-200"><%= pgbus_processed_event_reason(claim) %></td>
+            <td data-label="<%= t("pgbus.events.processed.headers.actions") %>" class="px-4 py-3 text-sm text-right">
+              <%# An unfinished claim's message is still in its queue: nothing to replay yet. %>
+              <% if claim.state == "completed" %>
+                <%= render "pgbus/events/replay", event: e, replay_state: @replay_states[e["id"]] %>
+              <% end %>
+            </td>
+          </tr>
+        <% end %>
+        <% if @events.empty? %>
+          <%= render "pgbus/shared/empty_row", colspan: 5, message: t("pgbus.events.processed.empty") %>
+        <% end %>
+      </tbody>
+    </table>
+    <%= render "pgbus/shared/pager", page: @processed_page, per_page: @per_page, shown: @events.size,
+          total_count: @processed_count.total, has_more: @processed_count.capped? && @events.size == @per_page,
+          page_path: ->(n) { events_list_path(processed_page: n) } %>
+  </div>
+</turbo-frame>

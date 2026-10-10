@@ -1,0 +1,55 @@
+<%# Pending events (issue #494): the unified job list scoped to the EventBus
+    handler queues. Each row's state comes from SQL, EventState adds the
+    reason; a row's expansion is the <tr> after it (.pgbus-job-detail in
+    tailwind.css), so the auto-refresh pause on `details[open]` keeps working.
+    Orphaned failed rows (message gone) are discarded through their failed
+    event and take no part in the bulk selection. %>
+<% selectable = @rows.any? { |r| r[:source] == "queue" } %>
+<% columns = selectable ? 8 : 7 %>
+<turbo-frame id="events-list" data-auto-refresh data-turbo-action="advance"
+             data-src="<%= events_list_path(frame: "list") %>">
+  <div data-bulk-page>
+    <div class="flex items-center justify-end mb-3 space-x-2">
+      <div data-bulk-actions class="hidden flex items-center space-x-2">
+        <span class="text-sm text-gray-500 dark:text-gray-400"><span data-bulk-count>0</span> <%= t("pgbus.helpers.bulk_selected") %></span>
+        <%= pgbus_button_tag t("pgbus.events.list.discard_selected"), variant: :danger, form: "bulk-discard-events-form",
+              confirm: t("pgbus.events.list.discard_selected_confirm") %>
+      </div>
+    </div>
+    <%# Bulk form outside the table to avoid nested forms. %>
+    <form id="bulk-discard-events-form" action="<%= pgbus.discard_selected_events_path %>" method="post" data-turbo-frame="_top" class="hidden">
+      <%= hidden_field_tag :authenticity_token, form_authenticity_token %>
+    </form>
+    <div class="overflow-hidden rounded-lg bg-white dark:bg-gray-800 shadow ring-1 ring-gray-200 dark:ring-gray-700" data-bulk-scope="events">
+      <table class="pgbus-table min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+        <thead class="bg-gray-50 dark:bg-gray-900">
+          <tr>
+            <% if selectable %>
+              <th class="w-10 px-4 py-3">
+                <input type="checkbox" data-bulk-select-all
+                       aria-label="<%= t("pgbus.helpers.bulk_select_all") %>"
+                       class="h-4 w-4 rounded border-gray-300 text-indigo-600 dark:text-indigo-400 focus:ring-indigo-600">
+              </th>
+            <% end %>
+            <% %w[id event handler state attempts reason].each do |header| %>
+              <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.events.list.headers.#{header}") %></th>
+            <% end %>
+            <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.events.list.headers.actions") %></th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+          <% @rows.each do |row| %>
+            <% event = Pgbus::Web::EventState.present(row, @state_context, ahead: @ahead[[row[:queue_name], row[:msg_id]]]) %>
+            <%= render "pgbus/events/row", row: row, event: event, selectable: selectable, columns: columns %>
+          <% end %>
+          <% if @rows.empty? %>
+            <%= render "pgbus/shared/empty_row", colspan: columns, message: t("pgbus.events.list.empty.#{@state}") %>
+          <% end %>
+        </tbody>
+      </table>
+      <%= render "pgbus/shared/pager", page: @page, per_page: @per_page, shown: @rows.size,
+            total_count: @counts[@state], has_more: @counts.capped?(@state) && @rows.size == @per_page,
+            page_path: ->(n) { events_list_path(page: n) } %>
+    </div>
+  </div>
+</turbo-frame>

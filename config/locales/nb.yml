@@ -193,6 +193,7 @@ nb:
         mark_handled_failed: Kunne ikke merke hendelse som håndtert.
         marked_handled: Hendelse merket som håndtert.
         none_selected: Ingen hendelser valgt.
+        payload_redacted: 'Ikke lagret: payloaden inneholder fortsatt sladdede ([FILTERED]) verdier som ville erstattet de ekte.'
         payload_update_failed: Kunne ikke oppdatere nyttelast. Sjekk at JSON er gyldig.
         payload_updated: Nyttelast oppdatert og hendelse lagt i kø på nytt.
         replay_failed: Hendelse ikke funnet eller kunne ikke spilles av på nytt.
@@ -200,56 +201,118 @@ nb:
         reroute_failed: Kunne ikke omdirigere hendelse.
         rerouted: Hendelse omdirigert til målbehandler.
       index:
-        discard_selected: Forkast valgte
-        discard_selected_confirm: Forkast valgte hendelser?
-        pending_empty: Ingen ventende hendelser
-        pending_headers:
-          enqueued: I kø
-          handler_queue: Behandlerkø
-          id: ID
-          reads: Lesninger
-          routing_key: Rutingsnøkkel
         pending_title: Ventende hendelser
-        processed_empty: Ingen hendelser behandlet ennå
-        processed_headers:
-          event_id: Hendelses-ID
-          handler: Behandler
-          processed_at: Behandlet klokken
         processed_title: Behandlede hendelser
+        subscribers:
+          covered: Behandles av en kjørende consumer
+          uncovered: Ingen kjørende consumer dekker dette mønsteret
+          unknown: Consumer-dekning ukjent
+          view_pending: Vis ventende
         subscribers_empty: Ingen abonnenter registrert
         subscribers_headers:
+          consumer: Consumer
           handler: Behandler
           pattern: Mønster
+          pending: Ventende
           queue: Kø
         subscribers_title: Registrerte abonnenter
         title: Hendelser
-      pending_table:
-        arguments: Nyttelast
+      list:
         context: Kontekst
         discard: Forkast
         discard_confirm: Forkast denne hendelsen? Den vil bli arkivert.
+        discard_failure_confirm: Forkaste denne feilede hendelsen? Meldingen er ikke lenger i køen.
+        discard_selected: Forkast valgte
+        discard_selected_confirm: Forkast valgte hendelser?
         edit_payload: Rediger & prøv på nytt
         edit_payload_confirm: Oppdater nyttelast og legg denne hendelsen i kø på nytt?
         edit_payload_label: 'JSON-nyttelast:'
+        empty:
+          all: Ingen ventende hendelser
+          ready: Ingen hendelser venter på behandling
+          retrying: Ingen hendelser venter på nytt forsøk
+          running: Ingen hendelser behandles
+          scheduled: Ingen planlagte hendelser
         event_id: 'Hendelses-ID:'
         full_json_payload: Full JSON-nyttelast
+        headers:
+          actions: Handlinger
+          attempts: Forsøk
+          event: Hendelse
+          handler: Behandler
+          id: ID
+          reason: Neste kjøring / Årsak
+          state: Tilstand
         headers_section: Overskrifter
         mark_handled: Merk som håndtert
-        mark_handled_confirm: Merk denne hendelsen som håndtert? Den vil bli arkivert og hoppes over ved avspilling.
+        mark_handled_confirm: Merke denne hendelsen som behandlet? Meldingen arkiveres, og handleren kjører den ikke.
         metadata: Metadata
         metadata_labels:
+          enqueued: 'Satt i kø:'
           last_read: 'Sist lest:'
+          published: 'Publisert:'
           read_count: 'Antall lesninger:'
           visible_at: 'Synlig fra:'
+        payload: Nyttelast
+        reasons:
+          handling_html: Behandles av %{handler} — hentet %{ago} · lease utløper %{time}
+          lease_expired_html: Lease utløpt (consumeren døde sannsynligvis) — leveres på nytt til %{handler}, forsøk %{attempt}
+          no_consumer_for_queue_html: Ingen kjørende consumer abonnerer på %{pattern} (%{handler})
+          no_consumers_html: Ingen frisk consumer kjører
+          orphaned_html: Feilet med %{error} i %{handler} — meldingen er ikke lenger i køen
+          paused_html: Køen er satt på pause
+          retrying_dlq_html: "%{handler} forsøk %{attempt}/%{max} feilet: %{error} — neste lesing flytter den til DLQ"
+          retrying_due_html: "%{handler} forsøk %{attempt}/%{max} feilet: %{error} — neste forsøk nå"
+          retrying_html: "%{handler} forsøk %{attempt}/%{max} feilet: %{error} — neste forsøk %{time}"
+          scheduled_html: Planlagt — behandles av %{handler} %{time}
+          waiting_html: 'Venter — %{count} foran · neste: %{handler}'
+          waiting_unknown_html: Venter på %{handler}
         reroute: Omdiriger
         reroute_confirm: Omdiriger denne hendelsen til en annen behandler?
         reroute_label: 'Målbehandler:'
+        states:
+          ready: Klar
+          retrying: Prøver igjen
+          running: Behandles
+          scheduled: Planlagt
+        tabs:
+          all: Alle
+          ready: Klar
+          retrying: Prøver igjen
+          running: Behandles
+          scheduled: Planlagt
+        tabs_label: Hendelsestilstander
+        view_failure: Vis feil
+      processed:
+        empty: Ingen hendelser behandlet ennå
+        headers:
+          actions: Handlinger
+          event_id: Hendelses-ID
+          handler: Behandler
+          reason: Årsak
+          state: Tilstand
+        reasons:
+          abandoned_html: Claim ble stille %{ago} — neste levering kjører handleren på nytt
+          completed_html: Fullført %{ago}
+          completed_legacy_html: Registrert %{ago} (enfase-claim; oppgrader med pgbus:add_processed_event_completion)
+          handling_html: Behandles — claim oppdatert %{ago}
+        replay: Spill av på nytt
+        replay_confirm: Lever denne hendelsen til handleren på nytt med en ny hendelses-ID? Handleren kjører igjen.
+        replay_unavailable:
+          no_handler: Handleren er ikke lenger registrert
+          not_archived: Ikke lenger i arkivet
+        states:
+          abandoned: Stille
+          completed: Fullført
+          handling: Behandles
       show:
         back: Tilbake til hendelser
         labels:
+          completed_at: Fullført
           event_id: Hendelses-ID
           handler: Behandler
           processed_at: Behandlet klokken
+          state: Tilstand
         not_found: Hendelse ikke funnet
         title: Hendelse %{event_id}
     helpers:

@@ -128,6 +128,81 @@ RSpec.describe Pgbus::Web::DataSource::JobList do
     end
   end
 
+  # The Events page lists the handler queues only; the Jobs page leaves them
+  # out (issue #494). Both cut the same SQL.
+  describe "#job_rows scoped by queues: / exclude:" do
+    it "unions only the listed queues, without the unknown-queue orphan fragment" do
+      sql, = captured_sql("Pgbus Job List") { data_source.job_rows(queues: %w[pgbus_test_mailers]) }
+
+      expect(sql).to include("FROM pgmq.q_pgbus_test_mailers m")
+      expect(sql).not_to include("pgmq.q_pgbus_test_default ")
+      expect(sql).to include("NOT EXISTS (SELECT 1 FROM pgmq.q_pgbus_test_mailers m WHERE m.msg_id = f.msg_id)")
+      expect(sql).not_to include("ANY(ARRAY")
+      expect(sql).to include("WHERE b.queue_name IN ('mailers', 'pgbus_test_mailers')")
+    end
+
+    it "matches blocked executions on every listed queue" do
+      sql, = captured_sql("Pgbus Job List") { data_source.job_rows(queues: %w[pgbus_test_default pgbus_test_mailers]) }
+
+      expect(sql).to include("WHERE b.queue_name IN ('default', 'pgbus_test_default', 'mailers', 'pgbus_test_mailers')")
+    end
+
+    it "returns no rows without querying when no listed queue exists" do
+      allow(mock_connection).to receive(:select_all)
+
+      expect(data_source.job_rows(queues: %w[pgbus_test_nope])).to eq([])
+      expect(data_source.job_rows(queues: [])).to eq([])
+      expect(mock_connection).not_to have_received(:select_all)
+    end
+
+    it "returns no rows for a queue filter outside the listed queues" do
+      allow(mock_connection).to receive(:select_all)
+
+      expect(data_source.job_rows(queue_name: "pgbus_test_default", queues: %w[pgbus_test_mailers])).to eq([])
+      expect(mock_connection).not_to have_received(:select_all)
+    end
+
+    it "leaves excluded queues out but still counts them as known for orphans" do
+      sql, = captured_sql("Pgbus Job List") { data_source.job_rows(exclude: %w[pgbus_test_mailers]) }
+
+      expect(sql).to include("FROM pgmq.q_pgbus_test_default m")
+      expect(sql).not_to include("pgmq.q_pgbus_test_mailers")
+      expect(sql).to include("NOT (f.queue_name = ANY(ARRAY['default', 'pgbus_test_default', 'mailers', 'pgbus_test_mailers']))")
+      expect(sql).to include("WHERE b.queue_name NOT IN ('mailers', 'pgbus_test_mailers')")
+    end
+
+    it "reads no blocked rows, never an empty IN (), when exclude: removes every listed queue" do
+      sql, = captured_sql("Pgbus Job List") do
+        data_source.job_rows(queues: %w[pgbus_test_mailers], exclude: %w[pgbus_test_mailers])
+      end
+
+      expect(sql).to include("FROM pgbus_blocked_executions b")
+      expect(sql).not_to include("IN ()")
+      expect(sql).to include("WHERE false")
+    end
+
+    it "counts only the listed queues' fragments" do
+      sql, = captured_sql("Pgbus Job State Counts") { data_source.job_state_counts(queues: %w[pgbus_test_mailers]) }
+
+      expect(sql).to include("FROM pgmq.q_pgbus_test_mailers m")
+      expect(sql).not_to include("pgmq.q_pgbus_test_default ")
+      expect(sql).not_to include("ANY(ARRAY")
+    end
+
+    it "returns empty counts without querying when no listed queue exists" do
+      allow(mock_connection).to receive(:select_all)
+
+      expect(data_source.job_state_counts(queues: %w[pgbus_test_nope])["all"]).to eq(0)
+      expect(mock_connection).not_to have_received(:select_all)
+    end
+
+    it "counts without the excluded queues" do
+      sql, = captured_sql("Pgbus Job State Counts") { data_source.job_state_counts(exclude: %w[pgbus_test_mailers]) }
+
+      expect(sql).not_to include("pgmq.q_pgbus_test_mailers")
+    end
+  end
+
   describe "#job_state_counts" do
     it "counts every state in one capped aggregate query" do
       sql, = captured_sql("Pgbus Job State Counts") { data_source.job_state_counts }

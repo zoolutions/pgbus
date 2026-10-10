@@ -193,6 +193,7 @@ da:
         mark_handled_failed: Kunne ikke markere begivenhed som håndteret.
         marked_handled: Begivenhed markeret som håndteret.
         none_selected: Ingen begivenheder valgt.
+        payload_redacted: 'Ikke gemt: payloaden indeholder stadig redigerede ([FILTERED]) værdier, som ville erstatte de rigtige.'
         payload_update_failed: Kunne ikke opdatere payload. Tjek at JSON er gyldig.
         payload_updated: Payload opdateret og begivenhed genindkøet.
         replay_failed: Begivenhed ikke fundet eller kunne ikke afspilles.
@@ -200,56 +201,118 @@ da:
         reroute_failed: Kunne ikke omdirigere begivenhed.
         rerouted: Begivenhed omdirigeret til målhandler.
       index:
-        discard_selected: Forkast valgte
-        discard_selected_confirm: Forkast valgte begivenheder?
-        pending_empty: Ingen ventende begivenheder
-        pending_headers:
-          enqueued: Indkøet
-          handler_queue: Handler-kø
-          id: ID
-          reads: Læsninger
-          routing_key: Routing-nøgle
         pending_title: Ventende begivenheder
-        processed_empty: Ingen begivenheder behandlet endnu
-        processed_headers:
-          event_id: Begivenheds-ID
-          handler: Håndterer
-          processed_at: Behandlet kl.
         processed_title: Behandlede begivenheder
+        subscribers:
+          covered: Drænes af en kørende consumer
+          uncovered: Ingen kørende consumer dækker dette mønster
+          unknown: Consumer-dækning ukendt
+          view_pending: Vis ventende
         subscribers_empty: Ingen abonnenter registreret
         subscribers_headers:
+          consumer: Consumer
           handler: Håndterer
           pattern: Mønster
+          pending: Ventende
           queue: Kø
         subscribers_title: Registrerede abonnenter
         title: Begivenheder
-      pending_table:
-        arguments: Payload
+      list:
         context: Kontekst
         discard: Forkast
         discard_confirm: Forkast denne begivenhed? Den vil blive arkiveret.
+        discard_failure_confirm: Kassér denne fejlede hændelse? Dens besked er ikke længere i køen.
+        discard_selected: Forkast valgte
+        discard_selected_confirm: Forkast valgte begivenheder?
         edit_payload: Rediger & prøv igen
         edit_payload_confirm: Opdater payload og genindkø denne begivenhed?
         edit_payload_label: 'JSON Payload:'
+        empty:
+          all: Ingen ventende begivenheder
+          ready: Ingen hændelser venter på at blive håndteret
+          retrying: Ingen hændelser venter på nyt forsøg
+          running: Ingen hændelser håndteres
+          scheduled: Ingen planlagte hændelser
         event_id: 'Begivenheds-ID:'
         full_json_payload: Fuld JSON Payload
+        headers:
+          actions: Handlinger
+          attempts: Forsøg
+          event: Hændelse
+          handler: Håndterer
+          id: ID
+          reason: Næste kørsel / Årsag
+          state: Tilstand
         headers_section: Headers
         mark_handled: Marker som håndteret
-        mark_handled_confirm: Marker denne begivenhed som håndteret? Den vil blive arkiveret og sprunget over ved afspilning.
+        mark_handled_confirm: Markér denne hændelse som håndteret? Beskeden arkiveres, og handleren kører den ikke.
         metadata: Metadata
         metadata_labels:
+          enqueued: 'Sat i kø:'
           last_read: 'Sist læst:'
+          published: 'Udgivet:'
           read_count: 'Læseantal:'
           visible_at: 'Synlig fra:'
+        payload: Payload
+        reasons:
+          handling_html: Håndteres af %{handler} — hentet %{ago} · lease udløber %{time}
+          lease_expired_html: Lease udløbet (consumer døde sandsynligvis) — leveres igen til %{handler}, forsøg %{attempt}
+          no_consumer_for_queue_html: Ingen kørende consumer abonnerer på %{pattern} (%{handler})
+          no_consumers_html: Ingen sund consumer kører
+          orphaned_html: Fejlede med %{error} i %{handler} — beskeden er ikke længere i køen
+          paused_html: Køen er sat på pause
+          retrying_dlq_html: "%{handler} forsøg %{attempt}/%{max} fejlede: %{error} — næste læsning flytter den til DLQ"
+          retrying_due_html: "%{handler} forsøg %{attempt}/%{max} fejlede: %{error} — næste forsøg nu"
+          retrying_html: "%{handler} forsøg %{attempt}/%{max} fejlede: %{error} — næste forsøg %{time}"
+          scheduled_html: Planlagt — håndteres af %{handler} %{time}
+          waiting_html: 'Venter — %{count} foran · næste: %{handler}'
+          waiting_unknown_html: Venter på %{handler}
         reroute: Omdiriger
         reroute_confirm: Omdiriger denne begivenhed til en anden handler?
         reroute_label: 'Målhandler:'
+        states:
+          ready: Klar
+          retrying: Prøver igen
+          running: Håndteres
+          scheduled: Planlagt
+        tabs:
+          all: Alle
+          ready: Klar
+          retrying: Prøver igen
+          running: Håndteres
+          scheduled: Planlagt
+        tabs_label: Hændelsestilstande
+        view_failure: Vis fejl
+      processed:
+        empty: Ingen begivenheder behandlet endnu
+        headers:
+          actions: Handlinger
+          event_id: Begivenheds-ID
+          handler: Håndterer
+          reason: Årsag
+          state: Tilstand
+        reasons:
+          abandoned_html: Claim blev tavs %{ago} — næste levering kører handleren igen
+          completed_html: Fuldført %{ago}
+          completed_legacy_html: Registreret %{ago} (enkeltfase-claim; opgradér med pgbus:add_processed_event_completion)
+          handling_html: Håndteres — claim opdateret %{ago}
+        replay: Afspil igen
+        replay_confirm: Lever denne hændelse til sin handler igen under et nyt hændelses-ID? Handleren kører igen.
+        replay_unavailable:
+          no_handler: Handleren er ikke længere registreret
+          not_archived: Ikke længere i arkivet
+        states:
+          abandoned: Tavs
+          completed: Fuldført
+          handling: Håndteres
       show:
         back: Tilbage til begivenheder
         labels:
+          completed_at: Fuldført
           event_id: Begivenheds-ID
           handler: Håndterer
           processed_at: Behandlet kl.
+          state: Tilstand
         not_found: Begivenhed ikke fundet
         title: Begivenhed %{event_id}
     helpers:

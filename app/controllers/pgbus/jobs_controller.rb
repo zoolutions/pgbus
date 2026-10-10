@@ -6,7 +6,8 @@ module Pgbus
 
     def index
       @queue = params[:queue].presence
-      load_job_list(queue_name: @queue, list_path: ->(extra) { jobs_path({ queue: @queue }.merge(extra)) })
+      load_job_list(queue_name: @queue, list_path: ->(extra) { jobs_path({ queue: @queue }.merge(extra)) },
+                    exclude: (data_source.handler_queue_physical_names unless @queue))
       @failed_total = @queue ? data_source.failed_events_count : @counts["retrying"]
       render_frame("pgbus/jobs/list") if params[:frame] == "list"
     end

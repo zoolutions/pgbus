@@ -1,9 +1,14 @@
 <div class="mb-6">
-  <%= pgbus_link_to "\u2190 #{t("pgbus.events.show.back")}", pgbus.events_path %>
+  <%= pgbus_link_to "← #{t("pgbus.events.show.back")}", pgbus.events_path %>
 </div>
 
 <% if @event %>
-  <h1 class="text-2xl font-bold text-gray-900 dark:text-white mb-6"><%= t("pgbus.events.show.title", event_id: @event["event_id"]) %></h1>
+  <div class="flex items-center justify-between mb-6">
+    <h1 class="text-2xl font-bold text-gray-900 dark:text-white"><%= t("pgbus.events.show.title", event_id: @event["event_id"]) %></h1>
+    <% if @claim.state == "completed" %>
+      <%= render "pgbus/events/replay", event: @event, replay_state: @replay_state %>
+    <% end %>
+  </div>
 
   <div class="rounded-lg bg-white dark:bg-gray-800 shadow ring-1 ring-gray-200 dark:ring-gray-700 p-6">
     <dl class="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -16,9 +21,22 @@
         <dd class="text-sm text-gray-900 dark:text-white"><%= @event["handler_class"] %></dd>
       </div>
       <div>
+        <dt class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.events.show.labels.state") %></dt>
+        <dd class="text-sm text-gray-900 dark:text-white">
+          <%= pgbus_processed_event_badge(@claim) %>
+          <span class="ml-2"><%= pgbus_processed_event_reason(@claim) %></span>
+        </dd>
+      </div>
+      <div>
         <dt class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.events.show.labels.processed_at") %></dt>
         <dd class="text-sm text-gray-900 dark:text-white"><%= pgbus_timestamp(@event["processed_at"]) %></dd>
       </div>
+      <% if @event["completed_at"] %>
+        <div>
+          <dt class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.events.show.labels.completed_at") %></dt>
+          <dd class="text-sm text-gray-900 dark:text-white"><%= pgbus_timestamp(@event["completed_at"]) %></dd>
+        </div>
+      <% end %>
     </dl>
   </div>
 <% else %>

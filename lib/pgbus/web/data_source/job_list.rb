@@ -18,6 +18,11 @@ module Pgbus
       # paging are bound parameters. Each fragment carries its own ORDER BY +
       # LIMIT so it stays index-backed and bounded; msg_ids from different
       # queues are not comparable, so the outer sort is by time.
+      #
+      # queues: cuts the list to those physical queues (the Events page passes
+      # the EventBus handler queues); exclude: leaves physical queues out (the
+      # Jobs page leaves the handler queues to the Events page). Both are
+      # optional, and without them the SQL is unchanged (issue #494).
       module JobList
         # A failure recorded after the read that ran the attempt means the job
         # is backing off; a later read (last_read_at past failed_at) means the
@@ -57,8 +62,8 @@ module Pgbus
           def capped?(state) = capped.include?(state.to_s)
         end
 
-        def job_rows(state: nil, queue_name: nil, page: 1, per_page: 25)
-          scope = job_list_scope(queue_name)
+        def job_rows(state: nil, queue_name: nil, queues: nil, exclude: nil, page: 1, per_page: 25)
+          scope = job_list_scope(queue_name, queues: queues, exclude: exclude)
           return [] unless scope
 
           binds = []
@@ -85,8 +90,8 @@ module Pgbus
           []
         end
 
-        def job_state_counts(queue_name: nil)
-          scope = job_list_scope(queue_name)
+        def job_state_counts(queue_name: nil, queues: nil, exclude: nil)
+          scope = job_list_scope(queue_name, queues: queues, exclude: exclude)
           return empty_state_counts unless scope
 
           kinds = []
@@ -126,17 +131,26 @@ module Pgbus
         private
 
         # The physical non-DLQ queues in view, grouped under their logical
-        # name, or nil when the requested queue does not exist.
-        def job_list_scope(queue_name)
+        # name, or nil when the requested queue (or every listed one) does not
+        # exist. Excluded queues stay known, so their failed rows never show up
+        # as orphans of an unknown queue.
+        def job_list_scope(queue_name, queues: nil, exclude: nil)
           names = queues_with_metrics.map { |q| q[:name] }.reject { |n| n.end_with?(Pgbus::DEAD_LETTER_SUFFIX) }
+          names &= queues if queues
+          return nil if queues && names.empty?
+
+          excluded = exclude ? names & exclude : []
+          names -= excluded
           if queue_name
             return nil unless names.include?(queue_name)
 
             names = [queue_name]
           end
 
-          queues = names.map { |n| [sanitize_name(n), logical_queue_name(n)] }
-          { queues: queues, by_logical: queues.group_by(&:last), filtered: !queue_name.nil? }
+          pairs = ->(list) { list.map { |n| [sanitize_name(n), logical_queue_name(n)] } }
+          scoped = pairs.call(names)
+          { queues: scoped, by_logical: scoped.group_by(&:last), excluded: pairs.call(excluded),
+            filtered: !queue_name.nil? || !queues.nil? }
         end
 
         def job_row_fragments(scope, state, state_param, fetch)
@@ -190,6 +204,7 @@ module Pgbus
           return fragments if scope[:filtered]
 
           known = scope[:by_logical].flat_map { |logical, tables| [logical, *tables.map(&:first)] }
+          known += scope[:excluded].flat_map { |(qtable, logical)| [logical, qtable] }
           where = known.empty? ? "true" : "NOT (f.queue_name = ANY(ARRAY[#{quoted_list(known)}]))"
           fragments << orphan_fragment("f.queue_name::text", where, fetch)
         end
@@ -223,10 +238,15 @@ module Pgbus
         end
 
         def blocked_where(scope)
-          return "" unless scope[:filtered]
+          if scope[:filtered]
+            return "WHERE false" if scope[:queues].empty?
 
-          qtable, logical = scope[:queues].first
-          "WHERE b.queue_name IN (#{quoted_list([logical, qtable])})"
+            "WHERE b.queue_name IN (#{quoted_list(scope[:queues].flat_map { |(qtable, logical)| [logical, qtable] })})"
+          elsif scope[:excluded].any?
+            "WHERE b.queue_name NOT IN (#{quoted_list(scope[:excluded].flat_map { |(qtable, logical)| [logical, qtable] })})"
+          else
+            ""
+          end
         end
 
         # [kind, sql selecting a `state` column] per fragment, uncapped.

@@ -38,7 +38,7 @@ class Views::Docs::Pages::Dashboard < DocsUI::Page
           [ "Jobs", "Enqueued and failed jobs, with retry / discard." ],
           [ "Dead letter", "New dead messages show why they died — the last recorded error when available, attempts, and source queue — filterable by DLQ and error class, with retry / discard and bulk actions." ],
           [ "Processes", [ :md, "Active workers, dispatcher, consumers with heartbeat status **and per-worker throughput** (e.g. `12.4/s processed · 0.2/s failed`)." ] ],
-          [ "Events", "Registered subscribers and processed events." ],
+          [ "Events", "Pending events with their state, the handler that runs each one and why it waits (or which attempt failed with what error); processed events say whether each claim completed, is being handled or went silent, with Replay when the claim completed, its handler is still registered and the archive still holds the event; subscribers say whether a running consumer drains them." ],
           [ "Outbox", "Transactional outbox entries pending publication." ],
           [ "Locks", "Uniqueness locks and concurrency keys — value, limit, lease, parked jobs; release a key or discard its parked jobs." ],
           [ "Insights", "Throughput chart, status distribution, slowest job classes." ]

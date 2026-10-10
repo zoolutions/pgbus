@@ -9,6 +9,11 @@ module Pgbus
       include DeadLetter
       include ListCounts
       include QueueSummary
+      include EventList
+
+      # pgbus_failed_events rows outside the EventBus handler queues; binds
+      # handler_queue_names_literal as $1.
+      NOT_HANDLER_QUEUE = "NOT (queue_name = ANY($1::text[]))"
 
       # Ceiling on how many parked jobs one dashboard release promotes, so a
       # key with thousands parked cannot hold the request open. The dispatcher
@@ -214,9 +219,12 @@ module Pgbus
         @client.archive_message(queue_name, msg_id.to_i, prefixed: false)
       end
 
+      # Job queues only: the Events page owns the EventBus handler queues
+      # (issue #494).
       def discard_all_enqueued
         dlq_suffix = Pgbus::DEAD_LETTER_SUFFIX
-        queues = queues_with_metrics.reject { |q| q[:name].end_with?(dlq_suffix) }
+        handlers = handler_queue_physical_names
+        queues = queues_with_metrics.reject { |q| q[:name].end_with?(dlq_suffix) || handlers.include?(q[:name]) }
         total = 0
 
         queues.each do |q|
@@ -312,11 +320,14 @@ module Pgbus
         false
       end
 
+      # Failed jobs only, like discard_all_failed: an event's message is still
+      # in its handler queue, so a re-sent copy would run the handler twice.
       def retry_all_failed
         count = 0
         loop do
           batch = connection.select_all(
-            "SELECT * FROM pgbus_failed_events ORDER BY id LIMIT 100", "Pgbus Retry Batch"
+            "SELECT * FROM pgbus_failed_events WHERE #{NOT_HANDLER_QUEUE} ORDER BY id LIMIT 100", "Pgbus Retry Batch",
+            [handler_queue_names_literal]
           ).to_a
           break if batch.empty?
 
@@ -339,12 +350,16 @@ module Pgbus
         count
       end
 
+      # Failed jobs only: failed EventBus handler rows belong to the Events
+      # page, whose list no Jobs-page action may reach (issue #494).
       def discard_all_failed
         release_locks_for_failed_events
         archive_all_failed_messages
 
-        result = connection.execute("DELETE FROM pgbus_failed_events")
-        result.cmd_tuples
+        connection.exec_delete(
+          "DELETE FROM pgbus_failed_events WHERE #{NOT_HANDLER_QUEUE}", "Pgbus Discard All Failed",
+          [handler_queue_names_literal]
+        )
       rescue StandardError => e
         Pgbus.logger.debug { "[Pgbus::Web] Error discarding all failed events: #{e.message}" }
         0
@@ -392,18 +407,6 @@ module Pgbus
       rescue StandardError => e
         Pgbus.logger.debug { "[Pgbus::Web] Error counting processed events: #{e.message}" }
         0
-      end
-
-      def replay_event(event)
-        # Re-publish the event payload to all matching subscribers
-        routing_key = event["routing_key"] || event["handler_class"]
-        return false unless routing_key
-
-        @client.publish_to_topic(routing_key, event["payload"] || "{}")
-        true
-      rescue StandardError => e
-        Pgbus.logger.debug { "[Pgbus::Web] Error replaying event: #{e.message}" }
-        false
       end
 
       # Recurring tasks
@@ -846,6 +849,14 @@ module Pgbus
         []
       end
 
+      # Logical and physical handler queue names as a text[] literal: failed
+      # rows carry the logical name, older ones the physical. Queue names are
+      # validated word characters, so the literal needs no quoting.
+      def handler_queue_names_literal
+        names = registered_subscribers.flat_map { |s| [s[:queue_name], s[:physical_queue_name]] }
+        "{#{names.compact.uniq.join(",")}}"
+      end
+
       # Physical queue names for all registered subscribers. Used for both
       # pending_events lookup and server-side validation of target queues
       # in reroute_event.
@@ -865,6 +876,7 @@ module Pgbus
       def discard_event(queue_name, msg_id)
         release_lock_for_message(queue_name, msg_id)
         @client.archive_message(queue_name, msg_id.to_i, prefixed: false)
+        clear_event_failure(queue_name, msg_id)
         true
       rescue StandardError => e
         Pgbus.logger.debug { "[Pgbus::Web] Error discarding event #{msg_id}: #{e.message}" }
@@ -888,16 +900,14 @@ module Pgbus
         event_id = raw["event_id"]
         return false unless event_id
 
-        ProcessedEvent.insert(
-          { event_id: event_id, handler_class: handler_class, processed_at: Time.now.utc },
-          unique_by: %i[event_id handler_class]
-        )
+        record_event_handled(event_id, handler_class)
         # Release the uniqueness lock while we still hold the payload in
         # memory — otherwise the message is archived but the lock row stays
         # behind, blocking later publishes with the same key. Mirrors
         # discard_event.
         release_lock_for_payload(detail[:message])
         @client.archive_message(queue_name, msg_id.to_i, prefixed: false)
+        clear_event_failure(queue_name, msg_id)
         true
       rescue StandardError => e
         Pgbus.logger.debug { "[Pgbus::Web] Error marking event #{msg_id} handled: #{e.message}" }
@@ -922,6 +932,7 @@ module Pgbus
           txn.produce(queue_name, parsed.to_json, headers: detail[:headers])
           txn.delete(queue_name, msg_id.to_i)
         end
+        clear_event_failure(queue_name, msg_id)
         true
       rescue StandardError => e
         Pgbus.logger.debug { "[Pgbus::Web] Error editing event #{msg_id}: #{e.message}" }
@@ -939,6 +950,7 @@ module Pgbus
           txn.produce(target_queue, detail[:message], headers: detail[:headers])
           txn.delete(source_queue, msg_id.to_i)
         end
+        clear_event_failure(source_queue, msg_id)
         true
       rescue StandardError => e
         Pgbus.logger.debug { "[Pgbus::Web] Error rerouting event #{msg_id}: #{e.message}" }
@@ -957,6 +969,33 @@ module Pgbus
           next
         end
         count
+      end
+
+      # A completed marker on a two-phase schema (completed_at): without it the
+      # audit reads the row as a claim that went silent, and a pending claim
+      # left by a failed attempt would stay pending (issue #494). The legacy
+      # schema keeps the single-phase insert.
+      def record_event_handled(event_id, handler_class)
+        now = Time.now.utc
+        row = { event_id: event_id, handler_class: handler_class, processed_at: now }
+        if ProcessedEvent.completion_column?
+          ProcessedEvent.upsert(row.merge(completed_at: now), unique_by: %i[event_id handler_class],
+                                                              update_only: [:completed_at])
+        else
+          ProcessedEvent.insert(row, unique_by: %i[event_id handler_class])
+        end
+      end
+
+      # The failed row of an event message an action just took out of its
+      # handler queue (issue #494). The consumer records the logical name;
+      # both spellings are cleared. A failure here never undoes the action.
+      def clear_event_failure(queue_name, msg_id)
+        connection.exec_delete(
+          "DELETE FROM pgbus_failed_events WHERE queue_name IN ($1, $2) AND msg_id = $3", "Pgbus Clear Event Failure",
+          [logical_queue_name(queue_name), queue_name, msg_id.to_i]
+        )
+      rescue StandardError => e
+        Pgbus.logger.error { "[Pgbus::Web] Error clearing the failed row of event #{msg_id}: #{e.class}: #{e.message}" }
       end
 
       # Subscriber registry. `queue_name` is the logical name the subscriber
@@ -1599,7 +1638,8 @@ module Pgbus
       # Collect uniqueness keys from all failed events and release their locks.
       def release_locks_for_failed_events
         rows = connection.select_all(
-          "SELECT payload FROM pgbus_failed_events", "Pgbus Collect Failed Keys"
+          "SELECT payload FROM pgbus_failed_events WHERE #{NOT_HANDLER_QUEUE}", "Pgbus Collect Failed Keys",
+          [handler_queue_names_literal]
         )
 
         keys = rows.to_a.filter_map { |row| extract_uniqueness_key_from_payload_str(row["payload"]) }
@@ -1643,8 +1683,8 @@ module Pgbus
       # so one bad queue can't block progress on the others.
       def archive_all_failed_messages
         rows = connection.select_all(
-          "SELECT id, queue_name, msg_id FROM pgbus_failed_events WHERE msg_id IS NOT NULL",
-          "Pgbus Collect Failed Messages"
+          "SELECT id, queue_name, msg_id FROM pgbus_failed_events WHERE msg_id IS NOT NULL AND #{NOT_HANDLER_QUEUE}",
+          "Pgbus Collect Failed Messages", [handler_queue_names_literal]
         )
 
         grouped = rows.to_a.group_by { |row| row["queue_name"] }

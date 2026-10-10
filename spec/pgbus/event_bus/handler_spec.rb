@@ -555,6 +555,13 @@ RSpec.describe Pgbus::EventBus::Handler do
     end
   end
 
+  describe ".claim_ownership_window" do
+    it "is two visibility heartbeat intervals, the window the dashboard shares (issue #494)" do
+      expect(described_class.claim_ownership_window)
+        .to eq(Pgbus.configuration.effective_visibility_heartbeat_interval * 2)
+    end
+  end
+
   describe "#handle (base class)" do
     it "raises NotImplementedError when not overridden" do
       handler = described_class.new

@@ -219,4 +219,14 @@ RSpec.describe Pgbus::EventBus::Registry do
       expect(registry.queue_names_for_topics(["orders"])).to eq(%w[orders_handler])
     end
   end
+
+  describe "#pattern_matches?" do
+    it "matches * to one word and # to any" do
+      registry = described_class.instance
+      expect(registry.pattern_matches?("orders.*", "orders.created")).to be(true)
+      expect(registry.pattern_matches?("orders.*", "orders.created.v2")).to be(false)
+      expect(registry.pattern_matches?("orders.#", "orders.created.v2")).to be(true)
+      expect(registry.pattern_matches?("orders.#", "webhook.sent")).to be(false)
+    end
+  end
 end

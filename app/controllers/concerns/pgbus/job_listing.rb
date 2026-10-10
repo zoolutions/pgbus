@@ -13,13 +13,16 @@ module Pgbus
     # auto-refresh source, so each page keeps them on its own URL. extra is
     # symbol-keyed, never request.query_parameters (string keys would repeat
     # a param in the URL).
-    def load_job_list(queue_name:, list_path:)
+    #
+    # exclude: physical queues to leave out (the Jobs page leaves the EventBus
+    # handler queues to the Events page, issue #494).
+    def load_job_list(queue_name:, list_path:, exclude: nil)
       @state = job_state_param
       @page = page_param
       @per_page = per_page
-      @rows = data_source.job_rows(state: (@state unless @state == "all"), queue_name: queue_name,
+      @rows = data_source.job_rows(state: (@state unless @state == "all"), queue_name: queue_name, exclude: exclude,
                                    page: @page, per_page: @per_page)
-      @counts = data_source.job_state_counts(queue_name: queue_name)
+      @counts = data_source.job_state_counts(queue_name: queue_name, exclude: exclude)
       @ahead = data_source.jobs_ahead(@rows)
       @state_context = data_source.job_list_context
       @list_scoped = !queue_name.nil?

@@ -193,6 +193,7 @@ fr:
         mark_handled_failed: Impossible de marquer l'événement comme traité.
         marked_handled: Événement marqué comme traité.
         none_selected: Aucun événement sélectionné.
+        payload_redacted: 'Non enregistré : le payload contient encore des valeurs masquées ([FILTERED]) qui remplaceraient les vraies.'
         payload_update_failed: Impossible de mettre à jour la charge utile. Vérifiez que le JSON est valide.
         payload_updated: Charge utile mise à jour et événement réenregistré.
         replay_failed: Événement non trouvé ou impossible à rejouer.
@@ -200,56 +201,118 @@ fr:
         reroute_failed: Impossible de rediriger l'événement.
         rerouted: Événement redirigé vers le gestionnaire cible.
       index:
-        discard_selected: Jeter la sélection
-        discard_selected_confirm: Jeter les événements sélectionnés ?
-        pending_empty: Aucun événement en attente
-        pending_headers:
-          enqueued: Enregistré
-          handler_queue: File du gestionnaire
-          id: ID
-          reads: Lectures
-          routing_key: Clé de routage
         pending_title: Événements en attente
-        processed_empty: Aucun événement traité pour le moment
-        processed_headers:
-          event_id: ID de l'événement
-          handler: Gestionnaire
-          processed_at: Traité à
         processed_title: Événements traités
+        subscribers:
+          covered: Consommé par un consumer en cours d'exécution
+          uncovered: Aucun consumer en cours d'exécution ne couvre ce modèle
+          unknown: Couverture des consumers inconnue
+          view_pending: Voir les événements en attente
         subscribers_empty: Aucun abonné enregistré
         subscribers_headers:
+          consumer: Consumer
           handler: Gestionnaire
           pattern: Modèle
+          pending: En attente
           queue: File d'attente
         subscribers_title: Abonnés enregistrés
         title: Événements
-      pending_table:
-        arguments: Charge utile
+      list:
         context: Contexte
         discard: Jeter
         discard_confirm: Jeter cet événement ? Il sera archivé.
+        discard_failure_confirm: Abandonner cet événement en échec ? Son message n'est plus dans la file.
+        discard_selected: Jeter la sélection
+        discard_selected_confirm: Jeter les événements sélectionnés ?
         edit_payload: Modifier & Réessayer
         edit_payload_confirm: Mettre à jour la charge utile et réenregistrer cet événement ?
         edit_payload_label: 'Charge utile JSON :'
+        empty:
+          all: Aucun événement en attente
+          ready: Aucun événement en attente de traitement
+          retrying: Aucun événement en attente de nouvelle tentative
+          running: Aucun événement en cours de traitement
+          scheduled: Aucun événement planifié
         event_id: 'ID de l''événement :'
         full_json_payload: Charge utile JSON complète
+        headers:
+          actions: Actions
+          attempts: Tentatives
+          event: Événement
+          handler: Gestionnaire
+          id: ID
+          reason: Prochaine exécution / Raison
+          state: État
         headers_section: En-têtes
         mark_handled: Marquer comme traité
-        mark_handled_confirm: Marquer cet événement comme traité ? Il sera archivé et ignoré lors du relecture.
+        mark_handled_confirm: Marquer cet événement comme traité ? Son message est archivé et le handler ne l'exécute pas.
         metadata: Métadonnées
         metadata_labels:
+          enqueued: 'Mis en file :'
           last_read: 'Dernière lecture :'
+          published: 'Publié :'
           read_count: 'Nombre de lectures :'
           visible_at: 'Visible à :'
+        payload: Charge utile
+        reasons:
+          handling_html: En cours de traitement par %{handler} — réclamé %{ago} · le bail expire %{time}
+          lease_expired_html: Bail expiré (le consumer est probablement mort) — nouvelle livraison à %{handler}, tentative %{attempt}
+          no_consumer_for_queue_html: Aucun consumer en cours d'exécution n'est abonné à %{pattern} (%{handler})
+          no_consumers_html: Aucun consumer sain en cours d'exécution
+          orphaned_html: Échec avec %{error} dans %{handler} — le message n'est plus dans la file
+          paused_html: File en pause
+          retrying_dlq_html: "%{handler} tentative %{attempt}/%{max} en échec : %{error} — la prochaine lecture le déplace vers la DLQ"
+          retrying_due_html: "%{handler} tentative %{attempt}/%{max} en échec : %{error} — prochaine tentative maintenant"
+          retrying_html: "%{handler} tentative %{attempt}/%{max} en échec : %{error} — prochaine tentative %{time}"
+          scheduled_html: Planifié — traité par %{handler} %{time}
+          waiting_html: 'En attente — %{count} devant · suivant : %{handler}'
+          waiting_unknown_html: En attente de %{handler}
         reroute: Rediriger
         reroute_confirm: Rediriger cet événement vers un autre gestionnaire ?
         reroute_label: 'Gestionnaire cible :'
+        states:
+          ready: Prêt
+          retrying: Nouvel essai
+          running: En traitement
+          scheduled: Planifié
+        tabs:
+          all: Tous
+          ready: Prêts
+          retrying: Nouvel essai
+          running: En traitement
+          scheduled: Planifiés
+        tabs_label: États des événements
+        view_failure: Voir l'échec
+      processed:
+        empty: Aucun événement traité pour le moment
+        headers:
+          actions: Actions
+          event_id: ID de l'événement
+          handler: Gestionnaire
+          reason: Raison
+          state: État
+        reasons:
+          abandoned_html: Le claim s'est tu %{ago} — la prochaine livraison relance le handler
+          completed_html: Terminé %{ago}
+          completed_legacy_html: Enregistré %{ago} (claim en une phase ; mettre à niveau avec pgbus:add_processed_event_completion)
+          handling_html: En traitement — claim rafraîchi %{ago}
+        replay: Rejouer
+        replay_confirm: Relivrer cet événement à son handler sous un nouvel ID d'événement ? Le handler s'exécute à nouveau.
+        replay_unavailable:
+          no_handler: Le handler n'est plus enregistré
+          not_archived: N'est plus dans l'archive
+        states:
+          abandoned: Silencieux
+          completed: Terminé
+          handling: En traitement
       show:
         back: Retour aux événements
         labels:
+          completed_at: Terminé le
           event_id: ID de l'événement
           handler: Gestionnaire
           processed_at: Traité à
+          state: État
         not_found: Événement non trouvé
         title: Événement %{event_id}
     helpers:

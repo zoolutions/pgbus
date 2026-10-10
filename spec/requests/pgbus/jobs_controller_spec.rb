@@ -23,6 +23,22 @@ RSpec.describe "Pgbus::JobsController", type: :request do
       end
     end
 
+    it "leaves the EventBus handler queues to the Events page" do
+      @stub_data_source.subscribers_list = [{ pattern: "orders.#", handler_class: "OrderHandler",
+                                              queue_name: "orders_handler", physical_queue_name: "pgbus_orders_handler" }]
+
+      get "/pgbus/jobs"
+
+      expect(job_rows_call).to include(exclude: ["pgbus_orders_handler"])
+      expect(@stub_data_source.calls[:job_state_counts].last.first).to include(exclude: ["pgbus_orders_handler"])
+    end
+
+    it "keeps a handler queue's messages on its own queue filter" do
+      get "/pgbus/jobs", params: { queue: "pgbus_orders_handler" }
+
+      expect(job_rows_call).to include(queue_name: "pgbus_orders_handler", exclude: nil)
+    end
+
     it "treats the old status=failed link as the Retrying tab" do
       get "/pgbus/jobs", params: { status: "failed" }
 
