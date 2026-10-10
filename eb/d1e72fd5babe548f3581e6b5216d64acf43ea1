@@ -1,0 +1,80 @@
+spec/support/pgbus/stub_data_source/sample_data.rb
+  s_364c84711a3705::t_4c7555067736d5 248-253
+  s_364c84711a3705::t_31fb43e156f651 124,147-149,229-232,235-239,242-243,245-247,254-258,263-264,267-272
+  s_364c84711a3705::t_0a60604f14dd9b 262,265-266
+spec/pgbus/web/dead_letter_reason_spec.rb
+  s_364c84711a3705::t_9d9dda684524df 1-97
+spec/requests/pgbus/dead_letter_controller_spec.rb
+  s_364c84711a3705::t_61a4589965e0cd 16-67,78-81
+spec/pgbus/helpers/application_helper_spec.rb
+  s_364c84711a3705::t_17737f1922f7e7 363-374,376-423
+  s_364c84711a3705::t_306b1d4e603a15 8
+  s_364c84711a3705::t_0a60604f14dd9b 375
+spec/support/pgbus/stub_data_source.rb
+  s_364c84711a3705::t_fd0870758d5312 78,80-90
+app/views/pgbus/dead_letter/_messages_table.html.erb
+  s_364c84711a3705::t_4a6adba8a95af7 1-26,49-52,56-57,60-61,66
+lib/pgbus/web/dead_letter_reason.rb
+  s_364c84711a3705::t_0ff988b550928c 1-74
+config/locales/es.yml
+  s_364c84711a3705::t_e68b587225211e 99-114,134-136,138-139,152-161,169-171
+spec/system/dead_letter_spec.rb
+  s_364c84711a3705::t_ed746d01d8275b 54,64,92-126,128-185,187-231
+  s_364c84711a3705::t_0a60604f14dd9b 127,186
+config/locales/de.yml
+  s_364c84711a3705::t_e68b587225211e 99-114,134-136,138-140,152-161,169-171
+app/views/pgbus/dead_letter/_error.html.erb
+  s_364c84711a3705::t_fba46350069061 11
+  s_364c84711a3705::t_c9c5b7151578c8 1-10,12-13
+config/locales/da.yml
+  s_364c84711a3705::t_e68b587225211e 99-114,134-136,138-139,152-161,169-171
+config/locales/pt.yml
+  s_364c84711a3705::t_e68b587225211e 99-114,134-136,138-140,152-161,169-171
+app/helpers/pgbus/application_helper.rb
+  s_364c84711a3705::t_aafbe7236a66f4 237-238
+  s_364c84711a3705::t_a39ce2ebb46a8c 231-236,240-241
+  s_364c84711a3705::t_3f648b53bf64b3 205-230,239,242-243
+app/views/pgbus/dead_letter/_row.html.erb
+  s_364c84711a3705::t_a39ce2ebb46a8c 19
+  s_364c84711a3705::t_f5971b4454dbf0 1-18,20-58,61-75
+  s_364c84711a3705::t_e3d48584e1b299 59-60
+app/frontend/pgbus/style.css
+  s_364c84711a3705::t_1762ced848d80f 2
+config/locales/fr.yml
+  s_364c84711a3705::t_e68b587225211e 99-114,134-136,138-140,152-161,169-171
+config/locales/it.yml
+  s_364c84711a3705::t_e68b587225211e 99-114,134-136,138-140,152-161,169-171
+config/locales/fi.yml
+  s_364c84711a3705::t_e68b587225211e 99-114,134-136,138-139,152-161,169-171
+app/views/pgbus/dead_letter/show.html.erb
+  s_364c84711a3705::t_f96ee16c69be43 8-27,31
+  s_364c84711a3705::t_fba46350069061 64,70
+config/locales/ja.yml
+  s_364c84711a3705::t_e68b587225211e 99-114,134-136,138-140,152-161,169-171
+config/locales/nl.yml
+  s_364c84711a3705::t_e68b587225211e 99-114,134-136,138-139,152-161,169-171
+config/locales/en.yml
+  s_364c84711a3705::t_e68b587225211e 99-114,134-136,138-140,152-161,169-171
+app/controllers/pgbus/dead_letter_controller.rb
+  s_364c84711a3705::t_0a020e940219b8 5-6,10-14,16-20,26,77-88
+config/locales/nb.yml
+  s_364c84711a3705::t_e68b587225211e 99-114,134-136,138-139,152-161,169-171
+config/locales/sv.yml
+  s_364c84711a3705::t_e68b587225211e 99-114,134-136,138-139,152-161,169-171
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "ebd1e72fd5babe548f3581e6b5216d64acf43ea1",
+  "prompts": {},
+  "sessions": {
+    "s_364c84711a3705": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8cab8bba-398f-49c5-ab3b-66a236e3b01c",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
