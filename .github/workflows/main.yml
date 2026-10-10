@@ -146,7 +146,7 @@ jobs:
           bundler-cache: true
       # Every DB- and browser-free spec set runs here, so request specs exercise
       # the controllers on each Ruby × Rails leg. spec/pgbus/ci_coverage_spec.rb fails
-      # when a spec directory or top-level spec file is not run by any job.
+      # when a spec file outside spec/dummy and spec/support is not run by any job.
       - name: Run unit tests
         run: >-
           bundle exec rspec spec/pgbus/ spec/generators/ spec/requests/
