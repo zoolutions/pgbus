@@ -57,14 +57,13 @@ RSpec.describe Pgbus::ProcessesHelper do
                                "removed at the dispatcher's next sweep (within 5m 0s)")
     end
 
-    it "has a sentence for every reason and next key" do
-      %w[healthy_loop healthy_heartbeat healthy_detection_off stalled].each do |key|
-        expect(text(helper.pgbus_process_status(result(reason_key: key)))).not_to include("translation missing")
-      end
-      %w[stale_reaped stale_unreaped stalled_supervised stalled_standalone stalled_maintenance
-         stalled_schedule].each do |key|
-        html = helper.pgbus_process_status(result(next_key: key, next_args: { within: 300 }))
-        expect(text(html)).not_to include("translation missing")
+    it "has a sentence for every reason and next key in every locale" do
+      reasons = %w[healthy_loop healthy_heartbeat healthy_detection_off stalled stale]
+      nexts = %w[stale_reaped stale_unreaped stalled_supervised stalled_standalone stalled_maintenance stalled_schedule]
+      keys = reasons.map { |k| "pgbus.processes.state.reasons.#{k}_html" } + nexts.map { |k| "pgbus.processes.state.next.#{k}" }
+
+      %i[en da de es fi fr it ja nb nl pt sv].each do |locale|
+        keys.each { |key| expect(I18n.exists?(key, locale)).to be(true), "#{locale}: #{key} missing" }
       end
     end
 
@@ -126,6 +125,7 @@ RSpec.describe Pgbus::ProcessesHelper do
   end
 
   describe "#pgbus_process_raw_metadata" do
+    # Counters and RSS stay: Recycle shows them only when a limit is set.
     it "leaves out every key the row already renders" do
       metadata = { "queues" => ["default"], "execution_mode" => "threads", "capsule" => "render", "process" => "1/2",
                    "supervisor_pid" => 1, "memory_mb" => 3, "started_at" => 1.0, "capacity" => 5, "busy" => 1,
@@ -134,7 +134,7 @@ RSpec.describe Pgbus::ProcessesHelper do
                    "topics" => ["a.*"], "tasks" => 3, "hostname" => "h", "pid" => 1 }
 
       expect(helper.pgbus_process_raw_metadata(metadata.merge("consumer_priority" => 0)).keys)
-        .to eq(%w[execution_mode consumer_priority])
+        .to eq(%w[execution_mode memory_mb jobs_processed jobs_failed consumer_priority])
     end
 
     it "is empty for non-Hash metadata" do

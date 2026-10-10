@@ -80,7 +80,8 @@ module Pgbus
       def reset_cache! = self
       def queues_with_metrics = @queues
       def queue_detail(name) = @queues.find { |q| q[:name].include?(name) }
-      def processes = @processes_list
+      # The stub never derives; thresholds is accepted for DataSource's signature.
+      def processes(thresholds: nil) = @processes_list
 
       # The real config and constants, as DataSource builds them;
       # process_thresholds_overrides lets a spec turn stall detection off.

@@ -30,7 +30,8 @@ module Pgbus
 
       def worker(metadata)
         queues = list(metadata["queues"])
-        drains = if queues == ["*"] then ["drains_all", {}]
+        # A "*" anywhere puts the worker in wildcard mode (Worker#@wildcard).
+        drains = if queues.include?("*") then ["drains_all", {}]
                  elsif queues.any? then ["drains", { queues: queues.join(", ") }]
                  end
         [drains, *pool(metadata), buffered(metadata), *rates(metadata["rates"])].compact

@@ -119,7 +119,7 @@ module Pgbus
         end
 
         def sample_stats
-          { total_queues: 8, total_depth: 145, total_visible: 115, active_processes: 7, failed_count: 5, dlq_depth: 4,
+          { total_queues: 8, total_depth: 145, total_visible: 115, active_processes: 10, failed_count: 5, dlq_depth: 4,
             recurring_count: PAGED_ROWS, throughput_rate: 42.7, total_dead_tuples: 1_250, tables_needing_vacuum: 1,
             oldest_transaction_age_sec: 8, parked_total: 5, oldest_parked_age_sec: 300, slots_held: 3,
             keys_at_limit: 1 }

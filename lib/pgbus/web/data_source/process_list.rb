@@ -7,9 +7,10 @@ module Pgbus
       # them in words (issue #493). Every status in one result set is derived
       # against one ProcessState::Thresholds, so one now.
       module ProcessList
-        def processes
+        # thresholds: pass the ones the caller puts the rows in words with, so
+        # badge and sentence share one now.
+        def processes(thresholds: process_thresholds)
           rows = connection.select_all("SELECT * FROM pgbus_processes ORDER BY kind, created_at")
-          thresholds = process_thresholds
           rows.to_a.map { |r| format_process(r, thresholds) }
         rescue StandardError => e
           Pgbus.logger.debug { "[Pgbus::Web] Error fetching processes: #{e.message}" }

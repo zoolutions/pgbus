@@ -882,22 +882,23 @@ module Pgbus
       end
 
       # Facts the Processes page states (issue #493), fixed for the process's
-      # life: when it started, which supervisor forked it (ppid; the page only
-      # groups under it when that pid is a supervisor row on this host) and the
-      # recycle limits this worker resolved, which may be its capsule's.
+      # life: when it started and which supervisor forked it (ppid; the page
+      # only groups under it when that pid is a supervisor row on this host).
       def lifecycle_metadata
-        {
-          started_at: @started_at.to_f, supervisor_pid: ::Process.ppid,
-          max_jobs: recycle_limit(:max_jobs_per_worker), max_memory_mb: recycle_limit(:max_memory_mb),
-          max_lifetime: recycle_limit(:max_worker_lifetime)
-        }
+        { started_at: @started_at.to_f, supervisor_pid: ::Process.ppid }
       end
 
       # Read once per beat: one atomic (threads) or one mutex (async) for the
-      # pool, MemoryUsage's 5s cache for RSS (a ps subprocess on darwin).
+      # pool, MemoryUsage's 5s cache for RSS (a ps subprocess on darwin), and
+      # the recycle limits resolved as the recycle check resolves them (a
+      # capsule's own when set), so the page follows a config change.
       def pool_metadata
         pool = @pool.metadata
-        { "capacity" => pool[:capacity], "busy" => pool[:busy], "memory_mb" => current_memory_mb }
+        {
+          "capacity" => pool[:capacity], "busy" => pool[:busy], "memory_mb" => current_memory_mb,
+          "max_jobs" => recycle_limit(:max_jobs_per_worker), "max_memory_mb" => recycle_limit(:max_memory_mb),
+          "max_lifetime" => recycle_limit(:max_worker_lifetime)
+        }.compact
       end
 
       def shutdown

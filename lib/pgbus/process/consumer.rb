@@ -617,10 +617,8 @@ module Pgbus
           kind: "consumer",
           metadata: {
             topics: topics, threads: threads, pid: ::Process.pid, execution_mode: @execution_mode,
-            started_at: @started_at.to_f, supervisor_pid: ::Process.ppid,
-            max_jobs: config.max_jobs_per_worker, max_memory_mb: config.max_memory_mb,
-            max_lifetime: config.max_worker_lifetime
-          }.compact,
+            started_at: @started_at.to_f, supervisor_pid: ::Process.ppid
+          },
           on_beat: -> { on_heartbeat },
           loop_tick_supplier: -> { @loop_tick_at.get },
           metadata_supplier: -> { throughput_metadata }
@@ -635,8 +633,10 @@ module Pgbus
         pool = @pool.metadata
         {
           "jobs_processed" => @jobs_processed.value, "buffered" => @claim_buffer.size,
-          "capacity" => pool[:capacity], "busy" => pool[:busy], "memory_mb" => current_memory_mb
-        }
+          "capacity" => pool[:capacity], "busy" => pool[:busy], "memory_mb" => current_memory_mb,
+          "max_jobs" => config.max_jobs_per_worker, "max_memory_mb" => config.max_memory_mb,
+          "max_lifetime" => config.max_worker_lifetime
+        }.compact
       end
 
       # Runs once per heartbeat interval (not per message), so it's the right

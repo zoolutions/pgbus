@@ -33,8 +33,9 @@ RSpec.describe Pgbus::Web::ProcessActivity do
         expect(activity("worker", { "queues" => "default,mailers" }).first).to eq(["drains", { queues: "default, mailers" }])
       end
 
-      it "says it drains every queue for a wildcard" do
+      it "says it drains every queue for a wildcard, alone or in a list" do
         expect(activity("worker", { "queues" => ["*"] }).first).to eq(["drains_all", {}])
+        expect(activity("worker", { "queues" => "default,*" }).first).to eq(["drains_all", {}])
       end
 
       it "counts slots for an async worker" do

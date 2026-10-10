@@ -56,6 +56,12 @@ RSpec.describe Pgbus::Web::DataSource::ProcessList do
       expect(data_source.processes.last(2).map { |p| [p[:status], p[:supervisor_pid]] }).to eq([[:healthy, 7], [:healthy, nil]])
     end
 
+    it "derives with the thresholds it is given, so a caller can reuse them for the words" do
+      later = data_source.process_thresholds(now: now + 600)
+
+      expect(data_source.processes(thresholds: later).map { |p| p[:status] }).to all(eq(:stale))
+    end
+
     it "derives against the dashboard's stall_threshold" do
       allow(Pgbus.configuration).to receive(:stall_threshold).and_return(nil)
 

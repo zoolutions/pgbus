@@ -7,8 +7,9 @@ module Pgbus
     private
 
     def load_processes
-      rows = data_source.processes
-      context = data_source.process_context(rows: rows)
+      thresholds = data_source.process_thresholds
+      rows = data_source.processes(thresholds: thresholds)
+      context = data_source.process_context(rows: rows, thresholds: thresholds)
       @processes = Web::ProcessState.order(rows, context)
       @process_states = @processes.to_h { |p| [p[:id], Web::ProcessState.present(p, context)] }
     end

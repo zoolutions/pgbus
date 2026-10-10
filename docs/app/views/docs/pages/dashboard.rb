@@ -52,15 +52,17 @@ class Views::Docs::Pages::Dashboard < DocsUI::Page
         plain ". Stats are buffered and bulk-inserted; if the migration hasn't run, recording is silently skipped."
       end
       md <<~'MD'
-        Each process writes what the Processes page states into its heartbeat
-        metadata, once per 60 s beat and never per job: its start time, the pid of
-        the supervisor that forked it, and (workers and consumers) the pool's
-        capacity and busy count, buffered claims, RSS, handled/processed counts,
-        live rates and the recycle limits that process resolved (a capsule's own
-        limits when set). A process from before these keys existed shows "—" where
-        a fact is missing. A row is grouped under a supervisor only when that
-        supervisor's row is on the same host. The stall limits the page quotes are
-        the dashboard host's `stall_threshold`, as the badge always was.
+        Every process registers its start time, and processes the supervisor forks
+        register its pid. Workers and consumers refresh their pool's capacity and
+        busy count, buffered claims, RSS, processed/handled counts and recycle
+        limits (a worker uses its capsule's own limits when set) once per 60 s
+        beat, never per job. Workers also report live rates; consumers do not.
+        A process from before these keys existed shows "—" where a fact is
+        missing. A row is grouped under a supervisor only when that supervisor's
+        row is on the same host. The stall limits the page quotes are derived from
+        the dashboard host's `stall_threshold`: workers get it as is, dispatchers
+        and schedulers add their sleep interval, consumers add their polling
+        allowance.
       MD
     end
   end

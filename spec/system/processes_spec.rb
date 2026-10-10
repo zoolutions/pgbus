@@ -93,10 +93,13 @@ RSpec.describe "Processes", type: :system do
     end
 
     it "lists each supervisor before its children, then standalone processes, host by host" do
+      # Fed as SQL orders them (kind, created_at); inside a group that order holds.
+      @stub_data_source.processes_list = @stub_data_source.sample_processes(now).sort_by { |p| [p[:kind], p[:id]] }
+
       visit "/pgbus/processes"
 
       ids = all("tbody tr[id^='process-']").map { |tr| tr[:id].delete_prefix("process-").to_i }
-      expect(ids).to eq([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+      expect(ids).to eq([1, 4, 6, 5, 2, 3, 7, 8, 9, 10])
     end
 
     it "names each fork's capsule and process slot (issue #503)" do
@@ -135,7 +138,8 @@ RSpec.describe "Processes", type: :system do
       expect(detail).to have_text("(42m ago)")
       expect(detail).to have_text("execution_mode: threads")
       expect(detail).to have_text("consumer_priority: 0")
-      %w[supervisor_pid memory_mb started_at capacity busy max_jobs max_memory_mb max_lifetime loop_tick_at
+      expect(detail).to have_text("jobs_failed: 3")
+      %w[supervisor_pid started_at capacity busy max_jobs max_memory_mb max_lifetime loop_tick_at
          rates capsule].each do |key|
         expect(detail).to have_no_text("#{key}:")
       end

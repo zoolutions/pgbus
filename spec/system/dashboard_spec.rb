@@ -74,9 +74,18 @@ RSpec.describe "Dashboard", type: :system do
 
       within("turbo-frame#dashboard-processes") do
         expect(page).to have_css("tbody tr", count: 10)
-        expect(page).to have_text("Loop ticked 5s ago (limit 1m 30s)")
-        expect(page).to have_text("Loop last ticked 2m ago (limit 1m 30s) — the supervisor's watchdog restarts it")
-        expect(page).to have_text("No heartbeat for 7m 0s (limit 5m 0s) — probably dead")
+        expect(page).to have_css("tbody tr [data-testid=process-reason]", count: 10)
+        {
+          1 => "Heartbeat 12s ago (limit 5m 0s)",
+          2 => "Loop ticked 5s ago (limit 1m 30s)",
+          3 => "Loop last ticked 2m ago (limit 1m 30s) — the supervisor's watchdog restarts it",
+          4 => "Loop ticked 3s ago (limit 1m 31s)",
+          6 => "No heartbeat for 7m 0s (limit 5m 0s) — probably dead",
+          7 => "no supervisor to restart it",
+          10 => "Loop ticked 4s ago (limit 1m 30s)"
+        }.each do |id, words|
+          expect(find("tr#dashboard-process-#{id}")).to have_text(words)
+        end
       end
     end
 

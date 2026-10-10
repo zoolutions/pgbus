@@ -7,11 +7,12 @@ module Pgbus
   module ProcessesHelper
     PART_SEPARATOR = " · "
 
-    # Metadata keys the row already renders (status, activity, recycle,
-    # Process cell, uptime), left out of the expansion's raw chips.
+    # Metadata keys the row always renders (status, activity, recycle limits,
+    # Process cell, uptime), left out of the expansion's raw chips. Counters
+    # and RSS stay: Recycle shows them only when a limit is configured.
     RENDERED_METADATA_KEYS = %w[
-      rates jobs_processed jobs_failed in_flight loop_tick_at buffered capacity busy memory_mb started_at
-      supervisor_pid max_jobs max_memory_mb max_lifetime queues topics tasks threads capsule process pid hostname
+      rates in_flight loop_tick_at buffered capacity busy started_at supervisor_pid max_jobs max_memory_mb
+      max_lifetime queues topics tasks threads capsule process pid hostname
     ].freeze
 
     SECONDS_ARGS = %i[limit within interval age].freeze
