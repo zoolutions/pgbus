@@ -29,8 +29,8 @@
   <div class="rounded-lg bg-white dark:bg-gray-800 p-5 shadow ring-1 ring-gray-200 dark:ring-gray-700">
     <p class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.recurring_tasks.show.next_run") %></p>
     <% if @task[:enabled] && @task[:next_run_at] %>
-      <p class="mt-1 text-lg font-semibold text-gray-900 dark:text-white"><%= pgbus_time_ago_future(@task[:next_run_at]) %></p>
-      <p class="text-xs text-gray-500 dark:text-gray-400"><%= @task[:next_run_at]&.strftime("%Y-%m-%d %H:%M:%S %Z") %></p>
+      <p class="mt-1 text-lg font-semibold text-gray-900 dark:text-white"><%= pgbus_time(@task[:next_run_at], clock: true) %></p>
+      <p class="text-xs text-gray-500 dark:text-gray-400"><%= pgbus_absolute_time(@task[:next_run_at]) %></p>
     <% else %>
       <p class="mt-1 text-lg font-semibold text-gray-500 dark:text-gray-400">—</p>
     <% end %>
@@ -101,10 +101,10 @@
       <% Array(@task[:executions]).each do |exec| %>
         <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
           <td data-label="<%= t("pgbus.recurring_tasks.show.execution_headers.scheduled_for") %>" class="px-4 py-3 text-sm text-gray-900 dark:text-white">
-            <%= exec[:run_at]&.strftime("%Y-%m-%d %H:%M:%S %Z") %>
+            <%= pgbus_timestamp(exec[:run_at]) %>
           </td>
           <td data-label="<%= t("pgbus.recurring_tasks.show.execution_headers.enqueued_at") %>" class="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
-            <%= exec[:created_at] ? pgbus_time_ago(exec[:created_at]) : "—" %>
+            <%= pgbus_time(exec[:created_at]) %>
           </td>
         </tr>
       <% end %>

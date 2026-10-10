@@ -65,7 +65,7 @@ nb:
         empty: Ingen køer funnet
         headers:
           depth: Dybde
-          oldest_claimable: Eldste tilgjengelig (s)
+          oldest_claimable: Eldste tilgjengelig
           parked: Parkert
           queue: Kø
           total: Totalt
@@ -246,6 +246,28 @@ nb:
         healthy: Sunn
         stale: Utdatert
         stalled: Fastlåst
+      time:
+        absolute_format: "%Y-%m-%d %H:%M:%S %Z"
+        clock_format: "%H:%M"
+        future: om %{distance}
+        now: nå
+        past: for %{distance} siden
+        range:
+          days:
+            one: "%{count} dag"
+            other: "%{count} dager"
+          hours:
+            one: "%{count} time"
+            other: "%{count} timer"
+          minutes:
+            one: "%{count} minutt"
+            other: "%{count} minutter"
+        units:
+          days: "%{count}d"
+          hours: "%{count}t"
+          milliseconds: "%{count}ms"
+          minutes: "%{count}m"
+          seconds: "%{count}s"
     insights:
       show:
         charts:
@@ -366,21 +388,21 @@ nb:
           timezone: 'Tidssone:'
           visible_at: 'Synlig fra:'
         reasons:
-          blocked: Venter på en samtidighetsplass på %{key} (opptatt %{held}/%{limit}) · parkert %{ago}
-          blocked_no_slots: Venter på en samtidighetsplass på %{key} · parkert %{ago}
-          lease_expired: Lease utløpt (worker døde sannsynligvis) — leveres på nytt, forsøk %{attempt}
-          no_workers: Ingen frisk worker kjører
-          not_drained: Ingen worker tømmer denne køen
-          orphaned: Feilet med %{error} — meldingen er ikke lenger i køen
-          paused: Køen er satt på pause
-          retrying: 'Forsøk %{attempt}/%{max} feilet: %{error} — neste forsøk %{time}'
-          retrying_dlq: 'Forsøk %{attempt}/%{max} feilet: %{error} — neste lesing flytter den til DLQ'
-          retrying_due: 'Forsøk %{attempt}/%{max} feilet: %{error} — neste forsøk nå'
-          running: Hentet %{ago} · lease utløper %{time}
-          scheduled: Planlagt — kjører %{time}
-          waiting: Venter — %{count} foran
-          waiting_priority: Venter — %{count} foran med denne prioriteten
-          waiting_unknown: Venter på å bli hentet
+          blocked_html: Venter på en samtidighetsplass på %{key} (opptatt %{held}/%{limit}) · parkert %{ago}
+          blocked_no_slots_html: Venter på en samtidighetsplass på %{key} · parkert %{ago}
+          lease_expired_html: Lease utløpt (worker døde sannsynligvis) — leveres på nytt, forsøk %{attempt}
+          no_workers_html: Ingen frisk worker kjører
+          not_drained_html: Ingen worker tømmer denne køen
+          orphaned_html: Feilet med %{error} — meldingen er ikke lenger i køen
+          paused_html: Køen er satt på pause
+          retrying_dlq_html: 'Forsøk %{attempt}/%{max} feilet: %{error} — neste lesing flytter den til DLQ'
+          retrying_due_html: 'Forsøk %{attempt}/%{max} feilet: %{error} — neste forsøk nå'
+          retrying_html: 'Forsøk %{attempt}/%{max} feilet: %{error} — neste forsøk %{time}'
+          running_html: Hentet %{ago} · lease utløper %{time}
+          scheduled_html: Planlagt — kjører %{time}
+          waiting_html: Venter — %{count} foran
+          waiting_priority_html: Venter — %{count} foran med denne prioriteten
+          waiting_unknown_html: Venter på å bli hentet
         retry: Prøv på nytt
         retry_confirm: Tilbakestill synlighetstidsavbrudd og prøv igjen?
         states:
@@ -513,8 +535,6 @@ nb:
         pending: Venter
         published: Publisert
         stats:
-          no_age: "—"
-          oldest_age: "%{seconds}s"
           oldest_unpublished: Eldste upubliserte
           total: Totalt
           unpublished: Upublisert
@@ -547,8 +567,8 @@ nb:
         headers:
           actions: Handlinger
           depth: Dybde
-          newest: Nyeste (s)
-          oldest_claimable: Eldste tilgjengelig (s)
+          newest: Nyeste
+          oldest_claimable: Eldste tilgjengelig
           parked: Parkert
           queue: Kø
           total_ever: Totalt noensinne
@@ -584,32 +604,32 @@ nb:
         purge_queue: Rens kø
         resume: Gjenoppta
         summary:
-          backlog: "%{visible} klare til henting nå, eldste har ventet %{age} · %{parked} parkert (planlagt eller nytt forsøk)"
-          backlog_parked_only: Ingenting klart til henting nå · %{parked} parkert (planlagt eller nytt forsøk)
-          dlq: 'Dead letter-kø for %{logical}: jobber havner her etter %{max} mislykkede forsøk'
-          drained_by:
+          backlog_html: "%{visible} klare til henting nå, eldste har ventet %{age} · %{parked} parkert (planlagt eller nytt forsøk)"
+          backlog_parked_only_html: Ingenting klart til henting nå · %{parked} parkert (planlagt eller nytt forsøk)
+          dlq_html: 'Dead letter-kø for %{logical}: jobber havner her etter %{max} mislykkede forsøk'
+          drained_by_html:
             one: Tømmes av %{capsules} (%{count} frisk worker)
             other: Tømmes av %{capsules} (%{count} friske workers)
-          drained_live:
+          drained_live_html:
             one: Tømmes av %{count} frisk worker som lytter på denne køen
             other: Tømmes av %{count} friske workers som lytter på denne køen
-          drained_wildcard:
+          drained_wildcard_html:
             one: Tømmes av en jokertegn-worker-kapsel (%{count} frisk worker)
             other: Tømmes av en jokertegn-worker-kapsel (%{count} friske workers)
-          empty: Ingenting venter
-          handler: Hendelsesbehandler-kø — tømmes av consumers (%{count} friske)
-          no_consumers:
+          empty_html: Ingenting venter
+          handler_html: Hendelsesbehandler-kø — tømmes av consumers (%{count} friske)
+          no_consumers_html:
             one: Hendelsesbehandler-kø uten frisk consumer — %{count} hendelse venter
             other: Hendelsesbehandler-kø uten frisk consumer — %{count} hendelser venter
-          no_workers:
+          no_workers_html:
             one: Ingen frisk worker kjører — %{count} jobb kan hentes, men ingenting henter den
             other: Ingen frisk worker kjører — %{count} jobber kan hentes, men ingenting henter dem
-          not_drained: Ingen worker-kapsel tømmer denne køen — jobber venter til en er konfigurert
-          paused_circuit_breaker: 'Automatisk satt på pause %{ago} etter %{failures} feil på rad — gjenopptas %{time} (utløsning #%{trip})'
-          paused_operator: Satt på pause %{ago} — %{reason}
-          paused_operator_no_reason: Satt på pause %{ago} av en operatør
-          priority_level: Prioritetsnivå %{level} av %{logical}
-          stream: Stream-kø — leveres med peek, tømmes ikke av workers
+          not_drained_html: Ingen worker-kapsel tømmer denne køen — jobber venter til en er konfigurert
+          paused_circuit_breaker_html: 'Automatisk satt på pause %{ago} etter %{failures} feil på rad — gjenopptas %{time} (utløsning #%{trip})'
+          paused_operator_html: Satt på pause %{ago} — %{reason}
+          paused_operator_no_reason_html: Satt på pause %{ago} av en operatør
+          priority_level_html: Prioritetsnivå %{level} av %{logical}
+          stream_html: Stream-kø — leveres med peek, tømmes ikke av workers
         summary_label: Køoversikt
         table_health:
           headers:

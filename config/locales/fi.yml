@@ -65,7 +65,7 @@ fi:
         empty: Jonot eivät löytyneet
         headers:
           depth: Syvyys
-          oldest_claimable: Vanhin saatavilla (s)
+          oldest_claimable: Vanhin saatavilla
           parked: Pysäköidyt
           queue: Jono
           total: Yhteensä
@@ -246,6 +246,28 @@ fi:
         healthy: Toimiva
         stale: Vanha
         stalled: Juuttunut
+      time:
+        absolute_format: "%Y-%m-%d %H:%M:%S %Z"
+        clock_format: "%H:%M"
+        future: "%{distance} päästä"
+        now: nyt
+        past: "%{distance} sitten"
+        range:
+          days:
+            one: "%{count} päivä"
+            other: "%{count} päivää"
+          hours:
+            one: "%{count} tunti"
+            other: "%{count} tuntia"
+          minutes:
+            one: "%{count} minuutti"
+            other: "%{count} minuuttia"
+        units:
+          days: "%{count}pv"
+          hours: "%{count}h"
+          milliseconds: "%{count}ms"
+          minutes: "%{count}min"
+          seconds: "%{count}s"
     insights:
       show:
         charts:
@@ -366,21 +388,21 @@ fi:
           timezone: 'Aikavyöhyke:'
           visible_at: 'Näkyvissä:'
         reasons:
-          blocked: Odottaa rinnakkaisuuspaikkaa avaimelle %{key} (varattu %{held}/%{limit}) · pysäköity %{ago}
-          blocked_no_slots: Odottaa rinnakkaisuuspaikkaa avaimelle %{key} · pysäköity %{ago}
-          lease_expired: Vuokra vanhentui (worker luultavasti kaatui) — toimitetaan uudelleen, yritys %{attempt}
-          no_workers: Yksikään terve worker ei ole käynnissä
-          not_drained: Mikään worker ei käsittele tätä jonoa
-          orphaned: 'Epäonnistui: %{error} — viesti ei ole enää jonossa'
-          paused: Jono on keskeytetty
-          retrying: 'Yritys %{attempt}/%{max} epäonnistui: %{error} — seuraava yritys %{time}'
-          retrying_dlq: 'Yritys %{attempt}/%{max} epäonnistui: %{error} — seuraava luku siirtää sen DLQ:hun'
-          retrying_due: 'Yritys %{attempt}/%{max} epäonnistui: %{error} — seuraava yritys nyt'
-          running: Noudettu %{ago} · vuokra vanhenee %{time}
-          scheduled: Ajastettu — ajetaan %{time}
-          waiting: Odottaa — %{count} edellä
-          waiting_priority: Odottaa — %{count} edellä tällä prioriteetilla
-          waiting_unknown: Odottaa noutoa
+          blocked_html: Odottaa rinnakkaisuuspaikkaa avaimelle %{key} (varattu %{held}/%{limit}) · pysäköity %{ago}
+          blocked_no_slots_html: Odottaa rinnakkaisuuspaikkaa avaimelle %{key} · pysäköity %{ago}
+          lease_expired_html: Vuokra vanhentui (worker luultavasti kaatui) — toimitetaan uudelleen, yritys %{attempt}
+          no_workers_html: Yksikään terve worker ei ole käynnissä
+          not_drained_html: Mikään worker ei käsittele tätä jonoa
+          orphaned_html: 'Epäonnistui: %{error} — viesti ei ole enää jonossa'
+          paused_html: Jono on keskeytetty
+          retrying_dlq_html: 'Yritys %{attempt}/%{max} epäonnistui: %{error} — seuraava luku siirtää sen DLQ:hun'
+          retrying_due_html: 'Yritys %{attempt}/%{max} epäonnistui: %{error} — seuraava yritys nyt'
+          retrying_html: 'Yritys %{attempt}/%{max} epäonnistui: %{error} — seuraava yritys %{time}'
+          running_html: Noudettu %{ago} · vuokra vanhenee %{time}
+          scheduled_html: Ajastettu — ajetaan %{time}
+          waiting_html: Odottaa — %{count} edellä
+          waiting_priority_html: Odottaa — %{count} edellä tällä prioriteetilla
+          waiting_unknown_html: Odottaa noutoa
         retry: Yritä uudelleen
         retry_confirm: Nollaa näkyvyysaika ja yritä uudelleen?
         states:
@@ -513,8 +535,6 @@ fi:
         pending: Odottaa
         published: Julkaistu
         stats:
-          no_age: "—"
-          oldest_age: "%{seconds}s"
           oldest_unpublished: Vanhin julkaisematon
           total: Yhteensä
           unpublished: Julkaisematon
@@ -547,8 +567,8 @@ fi:
         headers:
           actions: Toiminnot
           depth: Syvyys
-          newest: Uusimmat (s)
-          oldest_claimable: Vanhin saatavilla (s)
+          newest: Uusimmat
+          oldest_claimable: Vanhin saatavilla
           parked: Pysäköidyt
           queue: Jono
           total_ever: Yhteensä koskaan
@@ -584,32 +604,32 @@ fi:
         purge_queue: Tyhjennä jono
         resume: Jatka
         summary:
-          backlog: "%{visible} noudettavissa nyt, vanhin odottanut %{age} · %{parked} pysäköity (ajastettu tai uudelleenyritys)"
-          backlog_parked_only: Ei mitään noudettavissa nyt · %{parked} pysäköity (ajastettu tai uudelleenyritys)
-          dlq: 'Kuolleiden viestien jono jonolle %{logical}: työt päätyvät tänne %{max} epäonnistuneen yrityksen jälkeen'
-          drained_by:
+          backlog_html: "%{visible} noudettavissa nyt, vanhin odottanut %{age} · %{parked} pysäköity (ajastettu tai uudelleenyritys)"
+          backlog_parked_only_html: Ei mitään noudettavissa nyt · %{parked} pysäköity (ajastettu tai uudelleenyritys)
+          dlq_html: 'Kuolleiden viestien jono jonolle %{logical}: työt päätyvät tänne %{max} epäonnistuneen yrityksen jälkeen'
+          drained_by_html:
             one: Tyhjentää %{capsules} (%{count} terve worker)
             other: Tyhjentää %{capsules} (%{count} tervettä workeria)
-          drained_live:
+          drained_live_html:
             one: Tyhjentää %{count} terve worker, joka kuuntelee tätä jonoa
             other: Tyhjentää %{count} tervettä workeria, jotka kuuntelevat tätä jonoa
-          drained_wildcard:
+          drained_wildcard_html:
             one: Tyhjentää jokerimerkki-worker-kapseli (%{count} terve worker)
             other: Tyhjentää jokerimerkki-worker-kapseli (%{count} tervettä workeria)
-          empty: Mitään ei odota
-          handler: Tapahtumankäsittelijän jono — consumerit tyhjentävät (%{count} tervettä)
-          no_consumers:
+          empty_html: Mitään ei odota
+          handler_html: Tapahtumankäsittelijän jono — consumerit tyhjentävät (%{count} tervettä)
+          no_consumers_html:
             one: Tapahtumankäsittelijän jono ilman tervettä consumeria — %{count} tapahtuma odottaa
             other: Tapahtumankäsittelijän jono ilman tervettä consumeria — %{count} tapahtumaa odottaa
-          no_workers:
+          no_workers_html:
             one: Yksikään terve worker ei ole käynnissä — %{count} työ on noudettavissa, mutta kukaan ei nouda sitä
             other: Yksikään terve worker ei ole käynnissä — %{count} työtä on noudettavissa, mutta kukaan ei nouda niitä
-          not_drained: Mikään worker-kapseli ei tyhjennä tätä jonoa — työt odottavat, kunnes sellainen määritetään
-          paused_circuit_breaker: 'Keskeytetty automaattisesti %{ago} %{failures} peräkkäisen virheen jälkeen — jatkuu %{time} (laukaisu #%{trip})'
-          paused_operator: Keskeytetty %{ago} — %{reason}
-          paused_operator_no_reason: Operaattori keskeytti %{ago}
-          priority_level: Prioriteettitaso %{level} jonosta %{logical}
-          stream: Stream-jono — toimitetaan peekillä, workerit eivät tyhjennä sitä
+          not_drained_html: Mikään worker-kapseli ei tyhjennä tätä jonoa — työt odottavat, kunnes sellainen määritetään
+          paused_circuit_breaker_html: 'Keskeytetty automaattisesti %{ago} %{failures} peräkkäisen virheen jälkeen — jatkuu %{time} (laukaisu #%{trip})'
+          paused_operator_html: Keskeytetty %{ago} — %{reason}
+          paused_operator_no_reason_html: Operaattori keskeytti %{ago}
+          priority_level_html: Prioriteettitaso %{level} jonosta %{logical}
+          stream_html: Stream-jono — toimitetaan peekillä, workerit eivät tyhjennä sitä
         summary_label: Jonon yhteenveto
         table_health:
           headers:

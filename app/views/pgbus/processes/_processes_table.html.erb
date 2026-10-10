@@ -18,7 +18,7 @@
             <td data-label="<%= t("pgbus.processes.processes_table.headers.hostname") %>" class="px-4 py-3 text-sm text-gray-700 dark:text-gray-200"><%= p[:hostname] %></td>
             <td data-label="<%= t("pgbus.processes.processes_table.headers.pid") %>" class="px-4 py-3 text-sm font-mono text-gray-700 dark:text-gray-200"><%= p[:pid] %></td>
             <td data-label="<%= t("pgbus.processes.processes_table.headers.status") %>" class="px-4 py-3 text-sm"><%= pgbus_status_badge(p[:status] || p[:healthy]) %></td>
-            <td data-label="<%= t("pgbus.processes.processes_table.headers.last_heartbeat") %>" class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400"><%= pgbus_time_ago(p[:last_heartbeat_at]) %></td>
+            <td data-label="<%= t("pgbus.processes.processes_table.headers.last_heartbeat") %>" class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400"><%= pgbus_time(p[:last_heartbeat_at]) %></td>
             <td data-label="<%= t("pgbus.processes.processes_table.headers.metadata") %>" class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 font-mono text-xs max-w-xs truncate">
               <% if p[:metadata].is_a?(Hash) %>
                 <% if (rates = pgbus_worker_rates(p[:metadata])) %>

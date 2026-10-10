@@ -26,8 +26,8 @@
             <td data-label="<%= t("pgbus.queues.queues_list.headers.depth") %>" class="px-4 py-3 text-sm text-right font-mono text-gray-700 dark:text-gray-200"><%= pgbus_number(q[:queue_length]) %></td>
             <td data-label="<%= t("pgbus.queues.queues_list.headers.visible") %>" class="px-4 py-3 text-sm text-right font-mono text-gray-700 dark:text-gray-200"><%= pgbus_number(q[:queue_visible_length]) %></td>
             <td data-label="<%= t("pgbus.queues.queues_list.headers.parked") %>" class="px-4 py-3 text-sm text-right font-mono text-gray-500 dark:text-gray-400"><%= pgbus_number(q[:parked_length]) %></td>
-            <td data-label="<%= t("pgbus.queues.queues_list.headers.oldest_claimable") %>" class="px-4 py-3 text-sm text-right text-gray-500 dark:text-gray-400"><%= q[:oldest_claimable_age_sec] || "—" %></td>
-            <td data-label="<%= t("pgbus.queues.queues_list.headers.newest") %>" class="px-4 py-3 text-sm text-right text-gray-500 dark:text-gray-400"><%= q[:newest_msg_age_sec] || "—" %></td>
+            <td data-label="<%= t("pgbus.queues.queues_list.headers.oldest_claimable") %>" class="px-4 py-3 text-sm text-right text-gray-500 dark:text-gray-400"><%= pgbus_duration(q[:oldest_claimable_age_sec]) %></td>
+            <td data-label="<%= t("pgbus.queues.queues_list.headers.newest") %>" class="px-4 py-3 text-sm text-right text-gray-500 dark:text-gray-400"><%= pgbus_duration(q[:newest_msg_age_sec]) %></td>
             <td data-label="<%= t("pgbus.queues.queues_list.headers.total_ever") %>" class="px-4 py-3 text-sm text-right text-gray-500 dark:text-gray-400"><%= pgbus_number(q[:total_messages]) %></td>
             <td data-label="<%= t("pgbus.queues.queues_list.headers.actions") %>" class="px-4 py-3 text-sm text-right space-x-2">
               <% if q[:paused] %>

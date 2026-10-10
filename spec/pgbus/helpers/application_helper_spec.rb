@@ -1,36 +1,117 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "action_view"
+require "active_support/testing/time_helpers"
 
 require_relative "../../../app/helpers/pgbus/application_helper"
 require_relative "../../../lib/pgbus/web/payload_filter"
 
 RSpec.describe Pgbus::ApplicationHelper do
-  let(:helper) { Class.new { include Pgbus::ApplicationHelper }.new }
+  include ActiveSupport::Testing::TimeHelpers
 
-  describe "#pgbus_time_ago" do
-    it "returns dash for nil" do
-      expect(helper.pgbus_time_ago(nil)).to eq("—")
+  let(:helper) do
+    Class.new do
+      include ActionView::Helpers::TagHelper
+      include ActionView::Helpers::OutputSafetyHelper
+      include ActionView::Helpers::TranslationHelper
+      include Pgbus::ApplicationHelper
+    end.new
+  end
+
+  before(:all) do # rubocop:disable RSpec/BeforeAfterAll
+    I18n.load_path |= Dir[File.expand_path("../../../config/locales/*.yml", __dir__)]
+    I18n.backend.reload!
+  end
+
+  around do |example|
+    I18n.with_locale(:en) { example.run }
+  end
+
+  # Issue #497: one <time> family, always in Time.zone.
+  describe "time helpers" do
+    let(:now) { Time.utc(2026, 10, 10, 0, 8, 54) }
+
+    around do |example|
+      Time.use_zone("Europe/Stockholm") { travel_to(now) { example.run } }
     end
 
-    it "formats seconds" do
-      expect(helper.pgbus_time_ago(Time.now - 30)).to eq("30s ago")
+    describe "#pgbus_time" do
+      it "renders the relative time with the UTC value and the absolute in Time.zone" do
+        expect(helper.pgbus_time(now - 30))
+          .to eq('<time datetime="2026-10-10T00:08:24Z" title="2026-10-10 02:08:24 CEST">30s ago</time>')
+      end
+
+      it "adds the clock time for a future moment with clock: true" do
+        html = helper.pgbus_time(now + 5400, clock: true)
+        expect(html).to include(">in 1h (03:38)</time>", 'datetime="2026-10-10T01:38:54Z"')
+      end
+
+      it "accepts an ISO string" do
+        expect(helper.pgbus_time("2026-10-10T00:09:54Z")).to include(">in 1m</time>")
+      end
+
+      it "renders a dash for nil and a blank string" do
+        expect(helper.pgbus_time(nil)).to eq("—")
+        expect(helper.pgbus_time("")).to eq("—")
+        expect(helper.pgbus_timestamp(" ")).to eq("—")
+        expect(helper.pgbus_absolute_time("")).to eq("—")
+      end
+
+      it "shows an unparseable value as given, not marked safe (the view escapes it)" do
+        expect(helper.pgbus_time("<b>soon</b>")).to eq("<b>soon</b>")
+        expect(helper.pgbus_time("<b>soon</b>")).not_to be_html_safe
+      end
     end
 
-    it "formats minutes" do
-      expect(helper.pgbus_time_ago(Time.now - 120)).to eq("2m ago")
+    describe "#pgbus_timestamp" do
+      it "renders the absolute in a <time> followed by the relative" do
+        html = helper.pgbus_timestamp(now - 300)
+        expect(html).to eq('<time datetime="2026-10-10T00:03:54Z">2026-10-10 02:03:54 CEST</time> (5m ago)')
+        expect(html).to be_html_safe
+      end
+
+      it "renders a dash for nil" do
+        expect(helper.pgbus_timestamp(nil)).to eq("—")
+      end
     end
 
-    it "formats hours" do
-      expect(helper.pgbus_time_ago(Time.now - 7200)).to eq("2h ago")
+    describe "#pgbus_absolute_time" do
+      it "renders only the absolute in a <time>" do
+        expect(helper.pgbus_absolute_time(now))
+          .to eq('<time datetime="2026-10-10T00:08:54Z">2026-10-10 02:08:54 CEST</time>')
+      end
     end
 
-    it "formats days" do
-      expect(helper.pgbus_time_ago(Time.now - 172_800)).to eq("2d ago")
+    describe "#pgbus_job_reason" do
+      def result(key, args)
+        Pgbus::Web::JobState::Result.new(state: "running", reason_key: key, reason_args: args,
+                                         next_run_at: nil, badge_tone: :indigo)
+      end
+
+      it "renders both moments of a running job as <time> elements" do
+        html = helper.pgbus_job_reason(result("running", { ago: now - 12, time: now + 48 }))
+        expect(html).to be_html_safe
+        expect(html.scan("<time ").size).to eq(2)
+        expect(html).to include("Claimed ", ">12s ago</time>", ">in 48s (02:09)</time>")
+      end
+
+      it "escapes every argument that is not a time" do
+        html = helper.pgbus_job_reason(result("retrying", { attempt: 2, max: 5, error: "<script>x</script>",
+                                                            time: now + 60 }))
+        expect(html).to include("&lt;script&gt;x&lt;/script&gt;")
+        expect(html).not_to include("<script>")
+      end
     end
 
-    it "parses string timestamps" do
-      expect(helper.pgbus_time_ago(Time.now.utc.iso8601)).to match(/\d+s ago/)
+    it "returns plain Strings for durations, for non-_html keys" do
+      expect(helper.pgbus_duration(125)).to eq("2m 5s")
+      expect(helper.pgbus_duration(125)).not_to be_html_safe
+      expect(helper.pgbus_ms_duration(1500)).not_to be_html_safe
+    end
+
+    it "reads the range label from the locale" do
+      I18n.with_locale(:sv) { expect(helper.pgbus_time_range_label(120)).to eq("2 timmar") }
     end
   end
 

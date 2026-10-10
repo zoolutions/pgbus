@@ -30,6 +30,17 @@ AllCops:
 Pgbus/NoRubyTimeout:
   Enabled: true
 
+# Custom cop: every dashboard timestamp, age and duration goes through
+# Pgbus::Web::TimeFormat and its view helpers (issue #497). ERB is guarded by
+# spec/pgbus/web/time_conventions_spec.rb instead (RuboCop cannot parse it).
+Pgbus/DashboardTimeFormatting:
+  Enabled: true
+  Include:
+    - "app/**/*.rb"
+    - "lib/pgbus/web/**/*.rb"
+  Exclude:
+    - "lib/pgbus/web/time_format.rb"
+
 Style/StringLiterals:
   EnforcedStyle: double_quotes
 

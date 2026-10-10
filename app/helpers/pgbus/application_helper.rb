@@ -1,21 +1,34 @@
 # frozen_string_literal: true
 
-require "time"
-
 module Pgbus
   module ApplicationHelper
-    def pgbus_time_ago(time)
-      return "—" unless time
+    # A moment as "5m ago" / "in 2h" / "now", with the exact value in the
+    # tooltip and the UTC value in datetime (issue #497). clock: true adds
+    # the wall-clock time: "in 2h (21:40)".
+    def pgbus_time(value, clock: false)
+      return Web::TimeFormat::NONE if value.blank?
 
-      time = Time.parse(time) if time.is_a?(String)
-      seconds = (Time.now - time).to_i
+      relative = Web::TimeFormat.relative(value)
+      return value.to_s unless relative
 
-      case seconds
-      when 0..59 then "#{seconds}s ago"
-      when 60..3599 then "#{seconds / 60}m ago"
-      when 3600..86_399 then "#{seconds / 3600}h ago"
-      else "#{seconds / 86_400}d ago"
-      end
+      text = clock ? "#{relative} (#{Web::TimeFormat.clock(value)})" : relative
+      tag.time(text, datetime: Web::TimeFormat.iso(value), title: Web::TimeFormat.absolute(value))
+    end
+
+    # The exact moment, then the relative one: for expanded rows and show
+    # pages, where the absolute is what an operator debugs with.
+    def pgbus_timestamp(value)
+      return Web::TimeFormat::NONE if value.blank?
+      return value.to_s unless Web::TimeFormat.coerce(value)
+
+      safe_join([pgbus_absolute_time(value), " (#{Web::TimeFormat.relative(value)})"])
+    end
+
+    def pgbus_absolute_time(value)
+      return Web::TimeFormat::NONE if value.blank?
+      return value.to_s unless Web::TimeFormat.coerce(value)
+
+      tag.time(Web::TimeFormat.absolute(value), datetime: Web::TimeFormat.iso(value))
     end
 
     def pgbus_number(n)
@@ -102,31 +115,11 @@ module Pgbus
     end
 
     def pgbus_duration(seconds)
-      return "—" unless seconds
-
-      seconds = seconds.to_i
-      if seconds < 60
-        "#{seconds}s"
-      elsif seconds < 3600
-        "#{seconds / 60}m #{seconds % 60}s"
-      elsif seconds < 86_400
-        "#{seconds / 3600}h #{(seconds % 3600) / 60}m"
-      else
-        "#{seconds / 86_400}d #{(seconds % 86_400) / 3600}h"
-      end
+      Web::TimeFormat.duration(seconds)
     end
 
     def pgbus_ms_duration(millis)
-      return "—" unless millis
-
-      millis = millis.to_i
-      if millis < 1000
-        "#{millis}ms"
-      elsif millis < 60_000
-        "#{(millis / 1000.0).round(1)}s"
-      else
-        "#{(millis / 60_000.0).round(1)}m"
-      end
+      Web::TimeFormat.ms_duration(millis)
     end
 
     def pgbus_paused_badge(paused)
@@ -163,30 +156,32 @@ module Pgbus
     end
 
     # A JobState::Result's reason in words. :time is a future moment
-    # ("in 2h (21:40)"), :ago a past one ("5m ago").
+    # ("in 2h (21:40)"), :ago a past one ("5m ago"), both as <time>. The
+    # _html key lets them through; translate escapes every other argument.
     def pgbus_job_reason(result)
       args = result.reason_args.to_h do |key, value|
         case key
-        when :time then [key, pgbus_job_eta(value)]
-        when :ago then [key, pgbus_time_ago(value)]
+        when :time then [key, pgbus_time(value, clock: true)]
+        when :ago then [key, pgbus_time(value)]
         else [key, value]
         end
       end
-      I18n.t("pgbus.jobs.list.reasons.#{result.reason_key}", **args)
+      translate("pgbus.jobs.list.reasons.#{result.reason_key}_html", **args)
     end
 
-    # A QueueSummary::Line in words. :ago is a past moment, :time a future
-    # one, :age a wait in seconds.
+    # A QueueSummary::Line in words. :ago is a past moment and :time a future
+    # one, both as <time>; :age is a wait in seconds. The _html key lets the
+    # <time> elements through; translate escapes every other argument.
     def pgbus_queue_summary_line(line)
       args = line.args.to_h do |key, value|
         case key
-        when :ago then [key, pgbus_time_ago(value)]
-        when :time then [key, pgbus_job_eta(value)]
+        when :ago then [key, pgbus_time(value)]
+        when :time then [key, pgbus_time(value, clock: true)]
         when :age then [key, pgbus_duration(value)]
         else [key, value]
         end
       end
-      I18n.t("pgbus.queues.show.summary.#{line.key}", **args)
+      translate("pgbus.queues.show.summary.#{line.key}_html", **args)
     end
 
     QUEUE_SUMMARY_TONE_CSS = {
@@ -197,12 +192,6 @@ module Pgbus
 
     def pgbus_queue_summary_classes(tone)
       QUEUE_SUMMARY_TONE_CSS.fetch(tone, QUEUE_SUMMARY_TONE_CSS[:gray])
-    end
-
-    def pgbus_job_eta(time)
-      return "—" unless time
-
-      "#{pgbus_time_ago_future(time)} (#{time.in_time_zone.strftime("%H:%M")})"
     end
 
     # "2/5" for a job's delivery attempts against max_retries; "—" when the
@@ -250,25 +239,6 @@ module Pgbus
       Pgbus.configuration.web_refresh_interval
     end
 
-    def pgbus_time_ago_future(time)
-      return "—" unless time
-
-      time = Time.parse(time) if time.is_a?(String)
-      seconds = (time - Time.now).to_i
-
-      if seconds <= 0
-        "now"
-      elsif seconds < 60
-        "in #{seconds}s"
-      elsif seconds < 3600
-        "in #{seconds / 60}m"
-      elsif seconds < 86_400
-        "in #{seconds / 3600}h"
-      else
-        "in #{seconds / 86_400}d"
-      end
-    end
-
     def pgbus_recurring_health_badge(task)
       if task[:last_run_at].nil?
         tag.span(I18n.t("pgbus.helpers.recurring_health.pending"),
@@ -282,15 +252,7 @@ module Pgbus
     end
 
     def pgbus_time_range_label(minutes)
-      minutes = [minutes.to_i, 1].max
-
-      if minutes > 1440 && (minutes % 1440).zero?
-        pgbus_pluralize_unit(minutes / 1440, "day")
-      elsif minutes >= 60 && (minutes % 60).zero?
-        pgbus_pluralize_unit(minutes / 60, "hour")
-      else
-        pgbus_pluralize_unit(minutes, "minute")
-      end
+      Web::TimeFormat.range_label(minutes)
     end
 
     def pgbus_nav_link(label, path)
@@ -348,12 +310,6 @@ module Pgbus
       when :sv then "\u{1F1F8}\u{1F1EA}"
       else "\u{1F310}"
       end
-    end
-
-    private
-
-    def pgbus_pluralize_unit(count, unit)
-      count == 1 ? "1 #{unit}" : "#{count} #{unit}s"
     end
   end
 end

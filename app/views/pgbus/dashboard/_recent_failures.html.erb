@@ -20,7 +20,7 @@
             <tr>
               <td data-label="<%= t("pgbus.dashboard.recent_failures.headers.queue") %>" class="px-4 py-3 text-sm text-gray-700 dark:text-gray-200"><%= f["queue_name"] %></td>
               <td data-label="<%= t("pgbus.dashboard.recent_failures.headers.error") %>" class="px-4 py-3 text-sm text-red-600 dark:text-red-400 truncate max-w-xs" title="<%= f["error_class"] %>: <%= f["error_message"] %>"><%= f["error_class"] %>: <%= truncate(f["error_message"].to_s, length: 60) %></td>
-              <td data-label="<%= t("pgbus.dashboard.recent_failures.headers.when") %>" class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400"><%= pgbus_time_ago(f["failed_at"]) %></td>
+              <td data-label="<%= t("pgbus.dashboard.recent_failures.headers.when") %>" class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400"><%= pgbus_time(f["failed_at"]) %></td>
             </tr>
           <% end %>
           <% if @recent_failures.empty? %>

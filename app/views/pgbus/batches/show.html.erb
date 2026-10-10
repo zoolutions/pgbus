@@ -26,12 +26,12 @@
     </div>
     <div class="px-4 py-3 sm:grid sm:grid-cols-3 sm:gap-4">
       <dt class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.batches.show.created_at") %></dt>
-      <dd class="mt-1 text-sm text-gray-900 dark:text-white sm:col-span-2 sm:mt-0"><%= @batch[:created_at] %></dd>
+      <dd class="mt-1 text-sm text-gray-900 dark:text-white sm:col-span-2 sm:mt-0"><%= pgbus_timestamp(@batch[:created_at]) %></dd>
     </div>
     <% if @batch[:finished_at] %>
       <div class="px-4 py-3 sm:grid sm:grid-cols-3 sm:gap-4">
         <dt class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.batches.show.finished_at") %></dt>
-        <dd class="mt-1 text-sm text-gray-900 dark:text-white sm:col-span-2 sm:mt-0"><%= @batch[:finished_at] %></dd>
+        <dd class="mt-1 text-sm text-gray-900 dark:text-white sm:col-span-2 sm:mt-0"><%= pgbus_timestamp(@batch[:finished_at]) %></dd>
       </div>
     <% end %>
     <% if @batch[:on_finish_class] %>

@@ -65,7 +65,7 @@ ja:
         empty: キューが見つかりません
         headers:
           depth: 深さ
-          oldest_claimable: 取得可能な最古 (秒)
+          oldest_claimable: 取得可能な最古
           parked: 待機中
           queue: キュー
           total: 合計
@@ -246,6 +246,28 @@ ja:
         healthy: 正常
         stale: 期限切れ
         stalled: 停滞
+      time:
+        absolute_format: "%Y-%m-%d %H:%M:%S %Z"
+        clock_format: "%H:%M"
+        future: "%{distance}後"
+        now: 今
+        past: "%{distance}前"
+        range:
+          days:
+            one: "%{count}日"
+            other: "%{count}日"
+          hours:
+            one: "%{count}時間"
+            other: "%{count}時間"
+          minutes:
+            one: "%{count}分"
+            other: "%{count}分"
+        units:
+          days: "%{count}日"
+          hours: "%{count}時間"
+          milliseconds: "%{count}ms"
+          minutes: "%{count}分"
+          seconds: "%{count}秒"
     insights:
       show:
         charts:
@@ -366,21 +388,21 @@ ja:
           timezone: タイムゾーン：
           visible_at: 表示可能日時：
         reasons:
-          blocked: "%{key} の同時実行枠を待機中（使用中 %{held}/%{limit}） · 待機開始 %{ago}"
-          blocked_no_slots: "%{key} の同時実行枠を待機中 · 待機開始 %{ago}"
-          lease_expired: リースが期限切れ（ワーカーが停止した可能性） — 再配信中、試行 %{attempt}
-          no_workers: 正常なワーカーが動いていません
-          not_drained: このキューを処理するワーカーがいません
-          orphaned: "%{error} で失敗 — メッセージはもうキューにありません"
-          paused: キューは一時停止中
-          retrying: '試行 %{attempt}/%{max} が失敗: %{error} — 次の試行 %{time}'
-          retrying_dlq: '試行 %{attempt}/%{max} が失敗: %{error} — 次の読み取りで DLQ に移動'
-          retrying_due: '試行 %{attempt}/%{max} が失敗: %{error} — 次の試行は今'
-          running: "%{ago} に取得 · リース期限 %{time}"
-          scheduled: 予約済み — 実行予定 %{time}
-          waiting: 待機中 — 前に %{count} 件
-          waiting_priority: 待機中 — この優先度で前に %{count} 件
-          waiting_unknown: 取得待ち
+          blocked_html: "%{key} の同時実行枠を待機中（使用中 %{held}/%{limit}） · 待機開始 %{ago}"
+          blocked_no_slots_html: "%{key} の同時実行枠を待機中 · 待機開始 %{ago}"
+          lease_expired_html: リースが期限切れ（ワーカーが停止した可能性） — 再配信中、試行 %{attempt}
+          no_workers_html: 正常なワーカーが動いていません
+          not_drained_html: このキューを処理するワーカーがいません
+          orphaned_html: "%{error} で失敗 — メッセージはもうキューにありません"
+          paused_html: キューは一時停止中
+          retrying_dlq_html: '試行 %{attempt}/%{max} が失敗: %{error} — 次の読み取りで DLQ に移動'
+          retrying_due_html: '試行 %{attempt}/%{max} が失敗: %{error} — 次の試行は今'
+          retrying_html: '試行 %{attempt}/%{max} が失敗: %{error} — 次の試行 %{time}'
+          running_html: "%{ago} に取得 · リース期限 %{time}"
+          scheduled_html: 予約済み — 実行予定 %{time}
+          waiting_html: 待機中 — 前に %{count} 件
+          waiting_priority_html: 待機中 — この優先度で前に %{count} 件
+          waiting_unknown_html: 取得待ち
         retry: リトライ
         retry_confirm: 可視性タイムアウトをリセットしてリトライしますか？
         states:
@@ -513,8 +535,6 @@ ja:
         pending: 保留中
         published: 公開済み
         stats:
-          no_age: "—"
-          oldest_age: "%{seconds}秒"
           oldest_unpublished: 最も古い未公開
           total: 合計
           unpublished: 未公開
@@ -547,8 +567,8 @@ ja:
         headers:
           actions: アクション
           depth: 深さ
-          newest: 最新 (秒)
-          oldest_claimable: 取得可能な最古 (秒)
+          newest: 最新
+          oldest_claimable: 取得可能な最古
           parked: 待機中
           queue: キュー
           total_ever: 合計数
@@ -584,32 +604,32 @@ ja:
         purge_queue: キューをパージ
         resume: 再開
         summary:
-          backlog: 現在取得可能 %{visible} 件、最古は %{age} 待機中 · %{parked} 件保留中（予定または再試行）
-          backlog_parked_only: 現在取得可能なものはありません · %{parked} 件保留中（予定または再試行）
-          dlq: "%{logical} のデッドレターキュー：%{max} 回失敗したジョブがここに入ります"
-          drained_by:
+          backlog_html: 現在取得可能 %{visible} 件、最古は %{age} 待機中 · %{parked} 件保留中（予定または再試行）
+          backlog_parked_only_html: 現在取得可能なものはありません · %{parked} 件保留中（予定または再試行）
+          dlq_html: "%{logical} のデッドレターキュー：%{max} 回失敗したジョブがここに入ります"
+          drained_by_html:
             one: "%{capsules} が処理（正常なワーカー %{count}）"
             other: "%{capsules} が処理（正常なワーカー %{count}）"
-          drained_live:
+          drained_live_html:
             one: このキューを監視する正常なワーカー %{count} が処理
             other: このキューを監視する正常なワーカー %{count} が処理
-          drained_wildcard:
+          drained_wildcard_html:
             one: ワイルドカードのワーカーカプセルが処理（正常なワーカー %{count}）
             other: ワイルドカードのワーカーカプセルが処理（正常なワーカー %{count}）
-          empty: 待機中のものはありません
-          handler: イベントハンドラーキュー — コンシューマーが処理（正常 %{count}）
-          no_consumers:
+          empty_html: 待機中のものはありません
+          handler_html: イベントハンドラーキュー — コンシューマーが処理（正常 %{count}）
+          no_consumers_html:
             one: 正常なコンシューマーがいないイベントハンドラーキュー — %{count} 件のイベントが待機中
             other: 正常なコンシューマーがいないイベントハンドラーキュー — %{count} 件のイベントが待機中
-          no_workers:
+          no_workers_html:
             one: 正常なワーカーが稼働していません — %{count} 件のジョブが取得可能ですが、誰も取得していません
             other: 正常なワーカーが稼働していません — %{count} 件のジョブが取得可能ですが、誰も取得していません
-          not_drained: このキューを処理するワーカーカプセルがありません — 設定されるまでジョブは待機します
-          paused_circuit_breaker: "%{failures} 回連続の失敗により %{ago} に自動で一時停止 — %{time} に再開（%{trip} 回目の作動）"
-          paused_operator: "%{ago} に一時停止 — %{reason}"
-          paused_operator_no_reason: "%{ago} にオペレーターが一時停止"
-          priority_level: "%{logical} の優先度レベル %{level}"
-          stream: ストリームキュー — peek で配信され、ワーカーは処理しません
+          not_drained_html: このキューを処理するワーカーカプセルがありません — 設定されるまでジョブは待機します
+          paused_circuit_breaker_html: "%{failures} 回連続の失敗により %{ago} に自動で一時停止 — %{time} に再開（%{trip} 回目の作動）"
+          paused_operator_html: "%{ago} に一時停止 — %{reason}"
+          paused_operator_no_reason_html: "%{ago} にオペレーターが一時停止"
+          priority_level_html: "%{logical} の優先度レベル %{level}"
+          stream_html: ストリームキュー — peek で配信され、ワーカーは処理しません
         summary_label: キューの概要
         table_health:
           headers:

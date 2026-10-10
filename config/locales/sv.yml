@@ -65,7 +65,7 @@ sv:
         empty: Inga köer hittades
         headers:
           depth: Djup
-          oldest_claimable: Äldsta tillgänglig (s)
+          oldest_claimable: Äldsta tillgänglig
           parked: Parkerade
           queue: Kö
           total: Totalt
@@ -246,6 +246,28 @@ sv:
         healthy: Hälsosam
         stale: Föråldrad
         stalled: Fastlåst
+      time:
+        absolute_format: "%Y-%m-%d %H:%M:%S %Z"
+        clock_format: "%H:%M"
+        future: om %{distance}
+        now: nu
+        past: för %{distance} sedan
+        range:
+          days:
+            one: "%{count} dag"
+            other: "%{count} dagar"
+          hours:
+            one: "%{count} timme"
+            other: "%{count} timmar"
+          minutes:
+            one: "%{count} minut"
+            other: "%{count} minuter"
+        units:
+          days: "%{count}d"
+          hours: "%{count}t"
+          milliseconds: "%{count}ms"
+          minutes: "%{count}m"
+          seconds: "%{count}s"
     insights:
       show:
         charts:
@@ -366,21 +388,21 @@ sv:
           timezone: 'Tidszon:'
           visible_at: 'Synlig vid:'
         reasons:
-          blocked: Väntar på en samtidighetsplats för %{key} (upptagna %{held}/%{limit}) · parkerad %{ago}
-          blocked_no_slots: Väntar på en samtidighetsplats för %{key} · parkerad %{ago}
-          lease_expired: Lease har gått ut (workern dog troligen) — levereras igen, försök %{attempt}
-          no_workers: Ingen frisk worker körs
-          not_drained: Ingen worker tömmer den här kön
-          orphaned: Misslyckades med %{error} — meddelandet finns inte längre i kön
-          paused: Kön är pausad
-          retrying: 'Försök %{attempt}/%{max} misslyckades: %{error} — nästa försök %{time}'
-          retrying_dlq: 'Försök %{attempt}/%{max} misslyckades: %{error} — nästa läsning flyttar den till DLQ'
-          retrying_due: 'Försök %{attempt}/%{max} misslyckades: %{error} — nästa försök nu'
-          running: Hämtad %{ago} · lease går ut %{time}
-          scheduled: Schemalagd — körs %{time}
-          waiting: Väntar — %{count} före
-          waiting_priority: Väntar — %{count} före med den här prioriteten
-          waiting_unknown: Väntar på att hämtas
+          blocked_html: Väntar på en samtidighetsplats för %{key} (upptagna %{held}/%{limit}) · parkerad %{ago}
+          blocked_no_slots_html: Väntar på en samtidighetsplats för %{key} · parkerad %{ago}
+          lease_expired_html: Lease har gått ut (workern dog troligen) — levereras igen, försök %{attempt}
+          no_workers_html: Ingen frisk worker körs
+          not_drained_html: Ingen worker tömmer den här kön
+          orphaned_html: Misslyckades med %{error} — meddelandet finns inte längre i kön
+          paused_html: Kön är pausad
+          retrying_dlq_html: 'Försök %{attempt}/%{max} misslyckades: %{error} — nästa läsning flyttar den till DLQ'
+          retrying_due_html: 'Försök %{attempt}/%{max} misslyckades: %{error} — nästa försök nu'
+          retrying_html: 'Försök %{attempt}/%{max} misslyckades: %{error} — nästa försök %{time}'
+          running_html: Hämtad %{ago} · lease går ut %{time}
+          scheduled_html: Schemalagd — körs %{time}
+          waiting_html: Väntar — %{count} före
+          waiting_priority_html: Väntar — %{count} före med den här prioriteten
+          waiting_unknown_html: Väntar på att hämtas
         retry: Försök igen
         retry_confirm: Återställ synlighetstimeout och försök igen?
         states:
@@ -513,8 +535,6 @@ sv:
         pending: Väntande
         published: Publicerad
         stats:
-          no_age: "—"
-          oldest_age: "%{seconds}s"
           oldest_unpublished: Äldsta opublicerade
           total: Totalt
           unpublished: Opublicerad
@@ -547,8 +567,8 @@ sv:
         headers:
           actions: Åtgärder
           depth: Djup
-          newest: Nyaste (s)
-          oldest_claimable: Äldsta tillgänglig (s)
+          newest: Nyaste
+          oldest_claimable: Äldsta tillgänglig
           parked: Parkerade
           queue: Kö
           total_ever: Totalt någonsin
@@ -584,32 +604,32 @@ sv:
         purge_queue: Rensa kö
         resume: Återuppta
         summary:
-          backlog: "%{visible} hämtbara nu, äldsta har väntat %{age} · %{parked} parkerade (schemalagda eller nytt försök)"
-          backlog_parked_only: Inget hämtbart nu · %{parked} parkerade (schemalagda eller nytt försök)
-          dlq: 'Dead letter-kö för %{logical}: jobb hamnar här efter %{max} misslyckade försök'
-          drained_by:
+          backlog_html: "%{visible} hämtbara nu, äldsta har väntat %{age} · %{parked} parkerade (schemalagda eller nytt försök)"
+          backlog_parked_only_html: Inget hämtbart nu · %{parked} parkerade (schemalagda eller nytt försök)
+          dlq_html: 'Dead letter-kö för %{logical}: jobb hamnar här efter %{max} misslyckade försök'
+          drained_by_html:
             one: Töms av %{capsules} (%{count} frisk worker)
             other: Töms av %{capsules} (%{count} friska workers)
-          drained_live:
+          drained_live_html:
             one: Töms av %{count} frisk worker som lyssnar på den här kön
             other: Töms av %{count} friska workers som lyssnar på den här kön
-          drained_wildcard:
+          drained_wildcard_html:
             one: Töms av en jokertecken-worker-kapsel (%{count} frisk worker)
             other: Töms av en jokertecken-worker-kapsel (%{count} friska workers)
-          empty: Inget väntar
-          handler: Händelsehanterarkö — töms av consumers (%{count} friska)
-          no_consumers:
+          empty_html: Inget väntar
+          handler_html: Händelsehanterarkö — töms av consumers (%{count} friska)
+          no_consumers_html:
             one: Händelsehanterarkö utan frisk consumer — %{count} händelse väntar
             other: Händelsehanterarkö utan frisk consumer — %{count} händelser väntar
-          no_workers:
+          no_workers_html:
             one: Ingen frisk worker körs — %{count} jobb är hämtbart men inget hämtar det
             other: Ingen frisk worker körs — %{count} jobb är hämtbara men inget hämtar dem
-          not_drained: Ingen worker-kapsel tömmer den här kön — jobb väntar tills en är konfigurerad
-          paused_circuit_breaker: 'Automatiskt pausad %{ago} efter %{failures} fel i rad — återupptas %{time} (utlösning #%{trip})'
-          paused_operator: Pausad %{ago} — %{reason}
-          paused_operator_no_reason: Pausad %{ago} av en operatör
-          priority_level: Prioritetsnivå %{level} av %{logical}
-          stream: Stream-kö — levereras med peek, töms inte av workers
+          not_drained_html: Ingen worker-kapsel tömmer den här kön — jobb väntar tills en är konfigurerad
+          paused_circuit_breaker_html: 'Automatiskt pausad %{ago} efter %{failures} fel i rad — återupptas %{time} (utlösning #%{trip})'
+          paused_operator_html: Pausad %{ago} — %{reason}
+          paused_operator_no_reason_html: Pausad %{ago} av en operatör
+          priority_level_html: Prioritetsnivå %{level} av %{logical}
+          stream_html: Stream-kö — levereras med peek, töms inte av workers
         summary_label: Kööversikt
         table_health:
           headers:

@@ -65,7 +65,7 @@ it:
         empty: Nessuna coda trovata
         headers:
           depth: Profondità
-          oldest_claimable: Più vecchio disponibile (s)
+          oldest_claimable: Più vecchio disponibile
           parked: Posticipati
           queue: Coda
           total: Totale
@@ -246,6 +246,28 @@ it:
         healthy: Sano
         stale: Obsoleto
         stalled: Bloccato
+      time:
+        absolute_format: "%Y-%m-%d %H:%M:%S %Z"
+        clock_format: "%H:%M"
+        future: tra %{distance}
+        now: ora
+        past: "%{distance} fa"
+        range:
+          days:
+            one: "%{count} giorno"
+            other: "%{count} giorni"
+          hours:
+            one: "%{count} ora"
+            other: "%{count} ore"
+          minutes:
+            one: "%{count} minuto"
+            other: "%{count} minuti"
+        units:
+          days: "%{count}g"
+          hours: "%{count}h"
+          milliseconds: "%{count}ms"
+          minutes: "%{count}m"
+          seconds: "%{count}s"
     insights:
       show:
         charts:
@@ -366,21 +388,21 @@ it:
           timezone: 'Fuso orario:'
           visible_at: 'Visibile alle:'
         reasons:
-          blocked: In attesa di uno slot di concorrenza su %{key} (occupati %{held}/%{limit}) · parcheggiato %{ago}
-          blocked_no_slots: In attesa di uno slot di concorrenza su %{key} · parcheggiato %{ago}
-          lease_expired: Lease scaduto (probabilmente il worker è terminato) — riconsegna, tentativo %{attempt}
-          no_workers: Nessun worker integro in esecuzione
-          not_drained: Nessun worker elabora questa coda
-          orphaned: Fallito con %{error} — il messaggio non è più nella coda
-          paused: Coda in pausa
-          retrying: 'Tentativo %{attempt}/%{max} fallito: %{error} — prossimo tentativo %{time}'
-          retrying_dlq: 'Tentativo %{attempt}/%{max} fallito: %{error} — la prossima lettura lo sposta nella DLQ'
-          retrying_due: 'Tentativo %{attempt}/%{max} fallito: %{error} — prossimo tentativo ora'
-          running: Prelevato %{ago} · il lease scade %{time}
-          scheduled: Pianificato — viene eseguito %{time}
-          waiting: In attesa — %{count} davanti
-          waiting_priority: In attesa — %{count} davanti con questa priorità
-          waiting_unknown: In attesa di essere prelevato
+          blocked_html: In attesa di uno slot di concorrenza su %{key} (occupati %{held}/%{limit}) · parcheggiato %{ago}
+          blocked_no_slots_html: In attesa di uno slot di concorrenza su %{key} · parcheggiato %{ago}
+          lease_expired_html: Lease scaduto (probabilmente il worker è terminato) — riconsegna, tentativo %{attempt}
+          no_workers_html: Nessun worker integro in esecuzione
+          not_drained_html: Nessun worker elabora questa coda
+          orphaned_html: Fallito con %{error} — il messaggio non è più nella coda
+          paused_html: Coda in pausa
+          retrying_dlq_html: 'Tentativo %{attempt}/%{max} fallito: %{error} — la prossima lettura lo sposta nella DLQ'
+          retrying_due_html: 'Tentativo %{attempt}/%{max} fallito: %{error} — prossimo tentativo ora'
+          retrying_html: 'Tentativo %{attempt}/%{max} fallito: %{error} — prossimo tentativo %{time}'
+          running_html: Prelevato %{ago} · il lease scade %{time}
+          scheduled_html: Pianificato — viene eseguito %{time}
+          waiting_html: In attesa — %{count} davanti
+          waiting_priority_html: In attesa — %{count} davanti con questa priorità
+          waiting_unknown_html: In attesa di essere prelevato
         retry: Riprova
         retry_confirm: Reimpostare il timeout di visibilità e riprovare?
         states:
@@ -513,8 +535,6 @@ it:
         pending: In sospeso
         published: Pubblicato
         stats:
-          no_age: "—"
-          oldest_age: "%{seconds}s"
           oldest_unpublished: Più vecchio non pubblicato
           total: Totale
           unpublished: Non pubblicato
@@ -547,8 +567,8 @@ it:
         headers:
           actions: Azioni
           depth: Profondità
-          newest: Più recente (s)
-          oldest_claimable: Più vecchio disponibile (s)
+          newest: Più recente
+          oldest_claimable: Più vecchio disponibile
           parked: Posticipati
           queue: Coda
           total_ever: Totale mai
@@ -584,32 +604,32 @@ it:
         purge_queue: Pulisci coda
         resume: Riprendi
         summary:
-          backlog: "%{visible} prelevabili ora, il più vecchio attende da %{age} · %{parked} parcheggiati (pianificati o in nuovo tentativo)"
-          backlog_parked_only: Niente di prelevabile ora · %{parked} parcheggiati (pianificati o in nuovo tentativo)
-          dlq: 'Coda dei messaggi morti di %{logical}: i job arrivano qui dopo %{max} tentativi falliti'
-          drained_by:
+          backlog_html: "%{visible} prelevabili ora, il più vecchio attende da %{age} · %{parked} parcheggiati (pianificati o in nuovo tentativo)"
+          backlog_parked_only_html: Niente di prelevabile ora · %{parked} parcheggiati (pianificati o in nuovo tentativo)
+          dlq_html: 'Coda dei messaggi morti di %{logical}: i job arrivano qui dopo %{max} tentativi falliti'
+          drained_by_html:
             one: Svuotata da %{capsules} (%{count} worker sano)
             other: Svuotata da %{capsules} (%{count} worker sani)
-          drained_live:
+          drained_live_html:
             one: Svuotata da %{count} worker sano in ascolto su questa coda
             other: Svuotata da %{count} worker sani in ascolto su questa coda
-          drained_wildcard:
+          drained_wildcard_html:
             one: Svuotata da una capsula di worker jolly (%{count} worker sano)
             other: Svuotata da una capsula di worker jolly (%{count} worker sani)
-          empty: Niente in attesa
-          handler: Coda del gestore di eventi — svuotata dai consumer (%{count} sani)
-          no_consumers:
+          empty_html: Niente in attesa
+          handler_html: Coda del gestore di eventi — svuotata dai consumer (%{count} sani)
+          no_consumers_html:
             one: Coda del gestore di eventi senza consumer sano — %{count} evento in attesa
             other: Coda del gestore di eventi senza consumer sano — %{count} eventi in attesa
-          no_workers:
+          no_workers_html:
             one: Nessun worker sano in esecuzione — %{count} job è prelevabile ma nessuno lo preleva
             other: Nessun worker sano in esecuzione — %{count} job sono prelevabili ma nessuno li preleva
-          not_drained: Nessuna capsula di worker svuota questa coda — i job attendono finché non ne viene configurata una
-          paused_circuit_breaker: Messa in pausa automaticamente %{ago} dopo %{failures} errori consecutivi — riprende %{time} (intervento n.%{trip})
-          paused_operator: In pausa %{ago} — %{reason}
-          paused_operator_no_reason: Messa in pausa %{ago} da un operatore
-          priority_level: Livello di priorità %{level} di %{logical}
-          stream: Coda di stream — consegnata tramite peek, non svuotata dai worker
+          not_drained_html: Nessuna capsula di worker svuota questa coda — i job attendono finché non ne viene configurata una
+          paused_circuit_breaker_html: Messa in pausa automaticamente %{ago} dopo %{failures} errori consecutivi — riprende %{time} (intervento n.%{trip})
+          paused_operator_html: In pausa %{ago} — %{reason}
+          paused_operator_no_reason_html: Messa in pausa %{ago} da un operatore
+          priority_level_html: Livello di priorità %{level} di %{logical}
+          stream_html: Coda di stream — consegnata tramite peek, non svuotata dai worker
         summary_label: Riepilogo della coda
         table_health:
           headers:

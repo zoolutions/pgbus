@@ -41,7 +41,7 @@
               <% end %>
             </td>
             <td data-label="<%= t("pgbus.batches.index.headers.created") %>" class="px-4 py-3 text-sm text-right text-gray-500 dark:text-gray-400">
-              <%= pgbus_time_ago(batch[:created_at]) %>
+              <%= pgbus_time(batch[:created_at]) %>
             </td>
           </tr>
         <% end %>

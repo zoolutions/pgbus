@@ -60,7 +60,7 @@
                   <span class="text-gray-500 dark:text-gray-400"><%= t("pgbus.locks.concurrency.lease.none") %></span>
                 <% elsif row[:lease_fresh] %>
                   <span class="inline-flex items-center rounded-full bg-green-100 dark:bg-green-900/30 px-2.5 py-0.5 text-xs font-medium text-green-800 dark:text-green-400"><%= t("pgbus.locks.concurrency.lease.live") %></span>
-                  <span class="ml-1 text-xs text-gray-500 dark:text-gray-400"><%= pgbus_time_ago_future(row[:expires_at]) %></span>
+                  <span class="ml-1 text-xs text-gray-500 dark:text-gray-400"><%= pgbus_time(row[:expires_at]) %></span>
                 <% else %>
                   <span class="inline-flex items-center rounded-full bg-red-100 dark:bg-red-900/30 px-2.5 py-0.5 text-xs font-medium text-red-800 dark:text-red-400"><%= t("pgbus.locks.concurrency.lease.expired") %></span>
                 <% end %>

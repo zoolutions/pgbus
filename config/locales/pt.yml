@@ -65,7 +65,7 @@ pt:
         empty: Nenhuma fila encontrada
         headers:
           depth: Profundidade
-          oldest_claimable: Mais antigo disponível (s)
+          oldest_claimable: Mais antigo disponível
           parked: Adiados
           queue: Fila
           total: Total
@@ -246,6 +246,28 @@ pt:
         healthy: Saudável
         stale: Obsoleto
         stalled: Bloqueado
+      time:
+        absolute_format: "%Y-%m-%d %H:%M:%S %Z"
+        clock_format: "%H:%M"
+        future: em %{distance}
+        now: agora
+        past: há %{distance}
+        range:
+          days:
+            one: "%{count} dia"
+            other: "%{count} dias"
+          hours:
+            one: "%{count} hora"
+            other: "%{count} horas"
+          minutes:
+            one: "%{count} minuto"
+            other: "%{count} minutos"
+        units:
+          days: "%{count}d"
+          hours: "%{count}h"
+          milliseconds: "%{count}ms"
+          minutes: "%{count}min"
+          seconds: "%{count}s"
     insights:
       show:
         charts:
@@ -366,21 +388,21 @@ pt:
           timezone: 'Fuso horário:'
           visible_at: 'Visível em:'
         reasons:
-          blocked: Aguardando um slot de concorrência em %{key} (ocupados %{held}/%{limit}) · estacionado %{ago}
-          blocked_no_slots: Aguardando um slot de concorrência em %{key} · estacionado %{ago}
-          lease_expired: Concessão expirada (o worker provavelmente morreu) — reentregando, tentativa %{attempt}
-          no_workers: Nenhum worker saudável em execução
-          not_drained: Nenhum worker processa esta fila
-          orphaned: Falhou com %{error} — a mensagem não está mais na fila
-          paused: Fila pausada
-          retrying: 'A tentativa %{attempt}/%{max} falhou: %{error} — próxima tentativa %{time}'
-          retrying_dlq: 'A tentativa %{attempt}/%{max} falhou: %{error} — a próxima leitura o move para a DLQ'
-          retrying_due: 'A tentativa %{attempt}/%{max} falhou: %{error} — próxima tentativa agora'
-          running: Coletado %{ago} · a concessão expira %{time}
-          scheduled: Agendado — executa %{time}
-          waiting: Aguardando — %{count} à frente
-          waiting_priority: Aguardando — %{count} à frente nesta prioridade
-          waiting_unknown: Aguardando ser coletado
+          blocked_html: Aguardando um slot de concorrência em %{key} (ocupados %{held}/%{limit}) · estacionado %{ago}
+          blocked_no_slots_html: Aguardando um slot de concorrência em %{key} · estacionado %{ago}
+          lease_expired_html: Concessão expirada (o worker provavelmente morreu) — reentregando, tentativa %{attempt}
+          no_workers_html: Nenhum worker saudável em execução
+          not_drained_html: Nenhum worker processa esta fila
+          orphaned_html: Falhou com %{error} — a mensagem não está mais na fila
+          paused_html: Fila pausada
+          retrying_dlq_html: 'A tentativa %{attempt}/%{max} falhou: %{error} — a próxima leitura o move para a DLQ'
+          retrying_due_html: 'A tentativa %{attempt}/%{max} falhou: %{error} — próxima tentativa agora'
+          retrying_html: 'A tentativa %{attempt}/%{max} falhou: %{error} — próxima tentativa %{time}'
+          running_html: Coletado %{ago} · a concessão expira %{time}
+          scheduled_html: Agendado — executa %{time}
+          waiting_html: Aguardando — %{count} à frente
+          waiting_priority_html: Aguardando — %{count} à frente nesta prioridade
+          waiting_unknown_html: Aguardando ser coletado
         retry: Tentar Novamente
         retry_confirm: Redefinir tempo de visibilidade e tentar novamente?
         states:
@@ -513,8 +535,6 @@ pt:
         pending: Pendente
         published: Publicado
         stats:
-          no_age: "—"
-          oldest_age: "%{seconds}s"
           oldest_unpublished: Mais antigo não publicado
           total: Total
           unpublished: Não publicado
@@ -547,8 +567,8 @@ pt:
         headers:
           actions: Ações
           depth: Profundidade
-          newest: Mais novo (s)
-          oldest_claimable: Mais antigo disponível (s)
+          newest: Mais novo
+          oldest_claimable: Mais antigo disponível
           parked: Adiados
           queue: Fila
           total_ever: Total de todos os tempos
@@ -584,32 +604,32 @@ pt:
         purge_queue: Limpar fila
         resume: Retomar
         summary:
-          backlog: "%{visible} disponíveis agora, o mais antigo espera há %{age} · %{parked} estacionados (agendados ou em nova tentativa)"
-          backlog_parked_only: Nada disponível agora · %{parked} estacionados (agendados ou em nova tentativa)
-          dlq: 'Fila de mensagens mortas de %{logical}: os jobs chegam aqui após %{max} tentativas falhadas'
-          drained_by:
+          backlog_html: "%{visible} disponíveis agora, o mais antigo espera há %{age} · %{parked} estacionados (agendados ou em nova tentativa)"
+          backlog_parked_only_html: Nada disponível agora · %{parked} estacionados (agendados ou em nova tentativa)
+          dlq_html: 'Fila de mensagens mortas de %{logical}: os jobs chegam aqui após %{max} tentativas falhadas'
+          drained_by_html:
             one: Esvaziada por %{capsules} (%{count} worker saudável)
             other: Esvaziada por %{capsules} (%{count} workers saudáveis)
-          drained_live:
+          drained_live_html:
             one: Esvaziada por %{count} worker saudável que escuta esta fila
             other: Esvaziada por %{count} workers saudáveis que escutam esta fila
-          drained_wildcard:
+          drained_wildcard_html:
             one: Esvaziada por uma cápsula de workers curinga (%{count} worker saudável)
             other: Esvaziada por uma cápsula de workers curinga (%{count} workers saudáveis)
-          empty: Nada à espera
-          handler: Fila de handler de eventos — esvaziada pelos consumidores (%{count} saudáveis)
-          no_consumers:
+          empty_html: Nada à espera
+          handler_html: Fila de handler de eventos — esvaziada pelos consumidores (%{count} saudáveis)
+          no_consumers_html:
             one: Fila de handler de eventos sem consumidor saudável — %{count} evento espera
             other: Fila de handler de eventos sem consumidor saudável — %{count} eventos esperam
-          no_workers:
+          no_workers_html:
             one: Nenhum worker saudável em execução — %{count} job está disponível mas ninguém o pega
             other: Nenhum worker saudável em execução — %{count} jobs estão disponíveis mas ninguém os pega
-          not_drained: Nenhuma cápsula de workers esvazia esta fila — os jobs esperam até que uma seja configurada
-          paused_circuit_breaker: 'Pausada automaticamente %{ago} após %{failures} falhas consecutivas — retoma %{time} (disparo #%{trip})'
-          paused_operator: Pausada %{ago} — %{reason}
-          paused_operator_no_reason: Pausada %{ago} por um operador
-          priority_level: Nível de prioridade %{level} de %{logical}
-          stream: Fila de stream — entregue por peek, não esvaziada pelos workers
+          not_drained_html: Nenhuma cápsula de workers esvazia esta fila — os jobs esperam até que uma seja configurada
+          paused_circuit_breaker_html: 'Pausada automaticamente %{ago} após %{failures} falhas consecutivas — retoma %{time} (disparo #%{trip})'
+          paused_operator_html: Pausada %{ago} — %{reason}
+          paused_operator_no_reason_html: Pausada %{ago} por um operador
+          priority_level_html: Nível de prioridade %{level} de %{logical}
+          stream_html: Fila de stream — entregue por peek, não esvaziada pelos workers
         summary_label: Resumo da fila
         table_health:
           headers:

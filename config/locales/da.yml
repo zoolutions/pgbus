@@ -65,7 +65,7 @@ da:
         empty: Ingen køer fundet
         headers:
           depth: Dybde
-          oldest_claimable: Ældste tilgængelig (s)
+          oldest_claimable: Ældste tilgængelig
           parked: Parkeret
           queue: Kø
           total: Total
@@ -246,6 +246,28 @@ da:
         healthy: Sund
         stale: Forældet
         stalled: Gået i stå
+      time:
+        absolute_format: "%Y-%m-%d %H:%M:%S %Z"
+        clock_format: "%H:%M"
+        future: om %{distance}
+        now: nu
+        past: "%{distance} siden"
+        range:
+          days:
+            one: "%{count} dag"
+            other: "%{count} dage"
+          hours:
+            one: "%{count} time"
+            other: "%{count} timer"
+          minutes:
+            one: "%{count} minut"
+            other: "%{count} minutter"
+        units:
+          days: "%{count}d"
+          hours: "%{count}t"
+          milliseconds: "%{count}ms"
+          minutes: "%{count}m"
+          seconds: "%{count}s"
     insights:
       show:
         charts:
@@ -366,21 +388,21 @@ da:
           timezone: 'Tidszone:'
           visible_at: 'Synlig fra:'
         reasons:
-          blocked: Venter på en samtidighedsplads på %{key} (optaget %{held}/%{limit}) · parkeret %{ago}
-          blocked_no_slots: Venter på en samtidighedsplads på %{key} · parkeret %{ago}
-          lease_expired: Lease udløbet (worker er sandsynligvis død) — leveres igen, forsøg %{attempt}
-          no_workers: Ingen sund worker kører
-          not_drained: Ingen worker tømmer denne kø
-          orphaned: Fejlede med %{error} — beskeden er ikke længere i køen
-          paused: Køen er sat på pause
-          retrying: 'Forsøg %{attempt}/%{max} fejlede: %{error} — næste forsøg %{time}'
-          retrying_dlq: 'Forsøg %{attempt}/%{max} fejlede: %{error} — næste læsning flytter den til DLQ'
-          retrying_due: 'Forsøg %{attempt}/%{max} fejlede: %{error} — næste forsøg nu'
-          running: Hentet %{ago} · lease udløber %{time}
-          scheduled: Planlagt — kører %{time}
-          waiting: Venter — %{count} foran
-          waiting_priority: Venter — %{count} foran med denne prioritet
-          waiting_unknown: Venter på at blive hentet
+          blocked_html: Venter på en samtidighedsplads på %{key} (optaget %{held}/%{limit}) · parkeret %{ago}
+          blocked_no_slots_html: Venter på en samtidighedsplads på %{key} · parkeret %{ago}
+          lease_expired_html: Lease udløbet (worker er sandsynligvis død) — leveres igen, forsøg %{attempt}
+          no_workers_html: Ingen sund worker kører
+          not_drained_html: Ingen worker tømmer denne kø
+          orphaned_html: Fejlede med %{error} — beskeden er ikke længere i køen
+          paused_html: Køen er sat på pause
+          retrying_dlq_html: 'Forsøg %{attempt}/%{max} fejlede: %{error} — næste læsning flytter den til DLQ'
+          retrying_due_html: 'Forsøg %{attempt}/%{max} fejlede: %{error} — næste forsøg nu'
+          retrying_html: 'Forsøg %{attempt}/%{max} fejlede: %{error} — næste forsøg %{time}'
+          running_html: Hentet %{ago} · lease udløber %{time}
+          scheduled_html: Planlagt — kører %{time}
+          waiting_html: Venter — %{count} foran
+          waiting_priority_html: Venter — %{count} foran med denne prioritet
+          waiting_unknown_html: Venter på at blive hentet
         retry: Forsøg igen
         retry_confirm: Nulstil synlighedstimeout og prøv igen?
         states:
@@ -513,8 +535,6 @@ da:
         pending: Afventer
         published: Publiceret
         stats:
-          no_age: "—"
-          oldest_age: "%{seconds}s"
           oldest_unpublished: Ældste upublicerede
           total: Total
           unpublished: Upubliceret
@@ -547,8 +567,8 @@ da:
         headers:
           actions: Handlinger
           depth: Dybde
-          newest: Nyeste (s)
-          oldest_claimable: Ældste tilgængelig (s)
+          newest: Nyeste
+          oldest_claimable: Ældste tilgængelig
           parked: Parkeret
           queue: Kø
           total_ever: Total nogensinde
@@ -584,32 +604,32 @@ da:
         purge_queue: Rens kø
         resume: Genoptag
         summary:
-          backlog: "%{visible} klar til afhentning nu, ældste har ventet %{age} · %{parked} parkeret (planlagt eller genforsøg)"
-          backlog_parked_only: Intet klar til afhentning nu · %{parked} parkeret (planlagt eller genforsøg)
-          dlq: 'Dead letter-kø for %{logical}: job havner her efter %{max} mislykkede forsøg'
-          drained_by:
+          backlog_html: "%{visible} klar til afhentning nu, ældste har ventet %{age} · %{parked} parkeret (planlagt eller genforsøg)"
+          backlog_parked_only_html: Intet klar til afhentning nu · %{parked} parkeret (planlagt eller genforsøg)
+          dlq_html: 'Dead letter-kø for %{logical}: job havner her efter %{max} mislykkede forsøg'
+          drained_by_html:
             one: Tømmes af %{capsules} (%{count} sund worker)
             other: Tømmes af %{capsules} (%{count} sunde workers)
-          drained_live:
+          drained_live_html:
             one: Tømmes af %{count} sund worker, der lytter på denne kø
             other: Tømmes af %{count} sunde workers, der lytter på denne kø
-          drained_wildcard:
+          drained_wildcard_html:
             one: Tømmes af en wildcard-worker-kapsel (%{count} sund worker)
             other: Tømmes af en wildcard-worker-kapsel (%{count} sunde workers)
-          empty: Intet venter
-          handler: Event handler-kø — tømmes af consumers (%{count} sunde)
-          no_consumers:
+          empty_html: Intet venter
+          handler_html: Event handler-kø — tømmes af consumers (%{count} sunde)
+          no_consumers_html:
             one: Event handler-kø uden sund consumer — %{count} event venter
             other: Event handler-kø uden sund consumer — %{count} events venter
-          no_workers:
+          no_workers_html:
             one: Ingen sund worker kører — %{count} job kan afhentes, men intet afhenter det
             other: Ingen sund worker kører — %{count} job kan afhentes, men intet afhenter dem
-          not_drained: Ingen worker-kapsel tømmer denne kø — job venter, indtil en er konfigureret
-          paused_circuit_breaker: 'Automatisk sat på pause %{ago} efter %{failures} fejl i træk — genoptages %{time} (udløsning #%{trip})'
-          paused_operator: Sat på pause %{ago} — %{reason}
-          paused_operator_no_reason: Sat på pause %{ago} af en operatør
-          priority_level: Prioritetsniveau %{level} af %{logical}
-          stream: Stream-kø — leveres ved peek, tømmes ikke af workers
+          not_drained_html: Ingen worker-kapsel tømmer denne kø — job venter, indtil en er konfigureret
+          paused_circuit_breaker_html: 'Automatisk sat på pause %{ago} efter %{failures} fejl i træk — genoptages %{time} (udløsning #%{trip})'
+          paused_operator_html: Sat på pause %{ago} — %{reason}
+          paused_operator_no_reason_html: Sat på pause %{ago} af en operatør
+          priority_level_html: Prioritetsniveau %{level} af %{logical}
+          stream_html: Stream-kø — leveres ved peek, tømmes ikke af workers
         summary_label: Køoversigt
         table_health:
           headers:

@@ -65,7 +65,7 @@ nl:
         empty: Geen wachtrijen gevonden
         headers:
           depth: Diepte
-          oldest_claimable: Oudste beschikbaar (s)
+          oldest_claimable: Oudste beschikbaar
           parked: Geparkeerd
           queue: Wachtrij
           total: Totaal
@@ -246,6 +246,28 @@ nl:
         healthy: Gezond
         stale: Verouderd
         stalled: Vastgelopen
+      time:
+        absolute_format: "%Y-%m-%d %H:%M:%S %Z"
+        clock_format: "%H:%M"
+        future: over %{distance}
+        now: nu
+        past: "%{distance} geleden"
+        range:
+          days:
+            one: "%{count} dag"
+            other: "%{count} dagen"
+          hours:
+            one: "%{count} uur"
+            other: "%{count} uur"
+          minutes:
+            one: "%{count} minuut"
+            other: "%{count} minuten"
+        units:
+          days: "%{count}d"
+          hours: "%{count}u"
+          milliseconds: "%{count}ms"
+          minutes: "%{count}m"
+          seconds: "%{count}s"
     insights:
       show:
         charts:
@@ -366,21 +388,21 @@ nl:
           timezone: 'Tijdzone:'
           visible_at: 'Zichtbaar op:'
         reasons:
-          blocked: Wacht op een gelijktijdigheidsslot voor %{key} (bezet %{held}/%{limit}) · geparkeerd %{ago}
-          blocked_no_slots: Wacht op een gelijktijdigheidsslot voor %{key} · geparkeerd %{ago}
-          lease_expired: Lease verlopen (worker waarschijnlijk gestopt) — opnieuw afgeleverd, poging %{attempt}
-          no_workers: Geen gezonde worker actief
-          not_drained: Geen worker verwerkt deze wachtrij
-          orphaned: Mislukt met %{error} — bericht staat niet meer in de wachtrij
-          paused: Wachtrij gepauzeerd
-          retrying: 'Poging %{attempt}/%{max} mislukt: %{error} — volgende poging %{time}'
-          retrying_dlq: 'Poging %{attempt}/%{max} mislukt: %{error} — de volgende lezing verplaatst hem naar de DLQ'
-          retrying_due: 'Poging %{attempt}/%{max} mislukt: %{error} — volgende poging nu'
-          running: Opgepakt %{ago} · lease verloopt %{time}
-          scheduled: Gepland — draait %{time}
-          waiting: Wacht — %{count} ervoor
-          waiting_priority: Wacht — %{count} ervoor met deze prioriteit
-          waiting_unknown: Wacht om opgepakt te worden
+          blocked_html: Wacht op een gelijktijdigheidsslot voor %{key} (bezet %{held}/%{limit}) · geparkeerd %{ago}
+          blocked_no_slots_html: Wacht op een gelijktijdigheidsslot voor %{key} · geparkeerd %{ago}
+          lease_expired_html: Lease verlopen (worker waarschijnlijk gestopt) — opnieuw afgeleverd, poging %{attempt}
+          no_workers_html: Geen gezonde worker actief
+          not_drained_html: Geen worker verwerkt deze wachtrij
+          orphaned_html: Mislukt met %{error} — bericht staat niet meer in de wachtrij
+          paused_html: Wachtrij gepauzeerd
+          retrying_dlq_html: 'Poging %{attempt}/%{max} mislukt: %{error} — de volgende lezing verplaatst hem naar de DLQ'
+          retrying_due_html: 'Poging %{attempt}/%{max} mislukt: %{error} — volgende poging nu'
+          retrying_html: 'Poging %{attempt}/%{max} mislukt: %{error} — volgende poging %{time}'
+          running_html: Opgepakt %{ago} · lease verloopt %{time}
+          scheduled_html: Gepland — draait %{time}
+          waiting_html: Wacht — %{count} ervoor
+          waiting_priority_html: Wacht — %{count} ervoor met deze prioriteit
+          waiting_unknown_html: Wacht om opgepakt te worden
         retry: Opnieuw proberen
         retry_confirm: Zichtbaarheidstimeout resetten en opnieuw proberen?
         states:
@@ -513,8 +535,6 @@ nl:
         pending: In afwachting
         published: Gepubliceerd
         stats:
-          no_age: "—"
-          oldest_age: "%{seconds}s"
           oldest_unpublished: Oudste niet-gepubliceerde
           total: Totaal
           unpublished: Niet gepubliceerd
@@ -547,8 +567,8 @@ nl:
         headers:
           actions: Acties
           depth: Diepte
-          newest: Nieuwste (s)
-          oldest_claimable: Oudste beschikbaar (s)
+          newest: Nieuwste
+          oldest_claimable: Oudste beschikbaar
           parked: Geparkeerd
           queue: Wachtrij
           total_ever: Totaal ooit
@@ -584,32 +604,32 @@ nl:
         purge_queue: Wachtrij opschonen
         resume: Hervatten
         summary:
-          backlog: "%{visible} nu op te pakken, oudste wacht al %{age} · %{parked} geparkeerd (gepland of opnieuw proberen)"
-          backlog_parked_only: Niets nu op te pakken · %{parked} geparkeerd (gepland of opnieuw proberen)
-          dlq: 'Dead-letterwachtrij voor %{logical}: jobs komen hier na %{max} mislukte pogingen'
-          drained_by:
+          backlog_html: "%{visible} nu op te pakken, oudste wacht al %{age} · %{parked} geparkeerd (gepland of opnieuw proberen)"
+          backlog_parked_only_html: Niets nu op te pakken · %{parked} geparkeerd (gepland of opnieuw proberen)
+          dlq_html: 'Dead-letterwachtrij voor %{logical}: jobs komen hier na %{max} mislukte pogingen'
+          drained_by_html:
             one: Leeggemaakt door %{capsules} (%{count} gezonde worker)
             other: Leeggemaakt door %{capsules} (%{count} gezonde workers)
-          drained_live:
+          drained_live_html:
             one: Leeggemaakt door %{count} gezonde worker die naar deze wachtrij luistert
             other: Leeggemaakt door %{count} gezonde workers die naar deze wachtrij luisteren
-          drained_wildcard:
+          drained_wildcard_html:
             one: Leeggemaakt door een wildcard-workercapsule (%{count} gezonde worker)
             other: Leeggemaakt door een wildcard-workercapsule (%{count} gezonde workers)
-          empty: Niets in de wacht
-          handler: Event-handlerwachtrij — leeggemaakt door consumers (%{count} gezond)
-          no_consumers:
+          empty_html: Niets in de wacht
+          handler_html: Event-handlerwachtrij — leeggemaakt door consumers (%{count} gezond)
+          no_consumers_html:
             one: Event-handlerwachtrij zonder gezonde consumer — %{count} event wacht
             other: Event-handlerwachtrij zonder gezonde consumer — %{count} events wachten
-          no_workers:
+          no_workers_html:
             one: Geen gezonde worker actief — %{count} job is op te pakken maar niemand pakt hem op
             other: Geen gezonde worker actief — %{count} jobs zijn op te pakken maar niemand pakt ze op
-          not_drained: Geen workercapsule maakt deze wachtrij leeg — jobs wachten tot er een is geconfigureerd
-          paused_circuit_breaker: 'Automatisch gepauzeerd %{ago} na %{failures} opeenvolgende fouten — hervat %{time} (activering #%{trip})'
-          paused_operator: Gepauzeerd %{ago} — %{reason}
-          paused_operator_no_reason: Gepauzeerd %{ago} door een operator
-          priority_level: Prioriteitsniveau %{level} van %{logical}
-          stream: Streamwachtrij — bezorgd via peek, niet leeggemaakt door workers
+          not_drained_html: Geen workercapsule maakt deze wachtrij leeg — jobs wachten tot er een is geconfigureerd
+          paused_circuit_breaker_html: 'Automatisch gepauzeerd %{ago} na %{failures} opeenvolgende fouten — hervat %{time} (activering #%{trip})'
+          paused_operator_html: Gepauzeerd %{ago} — %{reason}
+          paused_operator_no_reason_html: Gepauzeerd %{ago} door een operator
+          priority_level_html: Prioriteitsniveau %{level} van %{logical}
+          stream_html: Streamwachtrij — bezorgd via peek, niet leeggemaakt door workers
         summary_label: Wachtrijoverzicht
         table_health:
           headers:

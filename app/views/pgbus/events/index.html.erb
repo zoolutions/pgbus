@@ -62,7 +62,7 @@
           <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
             <td data-label="<%= t("pgbus.events.index.processed_headers.event_id") %>" class="px-4 py-3 text-sm font-mono text-gray-900 dark:text-white"><%= e["event_id"] %></td>
             <td data-label="<%= t("pgbus.events.index.processed_headers.handler") %>" class="px-4 py-3 text-sm text-gray-700 dark:text-gray-200"><%= e["handler_class"] %></td>
-            <td data-label="<%= t("pgbus.events.index.processed_headers.processed_at") %>" class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400"><%= pgbus_time_ago(e["processed_at"]) %></td>
+            <td data-label="<%= t("pgbus.events.index.processed_headers.processed_at") %>" class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400"><%= pgbus_time(e["processed_at"]) %></td>
           </tr>
         <% end %>
         <% if @events.empty? %>

@@ -65,7 +65,7 @@ en:
         empty: No queues found
         headers:
           depth: Depth
-          oldest_claimable: Oldest claimable (s)
+          oldest_claimable: Oldest claimable
           parked: Parked
           queue: Queue
           total: Total
@@ -246,6 +246,28 @@ en:
         healthy: Healthy
         stale: Stale
         stalled: Stalled
+      time:
+        absolute_format: "%Y-%m-%d %H:%M:%S %Z"
+        clock_format: "%H:%M"
+        future: in %{distance}
+        now: now
+        past: "%{distance} ago"
+        range:
+          days:
+            one: "%{count} day"
+            other: "%{count} days"
+          hours:
+            one: "%{count} hour"
+            other: "%{count} hours"
+          minutes:
+            one: "%{count} minute"
+            other: "%{count} minutes"
+        units:
+          days: "%{count}d"
+          hours: "%{count}h"
+          milliseconds: "%{count}ms"
+          minutes: "%{count}m"
+          seconds: "%{count}s"
     insights:
       show:
         charts:
@@ -366,21 +388,21 @@ en:
           timezone: 'Timezone:'
           visible_at: 'Visible at:'
         reasons:
-          blocked: Waiting for a concurrency slot on %{key} (held %{held}/%{limit}) · parked %{ago}
-          blocked_no_slots: Waiting for a concurrency slot on %{key} · parked %{ago}
-          lease_expired: Lease expired (worker likely died) — redelivering, attempt %{attempt}
-          no_workers: No healthy worker running
-          not_drained: No worker drains this queue
-          orphaned: Failed with %{error} — message no longer in queue
-          paused: Queue paused
-          retrying: 'Attempt %{attempt}/%{max} failed: %{error} — next attempt %{time}'
-          retrying_dlq: 'Attempt %{attempt}/%{max} failed: %{error} — next read moves it to the DLQ'
-          retrying_due: 'Attempt %{attempt}/%{max} failed: %{error} — next attempt due now'
-          running: Claimed %{ago} · lease expires %{time}
-          scheduled: Scheduled — runs %{time}
-          waiting: Waiting — %{count} ahead
-          waiting_priority: Waiting — %{count} ahead at this priority
-          waiting_unknown: Waiting to be picked up
+          blocked_html: Waiting for a concurrency slot on %{key} (held %{held}/%{limit}) · parked %{ago}
+          blocked_no_slots_html: Waiting for a concurrency slot on %{key} · parked %{ago}
+          lease_expired_html: Lease expired (worker likely died) — redelivering, attempt %{attempt}
+          no_workers_html: No healthy worker running
+          not_drained_html: No worker drains this queue
+          orphaned_html: Failed with %{error} — message no longer in queue
+          paused_html: Queue paused
+          retrying_dlq_html: 'Attempt %{attempt}/%{max} failed: %{error} — next read moves it to the DLQ'
+          retrying_due_html: 'Attempt %{attempt}/%{max} failed: %{error} — next attempt due now'
+          retrying_html: 'Attempt %{attempt}/%{max} failed: %{error} — next attempt %{time}'
+          running_html: Claimed %{ago} · lease expires %{time}
+          scheduled_html: Scheduled — runs %{time}
+          waiting_html: Waiting — %{count} ahead
+          waiting_priority_html: Waiting — %{count} ahead at this priority
+          waiting_unknown_html: Waiting to be picked up
         retry: Retry
         retry_confirm: Reset visibility timeout and retry?
         states:
@@ -513,8 +535,6 @@ en:
         pending: Pending
         published: Published
         stats:
-          no_age: "—"
-          oldest_age: "%{seconds}s"
           oldest_unpublished: Oldest Unpublished
           total: Total
           unpublished: Unpublished
@@ -547,8 +567,8 @@ en:
         headers:
           actions: Actions
           depth: Depth
-          newest: Newest (s)
-          oldest_claimable: Oldest claimable (s)
+          newest: Newest
+          oldest_claimable: Oldest claimable
           parked: Parked
           queue: Queue
           total_ever: Total Ever
@@ -584,32 +604,32 @@ en:
         purge_queue: Purge Queue
         resume: Resume
         summary:
-          backlog: "%{visible} claimable now, oldest waiting %{age} · %{parked} parked (scheduled or retrying)"
-          backlog_parked_only: Nothing claimable now · %{parked} parked (scheduled or retrying)
-          dlq: 'Dead-letter queue for %{logical}: jobs land here after %{max} failed attempts'
-          drained_by:
+          backlog_html: "%{visible} claimable now, oldest waiting %{age} · %{parked} parked (scheduled or retrying)"
+          backlog_parked_only_html: Nothing claimable now · %{parked} parked (scheduled or retrying)
+          dlq_html: 'Dead-letter queue for %{logical}: jobs land here after %{max} failed attempts'
+          drained_by_html:
             one: Drained by %{capsules} (%{count} healthy worker)
             other: Drained by %{capsules} (%{count} healthy workers)
-          drained_live:
+          drained_live_html:
             one: Drained by %{count} healthy worker listening on this queue
             other: Drained by %{count} healthy workers listening on this queue
-          drained_wildcard:
+          drained_wildcard_html:
             one: Drained by a wildcard worker capsule (%{count} healthy worker)
             other: Drained by a wildcard worker capsule (%{count} healthy workers)
-          empty: Nothing waiting
-          handler: Event handler queue — drained by consumers (%{count} healthy)
-          no_consumers:
+          empty_html: Nothing waiting
+          handler_html: Event handler queue — drained by consumers (%{count} healthy)
+          no_consumers_html:
             one: Event handler queue with no healthy consumer — %{count} event waits
             other: Event handler queue with no healthy consumer — %{count} events wait
-          no_workers:
+          no_workers_html:
             one: No healthy worker running — %{count} job is claimable but nothing claims it
             other: No healthy worker running — %{count} jobs are claimable but nothing claims them
-          not_drained: No worker capsule drains this queue — jobs wait until one is configured
-          paused_circuit_breaker: 'Paused automatically %{ago} after %{failures} consecutive failures — resumes %{time} (trip #%{trip})'
-          paused_operator: Paused %{ago} — %{reason}
-          paused_operator_no_reason: Paused %{ago} by an operator
-          priority_level: Priority level %{level} of %{logical}
-          stream: Stream queue — delivered by peek, not drained by workers
+          not_drained_html: No worker capsule drains this queue — jobs wait until one is configured
+          paused_circuit_breaker_html: 'Paused automatically %{ago} after %{failures} consecutive failures — resumes %{time} (trip #%{trip})'
+          paused_operator_html: Paused %{ago} — %{reason}
+          paused_operator_no_reason_html: Paused %{ago} by an operator
+          priority_level_html: Priority level %{level} of %{logical}
+          stream_html: Stream queue — delivered by peek, not drained by workers
         summary_label: Queue summary
         table_health:
           headers:
