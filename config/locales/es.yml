@@ -598,6 +598,9 @@ es:
             other: La vacía una cápsula de workers comodín (%{count} workers sanos)
           empty: Nada en espera
           handler: Cola de manejador de eventos — la vacían los consumidores (%{count} sanos)
+          no_consumers:
+            one: Cola de manejador de eventos sin consumidor sano — %{count} evento espera
+            other: Cola de manejador de eventos sin consumidor sano — %{count} eventos esperan
           no_workers:
             one: Ningún worker sano en ejecución — %{count} trabajo está disponible pero nadie lo toma
             other: Ningún worker sano en ejecución — %{count} trabajos están disponibles pero nadie los toma

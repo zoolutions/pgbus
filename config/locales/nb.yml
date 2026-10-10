@@ -598,6 +598,9 @@ nb:
             other: Tømmes av en jokertegn-worker-kapsel (%{count} friske workers)
           empty: Ingenting venter
           handler: Hendelsesbehandler-kø — tømmes av consumers (%{count} friske)
+          no_consumers:
+            one: Hendelsesbehandler-kø uten frisk consumer — %{count} hendelse venter
+            other: Hendelsesbehandler-kø uten frisk consumer — %{count} hendelser venter
           no_workers:
             one: Ingen frisk worker kjører — %{count} jobb kan hentes, men ingenting henter den
             other: Ingen frisk worker kjører — %{count} jobber kan hentes, men ingenting henter dem

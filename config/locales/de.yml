@@ -598,6 +598,9 @@ de:
             other: Abgearbeitet von einer Wildcard-Worker-Kapsel (%{count} gesunde Worker)
           empty: Nichts wartet
           handler: Event-Handler-Queue — von Consumern abgearbeitet (%{count} gesund)
+          no_consumers:
+            one: Event-Handler-Queue ohne gesunden Consumer — %{count} Event wartet
+            other: Event-Handler-Queue ohne gesunden Consumer — %{count} Events warten
           no_workers:
             one: Kein gesunder Worker läuft — %{count} Job ist abholbar, aber niemand holt ihn ab
             other: Kein gesunder Worker läuft — %{count} Jobs sind abholbar, aber niemand holt sie ab

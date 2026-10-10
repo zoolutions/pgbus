@@ -142,15 +142,19 @@ module Pgbus
           .merge(@queue_pause_states.fetch(name, {}))
       end
 
+      # Every _pN table counts as a priority level here; live_workers defaults
+      # to the stub's healthy worker processes. The stub's rows are always
+      # named pgbus_*, whatever queue_prefix a spec configures (pgbus_test).
       def queue_drainers(name)
-        logical = name.delete_suffix(Pgbus::DEAD_LETTER_SUFFIX).delete_prefix("pgbus_").sub(/_p\d+\z/, "")
-        siblings = if name.match?(/_p\d+\z/)
-                     @queues.map { |q| q[:name] }.select { |n| n != name && n.match?(/\Apgbus_#{logical}_p\d+\z/) }
-                   else
-                     []
-                   end
+        prefix = "pgbus_"
+        table = name.delete_suffix(Pgbus::DEAD_LETTER_SUFFIX)
+        level = table[/_p(\d+)\z/, 1]&.to_i
+        logical = table.delete_prefix(prefix).sub(/_p\d+\z/, "")
+        siblings = level ? @queues.map { |q| q[:name] }.grep(/\A#{prefix}#{logical}_p\d+\z/) - [name] : []
+        live = @processes_list.count { |p| p[:kind].to_s == "worker" && p[:healthy] }
         { logical: logical, capsules: ["default"], wildcard: false, handler: false, stream: false,
-          live_workers: 1, live_consumers: 0, siblings: siblings }.merge(@queue_drainers_hash.fetch(name, {}))
+          live_workers: live, live_consumers: 0, siblings: siblings, priority_level: level }
+          .merge(@queue_drainers_hash.fetch(name, {}))
       end
 
       def recurring_tasks(page: nil, per_page: nil)

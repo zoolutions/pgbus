@@ -598,6 +598,9 @@ en:
             other: Drained by a wildcard worker capsule (%{count} healthy workers)
           empty: Nothing waiting
           handler: Event handler queue — drained by consumers (%{count} healthy)
+          no_consumers:
+            one: Event handler queue with no healthy consumer — %{count} event waits
+            other: Event handler queue with no healthy consumer — %{count} events wait
           no_workers:
             one: No healthy worker running — %{count} job is claimable but nothing claims it
             other: No healthy worker running — %{count} jobs are claimable but nothing claims them

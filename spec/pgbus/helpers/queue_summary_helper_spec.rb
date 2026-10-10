@@ -5,7 +5,12 @@ require "rails_helper"
 # The queue page summary sentences (issue #491). rails_helper, unlike the
 # plain helper spec, loads the engine's locales and ActiveSupport time zones.
 RSpec.describe Pgbus::ApplicationHelper do
+  include ActiveSupport::Testing::TimeHelpers
+
   let(:helper) { Class.new { include Pgbus::ApplicationHelper }.new }
+
+  # The helpers re-read the clock when they format; freeze it so the buckets are exact.
+  around { |example| travel_to(Time.utc(2026, 10, 10, 12, 0, 0)) { example.run } }
 
   describe "#pgbus_queue_summary_line" do
     def summary_line(key, **args) = Pgbus::Web::QueueSummary::Line.new(key: key, args: args, tone: :gray)
@@ -55,7 +60,9 @@ RSpec.describe Pgbus::ApplicationHelper do
 
   describe "#pgbus_queue_summary_classes" do
     it "gives every tone a dark partner and falls back to gray" do
-      expect(helper.pgbus_queue_summary_classes(:red)).to include("text-red-800", "dark:text-red-200")
+      %i[red yellow gray].each do |tone|
+        expect(helper.pgbus_queue_summary_classes(tone)).to include("text-#{tone}-", "dark:text-#{tone}-200")
+      end
       expect(helper.pgbus_queue_summary_classes(:unknown)).to eq(helper.pgbus_queue_summary_classes(:gray))
     end
   end

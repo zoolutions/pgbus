@@ -7,6 +7,10 @@ require "system_helper"
 # 500'd on Events, DLQ and Locks and left Outbox and Insights empty; these
 # examples keep every list on the page so it cannot quietly go empty again.
 RSpec.describe "Dashboard sample data", type: :system do
+  include ActiveSupport::Testing::TimeHelpers
+
+  after { travel_back }
+
   before { @stub_data_source.fill_sample_data! }
 
   it "fills Events with subscribers, pending and processed events" do
@@ -34,6 +38,9 @@ RSpec.describe "Dashboard sample data", type: :system do
   end
 
   it "explains each sample queue in words" do
+    travel_to Time.current.change(usec: 0)
+    @stub_data_source.fill_sample_data!
+
     visit "/pgbus/queues/pgbus_mailers"
     expect(page).to have_text("Paused 25m ago — Mail provider maintenance")
 

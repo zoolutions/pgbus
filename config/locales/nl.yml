@@ -598,6 +598,9 @@ nl:
             other: Leeggemaakt door een wildcard-workercapsule (%{count} gezonde workers)
           empty: Niets in de wacht
           handler: Event-handlerwachtrij — leeggemaakt door consumers (%{count} gezond)
+          no_consumers:
+            one: Event-handlerwachtrij zonder gezonde consumer — %{count} event wacht
+            other: Event-handlerwachtrij zonder gezonde consumer — %{count} events wachten
           no_workers:
             one: Geen gezonde worker actief — %{count} job is op te pakken maar niemand pakt hem op
             other: Geen gezonde worker actief — %{count} jobs zijn op te pakken maar niemand pakt ze op

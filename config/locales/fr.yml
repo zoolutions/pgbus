@@ -598,6 +598,9 @@ fr:
             other: Vidée par une capsule de workers joker (%{count} workers sains)
           empty: Rien en attente
           handler: File de gestionnaire d'événements — vidée par les consommateurs (%{count} sains)
+          no_consumers:
+            one: File de gestionnaire d'événements sans consommateur sain — %{count} événement attend
+            other: File de gestionnaire d'événements sans consommateur sain — %{count} événements attendent
           no_workers:
             one: Aucun worker sain en cours — %{count} job est récupérable mais personne ne le prend
             other: Aucun worker sain en cours — %{count} jobs sont récupérables mais personne ne les prend

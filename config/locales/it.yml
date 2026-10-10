@@ -598,6 +598,9 @@ it:
             other: Svuotata da una capsula di worker jolly (%{count} worker sani)
           empty: Niente in attesa
           handler: Coda del gestore di eventi — svuotata dai consumer (%{count} sani)
+          no_consumers:
+            one: Coda del gestore di eventi senza consumer sano — %{count} evento in attesa
+            other: Coda del gestore di eventi senza consumer sano — %{count} eventi in attesa
           no_workers:
             one: Nessun worker sano in esecuzione — %{count} job è prelevabile ma nessuno lo preleva
             other: Nessun worker sano in esecuzione — %{count} job sono prelevabili ma nessuno li preleva

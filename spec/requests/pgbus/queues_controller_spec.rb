@@ -36,6 +36,14 @@ RSpec.describe "Pgbus::QueuesController", type: :request do
         expect(response.body).not_to include("<h1")
       end
 
+      it "skips the queue metrics on the list-frame poll" do
+        allow(@stub_data_source).to receive(:queue_detail).and_call_original
+
+        get "/pgbus/queues/pgbus_default", params: { frame: "list" }
+
+        expect(@stub_data_source).not_to have_received(:queue_detail)
+      end
+
       it "refreshes the frame from the queue page, never from /pgbus/jobs" do
         get "/pgbus/queues/pgbus_default", params: { state: "ready", page: "2" }
 

@@ -75,12 +75,28 @@ RSpec.describe Pgbus::Web::DataSource::QueueSummary do
     it "names the capsules that drain the queue and counts its healthy workers" do
       expect(data_source.queue_drainers("pgbus_test_default"))
         .to eq(logical: "default", capsules: ["critical"], wildcard: false, handler: false, stream: false,
-               live_workers: 2, live_consumers: 1, siblings: [])
+               live_workers: 2, live_consumers: 1, siblings: [], priority_level: nil)
     end
 
     it "names an anonymous capsule by its first queue and lists sibling priority tables" do
       expect(data_source.queue_drainers("pgbus_test_mailers_p1"))
-        .to include(logical: "mailers", capsules: ["mailers"], live_workers: 1, siblings: %w[pgbus_test_mailers_p0])
+        .to include(logical: "mailers", capsules: ["mailers"], live_workers: 1, siblings: %w[pgbus_test_mailers_p0],
+                    priority_level: 1)
+    end
+
+    it "treats a _pN suffix the queue strategy did not create as part of the queue name" do
+      allow(mock_client).to receive(:physical_queue_names).with("reports").and_return(%w[pgbus_test_reports])
+      allow(mock_client).to receive(:physical_queue_names).with("reports_p1").and_return(%w[pgbus_test_reports_p1])
+
+      expect(data_source.queue_drainers("pgbus_test_reports_p1"))
+        .to include(logical: "reports_p1", priority_level: nil, siblings: [])
+    end
+
+    it "matches heartbeat queue names the way queue tables are named" do
+      allow(data_source).to receive(:processes).and_return([{ kind: "worker", healthy: true,
+                                                              metadata: { "queues" => %w[bulk-imports] } }])
+
+      expect(data_source.queue_drainers("pgbus_test_bulk_imports")).to include(live_workers: 1)
     end
 
     it "flags a wildcard capsule and counts wildcard workers as live" do

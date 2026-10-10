@@ -94,6 +94,12 @@ RSpec.describe Pgbus::Web::QueueSummary do
       expect(line(lines, "handler").args).to eq(count: 1)
     end
 
+    it "warns in red when a handler queue has no healthy consumer" do
+      lines = present(drain: { capsules: [], handler: true, live_consumers: 0 })
+
+      expect(line(lines, "no_consumers")).to have_attributes(tone: :red, args: { count: 3 })
+    end
+
     it "explains a stream queue and skips the backlog" do
       expect(keys(present(drain: { capsules: [], stream: true }))).to eq(%w[stream])
     end
@@ -126,13 +132,20 @@ RSpec.describe Pgbus::Web::QueueSummary do
 
   describe "priority line" do
     it "names the level and the logical queue of a priority sub-table" do
-      lines = present(detail: detail.merge(name: "pgbus_default_p1"))
+      lines = present(detail: detail.merge(name: "pgbus_default_p1"), drain: { priority_level: 1 })
 
       expect(lines.last).to have_attributes(key: "priority_level", tone: :gray, args: { level: 1, logical: "default" })
     end
 
     it "is omitted for a plain queue" do
       expect(keys(present)).not_to include("priority_level")
+    end
+
+    # `_pN` is legal in an ordinary queue name; only the queue strategy knows.
+    it "is omitted for a plain queue whose name merely ends in _pN" do
+      lines = present(detail: detail.merge(name: "pgbus_mailers_p1"), drain: { priority_level: nil })
+
+      expect(keys(lines)).not_to include("priority_level")
     end
   end
 end

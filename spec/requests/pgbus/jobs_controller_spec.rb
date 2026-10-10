@@ -76,6 +76,16 @@ RSpec.describe "Pgbus::JobsController", type: :request do
     end
   end
 
+  describe "acting from a job's own detail page" do
+    %w[retry discard].each do |action|
+      it "#{action} returns to the Jobs list, not the detail page it just removed" do
+        post "/pgbus/jobs/7/#{action}", headers: { "HTTP_REFERER" => "http://www.example.com/pgbus/jobs/7" }
+
+        expect(response).to redirect_to("/pgbus/jobs")
+      end
+    end
+  end
+
   describe "GET /pgbus/jobs/:id (issue #430 context card)" do
     let(:base_event) do
       { "id" => 7, "queue_name" => "default", "failed_at" => "2026-08-23 10:00", "error_class" => "RuntimeError",

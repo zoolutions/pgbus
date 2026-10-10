@@ -598,6 +598,9 @@ sv:
             other: Töms av en jokertecken-worker-kapsel (%{count} friska workers)
           empty: Inget väntar
           handler: Händelsehanterarkö — töms av consumers (%{count} friska)
+          no_consumers:
+            one: Händelsehanterarkö utan frisk consumer — %{count} händelse väntar
+            other: Händelsehanterarkö utan frisk consumer — %{count} händelser väntar
           no_workers:
             one: Ingen frisk worker körs — %{count} jobb är hämtbart men inget hämtar det
             other: Ingen frisk worker körs — %{count} jobb är hämtbara men inget hämtar dem

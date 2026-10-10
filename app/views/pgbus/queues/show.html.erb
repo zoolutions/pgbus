@@ -101,9 +101,10 @@
     </p>
   </div>
 <% else %>
-  <%# Scoped to this physical table. Known wart: blocked rows match the
-      logical name too, so a queue's blocked jobs show on every _pN page
-      (they are parked before a priority level is chosen). %>
+  <%# Scoped to this physical table. Known warts of job_rows on a _pN table:
+      blocked rows match the logical name, so a queue's blocked jobs show on
+      every level's page (they are parked before a level is chosen), and a
+      failed event whose message sits in a sibling level reads as an orphan. %>
   <%= render "pgbus/jobs/tabs", state: @state, counts: @counts, list_path: @list_path %>
   <%= render "pgbus/jobs/list" %>
 <% end %>

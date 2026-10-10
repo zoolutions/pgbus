@@ -23,7 +23,9 @@ module Pgbus
         end
 
         def queue_drainers(name)
-          logical = summary_logical_name(name)
+          table = name.to_s.delete_suffix(Pgbus::DEAD_LETTER_SUFFIX)
+          level = priority_level_of(table)
+          logical = level ? logical_queue_name(table) : table.delete_prefix("#{Pgbus.configuration.queue_prefix}_")
           capsules, wildcard = draining_capsules(name)
           healthy = processes.select { |p| p[:healthy] }
           {
@@ -31,14 +33,23 @@ module Pgbus
             handler: handler_queue_physical_names.include?(name), stream: stream_queue_names.include?(name),
             live_workers: healthy.count { |p| p[:kind].to_s == "worker" && worker_drains?(p, logical) },
             live_consumers: healthy.count { |p| p[:kind].to_s == "consumer" },
-            siblings: priority_siblings(name, logical)
+            siblings: level ? priority_siblings(name, logical) : [], priority_level: level
           }
         end
 
         private
 
-        def summary_logical_name(name)
-          logical_queue_name(name.to_s.delete_suffix(Pgbus::DEAD_LETTER_SUFFIX))
+        # The level of a priority sub-table, or nil. `_pN` is legal in an
+        # ordinary queue name, so only a table the queue strategy creates for
+        # the stripped logical name counts.
+        def priority_level_of(table)
+          level = table[Pgbus::Web::QueueSummary::PRIORITY_LEVEL, 1]
+          return unless level && @client.physical_queue_names(logical_queue_name(table)).include?(table)
+
+          level.to_i
+        rescue StandardError => e
+          Pgbus.logger.debug { "[Pgbus::Web] Error resolving priority level of #{table}: #{e.class}: #{e.message}" }
+          nil
         end
 
         # [names of the capsules whose queues expand to this table, wildcard?].
@@ -63,16 +74,21 @@ module Pgbus
           Array(capsule[:queues] || capsule["queues"]).map(&:to_s)
         end
 
-        # A heartbeat lists logical queue names, as an Array or a
-        # comma-separated String.
+        # A heartbeat lists queue names as configured (Array or comma-separated
+        # String); tables are named after their normalized form ("bulk-imports"
+        # → pgbus_bulk_imports), so compare that.
         def worker_drains?(process, logical)
           queues = Array((process[:metadata] || {})["queues"]).flat_map { |q| q.to_s.split(",") }.map(&:strip)
-          queues.include?("*") || queues.include?(logical)
+          queues.include?("*") || queues.any? { |q| normalized_queue(q) == logical }
+        end
+
+        def normalized_queue(queue)
+          Pgbus.configuration.queue_name(queue).delete_prefix("#{Pgbus.configuration.queue_prefix}_")
+        rescue ArgumentError
+          queue
         end
 
         def priority_siblings(name, logical)
-          return [] unless name.match?(Pgbus::Web::QueueSummary::PRIORITY_LEVEL)
-
           queues_with_metrics.map { |q| q[:name] }.select do |n|
             n != name && n.match?(Pgbus::Web::QueueSummary::PRIORITY_LEVEL) && logical_queue_name(n) == logical
           end

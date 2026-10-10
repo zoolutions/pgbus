@@ -17,17 +17,17 @@ module Pgbus
 
     def retry
       if data_source.retry_failed_event(params[:id])
-        redirect_back fallback_location: jobs_path, notice: "Job re-enqueued."
+        redirect_after_failed_event_action notice: "Job re-enqueued."
       else
-        redirect_back fallback_location: jobs_path, alert: "Could not retry job."
+        redirect_after_failed_event_action alert: "Could not retry job."
       end
     end
 
     def discard
       if data_source.discard_failed_event(params[:id])
-        redirect_back fallback_location: jobs_path, notice: "Job discarded."
+        redirect_after_failed_event_action notice: "Job discarded."
       else
-        redirect_back fallback_location: jobs_path, alert: "Could not discard job."
+        redirect_after_failed_event_action alert: "Could not discard job."
       end
     end
 
@@ -77,6 +77,20 @@ module Pgbus
     end
 
     private
+
+    # Back to the page the action came from (a queue page, the Jobs list),
+    # except the job's own detail page: its failed event is gone now.
+    def redirect_after_failed_event_action(**flash)
+      return redirect_to(jobs_path, **flash) if referer_path == job_path(params[:id])
+
+      redirect_back(fallback_location: jobs_path, **flash)
+    end
+
+    def referer_path
+      URI.parse(request.referer.to_s).path
+    rescue URI::InvalidURIError
+      nil
+    end
 
     def selected_messages
       Array(params[:messages]).filter_map do |s|

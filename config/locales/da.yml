@@ -598,6 +598,9 @@ da:
             other: Tømmes af en wildcard-worker-kapsel (%{count} sunde workers)
           empty: Intet venter
           handler: Event handler-kø — tømmes af consumers (%{count} sunde)
+          no_consumers:
+            one: Event handler-kø uden sund consumer — %{count} event venter
+            other: Event handler-kø uden sund consumer — %{count} events venter
           no_workers:
             one: Ingen sund worker kører — %{count} job kan afhentes, men intet afhenter det
             other: Ingen sund worker kører — %{count} job kan afhentes, men intet afhenter dem

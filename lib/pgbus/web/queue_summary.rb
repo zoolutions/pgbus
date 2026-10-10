@@ -25,7 +25,7 @@ module Pgbus
           pause_line(pause_state),
           drain_line(dlq, detail, drainers, max_retries),
           (backlog_line(detail) unless dlq || drainers[:stream]),
-          priority_line(name, drainers)
+          priority_line(drainers)
         ].compact
       end
 
@@ -48,7 +48,13 @@ module Pgbus
       def drain_line(dlq, detail, drainers, max_retries)
         return line("dlq", :gray, logical: drainers[:logical], max: max_retries) if dlq
         return line("stream", :gray) if drainers[:stream]
-        return line("handler", :gray, count: drainers[:live_consumers].to_i) if drainers[:handler]
+
+        if drainers[:handler]
+          consumers = drainers[:live_consumers].to_i
+          return line("handler", :gray, count: consumers) if consumers.positive?
+
+          return line("no_consumers", :red, count: detail[:queue_visible_length].to_i)
+        end
 
         capsules = Array(drainers[:capsules])
         live = drainers[:live_workers].to_i
@@ -75,11 +81,11 @@ module Pgbus
         end
       end
 
-      def priority_line(name, drainers)
-        level = name[PRIORITY_LEVEL, 1]
+      def priority_line(drainers)
+        level = drainers[:priority_level]
         return unless level
 
-        line("priority_level", :gray, level: level.to_i, logical: drainers[:logical])
+        line("priority_level", :gray, level: level, logical: drainers[:logical])
       end
 
       def line(key, tone, **args)

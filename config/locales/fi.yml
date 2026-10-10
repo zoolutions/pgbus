@@ -598,6 +598,9 @@ fi:
             other: Tyhjentää jokerimerkki-worker-kapseli (%{count} tervettä workeria)
           empty: Mitään ei odota
           handler: Tapahtumankäsittelijän jono — consumerit tyhjentävät (%{count} tervettä)
+          no_consumers:
+            one: Tapahtumankäsittelijän jono ilman tervettä consumeria — %{count} tapahtuma odottaa
+            other: Tapahtumankäsittelijän jono ilman tervettä consumeria — %{count} tapahtumaa odottaa
           no_workers:
             one: Yksikään terve worker ei ole käynnissä — %{count} työ on noudettavissa, mutta kukaan ei nouda sitä
             other: Yksikään terve worker ei ole käynnissä — %{count} työtä on noudettavissa, mutta kukaan ei nouda niitä

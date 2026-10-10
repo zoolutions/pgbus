@@ -8,7 +8,8 @@ module JobRowBuilder
       job_class: "#{state.capitalize}Job", read_ct: 0, enqueued_at: now - 60, last_read_at: nil,
       vt: now - 1, state: state, error_class: nil, error_message: nil, failed_event_id: nil,
       concurrency_key: nil, slots_held: nil, slots_max: nil,
-      payload: { job_class: "#{state.capitalize}Job", job_id: "job-#{state}", arguments: [42] }.to_json,
+      payload: { job_class: attrs[:job_class] || "#{state.capitalize}Job", job_id: "job-#{state}",
+                 arguments: [42] }.to_json,
       headers: nil }.merge(attrs)
   end
 end

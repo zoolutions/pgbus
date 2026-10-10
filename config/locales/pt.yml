@@ -598,6 +598,9 @@ pt:
             other: Esvaziada por uma cápsula de workers curinga (%{count} workers saudáveis)
           empty: Nada à espera
           handler: Fila de handler de eventos — esvaziada pelos consumidores (%{count} saudáveis)
+          no_consumers:
+            one: Fila de handler de eventos sem consumidor saudável — %{count} evento espera
+            other: Fila de handler de eventos sem consumidor saudável — %{count} eventos esperam
           no_workers:
             one: Nenhum worker saudável em execução — %{count} job está disponível mas ninguém o pega
             other: Nenhum worker saudável em execução — %{count} jobs estão disponíveis mas ninguém os pega

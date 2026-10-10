@@ -49,6 +49,11 @@ RSpec.describe "Queues", type: :system do
   end
 
   describe "show page" do
+    include ActiveSupport::Testing::TimeHelpers
+
+    # The page formats relative times against the clock; freeze it so "35s ago" is exact.
+    around { |example| travel_to(Time.utc(2026, 10, 10, 12, 0, 0)) { example.run } }
+
     let(:now) { Time.now.utc }
 
     it "displays queue name and metrics in words" do

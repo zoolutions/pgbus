@@ -10,15 +10,14 @@ module Pgbus
 
     def show
       name = params[:name]
+      # The unified list leaves DLQ tables out (they are the Dead Letter page's).
+      @dlq = name.end_with?(Pgbus::DEAD_LETTER_SUFFIX)
+      load_job_list(queue_name: name, list_path: ->(extra) { queue_path({ name: name }.merge(extra)) }) unless @dlq
+      # The auto-refresh poll needs only the list: skip the queue's metrics scan.
+      render_frame("pgbus/jobs/list") and return if params[:frame] == "list" && !@dlq
+
       @queue = data_source.queue_detail(name)
       redirect_to queues_path, alert: "Queue not found." and return unless @queue
-
-      @dlq = name.end_with?(Pgbus::DEAD_LETTER_SUFFIX)
-      # The unified list leaves DLQ tables out (they are the Dead Letter page's).
-      unless @dlq
-        load_job_list(queue_name: name, list_path: ->(extra) { queue_path({ name: name }.merge(extra)) })
-        render_frame("pgbus/jobs/list") and return if params[:frame] == "list"
-      end
 
       @paused = data_source.queue_paused?(name)
       @pause_state = data_source.queue_pause_state(name)
