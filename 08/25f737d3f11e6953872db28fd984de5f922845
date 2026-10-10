@@ -1,0 +1,19 @@
+.github/workflows/main.yml
+  s_4242253cc7e550::t_8ba24d7c6f8672 312-315
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "0825f737d3f11e6953872db28fd984de5f922845",
+  "prompts": {},
+  "sessions": {
+    "s_4242253cc7e550": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4fe2a4bd-8a7a-43f0-a807-a713cef7f01f",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
