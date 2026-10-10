@@ -42,8 +42,7 @@ module Pgbus
 
         ratio = health[:worst_bloat_ratio].to_f
         entry("bloat", level(ratio, BLOAT_WARN, BLOAT_CRITICAL), ratio: ratio, table: worst[:table],
-                                                                 warn: BLOAT_WARN, critical: BLOAT_CRITICAL,
-                                                                 tables: health[:tables_needing_vacuum].to_i)
+                                                                 warn: BLOAT_WARN, critical: BLOAT_CRITICAL)
       end
 
       def vacuum(health)

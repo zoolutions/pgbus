@@ -1,54 +1,88 @@
 <turbo-frame id="dashboard-stats" data-auto-refresh data-src="<%= pgbus.root_path(frame: 'stats') %>">
-  <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-7 mb-8">
-    <div class="rounded-lg bg-white dark:bg-gray-800 p-5 shadow ring-1 ring-gray-200 dark:ring-gray-700">
+  <%# The verdict /readyz serves (HealthAnalyzer). Its reasons are operator
+      diagnostics in English and show verbatim, like an error message. %>
+  <% verdict = @signals[:verdict] %>
+  <section data-testid="health-verdict" aria-labelledby="health-verdict-title" class="mb-6 rounded-lg p-4 ring-1 <%= pgbus_verdict_css(verdict) %>">
+    <h2 id="health-verdict-title" class="text-sm font-semibold">
+      <% if verdict %>
+        <%= t("pgbus.dashboard.verdict.title", status: t("pgbus.dashboard.verdict.statuses.#{verdict[:status].to_s.downcase}")) %>
+      <% else %>
+        <%= t("pgbus.dashboard.verdict.unavailable") %>
+      <% end %>
+    </h2>
+    <% if verdict %>
+      <p class="mt-1 text-sm"><%= t("pgbus.dashboard.verdict.meaning.#{verdict[:status].to_s.downcase}") %></p>
+      <% if verdict[:reasons].any? %>
+        <ul class="mt-2 list-disc pl-5 text-sm space-y-1">
+          <% verdict[:reasons].each do |reason| %>
+            <li><%= reason %></li>
+          <% end %>
+        </ul>
+      <% end %>
+      <% links = pgbus_verdict_links(@signals) %>
+      <% if links.any? && verdict[:status] != "OK" %>
+        <p class="mt-2 text-sm"><%= t("pgbus.dashboard.verdict.look_at") %> <%= safe_join(links, " · ") %></p>
+      <% end %>
+    <% end %>
+  </section>
+
+  <%# Every card links to the page that explains its number. turbo_frame:
+      "_top" because the cards sit inside the dashboard-stats frame, and the
+      target pages have no frame of that id to render into. %>
+  <% card = Pgbus::DashboardHelper::CARD_CSS %>
+  <% number = Pgbus::DashboardHelper::CARD_NUMBER_CSS %>
+  <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+    <%= link_to pgbus.queues_path, data: { turbo_frame: "_top" }, class: card do %>
       <p class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.stats_cards.queues") %></p>
-      <p class="mt-1 text-3xl font-semibold text-gray-900 dark:text-white"><%= @stats[:total_queues] %></p>
-    </div>
+      <p class="<%= number %>"><%= number_with_delimiter(@signals[:queues][:total]) %></p>
+      <p class="text-xs text-gray-600 dark:text-gray-300"><%= pgbus_queue_card_words(@signals[:queues]) %></p>
+    <% end %>
 
-    <div class="rounded-lg bg-white dark:bg-gray-800 p-5 shadow ring-1 ring-gray-200 dark:ring-gray-700">
+    <%= link_to pgbus.jobs_path(state: "ready"), data: { turbo_frame: "_top" }, class: card do %>
       <p class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.stats_cards.enqueued") %></p>
-      <p class="mt-1 text-3xl font-semibold text-gray-900 dark:text-white"><%= pgbus_number(@stats[:total_depth]) %></p>
-      <p class="text-xs text-gray-500 dark:text-gray-400"><%= pgbus_number(@stats[:total_visible]) %> <%= t("pgbus.dashboard.stats_cards.visible") %></p>
-    </div>
+      <p class="<%= number %>"><%= pgbus_number(@stats[:total_depth]) %></p>
+      <p class="text-xs text-gray-600 dark:text-gray-300"><%= t("pgbus.dashboard.stats_cards.enqueued_detail", claimable: number_with_delimiter(@stats[:total_visible]), waiting: number_with_delimiter([@stats[:total_depth].to_i - @stats[:total_visible].to_i, 0].max)) %></p>
+    <% end %>
 
-    <div class="rounded-lg bg-white dark:bg-gray-800 p-5 shadow ring-1 ring-gray-200 dark:ring-gray-700">
+    <%= link_to pgbus.processes_path, data: { turbo_frame: "_top" }, class: card do %>
+      <% processes = @signals[:processes] %>
       <p class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.stats_cards.processes") %></p>
-      <p class="mt-1 text-3xl font-semibold <%= @stats[:active_processes] > 0 ? 'text-green-600 dark:text-green-400' : 'text-gray-500 dark:text-gray-400' %>">
-        <%= @stats[:active_processes] %>
-      </p>
-    </div>
+      <p class="mt-1 text-3xl font-semibold <%= (processes[:stalled] + processes[:stale]).positive? ? 'text-amber-600 dark:text-amber-400' : processes[:healthy].positive? ? 'text-green-600 dark:text-green-400' : 'text-gray-900 dark:text-white' %>"><%= number_with_delimiter(processes[:total]) %></p>
+      <p class="text-xs text-gray-600 dark:text-gray-300"><%= pgbus_process_card_words(processes) %></p>
+    <% end %>
 
-    <div class="rounded-lg bg-white dark:bg-gray-800 p-5 shadow ring-1 ring-gray-200 dark:ring-gray-700">
+    <%= link_to pgbus.recurring_tasks_path, data: { turbo_frame: "_top" }, class: card do %>
       <p class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.stats_cards.recurring") %></p>
-      <p class="mt-1 text-3xl font-semibold text-gray-900 dark:text-white"><%= @stats[:recurring_count] %></p>
-      <p class="text-xs text-gray-500 dark:text-gray-400">
-        <%= pgbus_link_to t("pgbus.dashboard.stats_cards.view_tasks"), pgbus.recurring_tasks_path, size: :sm %>
-      </p>
-    </div>
+      <p class="<%= number %>"><%= number_with_delimiter(@stats[:recurring_count]) %></p>
+      <p class="text-xs text-gray-600 dark:text-gray-300"><%= t("pgbus.dashboard.stats_cards.recurring_detail") %></p>
+    <% end %>
 
-    <div class="rounded-lg bg-white dark:bg-gray-800 p-5 shadow ring-1 ring-gray-200 dark:ring-gray-700">
-      <p class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.stats_cards.failed_dlq") %></p>
-      <p class="mt-1 text-3xl font-semibold <%= (@stats[:failed_count] + @stats[:dlq_depth]) > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white' %>">
-        <%= @stats[:failed_count] %> / <%= @stats[:dlq_depth] %>
-      </p>
-      <p class="text-xs text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.stats_cards.failed_dlq_labels") %></p>
-    </div>
+    <%= link_to pgbus.jobs_path(state: "retrying"), data: { turbo_frame: "_top" }, class: card do %>
+      <% retrying = @signals[:retrying] %>
+      <p class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.stats_cards.retrying") %></p>
+      <p class="mt-1 text-3xl font-semibold <%= retrying[:count].positive? ? 'text-amber-600 dark:text-amber-400' : 'text-gray-900 dark:text-white' %>"><%= pgbus_retrying_count(retrying) %></p>
+      <p class="text-xs text-gray-600 dark:text-gray-300"><%= pgbus_retrying_card_words(retrying) %></p>
+    <% end %>
 
-    <div class="rounded-lg bg-white dark:bg-gray-800 p-5 shadow ring-1 ring-gray-200 dark:ring-gray-700">
+    <%= link_to pgbus.dead_letter_index_path, data: { turbo_frame: "_top" }, class: card do %>
+      <p class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.stats_cards.dead_lettered") %></p>
+      <p class="mt-1 text-3xl font-semibold <%= @signals[:dlq][:depth].positive? ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white' %>"><%= number_with_delimiter(@signals[:dlq][:depth]) %></p>
+      <p class="text-xs text-gray-600 dark:text-gray-300"><%= pgbus_dlq_card_words(@signals[:dlq]) %></p>
+    <% end %>
+
+    <%= link_to pgbus.insights_path, data: { turbo_frame: "_top" }, class: card do %>
+      <% throughput = @signals[:throughput] %>
       <p class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.stats_cards.throughput") %></p>
-      <p class="mt-1 text-3xl font-semibold text-gray-900 dark:text-white"><%= @stats[:throughput_rate] %></p>
-      <p class="text-xs text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.stats_cards.throughput_unit") %></p>
-    </div>
+      <p class="<%= number %>"><%= throughput[:available] ? number_with_precision(throughput[:jobs_per_minute], precision: 1) : Pgbus::Web::TimeFormat::NONE %></p>
+      <p class="text-xs text-gray-600 dark:text-gray-300"><%= throughput[:available] ? t("pgbus.dashboard.stats_cards.throughput_detail", minutes: throughput[:window_minutes]) : t("pgbus.dashboard.stats_cards.throughput_unavailable") %></p>
+    <% end %>
 
-    <%# The whole card links to the Locks page: parked jobs are only actionable
-        there. turbo_frame: "_top" because this card sits inside the
-        dashboard-stats frame, and /locks has no frame of that id to render into. %>
-    <%= link_to pgbus.locks_path, data: { turbo_frame: "_top" }, class: "rounded-lg bg-white dark:bg-gray-800 p-5 shadow ring-1 ring-gray-200 dark:ring-gray-700 block hover:ring-gray-300 dark:hover:ring-gray-600" do %>
+    <%= link_to pgbus.locks_path, data: { turbo_frame: "_top" }, class: card do %>
       <p class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.stats_cards.parked_jobs") %></p>
       <p class="mt-1 text-3xl font-semibold <%= @stats[:parked_total].to_i > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-900 dark:text-white' %>">
         <%= pgbus_number(@stats[:parked_total]) %>
       </p>
-      <p class="text-xs text-gray-500 dark:text-gray-400">
+      <p class="text-xs text-gray-600 dark:text-gray-300">
         <%= t("pgbus.dashboard.stats_cards.parked_jobs_oldest", age: pgbus_duration(@stats[:oldest_parked_age_sec])) %>
       </p>
     <% end %>

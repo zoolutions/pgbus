@@ -41,6 +41,7 @@ en:
         title: Active Processes
       queue_health:
         dead_tuples: Dead Tuples
+        empty: No queue tables to measure yet
         headers:
           bloat: Bloat
           dead: Dead
@@ -60,6 +61,25 @@ en:
           one: "%{count} table needs vacuum"
           other: "%{count} tables need vacuum"
         title: Queue Health
+        words:
+          bloat:
+            critical: "%{ratio} on %{table} — reads are slowing; vacuum it now (critical above %{critical}, warns above %{warn})"
+            none: Nothing to measure yet
+            ok: "%{ratio} on %{table} — fine (warns above %{warn}, critical above %{critical})"
+            warn: "%{ratio} on %{table} — vacuum due (warns above %{warn}, critical above %{critical})"
+          dead_tuples:
+            ok: Fine — warns above %{limit} dead rows
+            warn: Above %{limit} — autovacuum is behind; the table below shows where
+          transaction:
+            critical: Over %{critical} — vacuum cannot reclaim rows until it ends; find it in pg_stat_activity (warns at %{warn}; the health verdict degrades after %{verdict})
+            none: No open transaction — vacuum can reclaim every dead row (warns at %{warn}, alerts at %{critical}; the health verdict degrades after %{verdict})
+            ok: Fine — warns at %{warn}, alerts at %{critical}; the health verdict degrades after %{verdict}
+            warn: Over %{warn} — a long transaction stops vacuum reclaiming rows (alerts at %{critical}; the health verdict degrades after %{verdict})
+          vacuum:
+            critical: Over %{critical} — autovacuum is not reaching these tables; check its settings (warns after %{warn})
+            ok: Fine — warns after %{warn}, critical after %{critical}
+            unknown: Never vacuumed, or the statistics are unavailable
+            warn: Over %{warn} — autovacuum may be falling behind (critical after %{critical})
         worst_bloat: Worst Bloat
       queues_table:
         empty: No queues found
@@ -68,6 +88,7 @@ en:
           oldest_claimable: Oldest claimable
           parked: Parked
           queue: Queue
+          status: Status
           total: Total
           visible: Visible
         title: Queues
@@ -75,7 +96,9 @@ en:
       recent_failures:
         empty: No failures
         headers:
+          attempt: Attempt
           error: Error
+          job: Job
           queue: Queue
           when: When
         title: Recent Failures
@@ -83,18 +106,52 @@ en:
       show:
         title: Dashboard
       stats_cards:
+        dead_lettered: Dead-lettered
+        dlq_newest_html: 'newest: %{error_class} in %{job} %{ago}'
+        dlq_newest_legacy_html: 'newest: %{job} %{ago} — no reason recorded'
+        dlq_newest_no_error_html: 'newest: %{job} %{ago} — no error recorded'
+        dlq_none: Nothing dead-lettered
+        dlq_see_why: open the dead-letter page to see why each died
         enqueued: Enqueued
-        failed_dlq: Failed / DLQ
-        failed_dlq_labels: Failed / Dead Lettered
+        enqueued_detail: "%{claimable} claimable now · %{waiting} scheduled, running or retrying"
         parked_jobs: Parked jobs
         parked_jobs_oldest: oldest %{age}
         processes: Processes
+        processes_detail: "%{healthy} healthy · %{stalled} stalled · %{stale} stale"
+        processes_none: Nothing is running — no job is being claimed
+        processes_stale: stale processes stopped heartbeating; their in-flight jobs run again when their visibility timeout expires
         queues: Queues
+        queues_detail: "%{paused} paused · %{dlq} dead-letter"
+        queues_undrained:
+          one: "%{count} holds jobs that nothing drains"
+          other: "%{count} hold jobs that nothing drains"
         recurring: Recurring
+        recurring_detail: Tasks the scheduler enqueues on their schedule
+        retrying: Retrying
+        retrying_due:
+          one: "%{count} due now"
+          other: "%{count} due now"
+        retrying_newest: newest error %{error_class}
+        retrying_next_html: next attempt %{time}
+        retrying_none: Nothing is retrying
         throughput: Throughput
-        throughput_unit: msgs/s
-        view_tasks: View tasks
-        visible: visible
+        throughput_detail: jobs/min over the last %{minutes} min
+        throughput_unavailable: needs job stats (rails g pgbus:add_job_stats)
+      verdict:
+        links:
+          dlq: Dead letters
+          processes: Processes
+        look_at: 'Look at:'
+        meaning:
+          degraded: Something needs attention, but jobs still flow. /readyz still answers ready.
+          ok: Every queue with work is being drained and every process is heartbeating. /readyz answers ready.
+          stalled: Jobs are waiting and nothing is claiming them. /readyz answers not ready (503).
+        statuses:
+          degraded: DEGRADED
+          ok: OK
+          stalled: STALLED
+        title: 'Health: %{status}'
+        unavailable: Health verdict unavailable — the checks behind it could not be read; see the log
     dead_letter:
       detail:
         backtrace: Backtrace (first lines)

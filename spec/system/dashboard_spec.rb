@@ -12,9 +12,9 @@ RSpec.describe "Dashboard", type: :system do
     expect(page).to have_text("Queues")
     expect(page).to have_text("Enqueued")
     expect(page).to have_text("Processes")
-    expect(page).to have_text("Failed / DLQ")
+    expect(page).to have_text("Retrying")
+    expect(page).to have_text("Dead-lettered")
     expect(page).to have_text("15")
-    expect(page).to have_text("3 / 2") # failed / dlq
   end
 
   context "with parked jobs" do

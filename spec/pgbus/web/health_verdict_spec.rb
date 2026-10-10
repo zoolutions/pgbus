@@ -30,14 +30,14 @@ RSpec.describe Pgbus::Web::HealthVerdict do
     it "names the worst table and both thresholds" do
       expect(present.bloat).to have_attributes(
         level: :ok, key: "bloat.ok",
-        args: { ratio: 0.0283, table: "pgmq.a_pgbus_default", warn: 0.10, critical: 0.20, tables: 0 }
+        args: { ratio: 0.0283, table: "pgmq.a_pgbus_default", warn: 0.10, critical: 0.20 }
       )
     end
 
     it "warns above 10% and is critical above 20%" do
       tables = [{ table: "pgmq.q_pgbus_events", bloat_ratio: 0.12 }]
       expect(present(worst_bloat_ratio: 0.12, tables: tables, tables_needing_vacuum: 1).bloat)
-        .to have_attributes(level: :warn, key: "bloat.warn", args: include(table: "pgmq.q_pgbus_events", tables: 1))
+        .to have_attributes(level: :warn, key: "bloat.warn", args: include(table: "pgmq.q_pgbus_events"))
       expect(present(worst_bloat_ratio: 0.21, tables: tables).bloat).to have_attributes(level: :critical)
       expect(present(worst_bloat_ratio: 0.10, tables: tables).bloat).to have_attributes(level: :ok)
     end
