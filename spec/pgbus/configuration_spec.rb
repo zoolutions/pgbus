@@ -302,6 +302,76 @@ RSpec.describe Pgbus::Configuration do
     end
   end
 
+  # Issue #503: processes: N forks N identical workers for one capsule.
+  describe "#processes_for" do
+    it "defaults to 1 when the capsule sets no processes" do
+      expect(config.processes_for({ queues: %w[default] })).to eq(1)
+    end
+
+    it "returns the capsule's processes" do
+      expect(config.processes_for({ queues: %w[render], processes: 4 })).to eq(4)
+    end
+  end
+
+  describe "processes validation (issue #503)" do
+    after { config.workers = nil }
+
+    it "accepts a positive Integer processes" do
+      config.workers = [{ queues: %w[render], threads: 1, processes: 4 }]
+      expect { config.validate! }.not_to raise_error
+    end
+
+    [0, -1, 2.5, "4", :auto].each do |bad|
+      it "rejects processes #{bad.inspect}" do
+        config.workers = [{ queues: %w[render], threads: 1, processes: bad }]
+        expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /processes/)
+      end
+    end
+  end
+
+  # Issue #503: capsule-level recycle limits override the global ones.
+  describe "#recycle_limit_for" do
+    after do
+      config.max_memory_mb = nil
+      config.max_worker_lifetime = nil
+    end
+
+    it "returns the capsule's limit when set" do
+      config.max_memory_mb = 512
+      expect(config.recycle_limit_for({ queues: %w[render], max_memory_mb: 1_536 }, :max_memory_mb)).to eq(1_536)
+    end
+
+    it "falls back to the global limit when the capsule has none" do
+      config.max_worker_lifetime = 3600
+      expect(config.recycle_limit_for({ queues: %w[default] }, :max_worker_lifetime)).to eq(3600)
+    end
+
+    it "is nil when neither the capsule nor the global sets the limit" do
+      expect(config.recycle_limit_for({ queues: %w[default] }, :max_jobs_per_worker)).to be_nil
+    end
+  end
+
+  describe "capsule recycle limit validation (issue #503)" do
+    after { config.workers = nil }
+
+    %i[max_jobs_per_worker max_memory_mb max_worker_lifetime].each do |key|
+      it "rejects a non-positive capsule #{key}" do
+        config.workers = [{ queues: %w[render], threads: 1, key => 0 }]
+        expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /capsule #{key}/)
+      end
+
+      it "rejects a non-numeric capsule #{key}" do
+        config.workers = [{ queues: %w[render], threads: 1, key => "10" }]
+        expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /capsule #{key}/)
+      end
+
+      it "accepts a positive capsule #{key}" do
+        config.workers = [{ queues: %w[render], threads: 1, key => 500 }]
+        expect { config.validate! }.not_to raise_error
+      end
+    end
+  end
+
   describe "#queue_name" do
     it "prefixes the queue name" do
       expect(config.queue_name("critical")).to eq("pgbus_critical")
@@ -736,6 +806,27 @@ RSpec.describe Pgbus::Configuration do
       expect do
         config.capsule(:bad, queues: %w[a], threads: 0)
       end.to raise_error(Pgbus::ConfigurationError, /threads/)
+    end
+
+    it "keeps processes and capsule recycle limits on the one capsule entry" do
+      config.workers = nil
+      config.capsule(:render, queues: %w[render], threads: 1, processes: 4, max_memory_mb: 1_536)
+      expect(config.workers).to eq([
+                                     { name: "render", queues: %w[render], threads: 1, processes: 4,
+                                       max_memory_mb: 1_536 }
+                                   ])
+    end
+
+    it "treats processes: nil as the default, like the Array form" do
+      config.workers = nil
+      config.capsule(:render, queues: %w[render], threads: 1, processes: nil)
+      expect(config.processes_for(config.workers.first)).to eq(1)
+    end
+
+    it "rejects non-positive processes" do
+      expect do
+        config.capsule(:bad, queues: %w[a], threads: 1, processes: 0)
+      end.to raise_error(Pgbus::ConfigurationError, /processes/)
     end
 
     it "raises if a queue overlaps with an already-defined capsule" do

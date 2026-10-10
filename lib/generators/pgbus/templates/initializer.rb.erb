@@ -36,6 +36,10 @@ Pgbus.configure do |c|
   c.workers = []
   c.capsule :default,  queues: %w[critical default], threads: 5
   c.capsule :low,      queues: %w[low],              threads: 2
+  # CPU-bound jobs (rendering, reports, PDFs): threads share one GVL, so use
+  # processes instead. Capsule-level recycle limits override the global ones.
+  # c.capsule :render,   queues: %w[render], threads: 1, processes: 4,
+  #                      max_memory_mb: 1_536
 
   # --- Worker recycling (prevents memory bloat) --------------------------
   c.max_jobs_per_worker = 10_000

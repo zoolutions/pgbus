@@ -402,23 +402,27 @@ module Pgbus
     # per worker/consumer fork. Streams add one per web-server process, which
     # the doctor cannot count from here, so it is reported as a clause.
     def check_connection_budget
-      capsules = @config.role_enabled?(:workers) ? Array(@config.workers).size : 0
+      worker_configs = @config.role_enabled?(:workers) ? Array(@config.workers) : []
+      capsules = worker_configs.size
+      # A processes: N capsule forks N workers, each with its own LISTEN under :fork scope.
+      worker_forks = worker_configs.sum { |w| @config.processes_for(w) }
       consumers = @config.role_enabled?(:consumers) ? Array(@config.event_consumers).size : 0
 
       count =
         if !@config.worker_notify_wakeup?
           0
         elsif @config.worker_notify_scope == :supervisor
-          (capsules + consumers).positive? ? 1 : 0
+          (worker_forks + consumers).positive? ? 1 : 0
         else
-          capsules + consumers
+          worker_forks + consumers
         end
 
       detail = format(
         "%<count>d direct LISTEN connection%<plural>s pinned (scope=%<scope>s; " \
-        "%<capsules>d capsule%<cap_plural>s + %<consumers>d consumer%<con_plural>s%<share>s)",
+        "%<capsules>d capsule%<cap_plural>s%<forks>s + %<consumers>d consumer%<con_plural>s%<share>s)",
         count: count, plural: count == 1 ? "" : "s", scope: @config.worker_notify_scope,
         capsules: capsules, cap_plural: capsules == 1 ? "" : "s",
+        forks: worker_forks == capsules ? "" : " (#{worker_forks} worker processes)",
         consumers: consumers, con_plural: consumers == 1 ? "" : "s",
         share: count == 1 && @config.worker_notify_scope == :supervisor ? " share it" : ""
       )

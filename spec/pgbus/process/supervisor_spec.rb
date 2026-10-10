@@ -390,6 +390,127 @@ RSpec.describe Pgbus::Process::Supervisor do
     end
   end
 
+  # Issue #503: processes: N forks N identical workers for one capsule, each
+  # in its own slot (restart backoff, liveness pipe, pgbus_processes row).
+  describe "processes per capsule (issue #503)" do
+    let(:config) { Pgbus::Configuration.new }
+    let(:supervisor) { described_class.new(config: config) }
+    let(:crash_status) { instance_double(Process::Status, exitstatus: 1, success?: false) }
+
+    before do
+      config.roles = [:workers]
+      config.workers = nil
+      allow(supervisor).to receive(:fork).and_return(*(8001..8010).to_a)
+      allow(Pgbus.logger).to receive(:warn)
+    end
+
+    def worker_forks
+      supervisor.forks.values.select { |i| i[:type] == :worker }
+    end
+
+    it "forks one worker per process, all on the capsule's config" do
+      config.capsule(:render, queues: %w[render], threads: 1, processes: 3)
+
+      supervisor.send(:boot_processes)
+
+      expect(worker_forks.size).to eq(3)
+      expect(worker_forks.map { |i| i[:config][:queues] }).to all(eq(%w[render]))
+      expect(worker_forks.map { |i| i[:process_index] }).to eq([0, 1, 2])
+    end
+
+    it "gives every fork its own slot, unique across capsules" do
+      config.capsule(:render, queues: %w[render], threads: 1, processes: 2)
+      config.capsule(:default, queues: %w[default], threads: 5)
+
+      supervisor.send(:boot_processes)
+
+      expect(worker_forks.map { |i| i[:slot] }).to eq([0, 1, 2])
+    end
+
+    it "forks a single worker when processes is not set" do
+      config.capsule(:default, queues: %w[default], threads: 5)
+
+      supervisor.send(:boot_processes)
+
+      expect(worker_forks.size).to eq(1)
+    end
+
+    it "counts every fork in the readiness baseline" do
+      config.capsule(:render, queues: %w[render], threads: 1, processes: 3)
+
+      supervisor.send(:boot_processes)
+      supervisor.send(:mark_booted)
+
+      expect(supervisor.readiness_snapshot.expected).to eq(3)
+      expect(supervisor.readiness_snapshot.live).to eq(3)
+    end
+
+    it "restarts only the crashed fork, in its own slot and process index" do
+      config.capsule(:render, queues: %w[render], threads: 1, processes: 3)
+      supervisor.send(:boot_processes)
+      crashed_pid, crashed = supervisor.forks.find { |_, i| i[:slot] == 1 }
+      crashed[:spawned_at] = Process.clock_gettime(Process::CLOCK_MONOTONIC) - 120 # stable: no backoff
+      allow(Process).to receive(:waitpid2).and_return([crashed_pid, crash_status], nil)
+
+      supervisor.send(:reap_children)
+
+      expect(supervisor).to have_received(:fork).exactly(4).times
+      restarted = supervisor.forks.except(8001, 8003).values
+      expect(restarted.map { |i| [i[:slot], i[:process_index]] }).to eq([[1, 1]])
+    end
+
+    it "keeps a separate crash streak per fork of one capsule" do
+      config.capsule(:render, queues: %w[render], threads: 1, processes: 2)
+      supervisor.send(:boot_processes)
+      allow(Process).to receive(:waitpid2).and_return([8001, crash_status], nil)
+      supervisor.send(:reap_children)
+      allow(Process).to receive(:waitpid2).and_return([8002, crash_status], nil)
+      supervisor.send(:reap_children)
+
+      expect(supervisor.instance_variable_get(:@crash_counts)).to eq([:worker, 0] => 1, [:worker, 1] => 1)
+    end
+
+    context "when the child runs" do
+      let(:child) { double("child", run: nil) }
+
+      before do
+        allow(supervisor).to receive(:fork) do |&block|
+          block.call
+          7001
+        end
+        allow(supervisor).to receive_messages(restore_signals: nil, setup_child_process: nil, load_rails_app: nil,
+                                              bootstrap_queues!: nil)
+        allow(Pgbus::Process::Worker).to receive(:new).and_return(child)
+      end
+
+      it "names the capsule and the process slot for the dashboard" do
+        config.capsule(:render, queues: %w[render], threads: 1, processes: 2)
+
+        supervisor.send(:boot_processes)
+
+        expect(Pgbus::Process::Worker).to have_received(:new).with(hash_including(capsule: "render", process: "1/2"))
+        expect(Pgbus::Process::Worker).to have_received(:new).with(hash_including(capsule: "render", process: "2/2"))
+      end
+
+      it "omits the process slot for a single-process capsule" do
+        config.capsule(:default, queues: %w[default], threads: 5)
+
+        supervisor.send(:boot_processes)
+
+        expect(Pgbus::Process::Worker).to have_received(:new).with(hash_including(capsule: "default", process: nil))
+      end
+
+      it "passes the capsule's recycle limits to Worker.new" do
+        config.capsule(:render, queues: %w[render], threads: 1, max_memory_mb: 1_536, max_worker_lifetime: 600)
+
+        supervisor.send(:boot_processes)
+
+        expect(Pgbus::Process::Worker).to have_received(:new)
+          .with(hash_including(recycle_limits: { max_memory_mb: 1_536, max_worker_lifetime: 600 }))
+      end
+    end
+  end
+
   describe "worker liveness pipe (private)" do
     let(:supervisor) { described_class.new }
     let(:worker_config) { { queues: ["default"], threads: 5 } }
@@ -865,6 +986,20 @@ RSpec.describe Pgbus::Process::Supervisor do
       expect(banner).to include("threads=5")
       expect(banner).to include("queues=default,low")
       expect(banner).to include("threads=3")
+    end
+
+    it "prints each capsule's process count (issue #503)" do
+      config.database_url = "postgres://u:sekret@db:5432/app"
+      config.workers = [
+        { name: "render", queues: %w[render], threads: 1, processes: 4 },
+        { name: "default", queues: %w[default], threads: 3 }
+      ]
+      allow(Pgbus.client).to receive(:pgmq_schema_version).and_return(nil)
+
+      supervisor.send(:log_boot_banner)
+
+      expect(banner).to include("capsule=render queues=render threads=1 processes=4")
+      expect(banner).to include("capsule=default queues=default threads=3 processes=1")
     end
 
     it "names an unnamed capsule 'anonymous'" do

@@ -136,6 +136,26 @@ RSpec.describe Pgbus::Process::Worker do
       )
     end
 
+    # Issue #503: the Processes page tells sibling forks of one capsule apart.
+    it "names the capsule and the process slot in the static metadata" do
+      allow(Pgbus::Process::Heartbeat).to receive(:new).and_return(heartbeat)
+      forked = described_class.new(queues: %w[render], threads: 1, capsule: "render", process: "2/4")
+
+      forked.send(:start_heartbeat)
+
+      expect(Pgbus::Process::Heartbeat).to have_received(:new)
+        .with(hash_including(metadata: hash_including(capsule: "render", process: "2/4")))
+    end
+
+    it "leaves capsule and process out of the metadata when they are not set" do
+      allow(Pgbus::Process::Heartbeat).to receive(:new).and_return(heartbeat)
+
+      worker.send(:start_heartbeat)
+
+      expect(Pgbus::Process::Heartbeat).to have_received(:new)
+        .with(hash_including(metadata: hash_excluding(:capsule, :process)))
+    end
+
     it "snapshots the rate counter before the supplier reads it" do
       supplier = nil
       allow(Pgbus::Process::Heartbeat).to receive(:new) do |**kwargs|
@@ -379,6 +399,44 @@ RSpec.describe Pgbus::Process::Worker do
       it "returns false when memory is within the limit" do
         allow(Pgbus::Process::MemoryUsage).to receive(:current_mb).and_return(128)
         expect(worker.send(:recycle_needed?)).to be false
+      end
+    end
+
+    # Issue #503: a capsule's own limits override the global ones for its
+    # workers only; unset capsule limits fall back to the global value.
+    context "with capsule-level recycle limits" do
+      before { allow(Pgbus::Process::MemoryUsage).to receive(:current_mb).and_return(1_024) }
+
+      it "recycles on the capsule's max_memory_mb, not the higher global one" do
+        worker.config.max_memory_mb = 4_096
+        heavy = described_class.new(queues: %w[render], threads: 1, recycle_limits: { max_memory_mb: 512 })
+        expect(heavy.send(:recycle_needed?)).to be true
+      end
+
+      it "keeps running under a capsule max_memory_mb above the global one" do
+        worker.config.max_memory_mb = 512
+        heavy = described_class.new(queues: %w[render], threads: 1, recycle_limits: { max_memory_mb: 1_536 })
+        expect(heavy.send(:recycle_needed?)).to be false
+      end
+
+      it "still applies the global max_memory_mb to a worker without capsule limits" do
+        worker.config.max_memory_mb = 512
+        expect(worker.send(:recycle_needed?)).to be true
+      end
+
+      it "falls back to the global value for limits the capsule does not set" do
+        worker.config.max_jobs_per_worker = 10
+        heavy = described_class.new(queues: %w[render], threads: 1, recycle_limits: { max_memory_mb: 1_536 })
+        heavy.jobs_processed = 10
+        expect(heavy.send(:recycle_reason)).to eq(:max_jobs)
+      end
+
+      it "applies the capsule's max_worker_lifetime" do
+        aged = described_class.new(
+          queues: %w[render], threads: 1, recycle_limits: { max_worker_lifetime: 60 },
+          started_at_monotonic: Process.clock_gettime(Process::CLOCK_MONOTONIC) - 120
+        )
+        expect(aged.send(:recycle_reason)).to eq(:max_lifetime)
       end
     end
   end

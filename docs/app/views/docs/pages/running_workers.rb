@@ -14,6 +14,7 @@ class Views::Docs::Pages::RunningWorkers < DocsUI::Page
     shared_listen
     roles
     recycling
+    processes
     circuit_breaker
     connection_circuit_breaker
     read_timeouts
@@ -48,8 +49,8 @@ class Views::Docs::Pages::RunningWorkers < DocsUI::Page
         [Pgbus] boot: pgmq_schema_mode=auto pgmq_version=1.4.0
         [Pgbus] boot: listen_notify=true worker_notify_wakeup=true worker_notify_scope=supervisor
         [Pgbus] boot: roles=workers,dispatcher,scheduler
-        [Pgbus] boot: capsule=critical queues=critical threads=5 mode=threads
-        [Pgbus] boot: capsule=default queues=default,mailers threads=10 mode=threads
+        [Pgbus] boot: capsule=critical queues=critical threads=5 processes=1 mode=threads
+        [Pgbus] boot: capsule=default queues=default,mailers threads=10 processes=1 mode=threads
       LOG
       md <<~'MD'
         It states the version, the connection target (host/dbname only — never the
@@ -149,6 +150,52 @@ class Views::Docs::Pages::RunningWorkers < DocsUI::Page
       RUBY
       md <<~'MD'
         RSS is sampled from `/proc/self/statm` on Linux and `ps -o rss` on macOS.
+
+        A capsule can set its own limits. They apply to that capsule's workers only;
+        any limit it leaves unset (or `nil`) falls back to the global value:
+      MD
+      DocsUI::Code(<<~RUBY, filename: "config/initializers/pgbus.rb")
+        Pgbus.configure do |config|
+          config.max_memory_mb = 512 # every other capsule
+          config.capsule :render, queues: %w[render], threads: 1, processes: 4,
+                         max_memory_mb: 1_536, max_worker_lifetime: 6.hours
+        end
+      RUBY
+    end
+  end
+
+  def processes
+    DocsUI::Section("Threads vs processes", description: "For CPU-bound jobs.") do
+      md <<~'MD'
+        Ruby threads in one process share the GVL. Threads help when jobs wait on
+        I/O; they do not help when jobs burn CPU (rendering, reports, PDFs, images),
+        where a capsule with `threads: 8` still uses about one core. `processes: N`
+        forks N identical workers for one capsule, each with its own GVL:
+      MD
+      DocsUI::Code(<<~RUBY, filename: "config/initializers/pgbus.rb")
+        Pgbus.configure do |config|
+          config.capsule :render, queues: %w[render], threads: 1, processes: 4
+        end
+      RUBY
+      md <<~'MD'
+        - **I/O-bound jobs:** `threads:` (or `execution_mode: :async`), `processes: 1`.
+        - **CPU-bound jobs:** `processes:` up to the cores you can give the capsule, `threads: 1`–`2`.
+
+        All forks read the same queues with `FOR UPDATE SKIP LOCKED`, so uniqueness
+        and concurrency controls behave as with one process. Each fork has its own
+        restart backoff, liveness pipe and `pgbus_processes` row; a crashed fork
+        restarts alone. The boot banner prints `processes=N`, readiness counts every
+        fork, and the Processes page labels each row `capsule: render`,
+        `process: 2/4`.
+
+        Budget `boot RSS + peak job RSS` per process; the forks share the booted
+        app copy-on-write until they write to it. Every process has its own pool,
+        so a host holds about `processes × pool_size` connections for the capsule.
+        Under the default `worker_notify_scope: :supervisor` the host still holds
+        one LISTEN connection; under `:fork` each fork holds its own. With
+        `single_active_consumer: true` each queue is locked by one fork at a
+        time; a fork can still process the capsule's other queues, so in a
+        single-queue capsule the extra forks are hot standbys.
       MD
     end
   end
