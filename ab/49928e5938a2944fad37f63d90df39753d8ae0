@@ -1,0 +1,77 @@
+config/locales/es.yml
+  s_9453362ee84c49::t_b30a4d24095c4c 196
+spec/pgbus/web/data_source_job_list_spec.rb
+  s_9453362ee84c49::t_f5757d986e1af1 174-183
+spec/support/pgbus/stub_data_source.rb
+  s_9453362ee84c49::t_47f4fa0cae0e11 118,123,128,130,143-144,146-150
+config/locales/nl.yml
+  s_9453362ee84c49::t_b30a4d24095c4c 196
+lib/pgbus/event_bus/registry.rb
+  s_9453362ee84c49::t_634afdda5a7fa5 128-133
+config/locales/it.yml
+  s_9453362ee84c49::t_b30a4d24095c4c 196
+spec/system/events_spec.rb
+  s_9453362ee84c49::t_47f4fa0cae0e11 9-15
+config/locales/da.yml
+  s_9453362ee84c49::t_b30a4d24095c4c 196
+spec/requests/pgbus/events_controller_spec.rb
+  s_9453362ee84c49::t_f5757d986e1af1 157-180
+spec/support/pgbus/stub_data_source/sample_events.rb
+  s_9453362ee84c49::t_47f4fa0cae0e11 22-24
+config/locales/ja.yml
+  s_9453362ee84c49::t_b30a4d24095c4c 196
+lib/pgbus/web/data_source/event_list.rb
+  s_9453362ee84c49::t_634afdda5a7fa5 51-52,54-56,66,73,108-109,111-113,117,120-132
+config/locales/pt.yml
+  s_9453362ee84c49::t_b30a4d24095c4c 196
+CHANGELOG.md
+  s_9453362ee84c49::t_47f4fa0cae0e11 5
+lib/pgbus/process/consumer.rb
+  s_9453362ee84c49::t_7a51db16e72fd3 276-278
+config/locales/de.yml
+  s_9453362ee84c49::t_b30a4d24095c4c 196
+config/locales/fr.yml
+  s_9453362ee84c49::t_b30a4d24095c4c 196
+spec/pgbus/process/consumer_spec.rb
+  s_9453362ee84c49::t_a1e4f2b6bcbe68 513-514,517-520,568,574
+docs/app/views/docs/pages/dashboard.rb
+  s_9453362ee84c49::t_47f4fa0cae0e11 41
+spec/pgbus/helpers/events_helper_spec.rb
+  s_9453362ee84c49::t_47f4fa0cae0e11 61-69
+app/controllers/pgbus/events_controller.rb
+  s_9453362ee84c49::t_b30a4d24095c4c 77-78,80
+  s_9453362ee84c49::t_612519bbdd9018 79
+config/locales/nb.yml
+  s_9453362ee84c49::t_b30a4d24095c4c 196
+config/locales/sv.yml
+  s_9453362ee84c49::t_b30a4d24095c4c 196
+spec/pgbus/event_bus/registry_spec.rb
+  s_9453362ee84c49::t_803119597040ba 225
+  s_9453362ee84c49::t_a1e4f2b6bcbe68 222-224,226-231
+config/locales/en.yml
+  s_9453362ee84c49::t_b30a4d24095c4c 196
+spec/pgbus/web/data_source_event_list_spec.rb
+  s_9453362ee84c49::t_580e716f086709 143,145,162,164,173,180-198,271-277
+lib/pgbus/web/data_source/job_list.rb
+  s_9453362ee84c49::t_b30a4d24095c4c 242-243
+README.md
+  s_9453362ee84c49::t_47f4fa0cae0e11 2178
+config/locales/fi.yml
+  s_9453362ee84c49::t_b30a4d24095c4c 196
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "ab49928e5938a2944fad37f63d90df39753d8ae0",
+  "prompts": {},
+  "sessions": {
+    "s_9453362ee84c49": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "56ff4e96-ee2f-43de-ae18-5e04d8b3efea",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
