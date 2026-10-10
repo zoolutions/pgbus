@@ -79,8 +79,8 @@ gh pr view <PR_NUMBER> --json mergeable,mergeStateStatus,baseRefName
    ```bash
    # what CI's Lint job actually runs (a bare `rubocop` misses targets):
    bundle exec rubocop app benchmarks config gemfiles lib spec Gemfile Rakefile pgbus.gemspec
-   # what CI's unit job runs (spec/ci_coverage_spec.rb keeps it in sync with the spec tree):
-   bundle exec rspec spec/pgbus/ spec/generators/ spec/requests/ spec/rubocop/ spec/benchmarks/ spec/ci_coverage_spec.rb spec/i18n_spec.rb spec/pgbus_spec.rb
+   # what CI's unit job runs (spec/pgbus/ci_coverage_spec.rb keeps it in sync with the spec tree):
+   bundle exec rspec spec/pgbus/ spec/generators/ spec/requests/ spec/rubocop/ spec/benchmarks/ spec/i18n_spec.rb spec/pgbus_spec.rb
    # views (.html.erb) involved:
    bun run lint:herb
    # integration/system areas involved (need PGBUS_DATABASE_URL / Playwright — run if available, else note it):

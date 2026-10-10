@@ -145,12 +145,12 @@ jobs:
           # 7.1 legs get separate caches keyed on their own lockfiles.
           bundler-cache: true
       # Every DB- and browser-free spec set runs here, so request specs exercise
-      # the controllers on each Ruby × Rails leg. spec/ci_coverage_spec.rb fails
+      # the controllers on each Ruby × Rails leg. spec/pgbus/ci_coverage_spec.rb fails
       # when a spec directory or top-level spec file is not run by any job.
       - name: Run unit tests
         run: >-
           bundle exec rspec spec/pgbus/ spec/generators/ spec/requests/
-          spec/rubocop/ spec/benchmarks/ spec/ci_coverage_spec.rb
+          spec/rubocop/ spec/benchmarks/
           spec/i18n_spec.rb spec/pgbus_spec.rb
       - name: Upload coverage report
         uses: actions/upload-artifact@v7

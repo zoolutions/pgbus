@@ -7,7 +7,7 @@ require "yaml"
 # checks them against the spec tree, so adding a spec directory (or a top-level
 # spec file) without wiring it into CI fails CI. No Rails, no database.
 RSpec.describe "CI spec coverage" do # rubocop:disable RSpec/DescribeClass
-  let(:root) { File.expand_path("..", __dir__) }
+  let(:root) { File.expand_path("../..", __dir__) }
   let(:excluded_dirs) { %w[dummy support] }
 
   let(:rspec_paths) do
