@@ -1,0 +1,26 @@
+spec/system/time_presentation_spec.rb
+  s_4ad0484223837f::t_9f76b6b5f9e141 18
+  s_4ad0484223837f::t_44f197af61e05f 4,10-14,104,112
+spec/pgbus/web/time_format_spec.rb
+  s_4ad0484223837f::t_8204f465aa128d 55
+  s_4ad0484223837f::t_5641b74385cabe 54,56-58,114-116
+lib/pgbus/web/time_format.rb
+  s_4ad0484223837f::t_79a8414461a939 30,36-41,79-80
+  s_4ad0484223837f::t_8204f465aa128d 35
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "8b9814da0e808ac237723557292fe07e2bb53311",
+  "prompts": {},
+  "sessions": {
+    "s_4ad0484223837f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3ed0f016-1f17-4322-be29-e4daa76de66d",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}

@@ -1,0 +1,22 @@
+spec/support/pgbus/stub_data_source/sample_data.rb
+  s_4ad0484223837f::t_5367a659efc768 124,128,184-191,195,198-199,295
+  s_4ad0484223837f::t_f15e88eb65431c 283-284
+CHANGELOG.md
+  s_4ad0484223837f::t_c7c17d504bc7db 29-30
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "4c5a96f196a0444d656db16a6e25267cc969ce55",
+  "prompts": {},
+  "sessions": {
+    "s_4ad0484223837f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3ed0f016-1f17-4322-be29-e4daa76de66d",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
