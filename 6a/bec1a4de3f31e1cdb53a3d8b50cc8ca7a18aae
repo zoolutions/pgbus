@@ -1,0 +1,9 @@
+spec/pgbus/web/view_conventions_spec.rb
+  ai_agent 20-22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "6abec1a4de3f31e1cdb53a3d8b50cc8ca7a18aae",
+  "prompts": {}
+}
