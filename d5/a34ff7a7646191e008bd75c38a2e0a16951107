@@ -1,0 +1,49 @@
+spec/pgbus/mcp/locks_tool_spec.rb
+  s_b0a979e77aaac2::t_536f9bfee38059 73-75,78-80
+spec/pgbus/mcp/recurring_tool_spec.rb
+  s_b0a979e77aaac2::t_536f9bfee38059 85-87,90-92
+lib/pgbus/mcp/tools/locks_tool.rb
+  s_b0a979e77aaac2::t_65ea856fd89725 40
+spec/pgbus/web/data_source_list_counts_spec.rb
+  s_b0a979e77aaac2::t_16391c91d5faa8 23,72,85,119-120,139-142
+lib/pgbus/mcp/tools/concurrency_tool.rb
+  s_b0a979e77aaac2::t_65ea856fd89725 45
+lib/pgbus/mcp/base_tool.rb
+  s_b0a979e77aaac2::t_65ea856fd89725 73-78
+spec/pgbus/web/batches_data_source_spec.rb
+  s_b0a979e77aaac2::t_16391c91d5faa8 32,60
+spec/pgbus/mcp/concurrency_tool_spec.rb
+  s_b0a979e77aaac2::t_536f9bfee38059 75-80,83-85
+lib/pgbus/web/data_source/list_counts.rb
+  s_b0a979e77aaac2::t_6fb1ed37b589ac 34,38
+spec/support/pgbus/stub_data_source.rb
+  s_b0a979e77aaac2::t_e67bb45df9fa8a 145
+spec/requests/pgbus/outbox_controller_spec.rb
+  s_b0a979e77aaac2::t_e67bb45df9fa8a 30-37
+spec/integration/dashboard_list_paging_spec.rb
+  s_b0a979e77aaac2::t_56d5f9410068f0 52-63
+lib/pgbus/web/data_source.rb
+  s_b0a979e77aaac2::t_6fb1ed37b589ac 512,671,763,1156
+lib/pgbus/mcp/tools/recurring_tool.rb
+  s_b0a979e77aaac2::t_65ea856fd89725 43
+app/views/pgbus/outbox/index.html.erb
+  s_b0a979e77aaac2::t_e67bb45df9fa8a 56-57
+app/controllers/pgbus/outbox_controller.rb
+  s_b0a979e77aaac2::t_e67bb45df9fa8a 10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "d5a34ff7a7646191e008bd75c38a2e0a16951107",
+  "prompts": {},
+  "sessions": {
+    "s_b0a979e77aaac2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1beb5e41-62dd-40e5-aaf9-5b08c42be586",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
