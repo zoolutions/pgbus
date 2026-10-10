@@ -6,7 +6,7 @@ module Pgbus
     # tooltip and the UTC value in datetime (issue #497). clock: true adds
     # the wall-clock time: "in 2h (21:40)".
     def pgbus_time(value, clock: false)
-      return Web::TimeFormat::NONE if value.nil?
+      return Web::TimeFormat::NONE if value.blank?
 
       relative = Web::TimeFormat.relative(value)
       return value.to_s unless relative
@@ -18,14 +18,14 @@ module Pgbus
     # The exact moment, then the relative one: for expanded rows and show
     # pages, where the absolute is what an operator debugs with.
     def pgbus_timestamp(value)
-      return Web::TimeFormat::NONE if value.nil?
+      return Web::TimeFormat::NONE if value.blank?
       return value.to_s unless Web::TimeFormat.coerce(value)
 
       safe_join([pgbus_absolute_time(value), " (#{Web::TimeFormat.relative(value)})"])
     end
 
     def pgbus_absolute_time(value)
-      return Web::TimeFormat::NONE if value.nil?
+      return Web::TimeFormat::NONE if value.blank?
       return value.to_s unless Web::TimeFormat.coerce(value)
 
       tag.time(Web::TimeFormat.absolute(value), datetime: Web::TimeFormat.iso(value))

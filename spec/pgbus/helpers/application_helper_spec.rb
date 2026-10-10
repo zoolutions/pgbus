@@ -51,8 +51,11 @@ RSpec.describe Pgbus::ApplicationHelper do
         expect(helper.pgbus_time("2026-10-10T00:09:54Z")).to include(">in 1m</time>")
       end
 
-      it "renders a dash for nil" do
+      it "renders a dash for nil and a blank string" do
         expect(helper.pgbus_time(nil)).to eq("—")
+        expect(helper.pgbus_time("")).to eq("—")
+        expect(helper.pgbus_timestamp(" ")).to eq("—")
+        expect(helper.pgbus_absolute_time("")).to eq("—")
       end
 
       it "shows an unparseable value as given, not marked safe (the view escapes it)" do
