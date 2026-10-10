@@ -1,4 +1,5 @@
-<turbo-frame id="batches-list" data-auto-refresh data-src="<%= pgbus.batches_path(frame: 'list') %>">
+<turbo-frame id="batches-list" data-auto-refresh data-turbo-action="advance"
+             data-src="<%= pgbus.batches_path(request.query_parameters.merge(frame: "list")) %>">
   <div class="overflow-hidden rounded-lg bg-white dark:bg-gray-800 shadow ring-1 ring-gray-200 dark:ring-gray-700">
     <table class="pgbus-table min-w-full divide-y divide-gray-200 dark:divide-gray-700">
       <thead class="bg-gray-50 dark:bg-gray-900">
@@ -14,18 +15,17 @@
       <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
         <% @batches.each do |batch| %>
           <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-            <td data-label="Batch ID" class="px-4 py-3 text-sm">
-              <%= link_to batch[:batch_id][0..7], pgbus.batch_path(batch[:batch_id]),
-                    class: "font-mono text-indigo-600 dark:text-indigo-400 hover:underline",
-                    data: { turbo_frame: "_top" } %>
+            <td data-label="<%= t("pgbus.batches.index.headers.batch_id") %>" class="px-4 py-3 text-sm">
+              <%= pgbus_link_to batch[:batch_id][0..7], pgbus.batch_path(batch[:batch_id]),
+                    class: "font-mono", data: { turbo_frame: "_top" } %>
             </td>
-            <td data-label="Description" class="px-4 py-3 text-sm text-gray-700 dark:text-gray-300 max-w-xs truncate">
+            <td data-label="<%= t("pgbus.batches.index.headers.description") %>" class="px-4 py-3 text-sm text-gray-700 dark:text-gray-300 max-w-xs truncate">
               <%= batch[:description] || "—" %>
             </td>
-            <td data-label="Status" class="px-4 py-3 text-sm">
+            <td data-label="<%= t("pgbus.batches.index.headers.status") %>" class="px-4 py-3 text-sm">
               <%= pgbus_batch_status_badge(batch[:status]) %>
             </td>
-            <td data-label="Progress" class="px-4 py-3 text-sm">
+            <td data-label="<%= t("pgbus.batches.index.headers.progress") %>" class="px-4 py-3 text-sm">
               <div class="flex items-center space-x-2">
                 <div class="w-24 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
                   <div class="h-2 rounded-full <%= batch[:failed_jobs].to_i > 0 ? 'bg-amber-500' : 'bg-green-500' %>"
@@ -34,21 +34,24 @@
                 <span class="text-xs text-gray-500 dark:text-gray-400 font-mono"><%= batch[:progress_pct] %>%</span>
               </div>
             </td>
-            <td data-label="Jobs" class="px-4 py-3 text-sm text-right font-mono text-gray-500 dark:text-gray-400">
+            <td data-label="<%= t("pgbus.batches.index.headers.jobs") %>" class="px-4 py-3 text-sm text-right font-mono text-gray-500 dark:text-gray-400">
               <%= batch[:completed_jobs] %>/<%= batch[:total_jobs] %>
               <% if batch[:failed_jobs].to_i > 0 %>
                 <span class="text-red-700 dark:text-red-400">(<%= batch[:failed_jobs] %> failed)</span>
               <% end %>
             </td>
-            <td data-label="Created" class="px-4 py-3 text-sm text-right text-gray-500 dark:text-gray-400">
+            <td data-label="<%= t("pgbus.batches.index.headers.created") %>" class="px-4 py-3 text-sm text-right text-gray-500 dark:text-gray-400">
               <%= pgbus_time(batch[:created_at]) %>
             </td>
           </tr>
         <% end %>
         <% if @batches.empty? %>
-          <tr><td colspan="6" class="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400"><%= t("pgbus.batches.index.empty") %></td></tr>
+          <%= render "pgbus/shared/empty_row", colspan: 6, message: t("pgbus.batches.index.empty") %>
         <% end %>
       </tbody>
     </table>
+    <%= render "pgbus/shared/pager", page: @page, per_page: @per_page, shown: @batches.size,
+          total_count: @batches_count.total, has_more: @batches_count.capped? && @batches.size == @per_page,
+          page_path: ->(n) { pgbus.batches_path(page: n) } %>
   </div>
 </turbo-frame>

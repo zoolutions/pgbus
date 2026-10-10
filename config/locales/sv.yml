@@ -65,7 +65,7 @@ sv:
         empty: Inga köer hittades
         headers:
           depth: Djup
-          oldest_claimable: Äldsta tillgänglig (s)
+          oldest_claimable: Äldsta tillgänglig
           parked: Parkerade
           queue: Kö
           total: Totalt
@@ -473,6 +473,7 @@ sv:
           other: Kasta de %{count} jobb som parkerats bakom denna nyckel? De kommer aldrig att köras.
         empty: Inga samtidighetsnycklar används
         headers:
+          actions: Åtgärder
           in_use: Används
           key: Nyckel
           lease: Lås
@@ -506,6 +507,7 @@ sv:
         discard_selected_confirm: Kassera valda lås?
         empty: Inga aktiva lås
         headers:
+          actions: Åtgärder
           age: Ålder
           lock_key: Låsningsnyckel
           msg_id: Meddelande-ID
@@ -565,8 +567,8 @@ sv:
         headers:
           actions: Åtgärder
           depth: Djup
-          newest: Nyaste (s)
-          oldest_claimable: Äldsta tillgänglig (s)
+          newest: Nyaste
+          oldest_claimable: Äldsta tillgänglig
           parked: Parkerade
           queue: Kö
           total_ever: Totalt någonsin

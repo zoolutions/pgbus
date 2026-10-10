@@ -34,29 +34,29 @@
   <td data-label="<%= t("pgbus.jobs.list.headers.actions") %>" class="px-4 py-3 text-sm text-right align-top">
     <div class="flex justify-end space-x-2">
       <% if row[:source] == "blocked" %>
-        <%= link_to t("pgbus.jobs.list.view_locks"), pgbus.locks_path,
-              class: "text-xs font-medium text-indigo-600 hover:text-indigo-800 dark:hover:text-indigo-200 dark:text-indigo-300", data: { turbo_frame: "_top" } %>
+        <%= pgbus_link_to t("pgbus.jobs.list.view_locks"), pgbus.locks_path,
+              variant: :link, size: :sm, data: { turbo_frame: "_top" } %>
       <% elsif failed_id %>
         <%# A retry attempt in progress (running) must not have its lease reset. %>
         <% unless job.state == "running" %>
-          <%= button_to t("pgbus.jobs.list.retry"), pgbus.retry_job_path(failed_id), method: :post,
-                class: "text-xs font-medium text-indigo-600 hover:text-indigo-800 dark:hover:text-indigo-200 dark:text-indigo-300",
+          <%= pgbus_button_to t("pgbus.jobs.list.retry"), pgbus.retry_job_path(failed_id), method: :post,
+                variant: :link, size: :sm,
                 data: { turbo_frame: "_top" } %>
         <% end %>
-        <%= button_to t("pgbus.jobs.list.discard"), pgbus.discard_job_path(failed_id), method: :post,
-              class: "text-xs font-medium text-red-600 hover:text-red-800 dark:hover:text-red-200 dark:text-red-300",
+        <%= pgbus_button_to t("pgbus.jobs.list.discard"), pgbus.discard_job_path(failed_id), method: :post,
+              variant: :link, size: :sm, tone: :red,
               data: { turbo_confirm: t("pgbus.jobs.list.discard_confirm"), turbo_frame: "_top" } %>
       <% else %>
         <%# Resetting a running job's lease would run it twice: no Retry for it. %>
         <% unless job.state == "running" %>
-          <%= button_to t("pgbus.jobs.list.retry"), pgbus.retry_message_queue_path(name: row[:queue_name], msg_id: row[:msg_id]),
+          <%= pgbus_button_to t("pgbus.jobs.list.retry"), pgbus.retry_message_queue_path(name: row[:queue_name], msg_id: row[:msg_id]),
                 method: :post,
-                class: "text-xs font-medium text-indigo-600 hover:text-indigo-800 dark:hover:text-indigo-200 dark:text-indigo-300",
+                variant: :link, size: :sm,
                 data: { turbo_confirm: t("pgbus.jobs.list.retry_confirm"), turbo_frame: "_top" } %>
         <% end %>
-        <%= button_to t("pgbus.jobs.list.discard"), pgbus.discard_message_queue_path(name: row[:queue_name], msg_id: row[:msg_id]),
+        <%= pgbus_button_to t("pgbus.jobs.list.discard"), pgbus.discard_message_queue_path(name: row[:queue_name], msg_id: row[:msg_id]),
               method: :post,
-              class: "text-xs font-medium text-red-600 hover:text-red-800 dark:hover:text-red-200 dark:text-red-300",
+              variant: :link, size: :sm, tone: :red,
               data: { turbo_confirm: t("pgbus.jobs.list.discard_confirm"), turbo_frame: "_top" } %>
       <% end %>
     </div>
@@ -67,8 +67,8 @@
     <div class="flex items-center justify-between mt-3 mb-3">
       <span class="text-xs font-mono text-gray-500 dark:text-gray-400"><%= t("pgbus.jobs.list.job_id") %> <%= payload["job_id"] || "—" %></span>
       <% if failed_id %>
-        <%= link_to t("pgbus.jobs.list.view_failure"), pgbus.job_path(failed_id),
-              class: "text-xs font-medium text-indigo-600 hover:text-indigo-800 dark:hover:text-indigo-200 dark:text-indigo-300", data: { turbo_frame: "_top" } %>
+        <%= pgbus_link_to t("pgbus.jobs.list.view_failure"), pgbus.job_path(failed_id),
+              variant: :link, size: :sm, data: { turbo_frame: "_top" } %>
       <% end %>
     </div>
     <% if row[:error_class] %>

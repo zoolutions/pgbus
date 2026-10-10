@@ -17,6 +17,7 @@ module Pgbus
     layout "pgbus/application"
 
     helper Pgbus::ApplicationHelper unless self < Pgbus::ApplicationHelper
+    helper Pgbus::ButtonHelper unless self < Pgbus::ButtonHelper
 
     # Make `pgbus` route proxy available in views (e.g. pgbus.root_path).
     # With isolate_namespace, the non-prefixed helpers (root_path) work inside
@@ -75,8 +76,10 @@ module Pgbus
       @data_source ||= Pgbus.configuration.web_data_source || Web::DataSource.new
     end
 
-    def page_param
-      [params[:page].to_i, 1].max
+    # key – the query param; a second list on one page uses <list>_page.
+    def page_param(key = :page)
+      value = params[key]
+      [value.is_a?(String) ? value.to_i : 1, 1].max
     end
 
     def per_page

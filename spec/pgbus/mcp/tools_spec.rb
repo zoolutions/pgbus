@@ -211,8 +211,10 @@ RSpec.describe "Pgbus MCP tools" do # rubocop:disable RSpec/DescribeClass
 
   describe Pgbus::MCP::Tools::LocksTool do
     it "delegates to job_locks" do
-      allow(data_source).to receive(:job_locks)
-        .and_return([{ lock_key: "k", age_seconds: 10 }])
+      allow(data_source).to receive_messages(
+        job_locks: [{ lock_key: "k", age_seconds: 10 }],
+        list_count: Pgbus::Web::DataSource::ListCounts::Count.new(total: 1, capped: false)
+      )
 
       result = body(described_class.call(server_context: context))
       expect(result["locks"].first["lock_key"]).to eq("k")
@@ -221,10 +223,13 @@ RSpec.describe "Pgbus MCP tools" do # rubocop:disable RSpec/DescribeClass
 
   describe Pgbus::MCP::Tools::ConcurrencyTool do
     it "delegates to concurrency_stats" do
-      allow(data_source).to receive(:concurrency_stats).and_return(
-        parked_total: 7, oldest_parked_age_sec: 812, slots_held: 3, keys_at_limit: 1,
-        keys: [{ key: "ProcessOrder-42", value: 1, max_value: 1, lease_fresh: true,
-                 parked_count: 7, oldest_parked_age_sec: 812 }]
+      allow(data_source).to receive_messages(
+        concurrency_stats: {
+          parked_total: 7, oldest_parked_age_sec: 812, slots_held: 3, keys_at_limit: 1,
+          keys: [{ key: "ProcessOrder-42", value: 1, max_value: 1, lease_fresh: true,
+                   parked_count: 7, oldest_parked_age_sec: 812 }]
+        },
+        list_count: Pgbus::Web::DataSource::ListCounts::Count.new(total: 1, capped: false)
       )
 
       result = body(described_class.call(server_context: context))
@@ -272,9 +277,11 @@ RSpec.describe "Pgbus MCP tools" do # rubocop:disable RSpec/DescribeClass
   describe "default data source" do
     it "builds a DataSource when none is injected" do
       allow(Pgbus::Web::DataSource).to receive(:new).and_return(data_source)
-      allow(data_source).to receive(:job_locks).and_return([])
+      allow(data_source).to receive_messages(
+        job_locks: [], list_count: Pgbus::Web::DataSource::ListCounts::Count.new(total: 0, capped: false)
+      )
 
-      expect(body(Pgbus::MCP::Tools::LocksTool.call(server_context: nil))).to eq({ "locks" => [] })
+      expect(body(Pgbus::MCP::Tools::LocksTool.call(server_context: nil))["locks"]).to eq([])
     end
   end
 

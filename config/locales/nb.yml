@@ -65,7 +65,7 @@ nb:
         empty: Ingen køer funnet
         headers:
           depth: Dybde
-          oldest_claimable: Eldste tilgjengelig (s)
+          oldest_claimable: Eldste tilgjengelig
           parked: Parkert
           queue: Kø
           total: Totalt
@@ -473,6 +473,7 @@ nb:
           other: Forkast de %{count} jobbene som er parkert bak denne nøkkelen? De vil aldri kjøre.
         empty: Ingen samtidighetsnøkler i bruk
         headers:
+          actions: Handlinger
           in_use: I bruk
           key: Nøkkel
           lease: Leie
@@ -506,6 +507,7 @@ nb:
         discard_selected_confirm: Vil du forkaste valgte låser?
         empty: Ingen aktive låser
         headers:
+          actions: Handlinger
           age: Alder
           lock_key: Låsenøkkel
           msg_id: Meldings-ID
@@ -565,8 +567,8 @@ nb:
         headers:
           actions: Handlinger
           depth: Dybde
-          newest: Nyeste (s)
-          oldest_claimable: Eldste tilgjengelig (s)
+          newest: Nyeste
+          oldest_claimable: Eldste tilgjengelig
           parked: Parkert
           queue: Kø
           total_ever: Totalt noensinne

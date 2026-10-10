@@ -71,7 +71,7 @@ RSpec.describe "Time presentation", type: :system do
       visit "/pgbus/queues"
 
       expect(page).to have_css("td[data-label='Oldest claimable']", text: "1m 30s")
-      expect(page).to have_css("td[data-label='Newest']", text: "5s")
+      expect(page).to have_css("td[data-label=Newest]", text: "5s")
       expect(page).to have_css("td[data-label='Oldest claimable']", text: "1h 0m")
     end
 
@@ -123,7 +123,7 @@ RSpec.describe "Time presentation", type: :system do
 
       visit "/pgbus"
 
-      expect(page).to have_css("td[data-label=Time] #{stamp}", text: "5m ago")
+      expect(page).to have_css("td[data-label=When] #{stamp}", text: "5m ago")
     end
   end
 

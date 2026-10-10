@@ -65,7 +65,7 @@ es:
         empty: No se encontraron colas
         headers:
           depth: Profundidad
-          oldest_claimable: Más antiguo disponible (s)
+          oldest_claimable: Más antiguo disponible
           parked: Aparcados
           queue: Cola
           total: Total
@@ -473,6 +473,7 @@ es:
           other: "¿Descartar los %{count} trabajos aparcados detrás de esta clave? Nunca se ejecutarán."
         empty: No hay claves de concurrencia en uso
         headers:
+          actions: Acciones
           in_use: En uso
           key: Clave
           lease: Concesión
@@ -506,6 +507,7 @@ es:
         discard_selected_confirm: "¿Descartar los bloqueos seleccionados?"
         empty: No hay bloqueos activos
         headers:
+          actions: Acciones
           age: Antigüedad
           lock_key: Clave de bloqueo
           msg_id: ID de mensaje
@@ -565,8 +567,8 @@ es:
         headers:
           actions: Acciones
           depth: Profundidad
-          newest: Más nuevo (s)
-          oldest_claimable: Más antiguo disponible (s)
+          newest: Más nuevo
+          oldest_claimable: Más antiguo disponible
           parked: Aparcados
           queue: Cola
           total_ever: Total acumulado

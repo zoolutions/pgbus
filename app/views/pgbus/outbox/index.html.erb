@@ -33,23 +33,26 @@
     <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
       <% @entries.each do |entry| %>
         <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-          <td data-label="ID" class="px-4 py-3 text-sm font-mono text-gray-700 dark:text-gray-200"><%= entry.id %></td>
-          <td data-label="Routing Key" class="px-4 py-3 text-sm text-gray-700 dark:text-gray-200"><%= entry.routing_key || entry.queue_name %></td>
-          <td data-label="Payload" class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 max-w-xs truncate"><%= pgbus_json_preview(entry.payload) %></td>
-          <td data-label="Priority" class="px-4 py-3 text-sm text-right text-gray-500 dark:text-gray-400"><%= entry.priority %></td>
-          <td data-label="Status" class="px-4 py-3 text-sm text-right">
+          <td data-label="<%= t("pgbus.outbox.index.headers.id") %>" class="px-4 py-3 text-sm font-mono text-gray-700 dark:text-gray-200"><%= entry.id %></td>
+          <td data-label="<%= t("pgbus.outbox.index.headers.queue_topic") %>" class="px-4 py-3 text-sm text-gray-700 dark:text-gray-200"><%= entry.routing_key || entry.queue_name %></td>
+          <td data-label="<%= t("pgbus.outbox.index.headers.payload") %>" class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 max-w-xs truncate"><%= pgbus_json_preview(entry.payload) %></td>
+          <td data-label="<%= t("pgbus.outbox.index.headers.priority") %>" class="px-4 py-3 text-sm text-right text-gray-500 dark:text-gray-400"><%= entry.priority %></td>
+          <td data-label="<%= t("pgbus.outbox.index.headers.status") %>" class="px-4 py-3 text-sm text-right">
             <% if entry.published_at %>
               <span class="inline-flex items-center rounded-full bg-green-100 dark:bg-green-900/30 px-2 py-0.5 text-xs font-medium text-green-800 dark:text-green-400"><%= t("pgbus.outbox.index.published") %></span>
             <% else %>
               <span class="inline-flex items-center rounded-full bg-yellow-100 dark:bg-yellow-900/30 px-2 py-0.5 text-xs font-medium text-yellow-800 dark:text-yellow-400"><%= t("pgbus.outbox.index.pending") %></span>
             <% end %>
           </td>
-          <td data-label="Created" class="px-4 py-3 text-sm text-right text-gray-500 dark:text-gray-400"><%= pgbus_time(entry.created_at) %></td>
+          <td data-label="<%= t("pgbus.outbox.index.headers.created") %>" class="px-4 py-3 text-sm text-right text-gray-500 dark:text-gray-400"><%= pgbus_time(entry.created_at) %></td>
         </tr>
       <% end %>
       <% if @entries.empty? %>
-        <tr><td colspan="6" class="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400"><%= t("pgbus.outbox.index.empty") %></td></tr>
+        <%= render "pgbus/shared/empty_row", colspan: 6, message: t("pgbus.outbox.index.empty") %>
       <% end %>
     </tbody>
   </table>
+  <%= render "pgbus/shared/pager", page: @page, per_page: @per_page, shown: @entries.size,
+        total_count: @entries_count.total, has_more: @entries_count.capped? && @entries.size == @per_page,
+        page_path: ->(n) { pgbus.outbox_index_path(page: n) } %>
 </div>

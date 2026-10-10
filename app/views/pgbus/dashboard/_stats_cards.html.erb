@@ -22,7 +22,7 @@
       <p class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.stats_cards.recurring") %></p>
       <p class="mt-1 text-3xl font-semibold text-gray-900 dark:text-white"><%= @stats[:recurring_count] %></p>
       <p class="text-xs text-gray-500 dark:text-gray-400">
-        <%= link_to t("pgbus.dashboard.stats_cards.view_tasks"), pgbus.recurring_tasks_path, class: "text-blue-700 hover:text-blue-900 dark:hover:text-blue-300 dark:text-blue-400" %>
+        <%= pgbus_link_to t("pgbus.dashboard.stats_cards.view_tasks"), pgbus.recurring_tasks_path, size: :sm %>
       </p>
     </div>
 

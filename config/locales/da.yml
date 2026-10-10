@@ -65,7 +65,7 @@ da:
         empty: Ingen køer fundet
         headers:
           depth: Dybde
-          oldest_claimable: Ældste tilgængelig (s)
+          oldest_claimable: Ældste tilgængelig
           parked: Parkeret
           queue: Kø
           total: Total
@@ -473,6 +473,7 @@ da:
           other: Kassér de %{count} job der er parkeret bag denne nøgle? De vil aldrig køre.
         empty: Ingen samtidighedsnøgler i brug
         headers:
+          actions: Handlinger
           in_use: I brug
           key: Nøgle
           lease: Lease
@@ -506,6 +507,7 @@ da:
         discard_selected_confirm: Vil du kassere valgte låse?
         empty: Ingen aktive låse
         headers:
+          actions: Handlinger
           age: Alder
           lock_key: Låsenøgle
           msg_id: Besked-ID
@@ -565,8 +567,8 @@ da:
         headers:
           actions: Handlinger
           depth: Dybde
-          newest: Nyeste (s)
-          oldest_claimable: Ældste tilgængelig (s)
+          newest: Nyeste
+          oldest_claimable: Ældste tilgængelig
           parked: Parkeret
           queue: Kø
           total_ever: Total nogensinde

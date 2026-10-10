@@ -4,17 +4,14 @@
     <div class="flex items-center space-x-2">
       <div data-bulk-actions class="hidden flex items-center space-x-2">
         <span class="text-sm text-gray-500 dark:text-gray-400"><span data-bulk-count>0</span> <%= t("pgbus.helpers.bulk_selected") %></span>
-        <button type="submit" form="bulk-discard-dlq-form"
-                class="rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-500"
-                data-turbo-confirm="<%= t("pgbus.dead_letter.index.discard_selected_confirm") %>">
-          <%= t("pgbus.dead_letter.index.discard_selected") %>
-        </button>
+        <%= pgbus_button_tag t("pgbus.dead_letter.index.discard_selected"), variant: :danger, form: "bulk-discard-dlq-form",
+              confirm: t("pgbus.dead_letter.index.discard_selected_confirm") %>
       </div>
-      <%= button_to t("pgbus.dead_letter.index.retry_all"), pgbus.retry_all_dead_letter_index_path, method: :post,
-            class: "rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500",
+      <%= pgbus_button_to t("pgbus.dead_letter.index.retry_all"), pgbus.retry_all_dead_letter_index_path, method: :post,
+            variant: :primary,
             data: { turbo_confirm: t("pgbus.dead_letter.index.retry_all_confirm") } %>
-      <%= button_to t("pgbus.dead_letter.index.discard_all"), pgbus.discard_all_dead_letter_index_path, method: :post,
-            class: "rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-500",
+      <%= pgbus_button_to t("pgbus.dead_letter.index.discard_all"), pgbus.discard_all_dead_letter_index_path, method: :post,
+            variant: :danger,
             data: { turbo_confirm: t("pgbus.dead_letter.index.discard_all_confirm") } %>
     </div>
   <% end %>

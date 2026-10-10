@@ -57,33 +57,30 @@
                     <div class="flex space-x-2">
                       <%# Mark Handled — handler_class is resolved server-side
                           from the subscriber registry, so we only send queue_name. %>
-                      <%= button_to t("pgbus.events.pending_table.mark_handled"),
+                      <%= pgbus_button_to t("pgbus.events.pending_table.mark_handled"),
                             pgbus.mark_handled_event_path(m[:msg_id], queue_name: m[:queue_name]),
-                            method: :post,
-                            class: "rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-500",
+                            method: :post, variant: :success, size: :sm,
                             data: { turbo_confirm: t("pgbus.events.pending_table.mark_handled_confirm"), turbo_frame: "_top" } %>
                       <%# Reroute — dropdown with available handlers %>
                       <details class="relative inline-block">
-                        <summary class="rounded-md bg-yellow-400 px-3 py-1.5 text-xs font-medium text-yellow-950 hover:bg-yellow-300 cursor-pointer list-none">
+                        <summary class="<%= pgbus_button_classes(:warning, :sm, extra: "cursor-pointer list-none") %>">
                           <%= t("pgbus.events.pending_table.reroute") %>
                         </summary>
                         <div class="absolute right-0 z-10 mt-1 w-64 rounded-md bg-white dark:bg-gray-800 shadow-lg ring-1 ring-gray-200 dark:ring-gray-700 p-2">
                           <p class="text-xs text-gray-500 dark:text-gray-400 mb-2"><%= t("pgbus.events.pending_table.reroute_label") %></p>
                           <% @subscribers.each do |s| %>
                             <% next if s[:physical_queue_name] == m[:queue_name] %>
-                            <%= button_to s[:handler_class],
+                            <%= pgbus_button_to s[:handler_class],
                                   pgbus.reroute_event_path(m[:msg_id], queue_name: m[:queue_name], target_queue: s[:physical_queue_name]),
-                                  method: :post,
-                                  class: "block w-full text-left rounded px-2 py-1 text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700",
+                                  method: :post, variant: :menu, size: :sm,
                                   data: { turbo_confirm: t("pgbus.events.pending_table.reroute_confirm"), turbo_frame: "_top" } %>
                           <% end %>
                         </div>
                       </details>
                       <%# Discard %>
-                      <%= button_to t("pgbus.events.pending_table.discard"),
+                      <%= pgbus_button_to t("pgbus.events.pending_table.discard"),
                             pgbus.discard_event_path(m[:msg_id], queue_name: m[:queue_name]),
-                            method: :post,
-                            class: "rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-500",
+                            method: :post, variant: :danger, size: :sm,
                             data: { turbo_confirm: t("pgbus.events.pending_table.discard_confirm"), turbo_frame: "_top" } %>
                     </div>
                   </div>
@@ -133,11 +130,8 @@
                         <textarea name="payload" rows="6"
                                   class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-white text-xs font-mono shadow-sm focus:border-indigo-500 focus:ring-indigo-500"><%= parse_ok ? (JSON.pretty_generate(payload_raw) rescue m[:message]) : m[:message] %></textarea>
                         <div class="mt-2 flex justify-end">
-                          <button type="submit"
-                                  class="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-500"
-                                  data-turbo-confirm="<%= t("pgbus.events.pending_table.edit_payload_confirm") %>">
-                            <%= t("pgbus.events.pending_table.edit_payload") %>
-                          </button>
+                          <%= pgbus_button_tag t("pgbus.events.pending_table.edit_payload"), variant: :primary, size: :sm,
+                                confirm: t("pgbus.events.pending_table.edit_payload_confirm") %>
                         </div>
                       <% end %>
                     </div>

@@ -65,7 +65,7 @@ fr:
         empty: Aucune file d'attente trouvée
         headers:
           depth: Profondeur
-          oldest_claimable: Plus ancien disponible (s)
+          oldest_claimable: Plus ancien disponible
           parked: Différés
           queue: File d'attente
           total: Total
@@ -473,6 +473,7 @@ fr:
           other: Supprimer les %{count} jobs en attente derrière cette clé ? Ils ne s'exécuteront jamais.
         empty: Aucune clé de concurrence utilisée
         headers:
+          actions: Actions
           in_use: Occupé
           key: Clé
           lease: Bail
@@ -506,6 +507,7 @@ fr:
         discard_selected_confirm: Supprimer les verrous sélectionnés ?
         empty: Aucun verrou actif
         headers:
+          actions: Actions
           age: Âge
           lock_key: Clé de verrou
           msg_id: ID du message
@@ -565,8 +567,8 @@ fr:
         headers:
           actions: Actions
           depth: Profondeur
-          newest: Le plus récent (s)
-          oldest_claimable: Plus ancien disponible (s)
+          newest: Le plus récent
+          oldest_claimable: Plus ancien disponible
           parked: Différés
           queue: File d'attente
           total_ever: Total jamais

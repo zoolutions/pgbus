@@ -4,11 +4,8 @@
     <div class="flex items-center space-x-2">
       <div data-bulk-actions class="hidden flex items-center space-x-2">
         <span class="text-sm text-gray-500 dark:text-gray-400"><span data-bulk-count>0</span> <%= t("pgbus.helpers.bulk_selected") %></span>
-        <button type="submit" form="bulk-discard-events-form"
-                class="rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-500"
-                data-turbo-confirm="<%= t("pgbus.events.index.discard_selected_confirm") %>">
-          <%= t("pgbus.events.index.discard_selected") %>
-        </button>
+        <%= pgbus_button_tag t("pgbus.events.index.discard_selected"), variant: :danger, form: "bulk-discard-events-form",
+              confirm: t("pgbus.events.index.discard_selected_confirm") %>
       </div>
     </div>
   <% end %>
@@ -29,13 +26,13 @@
       <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
         <% @subscribers.each do |s| %>
           <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-            <td data-label="Pattern" class="px-4 py-3 text-sm font-mono text-indigo-600 dark:text-indigo-400"><%= s[:pattern] %></td>
-            <td data-label="Handler" class="px-4 py-3 text-sm text-gray-900 dark:text-white"><%= s[:handler_class] %></td>
-            <td data-label="Queue" class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400"><%= s[:queue_name] %></td>
+            <td data-label="<%= t("pgbus.events.index.subscribers_headers.pattern") %>" class="px-4 py-3 text-sm font-mono text-indigo-600 dark:text-indigo-400"><%= s[:pattern] %></td>
+            <td data-label="<%= t("pgbus.events.index.subscribers_headers.handler") %>" class="px-4 py-3 text-sm text-gray-900 dark:text-white"><%= s[:handler_class] %></td>
+            <td data-label="<%= t("pgbus.events.index.subscribers_headers.queue") %>" class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400"><%= s[:queue_name] %></td>
           </tr>
         <% end %>
         <% if @subscribers.empty? %>
-          <tr><td colspan="3" class="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400"><%= t("pgbus.events.index.subscribers_empty") %></td></tr>
+          <%= render "pgbus/shared/empty_row", colspan: 3, message: t("pgbus.events.index.subscribers_empty") %>
         <% end %>
       </tbody>
     </table>
@@ -63,13 +60,13 @@
       <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
         <% @events.each do |e| %>
           <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-            <td data-label="Event ID" class="px-4 py-3 text-sm font-mono text-gray-900 dark:text-white"><%= e["event_id"] %></td>
-            <td data-label="Handler" class="px-4 py-3 text-sm text-gray-700 dark:text-gray-200"><%= e["handler_class"] %></td>
-            <td data-label="Processed At" class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400"><%= pgbus_time(e["processed_at"]) %></td>
+            <td data-label="<%= t("pgbus.events.index.processed_headers.event_id") %>" class="px-4 py-3 text-sm font-mono text-gray-900 dark:text-white"><%= e["event_id"] %></td>
+            <td data-label="<%= t("pgbus.events.index.processed_headers.handler") %>" class="px-4 py-3 text-sm text-gray-700 dark:text-gray-200"><%= e["handler_class"] %></td>
+            <td data-label="<%= t("pgbus.events.index.processed_headers.processed_at") %>" class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400"><%= pgbus_time(e["processed_at"]) %></td>
           </tr>
         <% end %>
         <% if @events.empty? %>
-          <tr><td colspan="3" class="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400"><%= t("pgbus.events.index.processed_empty") %></td></tr>
+          <%= render "pgbus/shared/empty_row", colspan: 3, message: t("pgbus.events.index.processed_empty") %>
         <% end %>
       </tbody>
     </table>

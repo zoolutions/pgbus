@@ -1,5 +1,5 @@
 <div class="mb-6">
-  <%= link_to "\u2190 #{t("pgbus.jobs.show.back")}", pgbus.jobs_path, class: "text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300" %>
+  <%= pgbus_link_to "\u2190 #{t("pgbus.jobs.show.back")}", pgbus.jobs_path %>
 </div>
 
 <% if @job %>
@@ -61,10 +61,8 @@
   </div>
 
   <div class="flex space-x-2">
-    <%= button_to t("pgbus.jobs.show.retry"), pgbus.retry_job_path(@job["id"]), method: :post,
-          class: "rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500" %>
-    <%= button_to t("pgbus.jobs.show.discard"), pgbus.discard_job_path(@job["id"]), method: :post,
-          class: "rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-500",
+    <%= pgbus_button_to t("pgbus.jobs.show.retry"), pgbus.retry_job_path(@job["id"]), method: :post, variant: :primary %>
+    <%= pgbus_button_to t("pgbus.jobs.show.discard"), pgbus.discard_job_path(@job["id"]), method: :post, variant: :danger,
           data: { turbo_confirm: t("pgbus.jobs.show.discard_confirm") } %>
   </div>
 <% else %>

@@ -65,7 +65,7 @@ pt:
         empty: Nenhuma fila encontrada
         headers:
           depth: Profundidade
-          oldest_claimable: Mais antigo disponível (s)
+          oldest_claimable: Mais antigo disponível
           parked: Adiados
           queue: Fila
           total: Total
@@ -473,6 +473,7 @@ pt:
           other: Descartar os %{count} trabalhos estacionados atrás desta chave? Nunca serão executados.
         empty: Nenhuma chave de concorrência em uso
         headers:
+          actions: Ações
           in_use: Em uso
           key: Chave
           lease: Concessão
@@ -506,6 +507,7 @@ pt:
         discard_selected_confirm: Descartar bloqueios selecionados?
         empty: Nenhum bloqueio ativo
         headers:
+          actions: Ações
           age: Idade
           lock_key: Chave de Bloqueio
           msg_id: ID da mensagem
@@ -565,8 +567,8 @@ pt:
         headers:
           actions: Ações
           depth: Profundidade
-          newest: Mais novo (s)
-          oldest_claimable: Mais antigo disponível (s)
+          newest: Mais novo
+          oldest_claimable: Mais antigo disponível
           parked: Adiados
           queue: Fila
           total_ever: Total de todos os tempos

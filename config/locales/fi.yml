@@ -65,7 +65,7 @@ fi:
         empty: Jonot eivät löytyneet
         headers:
           depth: Syvyys
-          oldest_claimable: Vanhin saatavilla (s)
+          oldest_claimable: Vanhin saatavilla
           parked: Pysäköidyt
           queue: Jono
           total: Yhteensä
@@ -473,6 +473,7 @@ fi:
           other: Hylätäänkö tämän avaimen taakse pysäköityä %{count} työtä? Ne eivät koskaan suoritu.
         empty: Ei rinnakkaisuusavaimia käytössä
         headers:
+          actions: Toiminnot
           in_use: Käytössä
           key: Avain
           lease: Varaus
@@ -506,6 +507,7 @@ fi:
         discard_selected_confirm: Hylätäänkö valitut lukot?
         empty: Ei aktiivisia lukkoja
         headers:
+          actions: Toiminnot
           age: Ikä
           lock_key: Lukon avain
           msg_id: Viestin tunnus
@@ -565,8 +567,8 @@ fi:
         headers:
           actions: Toiminnot
           depth: Syvyys
-          newest: Uusimmat (s)
-          oldest_claimable: Vanhin saatavilla (s)
+          newest: Uusimmat
+          oldest_claimable: Vanhin saatavilla
           parked: Pysäköidyt
           queue: Jono
           total_ever: Yhteensä koskaan

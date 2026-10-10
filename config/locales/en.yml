@@ -65,7 +65,7 @@ en:
         empty: No queues found
         headers:
           depth: Depth
-          oldest_claimable: Oldest claimable (s)
+          oldest_claimable: Oldest claimable
           parked: Parked
           queue: Queue
           total: Total
@@ -473,6 +473,7 @@ en:
           other: Discard the %{count} jobs parked behind this key? They will never run.
         empty: No concurrency keys in use
         headers:
+          actions: Actions
           in_use: In use
           key: Key
           lease: Lease
@@ -506,6 +507,7 @@ en:
         discard_selected_confirm: Discard selected locks?
         empty: No active locks
         headers:
+          actions: Actions
           age: Age
           lock_key: Lock Key
           msg_id: Message ID
@@ -565,8 +567,8 @@ en:
         headers:
           actions: Actions
           depth: Depth
-          newest: Newest (s)
-          oldest_claimable: Oldest claimable (s)
+          newest: Newest
+          oldest_claimable: Oldest claimable
           parked: Parked
           queue: Queue
           total_ever: Total Ever

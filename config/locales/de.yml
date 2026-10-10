@@ -65,7 +65,7 @@ de:
         empty: Keine Warteschlangen gefunden
         headers:
           depth: Tiefe
-          oldest_claimable: Älteste verfügbar (s)
+          oldest_claimable: Älteste verfügbar
           parked: Geparkt
           queue: Warteschlange
           total: Gesamt
@@ -473,6 +473,7 @@ de:
           other: Die %{count} hinter diesem Schlüssel geparkten Jobs verwerfen? Sie werden nie ausgeführt.
         empty: Keine Nebenläufigkeitsschlüssel in Verwendung
         headers:
+          actions: Aktionen
           in_use: Belegt
           key: Schlüssel
           lease: Lease
@@ -506,6 +507,7 @@ de:
         discard_selected_confirm: Ausgewählte Sperren verwerfen?
         empty: Keine aktiven Sperren
         headers:
+          actions: Aktionen
           age: Alter
           lock_key: Sperrschlüssel
           msg_id: Nachrichten-ID
@@ -565,8 +567,8 @@ de:
         headers:
           actions: Aktionen
           depth: Tiefe
-          newest: Neueste (s)
-          oldest_claimable: Älteste verfügbar (s)
+          newest: Neueste
+          oldest_claimable: Älteste verfügbar
           parked: Geparkt
           queue: Warteschlange
           total_ever: Insgesamt jemals

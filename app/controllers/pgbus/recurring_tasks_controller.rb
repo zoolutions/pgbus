@@ -3,13 +3,11 @@
 module Pgbus
   class RecurringTasksController < ApplicationController
     def index
-      case params[:frame]
-      when "recurring_tasks"
-        @recurring_tasks = data_source.recurring_tasks
-        render_frame("pgbus/recurring_tasks/tasks_table")
-      else
-        @recurring_tasks = data_source.recurring_tasks
-      end
+      @page = page_param
+      @per_page = per_page
+      @recurring_tasks = data_source.recurring_tasks(page: @page, per_page: @per_page)
+      @recurring_tasks_count = data_source.list_count(:recurring_tasks)
+      render_frame("pgbus/recurring_tasks/tasks_table") if params[:frame] == "recurring_tasks"
     end
 
     def show
