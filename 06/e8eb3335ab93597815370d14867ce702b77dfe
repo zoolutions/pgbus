@@ -1,0 +1,11 @@
+README.md
+  ai_agent 577,607
+docs/app/views/docs/pages/running_workers.rb
+  ai_agent 155,195-197
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "06e8eb3335ab93597815370d14867ce702b77dfe",
+  "prompts": {}
+}

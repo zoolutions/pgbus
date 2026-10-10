@@ -1,0 +1,21 @@
+docs/app/views/docs/pages/sizing_capsules.rb
+  s_4ad0484223837f::t_d0a135a8fdc210 244-246
+  s_4ad0484223837f::t_37cc06a83cf948 137-139
+  s_4ad0484223837f::t_a1c7ba25426b55 58-63
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "72e070f9d23b9772a96bffdaf7b692f8637e2ea5",
+  "prompts": {},
+  "sessions": {
+    "s_4ad0484223837f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3ed0f016-1f17-4322-be29-e4daa76de66d",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
