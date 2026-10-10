@@ -1,0 +1,22 @@
+spec/pgbus/web/time_conventions_spec.rb
+  s_4ad0484223837f::t_5e808503c59c6b 22,30,32-33,37
+  s_4ad0484223837f::t_6d2ba8e18a9cff 47-48,62
+AGENTS.md
+  s_4ad0484223837f::t_5e808503c59c6b 28,200-201
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "f8c000f6b70e6387c374cce89df9183e1f6e5912",
+  "prompts": {},
+  "sessions": {
+    "s_4ad0484223837f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3ed0f016-1f17-4322-be29-e4daa76de66d",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
