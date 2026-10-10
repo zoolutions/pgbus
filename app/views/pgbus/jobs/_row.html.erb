@@ -21,7 +21,7 @@
   <% end %>
   <td data-label="<%= t("pgbus.jobs.list.headers.id") %>" class="px-4 py-3 text-sm font-mono text-gray-900 dark:text-white align-top">
     <details data-job-toggle class="group">
-      <summary class="cursor-pointer list-none text-indigo-600 hover:text-indigo-500 dark:hover:text-indigo-300 dark:text-indigo-400"><%= row[:msg_id] || row[:id] %></summary>
+      <summary class="cursor-pointer list-none text-indigo-600 hover:text-indigo-800 dark:hover:text-indigo-300 dark:text-indigo-400"><%= row[:msg_id] || row[:id] %></summary>
     </details>
   </td>
   <td data-label="<%= t("pgbus.jobs.list.headers.job") %>" class="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white align-top"><%= row[:job_class].presence || "—" %></td>
@@ -35,28 +35,28 @@
     <div class="flex justify-end space-x-2">
       <% if row[:source] == "blocked" %>
         <%= link_to t("pgbus.jobs.list.view_locks"), pgbus.locks_path,
-              class: "text-xs font-medium text-indigo-600 hover:text-indigo-800 dark:hover:text-indigo-300 dark:text-indigo-400", data: { turbo_frame: "_top" } %>
+              class: "text-xs font-medium text-indigo-600 hover:text-indigo-800 dark:hover:text-indigo-200 dark:text-indigo-300", data: { turbo_frame: "_top" } %>
       <% elsif failed_id %>
         <%# A retry attempt in progress (running) must not have its lease reset. %>
         <% unless job.state == "running" %>
           <%= button_to t("pgbus.jobs.list.retry"), pgbus.retry_job_path(failed_id), method: :post,
-                class: "text-xs font-medium text-indigo-600 hover:text-indigo-800 dark:hover:text-indigo-300 dark:text-indigo-400",
+                class: "text-xs font-medium text-indigo-600 hover:text-indigo-800 dark:hover:text-indigo-200 dark:text-indigo-300",
                 data: { turbo_frame: "_top" } %>
         <% end %>
         <%= button_to t("pgbus.jobs.list.discard"), pgbus.discard_job_path(failed_id), method: :post,
-              class: "text-xs font-medium text-red-600 hover:text-red-800 dark:hover:text-red-300 dark:text-red-400",
+              class: "text-xs font-medium text-red-600 hover:text-red-800 dark:hover:text-red-200 dark:text-red-300",
               data: { turbo_confirm: t("pgbus.jobs.list.discard_confirm"), turbo_frame: "_top" } %>
       <% else %>
         <%# Resetting a running job's lease would run it twice: no Retry for it. %>
         <% unless job.state == "running" %>
           <%= button_to t("pgbus.jobs.list.retry"), pgbus.retry_message_queue_path(name: row[:queue_name], msg_id: row[:msg_id]),
                 method: :post,
-                class: "text-xs font-medium text-indigo-600 hover:text-indigo-800 dark:hover:text-indigo-300 dark:text-indigo-400",
+                class: "text-xs font-medium text-indigo-600 hover:text-indigo-800 dark:hover:text-indigo-200 dark:text-indigo-300",
                 data: { turbo_confirm: t("pgbus.jobs.list.retry_confirm"), turbo_frame: "_top" } %>
         <% end %>
         <%= button_to t("pgbus.jobs.list.discard"), pgbus.discard_message_queue_path(name: row[:queue_name], msg_id: row[:msg_id]),
               method: :post,
-              class: "text-xs font-medium text-red-600 hover:text-red-800 dark:hover:text-red-300 dark:text-red-400",
+              class: "text-xs font-medium text-red-600 hover:text-red-800 dark:hover:text-red-200 dark:text-red-300",
               data: { turbo_confirm: t("pgbus.jobs.list.discard_confirm"), turbo_frame: "_top" } %>
       <% end %>
     </div>
@@ -68,7 +68,7 @@
       <span class="text-xs font-mono text-gray-500 dark:text-gray-400"><%= t("pgbus.jobs.list.job_id") %> <%= payload["job_id"] || "—" %></span>
       <% if failed_id %>
         <%= link_to t("pgbus.jobs.list.view_failure"), pgbus.job_path(failed_id),
-              class: "text-xs font-medium text-indigo-600 hover:text-indigo-500 dark:hover:text-indigo-300 dark:text-indigo-400", data: { turbo_frame: "_top" } %>
+              class: "text-xs font-medium text-indigo-600 hover:text-indigo-800 dark:hover:text-indigo-200 dark:text-indigo-300", data: { turbo_frame: "_top" } %>
       <% end %>
     </div>
     <% if row[:error_class] %>

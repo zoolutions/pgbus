@@ -64,7 +64,7 @@
                             data: { turbo_confirm: t("pgbus.events.pending_table.mark_handled_confirm"), turbo_frame: "_top" } %>
                       <%# Reroute — dropdown with available handlers %>
                       <details class="relative inline-block">
-                        <summary class="rounded-md bg-yellow-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-yellow-500 cursor-pointer list-none">
+                        <summary class="rounded-md bg-yellow-400 px-3 py-1.5 text-xs font-medium text-yellow-950 hover:bg-yellow-300 cursor-pointer list-none">
                           <%= t("pgbus.events.pending_table.reroute") %>
                         </summary>
                         <div class="absolute right-0 z-10 mt-1 w-64 rounded-md bg-white dark:bg-gray-800 shadow-lg ring-1 ring-gray-200 dark:ring-gray-700 p-2">
@@ -125,7 +125,7 @@
                   <% end %>
                   <%# Edit Payload form %>
                   <details class="mt-2">
-                    <summary class="text-xs font-medium text-indigo-600 dark:text-indigo-400 cursor-pointer hover:text-indigo-500 dark:hover:text-indigo-300"><%= t("pgbus.events.pending_table.edit_payload") %></summary>
+                    <summary class="text-xs font-medium text-indigo-600 dark:text-indigo-400 cursor-pointer hover:text-indigo-800 dark:hover:text-indigo-300"><%= t("pgbus.events.pending_table.edit_payload") %></summary>
                     <div class="mt-2 p-3 bg-white dark:bg-gray-800 rounded ring-1 ring-gray-200 dark:ring-gray-700">
                       <%= form_with url: pgbus.edit_payload_event_path(m[:msg_id]), method: :post, local: true, data: { turbo_frame: "_top" } do |f| %>
                         <%= hidden_field_tag :queue_name, m[:queue_name] %>

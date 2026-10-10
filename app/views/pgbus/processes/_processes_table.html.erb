@@ -25,7 +25,7 @@
                   <span class="inline-flex items-center rounded bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 px-1.5 py-0.5 text-xs mr-1 font-medium"><%= rates %></span>
                 <% end %>
                 <% pgbus_display_metadata(p[:metadata]).each do |k, v| %>
-                  <span class="inline-flex items-center rounded bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 text-xs mr-1"><%= k %>: <%= v %></span>
+                  <span class="inline-flex items-center rounded bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 text-xs text-gray-700 dark:text-gray-200 mr-1"><%= k %>: <%= v %></span>
                 <% end %>
               <% end %>
             </td>

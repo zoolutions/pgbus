@@ -1,5 +1,5 @@
 <div class="mb-3">
-  <%= link_to "← #{t("pgbus.queues.show.back")}", pgbus.queues_path, class: "text-sm text-indigo-600 hover:text-indigo-500 dark:hover:text-indigo-300 dark:text-indigo-400" %>
+  <%= link_to "← #{t("pgbus.queues.show.back")}", pgbus.queues_path, class: "text-sm text-indigo-600 hover:text-indigo-800 dark:hover:text-indigo-300 dark:text-indigo-400" %>
 </div>
 <div class="flex items-center justify-between mb-6">
   <div>
@@ -28,7 +28,7 @@
     <% else %>
       <%= button_to t("pgbus.queues.show.pause"), pgbus.pause_queue_path(name: params[:name]),
             method: :post,
-            class: "rounded-md bg-yellow-500 px-3 py-2 text-sm font-medium text-white hover:bg-yellow-400",
+            class: "rounded-md bg-yellow-400 px-3 py-2 text-sm font-medium text-yellow-950 hover:bg-yellow-300",
             data: { turbo_confirm: t("pgbus.queues.show.pause_confirm") } %>
     <% end %>
     <%= button_to t("pgbus.queues.show.purge_queue"), pgbus.purge_queue_path(name: params[:name]),
@@ -50,7 +50,7 @@
       <% if @health[:oldest_transaction_age_sec] %>
         <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
           <%= t("pgbus.queues.show.table_health.oldest_txn") %>
-          <span class="font-mono <%= @health[:oldest_transaction_age_sec] > 60 ? 'text-red-600 dark:text-red-400' : @health[:oldest_transaction_age_sec] > 30 ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400' %>"><%= pgbus_duration(@health[:oldest_transaction_age_sec]) %></span>
+          <span class="font-mono <%= @health[:oldest_transaction_age_sec] > 60 ? 'text-red-600 dark:text-red-400' : @health[:oldest_transaction_age_sec] > 30 ? 'text-amber-700 dark:text-amber-400' : 'text-green-700 dark:text-green-400' %>"><%= pgbus_duration(@health[:oldest_transaction_age_sec]) %></span>
         </p>
       <% end %>
     </div>
@@ -69,8 +69,8 @@
           <tr>
             <td class="px-4 py-2 text-sm font-mono text-gray-900 dark:text-white"><%= t[:table] %></td>
             <td class="px-4 py-2 text-sm text-right text-gray-700 dark:text-gray-300"><%= pgbus_number(t[:live_tuples]) %></td>
-            <td class="px-4 py-2 text-sm text-right <%= t[:dead_tuples] > 1000 ? 'text-amber-600 dark:text-amber-400 font-semibold' : 'text-gray-700 dark:text-gray-300' %>"><%= pgbus_number(t[:dead_tuples]) %></td>
-            <td class="px-4 py-2 text-sm text-right <%= t[:bloat_ratio] > 0.2 ? 'text-red-600 dark:text-red-400 font-semibold' : t[:bloat_ratio] > 0.1 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-500 dark:text-gray-400' %>"><%= (t[:bloat_ratio] * 100).round(1) %>%</td>
+            <td class="px-4 py-2 text-sm text-right <%= t[:dead_tuples] > 1000 ? 'text-amber-700 dark:text-amber-400 font-semibold' : 'text-gray-700 dark:text-gray-300' %>"><%= pgbus_number(t[:dead_tuples]) %></td>
+            <td class="px-4 py-2 text-sm text-right <%= t[:bloat_ratio] > 0.2 ? 'text-red-600 dark:text-red-400 font-semibold' : t[:bloat_ratio] > 0.1 ? 'text-amber-700 dark:text-amber-400' : 'text-gray-500 dark:text-gray-400' %>"><%= (t[:bloat_ratio] * 100).round(1) %>%</td>
             <td class="px-4 py-2 text-sm text-right text-gray-500 dark:text-gray-400"><%= t[:last_vacuum_ago_sec] ? pgbus_duration(t[:last_vacuum_ago_sec]) : "—" %></td>
           </tr>
         <% end %>

@@ -25,66 +25,66 @@
 
 <!-- Summary cards -->
 <div class="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6 mb-8">
-  <div class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
+  <dl class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
     <dt class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.insights.show.summary.total_jobs") %></dt>
     <dd class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white"><%= pgbus_number(@summary[:total]) %></dd>
-  </div>
-  <div class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
+  </dl>
+  <dl class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
     <dt class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.insights.show.summary.succeeded") %></dt>
     <dd class="mt-1 text-2xl font-semibold text-green-600 dark:text-green-400"><%= pgbus_number(@summary[:success]) %></dd>
-  </div>
-  <div class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
+  </dl>
+  <dl class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
     <dt class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.insights.show.summary.failed") %></dt>
     <dd class="mt-1 text-2xl font-semibold text-red-600 dark:text-red-400"><%= pgbus_number(@summary[:failed]) %></dd>
-  </div>
-  <div class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
+  </dl>
+  <dl class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
     <dt class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.insights.show.summary.dead_lettered") %></dt>
     <dd class="mt-1 text-2xl font-semibold text-orange-600 dark:text-orange-400"><%= pgbus_number(@summary[:dead_lettered]) %></dd>
-  </div>
-  <div class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
+  </dl>
+  <dl class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
     <dt class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.insights.show.summary.avg_duration") %></dt>
     <dd class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white"><%= pgbus_ms_duration(@summary[:avg_duration_ms]) %></dd>
-  </div>
-  <div class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
+  </dl>
+  <dl class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
     <dt class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.insights.show.summary.max_duration") %></dt>
     <dd class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white"><%= pgbus_ms_duration(@summary[:max_duration_ms]) %></dd>
-  </div>
+  </dl>
 </div>
 
 <% if @latency_available %>
 <!-- Latency summary cards -->
 <div class="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5 mb-8">
-  <div class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
+  <dl class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
     <dt class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.insights.show.summary.avg_latency") %></dt>
     <dd class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white"><%= pgbus_ms_duration(@summary[:avg_latency_ms]) %></dd>
-  </div>
-  <div class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
+  </dl>
+  <dl class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
     <dt class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.insights.show.summary.p50_latency") %></dt>
     <dd class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white"><%= pgbus_ms_duration(@summary[:p50_latency_ms]) %></dd>
-  </div>
-  <div class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
+  </dl>
+  <dl class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
     <dt class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.insights.show.summary.p95_latency") %></dt>
     <dd class="mt-1 text-2xl font-semibold text-yellow-600 dark:text-yellow-400"><%= pgbus_ms_duration(@summary[:p95_latency_ms]) %></dd>
-  </div>
-  <div class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
+  </dl>
+  <dl class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
     <dt class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.insights.show.summary.p99_latency") %></dt>
     <dd class="mt-1 text-2xl font-semibold text-orange-600 dark:text-orange-400"><%= pgbus_ms_duration(@summary[:p99_latency_ms]) %></dd>
-  </div>
-  <div class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
+  </dl>
+  <dl class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
     <dt class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.insights.show.summary.avg_retries") %></dt>
     <dd class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white"><%= @summary[:avg_retries]&.round(2) || 0 %></dd>
-  </div>
+  </dl>
 </div>
 <% end %>
 
 <!-- Charts -->
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
   <div class="rounded-lg bg-white dark:bg-gray-800 p-5 shadow ring-1 ring-gray-200 dark:ring-gray-700">
-    <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4"><%= t("pgbus.insights.show.charts.throughput") %></h3>
+    <h2 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4"><%= t("pgbus.insights.show.charts.throughput") %></h2>
     <div id="throughput-chart" style="height: 280px;"></div>
   </div>
   <div class="rounded-lg bg-white dark:bg-gray-800 p-5 shadow ring-1 ring-gray-200 dark:ring-gray-700">
-    <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4"><%= t("pgbus.insights.show.charts.status_distribution") %></h3>
+    <h2 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4"><%= t("pgbus.insights.show.charts.status_distribution") %></h2>
     <div id="status-chart" style="height: 280px;"></div>
   </div>
 </div>
@@ -93,7 +93,7 @@
 <!-- Latency chart -->
 <div class="grid grid-cols-1 gap-6 mb-8">
   <div class="rounded-lg bg-white dark:bg-gray-800 p-5 shadow ring-1 ring-gray-200 dark:ring-gray-700">
-    <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4"><%= t("pgbus.insights.show.charts.latency") %></h3>
+    <h2 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4"><%= t("pgbus.insights.show.charts.latency") %></h2>
     <div id="latency-chart" style="height: 280px;"></div>
   </div>
 </div>
@@ -101,7 +101,7 @@
 <!-- Latency by queue -->
 <div class="rounded-lg bg-white dark:bg-gray-800 shadow ring-1 ring-gray-200 dark:ring-gray-700 mb-8">
   <div class="px-5 py-4 border-b border-gray-200 dark:border-gray-700">
-    <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300"><%= t("pgbus.insights.show.latency_by_queue.title") %></h3>
+    <h2 class="text-sm font-medium text-gray-700 dark:text-gray-300"><%= t("pgbus.insights.show.latency_by_queue.title") %></h2>
   </div>
   <table class="pgbus-table min-w-full divide-y divide-gray-200 dark:divide-gray-700">
     <thead class="bg-gray-50 dark:bg-gray-900">
@@ -132,7 +132,7 @@
 <!-- Slowest job classes -->
 <div class="rounded-lg bg-white dark:bg-gray-800 shadow ring-1 ring-gray-200 dark:ring-gray-700">
   <div class="px-5 py-4 border-b border-gray-200 dark:border-gray-700">
-    <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300"><%= t("pgbus.insights.show.slowest.title") %></h3>
+    <h2 class="text-sm font-medium text-gray-700 dark:text-gray-300"><%= t("pgbus.insights.show.slowest.title") %></h2>
   </div>
   <table class="pgbus-table min-w-full divide-y divide-gray-200 dark:divide-gray-700">
     <thead class="bg-gray-50 dark:bg-gray-900">
@@ -165,22 +165,22 @@
   <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4"><%= t("pgbus.insights.show.live_streams.title") %></h2>
 
   <div class="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 mb-6">
-    <div class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
+    <dl class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
       <dt class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.insights.show.live_streams.broadcasts") %></dt>
       <dd class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white"><%= pgbus_number(@live_stream_metrics[:totals][:broadcasts]) %></dd>
-    </div>
-    <div class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
+    </dl>
+    <dl class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
       <dt class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.insights.show.live_streams.active_connections") %></dt>
       <dd class="mt-1 text-2xl font-semibold text-green-600 dark:text-green-400"><%= pgbus_number(@live_stream_metrics[:totals][:active_connections]) %></dd>
-    </div>
-    <div class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
+    </dl>
+    <dl class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
       <dt class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.insights.show.live_streams.total_connections") %></dt>
       <dd class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white"><%= pgbus_number(@live_stream_metrics[:totals][:total_connections]) %></dd>
-    </div>
-    <div class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
+    </dl>
+    <dl class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
       <dt class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.insights.show.live_streams.streams") %></dt>
       <dd class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white"><%= pgbus_number(@live_stream_metrics[:totals][:streams]) %></dd>
-    </div>
+    </dl>
   </div>
 
   <div class="rounded-lg bg-white dark:bg-gray-800 shadow ring-1 ring-gray-200 dark:ring-gray-700">
@@ -220,26 +220,26 @@
   <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4"><%= t("pgbus.insights.show.streams.title") %></h2>
 
   <div class="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5 mb-6">
-    <div class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
+    <dl class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
       <dt class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.insights.show.streams.summary.broadcasts") %></dt>
       <dd class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white"><%= pgbus_number(@stream_summary[:broadcasts]) %></dd>
-    </div>
-    <div class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
+    </dl>
+    <dl class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
       <dt class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.insights.show.streams.summary.connects") %></dt>
       <dd class="mt-1 text-2xl font-semibold text-green-600 dark:text-green-400"><%= pgbus_number(@stream_summary[:connects]) %></dd>
-    </div>
-    <div class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
+    </dl>
+    <dl class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
       <dt class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.insights.show.streams.summary.disconnects") %></dt>
       <dd class="mt-1 text-2xl font-semibold text-orange-600 dark:text-orange-400"><%= pgbus_number(@stream_summary[:disconnects]) %></dd>
-    </div>
-    <div class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
+    </dl>
+    <dl class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
       <dt class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.insights.show.streams.summary.active") %></dt>
       <dd class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white"><%= pgbus_number(@stream_summary[:active_estimate]) %></dd>
-    </div>
-    <div class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
+    </dl>
+    <dl class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
       <dt class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.insights.show.streams.summary.avg_fanout") %></dt>
       <dd class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white"><%= @stream_summary[:avg_fanout]&.round(1) || 0 %></dd>
-    </div>
+    </dl>
   </div>
 
   <div class="rounded-lg bg-white dark:bg-gray-800 shadow ring-1 ring-gray-200 dark:ring-gray-700">

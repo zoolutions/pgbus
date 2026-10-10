@@ -64,7 +64,7 @@
                   <span class="inline-flex items-center rounded-full bg-red-100 dark:bg-red-900/30 px-2.5 py-0.5 text-xs font-medium text-red-800 dark:text-red-400"><%= t("pgbus.locks.concurrency.lease.expired") %></span>
                 <% end %>
               </td>
-              <td data-label="Parked" class="px-4 py-3 text-sm text-right <%= row[:parked_count] > 0 ? 'text-amber-600 dark:text-amber-400 font-semibold' : 'text-gray-500 dark:text-gray-400' %>"><%= pgbus_number(row[:parked_count]) %></td>
+              <td data-label="Parked" class="px-4 py-3 text-sm text-right <%= row[:parked_count] > 0 ? 'text-amber-700 dark:text-amber-400 font-semibold' : 'text-gray-500 dark:text-gray-400' %>"><%= pgbus_number(row[:parked_count]) %></td>
               <td data-label="Oldest wait" class="px-4 py-3 text-sm text-right text-gray-500 dark:text-gray-400"><%= pgbus_duration(row[:oldest_parked_age_sec]) %></td>
               <td class="px-4 py-3 text-sm text-right">
                 <div class="flex items-center justify-end space-x-3">

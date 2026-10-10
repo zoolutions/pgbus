@@ -17,7 +17,7 @@
           <%= (@health[:worst_bloat_ratio] * 100).round(1) %>%
         </p>
         <% if @health[:tables_needing_vacuum] > 0 %>
-          <p class="text-xs text-amber-500"><%= t("pgbus.dashboard.queue_health.tables_need_vacuum", count: @health[:tables_needing_vacuum]) %></p>
+          <p class="text-xs text-amber-700 dark:text-amber-400"><%= t("pgbus.dashboard.queue_health.tables_need_vacuum", count: @health[:tables_needing_vacuum]) %></p>
         <% end %>
       </div>
 
@@ -65,8 +65,8 @@
                 <td class="px-4 py-3 text-sm font-mono text-gray-900 dark:text-white"><%= t[:table] %></td>
                 <td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.queue_health.kinds.#{t[:kind]}") %></td>
                 <td class="px-4 py-3 text-sm text-right text-gray-700 dark:text-gray-300"><%= pgbus_number(t[:live_tuples]) %></td>
-                <td class="px-4 py-3 text-sm text-right <%= t[:dead_tuples] > 1000 ? 'text-amber-600 dark:text-amber-400 font-semibold' : 'text-gray-700 dark:text-gray-300' %>"><%= pgbus_number(t[:dead_tuples]) %></td>
-                <td class="px-4 py-3 text-sm text-right <%= t[:bloat_ratio] > 0.2 ? 'text-red-600 dark:text-red-400 font-semibold' : t[:bloat_ratio] > 0.1 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-500 dark:text-gray-400' %>"><%= (t[:bloat_ratio] * 100).round(1) %>%</td>
+                <td class="px-4 py-3 text-sm text-right <%= t[:dead_tuples] > 1000 ? 'text-amber-700 dark:text-amber-400 font-semibold' : 'text-gray-700 dark:text-gray-300' %>"><%= pgbus_number(t[:dead_tuples]) %></td>
+                <td class="px-4 py-3 text-sm text-right <%= t[:bloat_ratio] > 0.2 ? 'text-red-600 dark:text-red-400 font-semibold' : t[:bloat_ratio] > 0.1 ? 'text-amber-700 dark:text-amber-400' : 'text-gray-500 dark:text-gray-400' %>"><%= (t[:bloat_ratio] * 100).round(1) %>%</td>
                 <td class="px-4 py-3 text-sm text-right text-gray-500 dark:text-gray-400"><%= t[:last_vacuum_ago_sec] ? pgbus_duration(t[:last_vacuum_ago_sec]) : "—" %></td>
               </tr>
             <% end %>
