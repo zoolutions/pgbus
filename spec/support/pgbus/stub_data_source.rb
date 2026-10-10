@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "stub_data_source/sample_data"
+
 module Pgbus
   module Test
     # In-memory stand-in for Pgbus::Web::DataSource. Injected via
@@ -8,6 +10,8 @@ module Pgbus
     # #calls so specs can assert the controller reached the data source with the
     # right arguments.
     class StubDataSource
+      include SampleData
+
       attr_accessor :stats, :queues, :processes_list, :failed_events_list,
                     :dlq_messages_list, :events_list, :subscribers_list, :jobs_list,
                     :paused_queues, :locks_list, :recurring_tasks_list,
@@ -16,7 +20,8 @@ module Pgbus
                     :stream_stats_available, :stream_summary, :top_streams_list,
                     :pending_events_list, :outbox_stats_hash, :outbox_entries_list,
                     :batches_list, :batch_detail_hash, :concurrency_stats_hash,
-                    :promoted_count, :job_rows_list, :jobs_ahead_hash, :job_context
+                    :promoted_count, :job_rows_list, :jobs_ahead_hash, :job_context,
+                    :recurring_executions_list, :health_stats, :health_detail_hash, :live_stream_metrics_hash
       attr_reader :calls
 
       def initialize
@@ -50,6 +55,10 @@ module Pgbus
         @job_rows_list = []
         @jobs_ahead_hash = {}
         @job_context = default_job_context
+        @recurring_executions_list = []
+        @health_stats = default_health_stats
+        @health_detail_hash = { tables: [], oldest_transaction_age_sec: nil }
+        @live_stream_metrics_hash = default_live_stream_metrics
         @calls = Hash.new { |h, k| h[k] = [] }
       end
 
@@ -109,7 +118,7 @@ module Pgbus
       def recurring_tasks = @recurring_tasks_list
 
       def recurring_task(id)
-        @recurring_tasks_list.find { |t| t[:id].to_s == id.to_s }&.merge(executions: [])
+        @recurring_tasks_list.find { |t| t[:id].to_s == id.to_s }&.merge(executions: @recurring_executions_list)
       end
 
       def toggle_recurring_task(id)
@@ -177,9 +186,7 @@ module Pgbus
       def job_status_counts(minutes: 60) = @insights_status_counts
 
       # Live stream metrics (always-on in-memory counters)
-      def live_stream_metrics
-        { streams: {}, totals: { broadcasts: 0, active_connections: 0, total_connections: 0, streams: 0 } }
-      end
+      def live_stream_metrics = @live_stream_metrics_hash
 
       # Insights (stream stats — opt-in, default unavailable)
       def stream_stats_available? = @stream_stats_available
@@ -191,8 +198,8 @@ module Pgbus
       def outbox_entries(page: 1, per_page: 25) = @outbox_entries_list
 
       # Queue health
-      def queue_health_stats = default_health_stats
-      def queue_health_detail(_name) = { tables: [], oldest_transaction_age_sec: nil }
+      def queue_health_stats = @health_stats
+      def queue_health_detail(_name) = @health_detail_hash
 
       private
 
@@ -233,6 +240,10 @@ module Pgbus
 
       def default_concurrency_stats
         { parked_total: 0, oldest_parked_age_sec: nil, slots_held: 0, keys_at_limit: 0, keys: [] }
+      end
+
+      def default_live_stream_metrics
+        { streams: {}, totals: { broadcasts: 0, active_connections: 0, total_connections: 0, streams: 0 } }
       end
 
       def default_job_context
