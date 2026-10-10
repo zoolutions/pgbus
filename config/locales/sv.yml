@@ -41,6 +41,7 @@ sv:
         title: Aktiva processer
       queue_health:
         dead_tuples: Döda tuplar
+        empty: Inga kötabeller att mäta ännu
         headers:
           bloat: Bloat
           dead: Döda
@@ -60,6 +61,25 @@ sv:
           one: "%{count} tabell behöver vacuum"
           other: "%{count} tabeller behöver vacuum"
         title: Köhälsa
+        words:
+          bloat:
+            critical: "%{ratio} i %{table} — läsningarna blir långsammare; kör vacuum nu (kritiskt över %{critical}, varnar över %{warn})"
+            none: Inget att mäta ännu
+            ok: "%{ratio} i %{table} — bra (varnar över %{warn}, kritiskt över %{critical})"
+            warn: "%{ratio} i %{table} — vacuum behövs (varnar över %{warn}, kritiskt över %{critical})"
+          dead_tuples:
+            ok: Bra — varnar över %{limit} döda rader
+            warn: Över %{limit} — autovacuum ligger efter; tabellen nedan visar var
+          transaction:
+            critical: Över %{critical} — vacuum kan inte återvinna rader förrän den slutar; hitta den i pg_stat_activity (varnar vid %{warn}; hälsobedömningen försämras efter %{verdict})
+            none: Ingen öppen transaktion — vacuum kan återvinna varje död rad (varnar vid %{warn}, larmar vid %{critical}; hälsobedömningen försämras efter %{verdict})
+            ok: Bra — varnar vid %{warn}, larmar vid %{critical}; hälsobedömningen försämras efter %{verdict}
+            warn: Över %{warn} — en lång transaktion hindrar vacuum från att återvinna rader (larmar vid %{critical}; hälsobedömningen försämras efter %{verdict})
+          vacuum:
+            critical: Över %{critical} — autovacuum når inte dessa tabeller; kontrollera dess inställningar (varnar efter %{warn})
+            ok: Bra — varnar efter %{warn}, kritiskt efter %{critical}
+            unknown: Aldrig vacuumad, eller så är statistiken otillgänglig
+            warn: Över %{warn} — autovacuum kan ligga efter (kritiskt efter %{critical})
         worst_bloat: Värsta Bloat
       queues_table:
         empty: Inga köer hittades
@@ -68,6 +88,7 @@ sv:
           oldest_claimable: Äldsta tillgänglig
           parked: Parkerade
           queue: Kö
+          status: Status
           total: Totalt
           visible: Synliga
         title: Köer
@@ -75,7 +96,9 @@ sv:
       recent_failures:
         empty: Inga fel
         headers:
+          attempt: Försök
           error: Fel
+          job: Jobb
           queue: Kö
           when: När
         title: Senaste fel
@@ -83,18 +106,52 @@ sv:
       show:
         title: Instrumentpanel
       stats_cards:
+        dead_lettered: Dead-lettered
+        dlq_newest_html: 'senaste: %{error_class} i %{job} %{ago}'
+        dlq_newest_legacy_html: 'senaste: %{job} %{ago} — ingen orsak registrerad'
+        dlq_newest_no_error_html: 'senaste: %{job} %{ago} — inget fel registrerat'
+        dlq_none: Inget dead-lettered
+        dlq_see_why: öppna dead letter-sidan för att se varför varje jobb dog
         enqueued: Inlagda
-        failed_dlq: Misslyckade / DLQ
-        failed_dlq_labels: Misslyckade / Dead Lettered
+        enqueued_detail: "%{claimable} hämtbara nu · %{waiting} schemalagda, pågående eller nytt försök"
         parked_jobs: Parkerade jobb
         parked_jobs_oldest: äldst %{age}
         processes: Processer
+        processes_detail: "%{healthy} friska · %{stalled} fastnade · %{stale} inaktuella"
+        processes_none: Inget körs — inget jobb hämtas
+        processes_stale: inaktuella processer har slutat skicka hjärtslag; deras pågående jobb körs igen när deras visibility timeout löper ut
         queues: Köer
+        queues_detail: "%{paused} pausade · %{dlq} dead-letter"
+        queues_undrained:
+          one: "%{count} innehåller jobb som inget tömmer"
+          other: "%{count} innehåller jobb som inget tömmer"
         recurring: Återkommande
+        recurring_detail: Uppgifter som schemaläggaren lägger i kö enligt sitt schema
+        retrying: Nytt försök
+        retrying_due:
+          one: "%{count} förfaller nu"
+          other: "%{count} förfaller nu"
+        retrying_newest: senaste fel %{error_class}
+        retrying_next_html: nästa försök %{time}
+        retrying_none: Inget görs om
         throughput: Genomströmning
-        throughput_unit: meddelanden/s
-        view_tasks: Visa uppgifter
-        visible: synliga
+        throughput_detail: jobb/min under de senaste %{minutes} min
+        throughput_unavailable: kräver jobbstatistik (rails g pgbus:add_job_stats)
+      verdict:
+        links:
+          dlq: Dead letters
+          processes: Processer
+        look_at: 'Titta på:'
+        meaning:
+          degraded: Något behöver uppmärksamhet, men jobb flödar fortfarande. /readyz svarar fortfarande ready.
+          ok: Varje kö med arbete töms och varje process skickar hjärtslag. /readyz svarar ready.
+          stalled: Jobb väntar och inget hämtar dem. /readyz svarar not ready (503).
+        statuses:
+          degraded: DEGRADED
+          ok: OK
+          stalled: STALLED
+        title: 'Hälsa: %{status}'
+        unavailable: Hälsobedömning otillgänglig — kontrollerna bakom den kunde inte läsas; se loggen
     dead_letter:
       detail:
         backtrace: Backtrace (första raderna)
@@ -364,21 +421,25 @@ sv:
     insights:
       show:
         charts:
-          failed_to_load: Misslyckades att ladda diagramdata
-          latency: Köfördröjning (ms)
+          captions:
+            latency: Jobben väntade i genomsnitt %{avg} innan en worker hämtade dem, p95 %{p95}
+            status: "%{success} lyckades, %{failed} misslyckades, %{dead_lettered} dead-lettered"
+            throughput_html: "%{total} jobb under de senaste %{range}, topp %{peak} jobb/min %{at}"
+          data_table: Datatabell
+          latency: Köfördröjning
           latency_avg: Genomsnitt
           latency_p95: P95
           no_data: Inga data än
           series_name: Jobb/min
           status_distribution: Statusfördelning
-          throughput: Genomströmning (jobb/min)
+          throughput: Genomströmning
         description_html: Jobbprestandamått för de senaste %{range}
         latency_by_queue:
           empty: Ingen fördröjningsdata än
           headers:
-            avg: Genomsnitt (ms)
+            avg: Genomsnitt
             count: Antal
-            p95: P95 (ms)
+            p95: P95
             queue: Kö
           title: Fördröjning per kö
         live_streams:
@@ -398,6 +459,10 @@ sv:
             job_class: Jobbklass
             max: Max
           title: Långsammaste jobbklasser (genomsnittlig varaktighet)
+        statuses:
+          dead_lettered: Dead-lettered
+          failed: Misslyckades
+          success: Lyckades
         streams:
           summary:
             active: Aktiv
@@ -426,6 +491,20 @@ sv:
           p99_latency: P99-fördröjning
           succeeded: Lyckades
           total_jobs: Totalt antal jobb
+        tables:
+          captions:
+            latency_minute: Köfördröjning per minut
+            latency_step: Köfördröjning per %{step}
+            status: Jobb per slutstatus
+            throughput_minute: Jobb per minut
+            throughput_step: Jobb per %{step}
+          headers:
+            avg: Genomsnitt
+            from: Från
+            highest_p95: Högsta p95
+            jobs: Jobb
+            share: Andel
+            status: Status
         time_ranges:
           1h: 1h
           24h: 24h

@@ -41,6 +41,7 @@ fr:
         title: Processus actifs
       queue_health:
         dead_tuples: Tuples mortes
+        empty: Aucune table de file à mesurer pour l'instant
         headers:
           bloat: Bloat
           dead: Mortes
@@ -60,6 +61,25 @@ fr:
           one: "%{count} table nécessite un vacuum"
           other: "%{count} tables nécessitent un vacuum"
         title: Santé des files d'attente
+        words:
+          bloat:
+            critical: "%{ratio} sur %{table} — les lectures ralentissent ; lancez un vacuum maintenant (critique au-delà de %{critical}, alerte au-delà de %{warn})"
+            none: Rien à mesurer pour l'instant
+            ok: "%{ratio} sur %{table} — correct (alerte au-delà de %{warn}, critique au-delà de %{critical})"
+            warn: "%{ratio} sur %{table} — vacuum à prévoir (alerte au-delà de %{warn}, critique au-delà de %{critical})"
+          dead_tuples:
+            ok: Correct — alerte au-delà de %{limit} lignes mortes
+            warn: Au-delà de %{limit} — l'autovacuum est en retard ; le tableau ci-dessous montre où
+          transaction:
+            critical: Plus de %{critical} — le vacuum ne peut pas récupérer de lignes avant sa fin ; repérez-la dans pg_stat_activity (alerte à %{warn} ; le verdict de santé se dégrade après %{verdict})
+            none: Aucune transaction ouverte — le vacuum peut récupérer toutes les lignes mortes (alerte à %{warn}, alarme à %{critical} ; le verdict de santé se dégrade après %{verdict})
+            ok: Correct — alerte à %{warn}, alarme à %{critical} ; le verdict de santé se dégrade après %{verdict}
+            warn: Plus de %{warn} — une longue transaction empêche le vacuum de récupérer des lignes (alarme à %{critical} ; le verdict de santé se dégrade après %{verdict})
+          vacuum:
+            critical: Plus de %{critical} — l'autovacuum n'atteint pas ces tables ; vérifiez ses réglages (alerte après %{warn})
+            ok: Correct — alerte après %{warn}, critique après %{critical}
+            unknown: Jamais passé en vacuum, ou statistiques indisponibles
+            warn: Plus de %{warn} — l'autovacuum prend peut-être du retard (critique après %{critical})
         worst_bloat: Pire Bloat
       queues_table:
         empty: Aucune file d'attente trouvée
@@ -68,6 +88,7 @@ fr:
           oldest_claimable: Plus ancien disponible
           parked: Différés
           queue: File d'attente
+          status: Statut
           total: Total
           visible: Visible
         title: Files d'attente
@@ -75,7 +96,9 @@ fr:
       recent_failures:
         empty: Aucune erreur
         headers:
+          attempt: Tentative
           error: Erreur
+          job: Job
           queue: File d'attente
           when: Quand
         title: Échecs récents
@@ -83,18 +106,52 @@ fr:
       show:
         title: Tableau de bord
       stats_cards:
+        dead_lettered: En dead-letter
+        dlq_newest_html: 'le plus récent : %{error_class} dans %{job} %{ago}'
+        dlq_newest_legacy_html: 'le plus récent : %{job} %{ago} — aucune raison enregistrée'
+        dlq_newest_no_error_html: 'le plus récent : %{job} %{ago} — aucune erreur enregistrée'
+        dlq_none: Rien en dead-letter
+        dlq_see_why: ouvrez la page dead-letter pour voir pourquoi chacun est mort
         enqueued: Enregistré
-        failed_dlq: Échoué / DLQ
-        failed_dlq_labels: Échoués / Dead Lettered
+        enqueued_detail: "%{claimable} disponibles maintenant · %{waiting} planifiés, en cours ou en nouvelle tentative"
         parked_jobs: Jobs en attente
         parked_jobs_oldest: le plus ancien %{age}
         processes: Processus
+        processes_detail: "%{healthy} sains · %{stalled} bloqués · %{stale} obsolètes"
+        processes_none: Rien ne tourne — aucun job n'est pris en charge
+        processes_stale: les processus obsolètes ont cessé d'émettre leur heartbeat ; leurs jobs en cours sont relancés à l'expiration de leur délai de visibilité
         queues: Files d'attente
+        queues_detail: "%{paused} en pause · %{dlq} en dead-letter"
+        queues_undrained:
+          one: "%{count} contient des jobs que rien ne vide"
+          other: "%{count} contiennent des jobs que rien ne vide"
         recurring: Récurrent
+        recurring_detail: Tâches que le planificateur met en file selon leur calendrier
+        retrying: Nouvel essai
+        retrying_due:
+          one: "%{count} à relancer maintenant"
+          other: "%{count} à relancer maintenant"
+        retrying_newest: erreur la plus récente %{error_class}
+        retrying_next_html: prochaine tentative %{time}
+        retrying_none: Rien n'est en nouvel essai
         throughput: Débit
-        throughput_unit: msg/s
-        view_tasks: Voir les tâches
-        visible: visible
+        throughput_detail: tâches/min sur les %{minutes} dernières min
+        throughput_unavailable: nécessite les statistiques de jobs (rails g pgbus:add_job_stats)
+      verdict:
+        links:
+          dlq: Dead letters
+          processes: Processus
+        look_at: 'À examiner :'
+        meaning:
+          degraded: Quelque chose demande de l'attention, mais les jobs circulent encore. /readyz répond toujours prêt.
+          ok: Chaque file contenant du travail est vidée et chaque processus émet son heartbeat. /readyz répond prêt.
+          stalled: Des jobs attendent et rien ne les prend en charge. /readyz répond non prêt (503).
+        statuses:
+          degraded: DEGRADED
+          ok: OK
+          stalled: STALLED
+        title: 'Santé : %{status}'
+        unavailable: Verdict de santé indisponible — les contrôles sous-jacents n'ont pas pu être lus ; consultez le journal
     dead_letter:
       detail:
         backtrace: Backtrace (premières lignes)
@@ -364,21 +421,25 @@ fr:
     insights:
       show:
         charts:
-          failed_to_load: Échec du chargement des données du graphique
-          latency: Latence de la file d'attente (ms)
+          captions:
+            latency: Les jobs ont attendu %{avg} en moyenne avant d'être pris par un worker, p95 %{p95}
+            status: "%{success} réussies, %{failed} échouées, %{dead_lettered} en dead-letter"
+            throughput_html: "%{total} tâches sur les derniers %{range}, pic de %{peak} tâches/min %{at}"
+          data_table: Tableau de données
+          latency: Latence de la file d'attente
           latency_avg: Moyenne
           latency_p95: P95
           no_data: Pas encore de données
           series_name: Tâches/min
           status_distribution: Répartition du statut
-          throughput: Débit (tâches/min)
+          throughput: Débit
         description_html: Indicateurs de performance professionnelle pour les derniers %{range}
         latency_by_queue:
           empty: Pas encore de données de latence
           headers:
-            avg: Moyenne (ms)
+            avg: Moyenne
             count: Nombre
-            p95: P95 (ms)
+            p95: P95
             queue: File d'attente
           title: Latence par file d'attente
         live_streams:
@@ -398,6 +459,10 @@ fr:
             job_class: Classe de tâche
             max: Max
           title: Classes de travail les plus lentes (durée moyenne)
+        statuses:
+          dead_lettered: En dead-letter
+          failed: Échoués
+          success: Réussis
         streams:
           summary:
             active: Actif
@@ -426,6 +491,20 @@ fr:
           p99_latency: Latence P99
           succeeded: Réussi
           total_jobs: Total des travaux
+        tables:
+          captions:
+            latency_minute: Latence de la file d'attente par minute
+            latency_step: Latence de la file d'attente par %{step}
+            status: Jobs par statut final
+            throughput_minute: Jobs par minute
+            throughput_step: Jobs par %{step}
+          headers:
+            avg: Moyenne
+            from: Depuis
+            highest_p95: P95 le plus élevé
+            jobs: Jobs
+            share: Part
+            status: Statut
         time_ranges:
           1h: 1h
           24h: 24h

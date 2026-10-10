@@ -41,6 +41,7 @@ nb:
         title: Aktive prosesser
       queue_health:
         dead_tuples: Døde tupler
+        empty: Ingen køtabeller å måle ennå
         headers:
           bloat: Bloat
           dead: Døde
@@ -60,6 +61,25 @@ nb:
           one: "%{count} tabell trenger vacuum"
           other: "%{count} tabeller trenger vacuum"
         title: Køhelse
+        words:
+          bloat:
+            critical: "%{ratio} på %{table} — lesing går tregere; kjør vacuum nå (kritisk over %{critical}, advarer over %{warn})"
+            none: Ingenting å måle ennå
+            ok: "%{ratio} på %{table} — fint (advarer over %{warn}, kritisk over %{critical})"
+            warn: "%{ratio} på %{table} — vacuum trengs (advarer over %{warn}, kritisk over %{critical})"
+          dead_tuples:
+            ok: Fint — advarer over %{limit} døde rader
+            warn: Over %{limit} — autovacuum henger etter; tabellen under viser hvor
+          transaction:
+            critical: Over %{critical} — vacuum kan ikke frigjøre rader før den avsluttes; finn den i pg_stat_activity (advarer ved %{warn}; helsevurderingen forverres etter %{verdict})
+            none: Ingen åpen transaksjon — vacuum kan frigjøre alle døde rader (advarer ved %{warn}, varsler ved %{critical}; helsevurderingen forverres etter %{verdict})
+            ok: Fint — advarer ved %{warn}, varsler ved %{critical}; helsevurderingen forverres etter %{verdict}
+            warn: Over %{warn} — en lang transaksjon hindrer vacuum i å frigjøre rader (varsler ved %{critical}; helsevurderingen forverres etter %{verdict})
+          vacuum:
+            critical: Over %{critical} — autovacuum når ikke disse tabellene; sjekk innstillingene (advarer etter %{warn})
+            ok: Fint — advarer etter %{warn}, kritisk etter %{critical}
+            unknown: Aldri kjørt vacuum, eller statistikken er utilgjengelig
+            warn: Over %{warn} — autovacuum henger kanskje etter (kritisk etter %{critical})
         worst_bloat: Verste Bloat
       queues_table:
         empty: Ingen køer funnet
@@ -68,6 +88,7 @@ nb:
           oldest_claimable: Eldste tilgjengelig
           parked: Parkert
           queue: Kø
+          status: Status
           total: Totalt
           visible: Synlig
         title: Køer
@@ -75,7 +96,9 @@ nb:
       recent_failures:
         empty: Ingen feil
         headers:
+          attempt: Forsøk
           error: Feil
+          job: Jobb
           queue: Kø
           when: Når
         title: Nylige feil
@@ -83,18 +106,52 @@ nb:
       show:
         title: Dashbord
       stats_cards:
+        dead_lettered: I dead-letter
+        dlq_newest_html: 'nyeste: %{error_class} i %{job} %{ago}'
+        dlq_newest_legacy_html: 'nyeste: %{job} %{ago} — ingen årsak registrert'
+        dlq_newest_no_error_html: 'nyeste: %{job} %{ago} — ingen feil registrert'
+        dlq_none: Ingenting i dead-letter
+        dlq_see_why: åpne dead-letter-siden for å se hvorfor hver enkelt døde
         enqueued: I kø
-        failed_dlq: Mislyktes / DLQ
-        failed_dlq_labels: Mislyktes / Dead Lettered
+        enqueued_detail: "%{claimable} kan hentes nå · %{waiting} planlagt, kjører eller prøves på nytt"
         parked_jobs: Parkerte jobber
         parked_jobs_oldest: eldst %{age}
         processes: Prosesser
+        processes_detail: "%{healthy} friske · %{stalled} fastlåst · %{stale} utdaterte"
+        processes_none: Ingenting kjører — ingen jobb blir hentet
+        processes_stale: utdaterte prosesser har sluttet å sende heartbeat; jobbene deres som pågår kjøres på nytt når synlighetstidsavbruddet utløper
         queues: Køer
+        queues_detail: "%{paused} satt på pause · %{dlq} i dead-letter"
+        queues_undrained:
+          one: "%{count} har jobber som ingenting tømmer"
+          other: "%{count} har jobber som ingenting tømmer"
         recurring: Gjentakende
+        recurring_detail: Oppgaver planleggeren legger i kø etter timeplanen sin
+        retrying: Prøves på nytt
+        retrying_due:
+          one: "%{count} forfalt nå"
+          other: "%{count} forfalt nå"
+        retrying_newest: nyeste feil %{error_class}
+        retrying_next_html: neste forsøk %{time}
+        retrying_none: Ingenting prøves på nytt
         throughput: Gjennomstrømning
-        throughput_unit: meldinger/s
-        view_tasks: Vis oppgaver
-        visible: synlig
+        throughput_detail: jobber/min de siste %{minutes} min
+        throughput_unavailable: krever jobbstatistikk (rails g pgbus:add_job_stats)
+      verdict:
+        links:
+          dlq: Dead letters
+          processes: Prosesser
+        look_at: 'Se på:'
+        meaning:
+          degraded: Noe trenger oppmerksomhet, men jobbene flyter fortsatt. /readyz svarer fortsatt klar.
+          ok: Hver kø med arbeid blir tømt, og alle prosesser sender heartbeat. /readyz svarer klar.
+          stalled: Jobber venter og ingenting henter dem. /readyz svarer ikke klar (503).
+        statuses:
+          degraded: DEGRADED
+          ok: OK
+          stalled: STALLED
+        title: 'Helse: %{status}'
+        unavailable: Helsevurdering utilgjengelig — kontrollene bak den kunne ikke leses; se loggen
     dead_letter:
       detail:
         backtrace: Backtrace (første linjer)
@@ -364,21 +421,25 @@ nb:
     insights:
       show:
         charts:
-          failed_to_load: Kunne ikke laste diagramdata
-          latency: Køforsinkelse (ms)
+          captions:
+            latency: Jobbene ventet %{avg} i gjennomsnitt før en worker hentet dem, p95 %{p95}
+            status: "%{success} lyktes, %{failed} mislyktes, %{dead_lettered} i dead-letter"
+            throughput_html: "%{total} jobber de siste %{range}, topp på %{peak} jobber/min %{at}"
+          data_table: Datatabell
+          latency: Køforsinkelse
           latency_avg: Gj.snitt
           latency_p95: P95
           no_data: Ingen data ennå
           series_name: Jobber/min
           status_distribution: Statusfordeling
-          throughput: Gjennomstrømning (jobber/min)
+          throughput: Gjennomstrømning
         description_html: Jobbprestasjonsmålinger for de siste %{range}
         latency_by_queue:
           empty: Ingen forsinkelsesdata ennå
           headers:
-            avg: Gj.snitt (ms)
+            avg: Gj.snitt
             count: Antall
-            p95: P95 (ms)
+            p95: P95
             queue: Kø
           title: Forsinkelse per kø
         live_streams:
@@ -398,6 +459,10 @@ nb:
             job_class: Jobbklasse
             max: Maks
           title: Sakte jobber (gj.snitt varighet)
+        statuses:
+          dead_lettered: I dead-letter
+          failed: Mislyktes
+          success: Lyktes
         streams:
           summary:
             active: Aktiv
@@ -426,6 +491,20 @@ nb:
           p99_latency: P99 Forsinkelse
           succeeded: Lyktes
           total_jobs: Totalt antall jobber
+        tables:
+          captions:
+            latency_minute: Køforsinkelse per minutt
+            latency_step: Køforsinkelse per %{step}
+            status: Jobber etter endelig status
+            throughput_minute: Jobber per minutt
+            throughput_step: Jobber per %{step}
+          headers:
+            avg: Gj.snitt
+            from: Fra
+            highest_p95: Høyeste P95
+            jobs: Jobber
+            share: Andel
+            status: Status
         time_ranges:
           1h: 1t
           24h: 24t

@@ -33,7 +33,7 @@ class Views::Docs::Pages::Dashboard < DocsUI::Page
       DocsUI::Table(
         [ "Panel", "Shows" ],
         [
-          [ "Overview", "Queue depths, enqueued count, active processes, failures, throughput rate, parked jobs." ],
+          [ "Overview", [ :md, "A health verdict strip (OK / DEGRADED / STALLED with its reasons — what `/readyz` would say), then cards that each say what their number means and link to the page that explains it: queues (paused, dead-letter, undrained), enqueued, processes (healthy, stalled, stale), recurring tasks, retrying (next attempt, newest error), dead-lettered (newest reason), throughput (jobs/min over 5 minutes, from job stats) and parked jobs. The queues table says what each queue is doing; Queue Health states its thresholds." ] ],
           [ "Queues", "Per-queue metrics with purge / pause / resume / delete." ],
           [ "Jobs", "Enqueued and failed jobs, with retry / discard." ],
           [ "Dead letter", "New dead messages show why they died — the last recorded error when available, attempts, and source queue — filterable by DLQ and error class, with retry / discard and bulk actions." ],
@@ -41,7 +41,7 @@ class Views::Docs::Pages::Dashboard < DocsUI::Page
           [ "Events", "Pending events with their state, the handler that runs each one and why it waits (or which attempt failed with what error); processed events say whether each claim completed, is being handled or went silent, with Replay when the claim completed, its handler is still registered and the archive still holds the event; subscribers say whether a running consumer drains them." ],
           [ "Outbox", "Transactional outbox entries pending publication." ],
           [ "Locks", "Uniqueness locks and concurrency keys — value, limit, lease, parked jobs; release a key or discard its parked jobs." ],
-          [ "Insights", "Throughput chart, status distribution, slowest job classes." ]
+          [ "Insights", "Throughput, status distribution and queue latency charts, each with a caption saying what it shows and a data table behind it, themed for light and dark mode; slowest job classes and latency by queue." ]
         ]
       )
       DocsUI::Callout(:note) do

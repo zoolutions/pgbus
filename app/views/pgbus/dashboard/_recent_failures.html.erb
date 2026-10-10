@@ -4,7 +4,7 @@
       <h2 class="text-lg font-semibold text-gray-900 dark:text-white"><%= t("pgbus.dashboard.recent_failures.title") %></h2>
       <%= pgbus_link_to t("pgbus.dashboard.recent_failures.view_all"), pgbus.jobs_path(state: "retrying"), data: { turbo_frame: "_top" } %>
     </div>
-    <div class="overflow-hidden rounded-lg bg-white dark:bg-gray-800 shadow ring-1 ring-gray-200 dark:ring-gray-700">
+    <div class="overflow-x-auto rounded-lg bg-white dark:bg-gray-800 shadow ring-1 ring-gray-200 dark:ring-gray-700">
       <table class="pgbus-table min-w-full divide-y divide-gray-200 dark:divide-gray-700">
         <thead class="bg-gray-50 dark:bg-gray-900">
           <tr>
@@ -22,7 +22,7 @@
                 <%= pgbus_link_to pgbus_failure_job(f), pgbus.job_path(f["id"]), data: { turbo_frame: "_top" } %>
               </td>
               <td data-label="<%= t("pgbus.dashboard.recent_failures.headers.queue") %>" class="px-4 py-3 text-sm text-gray-700 dark:text-gray-200"><%= f["queue_name"] %></td>
-              <td data-label="<%= t("pgbus.dashboard.recent_failures.headers.error") %>" class="px-4 py-3 text-sm text-red-700 dark:text-red-300 truncate max-w-xs" title="<%= f["error_class"] %>: <%= f["error_message"] %>"><%= f["error_class"] %>: <%= truncate(f["error_message"].to_s, length: 60) %></td>
+              <td data-label="<%= t("pgbus.dashboard.recent_failures.headers.error") %>" class="px-4 py-3 text-sm text-red-700 dark:text-red-300" title="<%= f["error_class"] %>: <%= f["error_message"] %>"><span class="block max-w-md truncate"><%= f["error_class"] %>: <%= truncate(f["error_message"].to_s, length: 60) %></span></td>
               <td data-label="<%= t("pgbus.dashboard.recent_failures.headers.attempt") %>" class="px-4 py-3 text-sm text-right text-gray-700 dark:text-gray-200"><%= pgbus_failure_attempt(f) %></td>
               <td data-label="<%= t("pgbus.dashboard.recent_failures.headers.when") %>" class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400"><%= pgbus_time(f["failed_at"]) %></td>
             </tr>

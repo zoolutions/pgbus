@@ -41,6 +41,7 @@ nl:
         title: Actieve processen
       queue_health:
         dead_tuples: Dode tupels
+        empty: Nog geen wachtrijtabellen om te meten
         headers:
           bloat: Bloat
           dead: Dood
@@ -60,6 +61,25 @@ nl:
           one: "%{count} tabel heeft vacuum nodig"
           other: "%{count} tabellen hebben vacuum nodig"
         title: Wachtrijgezondheid
+        words:
+          bloat:
+            critical: "%{ratio} op %{table} — lezen vertraagt; voer nu vacuum uit (kritiek boven %{critical}, waarschuwt boven %{warn})"
+            none: Nog niets te meten
+            ok: "%{ratio} op %{table} — prima (waarschuwt boven %{warn}, kritiek boven %{critical})"
+            warn: "%{ratio} op %{table} — vacuum nodig (waarschuwt boven %{warn}, kritiek boven %{critical})"
+          dead_tuples:
+            ok: Prima — waarschuwt boven %{limit} dode rijen
+            warn: Boven %{limit} — autovacuum loopt achter; de tabel hieronder toont waar
+          transaction:
+            critical: Meer dan %{critical} — vacuum kan geen rijen vrijgeven tot hij eindigt; zoek hem in pg_stat_activity (waarschuwt bij %{warn}; het gezondheidsoordeel gaat naar degraded na %{verdict})
+            none: Geen open transactie — vacuum kan elke dode rij vrijgeven (waarschuwt bij %{warn}, alarmeert bij %{critical}; het gezondheidsoordeel gaat naar degraded na %{verdict})
+            ok: Prima — waarschuwt bij %{warn}, alarmeert bij %{critical}; het gezondheidsoordeel gaat naar degraded na %{verdict}
+            warn: Meer dan %{warn} — een lange transactie verhindert dat vacuum rijen vrijgeeft (alarmeert bij %{critical}; het gezondheidsoordeel gaat naar degraded na %{verdict})
+          vacuum:
+            critical: Meer dan %{critical} — autovacuum bereikt deze tabellen niet; controleer de instellingen (waarschuwt na %{warn})
+            ok: Prima — waarschuwt na %{warn}, kritiek na %{critical}
+            unknown: Nooit vacuum uitgevoerd, of de statistieken zijn niet beschikbaar
+            warn: Meer dan %{warn} — autovacuum loopt mogelijk achter (kritiek na %{critical})
         worst_bloat: Ergste Bloat
       queues_table:
         empty: Geen wachtrijen gevonden
@@ -68,6 +88,7 @@ nl:
           oldest_claimable: Oudste beschikbaar
           parked: Geparkeerd
           queue: Wachtrij
+          status: Status
           total: Totaal
           visible: Zichtbaar
         title: Wachtrijen
@@ -75,7 +96,9 @@ nl:
       recent_failures:
         empty: Geen fouten
         headers:
+          attempt: Poging
           error: Fout
+          job: Job
           queue: Wachtrij
           when: Wanneer
         title: Recente fouten
@@ -83,18 +106,52 @@ nl:
       show:
         title: Dashboard
       stats_cards:
+        dead_lettered: Dead-lettered
+        dlq_newest_html: 'nieuwste: %{error_class} in %{job} %{ago}'
+        dlq_newest_legacy_html: 'nieuwste: %{job} %{ago} — geen reden geregistreerd'
+        dlq_newest_no_error_html: 'nieuwste: %{job} %{ago} — geen fout geregistreerd'
+        dlq_none: Niets dead-lettered
+        dlq_see_why: open de dead-letterpagina om te zien waarom elke job stierf
         enqueued: In de wachtrij geplaatst
-        failed_dlq: Mislukt / DLQ
-        failed_dlq_labels: Mislukt / Dead Lettered
+        enqueued_detail: "%{claimable} nu op te pakken · %{waiting} gepland, actief of opnieuw proberend"
         parked_jobs: Geparkeerde jobs
         parked_jobs_oldest: oudste %{age}
         processes: Processen
+        processes_detail: "%{healthy} gezond · %{stalled} vastgelopen · %{stale} verouderd"
+        processes_none: Er draait niets — geen enkele job wordt opgepakt
+        processes_stale: verouderde processen hebben geen hartslag meer gestuurd; hun lopende jobs worden opnieuw uitgevoerd zodra hun visibility timeout verloopt
         queues: Wachtrijen
+        queues_detail: "%{paused} gepauzeerd · %{dlq} dead-letter"
+        queues_undrained:
+          one: "%{count} bevat jobs die door niets worden leeggemaakt"
+          other: "%{count} bevatten jobs die door niets worden leeggemaakt"
         recurring: Terugkerend
+        recurring_detail: Taken die de scheduler volgens schema in de wachtrij plaatst
+        retrying: Opnieuw proberen
+        retrying_due:
+          one: "%{count} nu aan de beurt"
+          other: "%{count} nu aan de beurt"
+        retrying_newest: nieuwste fout %{error_class}
+        retrying_next_html: volgende poging %{time}
+        retrying_none: Niets wordt opnieuw geprobeerd
         throughput: Doorvoer
-        throughput_unit: berichten/s
-        view_tasks: Bekijk taken
-        visible: zichtbaar
+        throughput_detail: jobs/min over de laatste %{minutes} min
+        throughput_unavailable: vereist jobstatistieken (rails g pgbus:add_job_stats)
+      verdict:
+        links:
+          dlq: Dead letters
+          processes: Processen
+        look_at: 'Kijk bij:'
+        meaning:
+          degraded: Er is aandacht nodig, maar jobs blijven stromen. /readyz antwoordt nog steeds ready.
+          ok: Elke wachtrij met werk wordt leeggemaakt en elk proces stuurt een hartslag. /readyz antwoordt ready.
+          stalled: Jobs wachten en niets pakt ze op. /readyz antwoordt not ready (503).
+        statuses:
+          degraded: DEGRADED
+          ok: OK
+          stalled: STALLED
+        title: 'Gezondheid: %{status}'
+        unavailable: Gezondheidsoordeel niet beschikbaar — de onderliggende controles konden niet worden gelezen; zie het log
     dead_letter:
       detail:
         backtrace: Backtrace (eerste regels)
@@ -364,21 +421,25 @@ nl:
     insights:
       show:
         charts:
-          failed_to_load: Fout bij laden grafiekgegevens
-          latency: Wachtrijvertraging (ms)
+          captions:
+            latency: Jobs wachtten gemiddeld %{avg} voordat een worker ze oppakte, p95 %{p95}
+            status: "%{success} geslaagd, %{failed} mislukt, %{dead_lettered} dead-lettered"
+            throughput_html: "%{total} jobs in de afgelopen %{range}, piek %{peak} jobs/min %{at}"
+          data_table: Gegevenstabel
+          latency: Wachtrijvertraging
           latency_avg: Gemiddeld
           latency_p95: P95
           no_data: Nog geen gegevens
           series_name: Taken/min
           status_distribution: Statusverdeling
-          throughput: Doorvoer (taken/min)
+          throughput: Doorvoer
         description_html: Prestatie-indicatoren voor de laatste %{range}
         latency_by_queue:
           empty: Nog geen vertraginggegevens
           headers:
-            avg: Gemiddeld (ms)
+            avg: Gemiddeld
             count: Aantal
-            p95: P95 (ms)
+            p95: P95
             queue: Wachtrij
           title: Vertraging per wachtrij
         live_streams:
@@ -398,6 +459,10 @@ nl:
             job_class: Taakklasse
             max: Maximaal
           title: Langzaamste Taakklassen (gem. duur)
+        statuses:
+          dead_lettered: Dead-lettered
+          failed: Mislukt
+          success: Geslaagd
         streams:
           summary:
             active: Actief
@@ -426,6 +491,20 @@ nl:
           p99_latency: P99 vertraging
           succeeded: Geslaagd
           total_jobs: Totaal Taken
+        tables:
+          captions:
+            latency_minute: Wachtrijvertraging per minuut
+            latency_step: Wachtrijvertraging per %{step}
+            status: Jobs per eindstatus
+            throughput_minute: Jobs per minuut
+            throughput_step: Jobs per %{step}
+          headers:
+            avg: Gemiddeld
+            from: Van
+            highest_p95: Hoogste p95
+            jobs: Jobs
+            share: Aandeel
+            status: Status
         time_ranges:
           1h: 1u
           24h: 24u

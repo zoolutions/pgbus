@@ -36,6 +36,7 @@ ignore_missing:
 ignore_unused:
   - "pgbus.helpers.*"
   - "pgbus.insights.show.time_ranges.*"
+  - "pgbus.dashboard.queue_health.words.*"
   - "pgbus.insights.show.charts.series_name"
   - "pgbus.recurring_tasks.index.task_count.*"
   - "pgbus.processes.state.activity.schedule.*"

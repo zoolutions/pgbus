@@ -41,6 +41,7 @@ de:
         title: Aktive Prozesse
       queue_health:
         dead_tuples: Tote Tupel
+        empty: Noch keine Queue-Tabellen zu messen
         headers:
           bloat: Bloat
           dead: Tot
@@ -60,6 +61,25 @@ de:
           one: "%{count} Tabelle benötigt Vacuum"
           other: "%{count} Tabellen benötigen Vacuum"
         title: Warteschlangen-Gesundheit
+        words:
+          bloat:
+            critical: "%{ratio} bei %{table} — Lesezugriffe werden langsamer; jetzt Vacuum ausführen (kritisch ab %{critical}, Warnung ab %{warn})"
+            none: Noch nichts zu messen
+            ok: "%{ratio} bei %{table} — in Ordnung (Warnung ab %{warn}, kritisch ab %{critical})"
+            warn: "%{ratio} bei %{table} — Vacuum fällig (Warnung ab %{warn}, kritisch ab %{critical})"
+          dead_tuples:
+            ok: In Ordnung — Warnung ab %{limit} toten Zeilen
+            warn: Über %{limit} — Autovacuum hinkt hinterher; die Tabelle unten zeigt, wo
+          transaction:
+            critical: Über %{critical} — Vacuum kann keine Zeilen freigeben, bis sie endet; finde sie in pg_stat_activity (Warnung bei %{warn}; die Zustandsbewertung wird nach %{verdict} schlechter)
+            none: Keine offene Transaktion — Vacuum kann alle toten Zeilen freigeben (Warnung bei %{warn}, Alarm bei %{critical}; die Zustandsbewertung wird nach %{verdict} schlechter)
+            ok: In Ordnung — Warnung bei %{warn}, Alarm bei %{critical}; die Zustandsbewertung wird nach %{verdict} schlechter
+            warn: Über %{warn} — eine lange Transaktion hindert Vacuum daran, Zeilen freizugeben (Alarm bei %{critical}; die Zustandsbewertung wird nach %{verdict} schlechter)
+          vacuum:
+            critical: Über %{critical} — Autovacuum erreicht diese Tabellen nicht; prüfe seine Einstellungen (Warnung nach %{warn})
+            ok: In Ordnung — Warnung nach %{warn}, kritisch nach %{critical}
+            unknown: Nie vacuumiert, oder die Statistiken sind nicht verfügbar
+            warn: Über %{warn} — Autovacuum kommt möglicherweise nicht hinterher (kritisch nach %{critical})
         worst_bloat: Schlimmster Bloat
       queues_table:
         empty: Keine Warteschlangen gefunden
@@ -68,6 +88,7 @@ de:
           oldest_claimable: Älteste verfügbar
           parked: Geparkt
           queue: Warteschlange
+          status: Status
           total: Gesamt
           visible: Sichtbar
         title: Warteschlangen
@@ -75,7 +96,9 @@ de:
       recent_failures:
         empty: Keine Fehler
         headers:
+          attempt: Versuch
           error: Fehler
+          job: Job
           queue: Warteschlange
           when: Wann
         title: Kürzliche Fehler
@@ -83,18 +106,52 @@ de:
       show:
         title: Dashboard
       stats_cards:
+        dead_lettered: Dead-lettered
+        dlq_newest_html: 'neuester: %{error_class} in %{job} %{ago}'
+        dlq_newest_legacy_html: 'neuester: %{job} %{ago} — kein Grund erfasst'
+        dlq_newest_no_error_html: 'neuester: %{job} %{ago} — kein Fehler erfasst'
+        dlq_none: Nichts ist dead-lettered
+        dlq_see_why: öffne die Dead-Letter-Seite, um zu sehen, warum jeder gestorben ist
         enqueued: Eingereiht
-        failed_dlq: Fehlgeschlagen / DLQ
-        failed_dlq_labels: Fehlgeschlagen / Dead Lettered
+        enqueued_detail: "%{claimable} jetzt abholbar · %{waiting} geplant, laufend oder in Wiederholung"
         parked_jobs: Geparkte Jobs
         parked_jobs_oldest: ältester %{age}
         processes: Prozesse
+        processes_detail: "%{healthy} gesund · %{stalled} hängend · %{stale} veraltet"
+        processes_none: Nichts läuft — kein Job wird abgeholt
+        processes_stale: veraltete Prozesse senden keine Heartbeats mehr; ihre laufenden Jobs werden erneut ausgeführt, wenn ihr Visibility Timeout abläuft
         queues: Warteschlangen
+        queues_detail: "%{paused} pausiert · %{dlq} Dead Letter"
+        queues_undrained:
+          one: "%{count} enthält Jobs, die niemand abarbeitet"
+          other: "%{count} enthalten Jobs, die niemand abarbeitet"
         recurring: Wiederkehrend
+        recurring_detail: Aufgaben, die der Scheduler nach Zeitplan einreiht
+        retrying: Wiederholung
+        retrying_due:
+          one: "%{count} jetzt fällig"
+          other: "%{count} jetzt fällig"
+        retrying_newest: neuester Fehler %{error_class}
+        retrying_next_html: nächster Versuch %{time}
+        retrying_none: Nichts wird wiederholt
         throughput: Durchsatz
-        throughput_unit: Nachrichten/s
-        view_tasks: Aufgaben anzeigen
-        visible: sichtbar
+        throughput_detail: Aufträge/Min in den letzten %{minutes} Min
+        throughput_unavailable: benötigt Job-Statistiken (rails g pgbus:add_job_stats)
+      verdict:
+        links:
+          dlq: Dead Letters
+          processes: Prozesse
+        look_at: 'Siehe:'
+        meaning:
+          degraded: Etwas braucht Aufmerksamkeit, aber Jobs laufen weiter. /readyz antwortet weiterhin bereit.
+          ok: Jede Warteschlange mit Arbeit wird abgearbeitet, und jeder Prozess sendet Heartbeats. /readyz antwortet bereit.
+          stalled: Jobs warten, und niemand holt sie ab. /readyz antwortet nicht bereit (503).
+        statuses:
+          degraded: DEGRADED
+          ok: OK
+          stalled: STALLED
+        title: 'Zustand: %{status}'
+        unavailable: Zustandsbewertung nicht verfügbar — die zugrunde liegenden Prüfungen konnten nicht gelesen werden; siehe Log
     dead_letter:
       detail:
         backtrace: Backtrace (erste Zeilen)
@@ -364,21 +421,25 @@ de:
     insights:
       show:
         charts:
-          failed_to_load: Fehler beim Laden der Diagrammdaten
-          latency: Warteschlangenlatenz (ms)
+          captions:
+            latency: Jobs warteten durchschnittlich %{avg}, bevor ein Worker sie übernahm, p95 %{p95}
+            status: "%{success} erfolgreich, %{failed} fehlgeschlagen, %{dead_lettered} dead-lettered"
+            throughput_html: "%{total} Aufträge in den letzten %{range}, Spitze %{peak} Aufträge/Min %{at}"
+          data_table: Datentabelle
+          latency: Warteschlangenlatenz
           latency_avg: Durchschnitt
           latency_p95: P95
           no_data: Noch keine Daten
           series_name: Aufträge/Min
           status_distribution: Statusverteilung
-          throughput: Durchsatz (Aufträge/Min)
+          throughput: Durchsatz
         description_html: Leistungskennzahlen für die letzten %{range}
         latency_by_queue:
           empty: Noch keine Latenzdaten vorhanden
           headers:
-            avg: Durchschnitt (ms)
+            avg: Durchschnitt
             count: Anzahl
-            p95: P95 (ms)
+            p95: P95
             queue: Warteschlange
           title: Latenz nach Warteschlange
         live_streams:
@@ -398,6 +459,10 @@ de:
             job_class: Job-Klasse
             max: Max
           title: Langsamste Job-Klassen (durchschnittliche Dauer)
+        statuses:
+          dead_lettered: Dead-lettered
+          failed: Fehlgeschlagen
+          success: Erfolgreich
         streams:
           summary:
             active: Aktiv
@@ -426,6 +491,20 @@ de:
           p99_latency: P99 Latenz
           succeeded: Erfolgreich
           total_jobs: Gesamtanzahl der Jobs
+        tables:
+          captions:
+            latency_minute: Warteschlangenlatenz pro Minute
+            latency_step: Warteschlangenlatenz pro %{step}
+            status: Aufträge nach Endstatus
+            throughput_minute: Aufträge pro Minute
+            throughput_step: Aufträge pro %{step}
+          headers:
+            avg: Durchschnitt
+            from: Von
+            highest_p95: Höchster p95
+            jobs: Aufträge
+            share: Anteil
+            status: Status
         time_ranges:
           1h: 1h
           24h: 24h
