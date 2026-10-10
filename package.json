@@ -10,7 +10,7 @@
     "@herb-tools/linter": "^0.9.5",
     "@lhci/cli": "0.15.1",
     "axe-core": "4.13.0",
-    "lighthouse": "13.5.0",
+    "lighthouse": "12.6.1",
     "playwright": "^1.50.0"
   }
 }
