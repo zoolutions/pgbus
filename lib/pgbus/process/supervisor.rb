@@ -903,7 +903,7 @@ module Pgbus
       def start_heartbeat
         @heartbeat = Heartbeat.new(
           kind: "supervisor",
-          metadata: { pid: ::Process.pid, hostname: Socket.gethostname }
+          metadata: { pid: ::Process.pid, hostname: Socket.gethostname, started_at: Time.now.to_f }
         )
         @heartbeat.start
       end

@@ -116,7 +116,8 @@ module Pgbus
       def start_heartbeat
         @heartbeat = Process::Heartbeat.new(
           kind: "scheduler",
-          metadata: { pid: ::Process.pid, tasks: schedule.tasks.size },
+          metadata: { pid: ::Process.pid, tasks: schedule.tasks.size, started_at: Time.now.to_f,
+                      supervisor_pid: ::Process.ppid },
           loop_tick_supplier: -> { @loop_tick_at.get }
         )
         @heartbeat.start

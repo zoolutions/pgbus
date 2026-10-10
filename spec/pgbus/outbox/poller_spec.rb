@@ -123,4 +123,16 @@ RSpec.describe Pgbus::Outbox::Poller do
       expect(poller.poll_and_publish).to eq(0)
     end
   end
+
+  # Issue #493: the Processes page states the poller's uptime.
+  describe "#start_heartbeat (private)" do
+    it "registers its pid, start time and parent pid (the supervisor forks it)" do
+      poller.send(:start_heartbeat)
+
+      expect(Pgbus::Process::Heartbeat).to have_received(:new).with(
+        kind: "outbox_poller",
+        metadata: { pid: Process.pid, started_at: a_value_within(5).of(Time.now.to_f), supervisor_pid: Process.ppid }
+      )
+    end
+  end
 end

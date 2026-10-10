@@ -980,6 +980,37 @@ RSpec.describe Pgbus::Process::Consumer do
         expect(kwargs[:loop_tick_supplier].call).to eq(tick)
       end
     end
+
+    # Issue #493: the Processes page states uptime, the owning supervisor,
+    # pool use and recycle progress for consumers too.
+    it "registers its start time, parent pid and the recycle limits it checks" do
+      allow(Pgbus::Process::Heartbeat).to receive(:new).and_return(mock_heartbeat)
+      allow(Pgbus.configuration).to receive_messages(max_jobs_per_worker: nil, max_memory_mb: 256,
+                                                     max_worker_lifetime: 3600)
+
+      consumer.send(:start_heartbeat)
+
+      expect(Pgbus::Process::Heartbeat).to have_received(:new) do |kwargs|
+        expect(kwargs[:metadata]).to include(started_at: a_value_within(5).of(Time.now.to_f),
+                                             supervisor_pid: Process.ppid, max_memory_mb: 256, max_lifetime: 3600)
+        expect(kwargs[:metadata]).not_to have_key(:max_jobs)
+      end
+    end
+
+    it "supplies handled count, buffer, pool use and memory on every beat" do
+      allow(Pgbus::Process::MemoryUsage).to receive(:current_mb).and_return(128)
+      allow(mock_pool).to receive(:metadata).and_return({ mode: :threads, capacity: 3, busy: 1 })
+      supplier = nil
+      allow(Pgbus::Process::Heartbeat).to receive(:new) do |**kwargs|
+        supplier = kwargs[:metadata_supplier]
+        mock_heartbeat
+      end
+
+      consumer.send(:start_heartbeat)
+
+      expect(supplier.call).to eq("jobs_processed" => 0, "buffered" => 0, "capacity" => 3, "busy" => 1,
+                                  "memory_mb" => 128)
+    end
   end
 
   # Consumer consults the circuit breaker before fetching so a poison queue

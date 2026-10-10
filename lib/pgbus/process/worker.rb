@@ -833,7 +833,8 @@ module Pgbus
           metadata: {
             capsule: @capsule, process: @process,
             queues: queues, threads: threads, pid: ::Process.pid,
-            execution_mode: @execution_mode, consumer_priority: @consumer_priority
+            execution_mode: @execution_mode, consumer_priority: @consumer_priority,
+            **lifecycle_metadata
           }.compact,
           on_beat: -> { on_heartbeat },
           loop_tick_supplier: -> { @loop_tick_at.get },
@@ -875,8 +876,28 @@ module Pgbus
           "jobs_processed" => @jobs_processed.value,
           "jobs_failed" => @jobs_failed.value,
           "in_flight" => @in_flight.value,
-          "buffered" => @claim_buffer.size
+          "buffered" => @claim_buffer.size,
+          **pool_metadata
         }
+      end
+
+      # Facts the Processes page states (issue #493), fixed for the process's
+      # life: when it started, which supervisor forked it (ppid; the page only
+      # groups under it when that pid is a supervisor row on this host) and the
+      # recycle limits this worker resolved, which may be its capsule's.
+      def lifecycle_metadata
+        {
+          started_at: @started_at.to_f, supervisor_pid: ::Process.ppid,
+          max_jobs: recycle_limit(:max_jobs_per_worker), max_memory_mb: recycle_limit(:max_memory_mb),
+          max_lifetime: recycle_limit(:max_worker_lifetime)
+        }
+      end
+
+      # Read once per beat: one atomic (threads) or one mutex (async) for the
+      # pool, MemoryUsage's 5s cache for RSS (a ps subprocess on darwin).
+      def pool_metadata
+        pool = @pool.metadata
+        { "capacity" => pool[:capacity], "busy" => pool[:busy], "memory_mb" => current_memory_mb }
       end
 
       def shutdown
