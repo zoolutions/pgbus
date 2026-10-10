@@ -1,0 +1,13 @@
+<%# The recorded error of a dead message: the full error line, which attempt
+    it came from when later ones recorded nothing, and the backtrace head.
+    Shared by the list expansion and the show page. Local: reason. %>
+<% if reason.error_class %>
+  <p class="mb-2 text-sm text-red-700 dark:text-red-300 break-words"><span class="font-medium"><%= reason.error_class %></span>: <%= reason.error_message %></p>
+  <% if (later = reason.later_attempts) %>
+    <p class="mb-2 text-xs text-gray-600 dark:text-gray-300"><%= t("pgbus.dead_letter.detail.error_from_attempt", attempt: reason.error_attempt, from: later.first, to: later.last) %></p>
+  <% end %>
+  <% if reason.backtrace.present? %>
+    <span class="text-xs font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.dead_letter.detail.backtrace") %></span>
+    <pre tabindex="0" class="mb-3 mt-1 max-h-40 overflow-auto rounded bg-white dark:bg-gray-800 p-2 text-xs text-gray-700 dark:text-gray-200"><%= reason.backtrace %></pre>
+  <% end %>
+<% end %>

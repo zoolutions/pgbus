@@ -96,6 +96,22 @@ es:
         view_tasks: Ver tareas
         visible: visible
     dead_letter:
+      detail:
+        backtrace: Backtrace (primeras líneas)
+        died: 'Murió:'
+        dlq: 'Cola de mensajes muertos:'
+        error_from_attempt: Error del intento %{attempt}; los intentos %{from}–%{to} no registraron error.
+        source: 'Movido por:'
+        sources:
+          consumer: consumidor de eventos
+          worker: worker de jobs
+        why: Por qué murió
+      filters:
+        all: Todas
+        clear_error_class: Quitar filtro
+        error_class: 'Error: %{error_class}'
+        filter_error_class: Mostrar solo %{error_class}
+        label: Filtrar mensajes muertos
       index:
         discard_all: Descartar todo
         discard_all_confirm: "¿Descartar permanentemente todos los mensajes DLQ?"
@@ -115,10 +131,12 @@ es:
         empty: La cola de mensajes muertos está vacía
         full_json_payload: Carga JSON completa
         headers:
-          enqueued: Encolado
+          actions: Acciones
+          attempts: Intentos
+          died: Murió
           id: ID
-          job_class: Clase de trabajo
-          reads: Lecturas
+          job: Job
+          reason: Motivo
           source_queue: Cola de origen
         headers_section: Encabezados
         job_id: 'ID de trabajo:'
@@ -131,6 +149,16 @@ es:
           visible_at: 'Visible en:'
         retry: Reintentar
         total_label: mensajes en la cola de mensajes fallidos
+        view: Ver
+      reasons:
+        error_earlier_attempt_html: 'Reintentos agotados. Último error registrado, del intento %{error_attempt}: %{error_class}: %{error_message}'
+        error_html: 'Reintentos agotados. Último error: %{error_class}: %{error_message}'
+        event_no_error_html: El handler falló en %{attempts} entregas (máx. %{max}) — no se registró ningún error del handler
+        no_error_recorded_html: Superó %{max} reintentos tras %{attempts} lecturas — no se registró ningún error; cada intento fallido se cayó antes de poder informar
+        not_recorded_html: Motivo no registrado (movido a la DLQ antes de pgbus %{version})
+        retried_before:
+          one: Reintentado desde la DLQ una vez antes.
+          other: Reintentado desde la DLQ %{count} veces antes.
       show:
         back: Volver a DLQ
         context: Contexto
@@ -138,8 +166,10 @@ es:
         discard_confirm: "¿Descartar permanentemente?"
         headers: Encabezados
         labels:
+          attempts: Intentos
+          died: Murió
+          dlq: Cola de mensajes muertos
           enqueued_at: Encolado en
-          read_count: Conteo de lecturas
           source_queue: Cola de origen
           visibility_timeout: Tiempo de espera de visibilidad
         not_found: Mensaje no encontrado

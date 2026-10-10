@@ -96,6 +96,22 @@ pt:
         view_tasks: Ver tarefas
         visible: visível
     dead_letter:
+      detail:
+        backtrace: Backtrace (primeiras linhas)
+        died: 'Morreu:'
+        dlq: 'Fila de mensagens mortas:'
+        error_from_attempt: Erro da tentativa %{attempt}; as tentativas %{from}–%{to} não registraram erro.
+        source: 'Movido por:'
+        sources:
+          consumer: consumidor de eventos
+          worker: worker de jobs
+        why: Por que morreu
+      filters:
+        all: Todas
+        clear_error_class: Limpar filtro
+        error_class: 'Erro: %{error_class}'
+        filter_error_class: Mostrar apenas %{error_class}
+        label: Filtrar mensagens mortas
       index:
         discard_all: Descartar Tudo
         discard_all_confirm: Descartar permanentemente todas as mensagens DLQ?
@@ -115,11 +131,13 @@ pt:
         empty: A fila de mensagens mortas está vazia
         full_json_payload: Carga JSON completa
         headers:
-          enqueued: Enfileirado
+          actions: Ações
+          attempts: Tentativas
+          died: Morreu
           id: ID
-          job_class: Classe do Trabalho
-          reads: Leituras
-          source_queue: Fila de Origem
+          job: Job
+          reason: Motivo
+          source_queue: Fila de origem
         headers_section: Cabeçalhos
         job_id: 'ID do Trabalho:'
         metadata: Metadados
@@ -131,6 +149,16 @@ pt:
           visible_at: 'Visível em:'
         retry: Tentar novamente
         total_label: mensagens na fila de mensagens mortas
+        view: Ver
+      reasons:
+        error_earlier_attempt_html: 'Tentativas esgotadas. Último erro registrado, da tentativa %{error_attempt}: %{error_class}: %{error_message}'
+        error_html: 'Tentativas esgotadas. Último erro: %{error_class}: %{error_message}'
+        event_no_error_html: O handler falhou em %{attempts} entregas (máx. %{max}) — nenhum erro do handler foi registrado
+        no_error_recorded_html: Excedeu %{max} tentativas após %{attempts} leituras — nenhum erro foi registrado; cada tentativa com falha travou antes de poder reportar
+        not_recorded_html: Motivo não registrado (movido para a DLQ antes do pgbus %{version})
+        retried_before:
+          one: Já reenviado da DLQ uma vez.
+          other: Já reenviado da DLQ %{count} vezes.
       show:
         back: Voltar para DLQ
         context: Contexto
@@ -138,8 +166,10 @@ pt:
         discard_confirm: Descartar permanentemente?
         headers: Cabeçalhos
         labels:
+          attempts: Tentativas
+          died: Morreu
+          dlq: Fila de mensagens mortas
           enqueued_at: Enfileirado em
-          read_count: Contagem de leituras
           source_queue: Fila de origem
           visibility_timeout: Tempo limite de visibilidade
         not_found: Mensagem não encontrada

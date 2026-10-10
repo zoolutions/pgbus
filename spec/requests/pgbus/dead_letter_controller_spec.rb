@@ -13,6 +13,58 @@ RSpec.describe "Pgbus::DeadLetterController", type: :request do
       get "/pgbus/dlq", params: { frame: "list" }
       expect(response).to have_http_status(:ok)
     end
+
+    context "with filters (issue #495)" do
+      let(:card_error) { { error_class: "Stripe::CardError", error_message: "declined", retry_count: 4 } }
+
+      before do
+        dead = lambda do |error|
+          Pgbus::DeadLetterHeader.build(existing: nil, reason: "max_retries_exceeded", source: "worker",
+                                        source_queue: "pgbus_default", attempts: 6, max_retries: 5, error: error)
+        end
+        @stub_data_source.dlq_messages_list = [
+          { msg_id: 1, queue_name: "pgbus_default_dlq", message: '{"job_class":"PayJob"}', headers: dead.call(card_error) },
+          { msg_id: 2, queue_name: "pgbus_orders_dlq", message: '{"job_class":"ShipJob"}', headers: dead.call(nil) }
+        ]
+      end
+
+      it "filters by DLQ" do
+        get "/pgbus/dlq", params: { dlq: "pgbus_orders_dlq" }
+
+        expect(response.body).to include('data-dlq-row="2"')
+        expect(response.body).not_to include('data-dlq-row="1"')
+      end
+
+      it "filters by error class" do
+        get "/pgbus/dlq", params: { error_class: "Stripe::CardError" }
+
+        expect(response.body).to include('data-dlq-row="1"')
+        expect(response.body).not_to include('data-dlq-row="2"')
+      end
+
+      it "ignores a dlq param that is not a DLQ" do
+        get "/pgbus/dlq", params: { dlq: "pgbus_default" }
+
+        expect(response).to have_http_status(:ok)
+        expect(response.body).to include('data-dlq-row="1"', 'data-dlq-row="2"')
+      end
+
+      it "ignores an error_class longer than 200 characters" do
+        get "/pgbus/dlq", params: { error_class: "X" * 201 }
+
+        expect(response).to have_http_status(:ok)
+        expect(response.body).to include('data-dlq-row="1"', 'data-dlq-row="2"')
+      end
+
+      it "keeps the filters in the list frame and its source" do
+        get "/pgbus/dlq", params: { frame: "list", dlq: "pgbus_default_dlq", error_class: "Stripe::CardError" }
+
+        expect(response).to have_http_status(:ok)
+        expect(response.body).to include('data-dlq-row="1"')
+        expect(response.body).to match(/data-src="[^"]*dlq=pgbus_default_dlq[^"]*"/)
+        expect(response.body).to match(/data-src="[^"]*error_class=Stripe%3A%3ACardError[^"]*"/)
+      end
+    end
   end
 
   describe "GET /pgbus/dlq/:id" do
@@ -22,6 +74,11 @@ RSpec.describe "Pgbus::DeadLetterController", type: :request do
       it "renders the message detail" do
         get "/pgbus/dlq/12"
         expect(response).to have_http_status(:ok)
+      end
+
+      it "explains a legacy message without a recorded reason" do
+        get "/pgbus/dlq/12"
+        expect(response.body).to include('data-testid="dead-letter-reason"', "Reason not recorded")
       end
     end
 

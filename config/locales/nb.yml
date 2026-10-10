@@ -96,6 +96,22 @@ nb:
         view_tasks: Vis oppgaver
         visible: synlig
     dead_letter:
+      detail:
+        backtrace: Backtrace (første linjer)
+        died: 'Døde:'
+        dlq: 'Dead letter-kø:'
+        error_from_attempt: Feil fra forsøk %{attempt}; forsøk %{from}–%{to} registrerte ingen feil.
+        source: 'Flyttet av:'
+        sources:
+          consumer: hendelseskonsument
+          worker: jobb-worker
+        why: Hvorfor den døde
+      filters:
+        all: Alle
+        clear_error_class: Fjern filter
+        error_class: 'Feil: %{error_class}'
+        filter_error_class: Vis bare %{error_class}
+        label: Filtrer dead letters
       index:
         discard_all: Forkast alle
         discard_all_confirm: Slett alle DLQ-meldinger permanent?
@@ -115,10 +131,12 @@ nb:
         empty: Dead letter queue er tom
         full_json_payload: Full JSON-payload
         headers:
-          enqueued: I kø
+          actions: Handlinger
+          attempts: Forsøk
+          died: Døde
           id: ID
-          job_class: Jobbklasse
-          reads: Leser
+          job: Jobb
+          reason: Årsak
           source_queue: Kildekø
         headers_section: Overskrifter
         job_id: 'Jobb-ID:'
@@ -131,6 +149,16 @@ nb:
           visible_at: 'Synlig ved:'
         retry: Prøv igjen
         total_label: meldinger i dead letter-kø
+        view: Vis
+      reasons:
+        error_earlier_attempt_html: 'Nye forsøk brukt opp. Siste registrerte feil, fra forsøk %{error_attempt}: %{error_class}: %{error_message}'
+        error_html: 'Nye forsøk brukt opp. Siste feil: %{error_class}: %{error_message}'
+        event_no_error_html: Handleren feilet på %{attempts} leveranser (maks %{max}) — ingen handler-feil ble registrert
+        no_error_recorded_html: Overskred %{max} nye forsøk etter %{attempts} lesinger — ingen feil ble registrert; hvert feilende forsøk krasjet før det kunne rapportere
+        not_recorded_html: Årsak ikke registrert (flyttet til DLQ før pgbus %{version})
+        retried_before:
+          one: Forsøkt på nytt fra DLQ én gang før.
+          other: Forsøkt på nytt fra DLQ %{count} ganger før.
       show:
         back: Tilbake til DLQ
         context: Kontekst
@@ -138,8 +166,10 @@ nb:
         discard_confirm: Forkaste permanent?
         headers: Overskrifter
         labels:
+          attempts: Forsøk
+          died: Døde
+          dlq: Dead letter-kø
           enqueued_at: Innlagt klokken
-          read_count: Antall ganger lest
           source_queue: Kildekø
           visibility_timeout: Synlighetstidsavbrudd
         not_found: Melding ikke funnet

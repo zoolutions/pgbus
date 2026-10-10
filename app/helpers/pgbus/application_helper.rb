@@ -202,6 +202,45 @@ module Pgbus
       "#{row[:read_ct]}/#{max_retries}"
     end
 
+    # A DeadLetterReason::Result in words (issue #495). With filter_path
+    # (->(extra) { url }) the error class becomes a link that filters the list
+    # to it. The _html keys let that link through; translate escapes the
+    # error message and every other argument.
+    def pgbus_dead_letter_reason(result, filter_path: nil)
+      args = result.reason_args.dup
+      if args[:error_class] && filter_path
+        args[:error_class] = pgbus_link_to(
+          result.error_class, filter_path.call(error_class: result.error_class, page: nil),
+          title: t("pgbus.dead_letter.filters.filter_error_class", error_class: result.error_class),
+          data: { turbo_frame: "_top" }
+        )
+      end
+      sentence = translate("pgbus.dead_letter.reasons.#{result.reason_key}_html", **args)
+      return sentence unless result.retried_before.to_i.positive?
+
+      safe_join([sentence, " ", t("pgbus.dead_letter.reasons.retried_before", count: result.retried_before)])
+    end
+
+    def pgbus_dead_letter_attempts(result)
+      return "—" if result.attempts.nil?
+
+      "#{result.attempts}/#{result.max_retries}"
+    end
+
+    # The Job column: an ActiveJob's class, or a dead event's routing key.
+    # Reads the raw message like the Events page: both are identifiers, and
+    # PayloadFilter's default /_key$/ pattern would mask routing_key.
+    def pgbus_dead_letter_job(message)
+      payload = message.is_a?(String) ? JSON.parse(message) : message
+      return "—" unless payload.is_a?(Hash)
+
+      headers = payload["headers"]
+      payload["job_class"].presence || (headers["routing_key"].presence if headers.is_a?(Hash)) ||
+        payload["routing_key"].presence || "—"
+    rescue JSON::ParserError
+      "—"
+    end
+
     # A tab's count, with "+" when a capped fragment made it a lower bound.
     def pgbus_job_count(counts, state)
       "#{number_with_delimiter(counts[state])}#{"+" if counts.capped?(state)}"

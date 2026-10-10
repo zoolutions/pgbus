@@ -96,6 +96,22 @@ fi:
         view_tasks: Näytä tehtävät
         visible: näkyvissä
     dead_letter:
+      detail:
+        backtrace: Backtrace (ensimmäiset rivit)
+        died: 'Kuoli:'
+        dlq: 'Dead letter -jono:'
+        error_from_attempt: Virhe yrityksestä %{attempt}; yritykset %{from}–%{to} eivät tallentaneet virhettä.
+        source: 'Siirtäjä:'
+        sources:
+          consumer: tapahtumakuluttaja
+          worker: job-worker
+        why: Miksi se kuoli
+      filters:
+        all: Kaikki
+        clear_error_class: Poista suodatin
+        error_class: 'Virhe: %{error_class}'
+        filter_error_class: Näytä vain %{error_class}
+        label: Suodata dead letterit
       index:
         discard_all: Hylkää kaikki
         discard_all_confirm: Hylätäänkö kaikki DLQ-viestit pysyvästi?
@@ -115,10 +131,12 @@ fi:
         empty: Dead letter -jono on tyhjä
         full_json_payload: Täysi JSON-payload
         headers:
-          enqueued: Lisätty jonoon
+          actions: Toiminnot
+          attempts: Yritykset
+          died: Kuoli
           id: ID
-          job_class: Työluokka
-          reads: Lukee
+          job: Job
+          reason: Syy
           source_queue: Lähdejono
         headers_section: Otsikot
         job_id: 'Työ ID:'
@@ -131,6 +149,16 @@ fi:
           visible_at: 'Näkyvissä klo:'
         retry: Yritä uudelleen
         total_label: viestiä dead letter -jonossa
+        view: Näytä
+      reasons:
+        error_earlier_attempt_html: 'Uudelleenyritykset käytetty. Viimeisin tallennettu virhe, yrityksestä %{error_attempt}: %{error_class}: %{error_message}'
+        error_html: 'Uudelleenyritykset käytetty. Viimeisin virhe: %{error_class}: %{error_message}'
+        event_no_error_html: Käsittelijä epäonnistui %{attempts} toimituksessa (enintään %{max}) — käsittelijän virhettä ei tallennettu
+        no_error_recorded_html: Ylitti %{max} uudelleenyritystä %{attempts} lukukerran jälkeen — virhettä ei tallennettu; jokainen epäonnistunut yritys kaatui ennen kuin ehti raportoida
+        not_recorded_html: Syytä ei tallennettu (siirretty DLQ:hun ennen pgbus %{version} -versiota)
+        retried_before:
+          one: Yritetty uudelleen DLQ:sta kerran aiemmin.
+          other: Yritetty uudelleen DLQ:sta %{count} kertaa aiemmin.
       show:
         back: Takaisin DLQ:hon
         context: Konteksti
@@ -138,8 +166,10 @@ fi:
         discard_confirm: Hylätään pysyvästi?
         headers: Otsikot
         labels:
+          attempts: Yritykset
+          died: Kuoli
+          dlq: Dead letter -jono
           enqueued_at: Jonoon lisätty
-          read_count: Lukukerrat
           source_queue: Lähdejono
           visibility_timeout: Näkyvyysaikaraja
         not_found: Viestia ei löytynyt

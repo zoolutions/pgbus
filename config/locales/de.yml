@@ -96,6 +96,22 @@ de:
         view_tasks: Aufgaben anzeigen
         visible: sichtbar
     dead_letter:
+      detail:
+        backtrace: Backtrace (erste Zeilen)
+        died: 'Gestorben:'
+        dlq: 'Dead-Letter-Queue:'
+        error_from_attempt: Fehler aus Versuch %{attempt}; Versuche %{from}–%{to} haben keinen Fehler erfasst.
+        source: 'Verschoben von:'
+        sources:
+          consumer: Event-Consumer
+          worker: Job-Worker
+        why: Warum er gestorben ist
+      filters:
+        all: Alle
+        clear_error_class: Filter entfernen
+        error_class: 'Fehler: %{error_class}'
+        filter_error_class: Nur %{error_class} anzeigen
+        label: Dead Letters filtern
       index:
         discard_all: Alle verwerfen
         discard_all_confirm: Alle DLQ-Nachrichten dauerhaft verwerfen?
@@ -115,11 +131,13 @@ de:
         empty: Dead Letter Queue ist leer
         full_json_payload: Vollständige JSON-Nutzlast
         headers:
-          enqueued: Eingereiht
+          actions: Aktionen
+          attempts: Versuche
+          died: Gestorben
           id: ID
-          job_class: Job-Klasse
-          reads: Liest
-          source_queue: Quellwarteschlange
+          job: Job
+          reason: Grund
+          source_queue: Quell-Queue
         headers_section: Header
         job_id: 'Job-ID:'
         metadata: Metadaten
@@ -131,6 +149,16 @@ de:
           visible_at: 'Sichtbar um:'
         retry: Erneut versuchen
         total_label: Nachrichten in der Dead-Letter-Warteschlange
+        view: Ansehen
+      reasons:
+        error_earlier_attempt_html: 'Wiederholungen ausgeschöpft. Letzter erfasster Fehler, aus Versuch %{error_attempt}: %{error_class}: %{error_message}'
+        error_html: 'Wiederholungen ausgeschöpft. Letzter Fehler: %{error_class}: %{error_message}'
+        event_no_error_html: Handler ist bei %{attempts} Zustellungen gescheitert (max. %{max}) — kein Handler-Fehler erfasst
+        no_error_recorded_html: "%{max} Wiederholungen nach %{attempts} Lesevorgängen überschritten — kein Fehler erfasst; jeder fehlgeschlagene Versuch ist abgestürzt, bevor er berichten konnte"
+        not_recorded_html: Grund nicht erfasst (vor pgbus %{version} in die DLQ verschoben)
+        retried_before:
+          one: Schon einmal aus der DLQ wiederholt.
+          other: Schon %{count}-mal aus der DLQ wiederholt.
       show:
         back: Zurück zur DLQ
         context: Kontext
@@ -138,8 +166,10 @@ de:
         discard_confirm: Dauerhaft verwerfen?
         headers: Header
         labels:
+          attempts: Versuche
+          died: Gestorben
+          dlq: Dead-Letter-Queue
           enqueued_at: Eingereiht am
-          read_count: Anzahl der Lesevorgänge
           source_queue: Quellwarteschlange
           visibility_timeout: Sichtbarkeits-Timeout
         not_found: Nachricht nicht gefunden

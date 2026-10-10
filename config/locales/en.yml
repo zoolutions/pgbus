@@ -96,6 +96,22 @@ en:
         view_tasks: View tasks
         visible: visible
     dead_letter:
+      detail:
+        backtrace: Backtrace (first lines)
+        died: 'Died:'
+        dlq: 'Dead-letter queue:'
+        error_from_attempt: Error from attempt %{attempt}; attempts %{from}–%{to} recorded no error.
+        source: 'Moved by:'
+        sources:
+          consumer: event consumer
+          worker: job worker
+        why: Why it died
+      filters:
+        all: All
+        clear_error_class: Clear filter
+        error_class: 'Error: %{error_class}'
+        filter_error_class: Show only %{error_class}
+        label: Filter dead letters
       index:
         discard_all: Discard All
         discard_all_confirm: Permanently discard all DLQ messages?
@@ -115,11 +131,13 @@ en:
         empty: Dead letter queue is empty
         full_json_payload: Full JSON payload
         headers:
-          enqueued: Enqueued
+          actions: Actions
+          attempts: Attempts
+          died: Died
           id: ID
-          job_class: Job Class
-          reads: Reads
-          source_queue: Source Queue
+          job: Job
+          reason: Reason
+          source_queue: Source queue
         headers_section: Headers
         job_id: 'Job ID:'
         metadata: Metadata
@@ -131,6 +149,16 @@ en:
           visible_at: 'Visible at:'
         retry: Retry
         total_label: messages in dead letter queue
+        view: View
+      reasons:
+        error_earlier_attempt_html: 'Retries exhausted. Last recorded error, from attempt %{error_attempt}: %{error_class}: %{error_message}'
+        error_html: 'Retries exhausted. Last error: %{error_class}: %{error_message}'
+        event_no_error_html: Handler failed on %{attempts} deliveries (max %{max}) — no handler error was recorded
+        no_error_recorded_html: Exceeded %{max} retries after %{attempts} reads — no error was recorded; every failing attempt crashed before it could report
+        not_recorded_html: Reason not recorded (dead-lettered before pgbus %{version})
+        retried_before:
+          one: Retried from the DLQ once before.
+          other: Retried from the DLQ %{count} times before.
       show:
         back: Back to DLQ
         context: Context
@@ -138,8 +166,10 @@ en:
         discard_confirm: Permanently discard?
         headers: Headers
         labels:
+          attempts: Attempts
+          died: Died
+          dlq: Dead-letter queue
           enqueued_at: Enqueued At
-          read_count: Read Count
           source_queue: Source Queue
           visibility_timeout: Visibility Timeout
         not_found: Message not found

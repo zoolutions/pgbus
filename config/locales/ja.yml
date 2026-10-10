@@ -96,6 +96,22 @@ ja:
         view_tasks: タスクを表示
         visible: 表示中
     dead_letter:
+      detail:
+        backtrace: バックトレース（先頭行）
+        died: '停止日時:'
+        dlq: 'デッドレターキュー:'
+        error_from_attempt: 試行 %{attempt} のエラー。試行 %{from}–%{to} はエラーを記録していません。
+        source: '移動元:'
+        sources:
+          consumer: イベントコンシューマー
+          worker: ジョブワーカー
+        why: 停止した理由
+      filters:
+        all: すべて
+        clear_error_class: フィルターを解除
+        error_class: 'エラー: %{error_class}'
+        filter_error_class: "%{error_class} のみ表示"
+        label: デッドレターを絞り込む
       index:
         discard_all: すべて破棄
         discard_all_confirm: すべてのDLQメッセージを完全に破棄しますか？
@@ -115,11 +131,13 @@ ja:
         empty: デッドレターキューは空です
         full_json_payload: 完全なJSONペイロード
         headers:
-          enqueued: キューに追加済み
+          actions: 操作
+          attempts: 試行
+          died: 停止日時
           id: ID
-          job_class: ジョブクラス
-          reads: 読み取り数
-          source_queue: ソースキュー
+          job: ジョブ
+          reason: 理由
+          source_queue: 元のキュー
         headers_section: ヘッダー
         job_id: 'ジョブID:'
         metadata: メタデータ
@@ -131,6 +149,16 @@ ja:
           visible_at: '表示日時:'
         retry: 再試行
         total_label: デッドレターキュー内のメッセージ
+        view: 表示
+      reasons:
+        error_earlier_attempt_html: 'リトライ上限に達しました。最後に記録されたエラー（試行 %{error_attempt}）: %{error_class}: %{error_message}'
+        error_html: 'リトライ上限に達しました。最後のエラー: %{error_class}: %{error_message}'
+        event_no_error_html: ハンドラーが %{attempts} 回の配信で失敗しました（上限 %{max}）— ハンドラーのエラーは記録されていません
+        no_error_recorded_html: "%{attempts} 回の読み取りで %{max} 回のリトライ上限を超えました — エラーは記録されていません。失敗した試行はすべて報告前にクラッシュしました"
+        not_recorded_html: 理由は記録されていません（pgbus %{version} より前に DLQ へ移動）
+        retried_before:
+          one: 以前に DLQ から 1 回リトライされました。
+          other: 以前に DLQ から %{count} 回リトライされました。
       show:
         back: DLQに戻る
         context: コンテキスト
@@ -138,8 +166,10 @@ ja:
         discard_confirm: 完全に破棄しますか？
         headers: ヘッダー
         labels:
+          attempts: 試行
+          died: 停止日時
+          dlq: デッドレターキュー
           enqueued_at: キューイング日時
-          read_count: 読み取り回数
           source_queue: ソースキュー
           visibility_timeout: 可視性タイムアウト
         not_found: メッセージが見つかりません
