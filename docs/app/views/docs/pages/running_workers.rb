@@ -193,8 +193,9 @@ class Views::Docs::Pages::RunningWorkers < DocsUI::Page
         so a host holds about `processes × pool_size` connections for the capsule.
         Under the default `worker_notify_scope: :supervisor` the host still holds
         one LISTEN connection; under `:fork` each fork holds its own. With
-        `single_active_consumer: true` only one fork holds the queue lock at a
-        time; the others are hot standbys.
+        `single_active_consumer: true` each queue is locked by one fork at a
+        time; a fork can still process the capsule's other queues, so in a
+        single-queue capsule the extra forks are hot standbys.
       MD
     end
   end

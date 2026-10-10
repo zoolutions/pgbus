@@ -817,6 +817,12 @@ RSpec.describe Pgbus::Configuration do
                                    ])
     end
 
+    it "treats processes: nil as the default, like the Array form" do
+      config.workers = nil
+      config.capsule(:render, queues: %w[render], threads: 1, processes: nil)
+      expect(config.processes_for(config.workers.first)).to eq(1)
+    end
+
     it "rejects non-positive processes" do
       expect do
         config.capsule(:bad, queues: %w[a], threads: 1, processes: 0)

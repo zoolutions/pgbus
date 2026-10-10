@@ -1261,7 +1261,7 @@ module Pgbus
       raise Pgbus::ConfigurationError, "capsule queues must be a non-empty Array" unless queues.is_a?(Array) && queues.any?
       raise Pgbus::ConfigurationError, "capsule threads must be a positive Integer" unless threads.is_a?(Integer) && threads.positive?
 
-      validate_processes!(options[:processes]) if options.key?(:processes)
+      validate_processes!(options[:processes]) unless options[:processes].nil?
 
       normalized_name = name.to_s
       @workers ||= []

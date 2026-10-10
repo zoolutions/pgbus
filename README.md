@@ -604,7 +604,7 @@ config.capsule :render, queues: %w[render], threads: 1, processes: 4
 - **Memory.** Budget roughly `boot RSS + peak job RSS` per process. The forks share the booted app's memory copy-on-write until they write to it, so N forks cost less than N separate supervisors, which each boot the app.
 - **Connections.** Every process has its own pool (`pool=` in the boot banner), so a host holds about `processes × pool_size` connections for the capsule. Under the default `worker_notify_scope: :supervisor` the host still holds one LISTEN connection; under `:fork` each fork holds its own, and `pgbus doctor`'s connection budget counts them.
 - **Shutdown.** The stop timeout applies to every fork at once, so N forks drain in parallel and need no longer `shutdown_timeout`.
-- **With `single_active_consumer: true`** only one fork holds the queue lock at a time; the others are hot standbys. Use `processes:` there for failover, not throughput.
+- **With `single_active_consumer: true`** each queue is locked by one fork at a time; a fork can still process the capsule's other queues. For a single-queue capsule that makes the extra forks hot standbys: use `processes:` there for failover, not throughput.
 - `processes:` must be a positive Integer (default `1`, so existing configs are unchanged). It is set on `c.capsule` or on an Array-form `workers` entry; the string DSL has no syntax for it.
 
 ### Retry backoff
