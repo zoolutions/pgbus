@@ -55,10 +55,12 @@ class Views::Docs::Pages::SizingCapsules < DocsUI::Page
         - The capsule's worker process sits near **100 % of one core** (in `top`, or
           the CPU graph of its container), however many threads it has.
 
-        To measure instead of guess, run `rake bench:worker_profile`: it drives a real
-        worker and reports where each thread's time goes, including `gvl_wait`, the time
-        a thread was ready to run but waiting for the GVL. A large `gvl_wait` share with
-        your jobs means more threads won't help and more processes will.
+        For a baseline, run `rake bench:worker_profile`: it drives a real worker with a
+        no-op job and reports where each thread's time goes, including `gvl_wait`, the
+        time a thread was ready to run but waiting for the GVL. That is pgbus's own GVL
+        cost at a given `threads:`, not your jobs'. If your queue's per-job wall time
+        grows with `threads:` far beyond that baseline, your jobs are holding the GVL:
+        more threads won't help and more processes will.
 
         | Jobs are mostly… | Give the capsule |
         |---|---|
@@ -132,8 +134,9 @@ class Views::Docs::Pages::SizingCapsules < DocsUI::Page
       md <<~'MD'
         **Why.** The limit belongs to the capsule, not the container. One supervisor runs
         both, the light capsule still recycles at 1 GB, and the export finishes. A worker
-        that hits its limit drains its running jobs before it exits, so set the limit above
-        the export's peak, not at it.
+        that hits its limit drains its running jobs for up to `drain_timeout` (30 seconds by
+        default) before it exits, so a multi-minute export caught by the limit is still
+        redelivered. Set the limit above the export's peak, not at it.
       MD
     end
   end
@@ -238,8 +241,9 @@ class Views::Docs::Pages::SizingCapsules < DocsUI::Page
         `processes: 4` needs about 4 × (0.4 + 1.1) ≈ 6 GB before any other capsule. That
         doesn't fit next to anything else on an 8 GB host; `processes: 3` (about 4.5 GB)
         does. Copy-on-write sharing of the booted app usually makes the real number lower.
-        Measure your own app: the dashboard's Processes page and the recycle log line give
-        each worker's RSS.
+        Measure your own app: every `pgbus.worker.recycle` event carries the worker's
+        `memory_mb`, the memory-limit recycle log line prints it, and `ps` or the
+        container's memory graph shows it live.
 
         Connections: each fork has its own pool (`pool=` in the boot banner), so a capsule
         holds up to about `processes × pool_size` connections. Pool slots open lazily, so
