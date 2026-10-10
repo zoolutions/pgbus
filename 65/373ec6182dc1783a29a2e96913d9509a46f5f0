@@ -1,0 +1,28 @@
+CHANGELOG.md
+  s_4242253cc7e550::t_2af9f16c26d12e 5,31
+spec/system/support/accessibility.rb
+  s_4242253cc7e550::t_2af9f16c26d12e 6-7
+  s_4242253cc7e550::t_a5792a63c0626d 19
+.claude/rules/dashboard.md
+  s_4242253cc7e550::t_2af9f16c26d12e 49
+app/views/pgbus/queues/_queues_list.html.erb
+  s_4242253cc7e550::t_d07eda70c543a8 36,41,46,50
+app/views/pgbus/insights/show.html.erb
+  s_4242253cc7e550::t_d07eda70c543a8 6,23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "65373ec6182dc1783a29a2e96913d9509a46f5f0",
+  "prompts": {},
+  "sessions": {
+    "s_4242253cc7e550": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4fe2a4bd-8a7a-43f0-a807-a713cef7f01f",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
