@@ -15,7 +15,8 @@ module Pgbus
   #   pgbus.executor.execute       — full job execution (deserialize + perform + archive)
   #   pgbus.job_completed          — job archived successfully
   #   pgbus.job_failed             — job raised; carries :exception_object
-  #   pgbus.job_dead_lettered      — job exceeded max_retries and was DLQ-routed
+  #   pgbus.job_dead_lettered      — job exceeded max_retries and was DLQ-routed;
+  #                                  :error is the last recorded error class (or nil)
   #   pgbus.job_visibility_extended — heartbeat re-armed a running job's visibility timeout
   #                                  payload: queue, job_class, msg_id, vt, extensions
   #   pgbus.event_processed        — event handler succeeded
