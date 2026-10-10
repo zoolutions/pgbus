@@ -1,0 +1,32 @@
+docs/app/models/doc.rb
+  s_4ad0484223837f::t_1c446fe142ba17 39
+docs/app/views/docs/pages/sizing_capsules.rb
+  s_4ad0484223837f::t_da2619e7efac28 272-275
+  s_4ad0484223837f::t_f2b5e99f44a44f 297-298
+  s_4ad0484223837f::t_0515d102373a8e 198-199
+  s_4ad0484223837f::t_ce0e55550740c3 245-246,248-249
+  s_4ad0484223837f::t_ff5b46234a0904 1-114,116-125,127-187,189-197,200-244,247,250-254,256-271,276-296,299-309
+  s_4ad0484223837f::t_a46b19f1d887ce 115,126,188,255
+docs/app/views/docs/pages/running_workers.rb
+  s_4ad0484223837f::t_76842959b678b5 199-200
+README.md
+  s_4ad0484223837f::t_3c6316a69d1264 610-611
+CHANGELOG.md
+  s_4ad0484223837f::t_067180b3ab0b93 5-6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "ecbb6e255b91a1f273cc46780f9ee06ceab12566",
+  "prompts": {},
+  "sessions": {
+    "s_4ad0484223837f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3ed0f016-1f17-4322-be29-e4daa76de66d",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
