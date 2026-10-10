@@ -3,7 +3,7 @@
     <div class="flex items-center justify-between mb-3">
       <h2 class="text-lg font-semibold text-gray-900 dark:text-white"><%= t("pgbus.dashboard.recent_failures.title") %></h2>
       <% if @recent_failures.any? %>
-        <%= link_to t("pgbus.dashboard.recent_failures.view_all"), pgbus.jobs_path(status: "failed"), class: "text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 dark:hover:text-indigo-300", data: { turbo_frame: "_top" } %>
+        <%= link_to t("pgbus.dashboard.recent_failures.view_all"), pgbus.jobs_path(status: "failed"), class: "text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300", data: { turbo_frame: "_top" } %>
       <% end %>
     </div>
     <div class="overflow-hidden rounded-lg bg-white dark:bg-gray-800 shadow ring-1 ring-gray-200 dark:ring-gray-700">

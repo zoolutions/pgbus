@@ -30,6 +30,7 @@ Follow RED -> GREEN -> REFACTOR:
 | Dashboard DataSource | Unit spec with mocked client |
 | Dashboard Authentication | Unit spec |
 | Helper formatting | Unit spec |
+| Dashboard view / CSS / JS | System spec (light + dark) + axe gate — see `.claude/rules/dashboard.md` |
 
 ## RSpec Conventions
 
@@ -65,3 +66,4 @@ let(:mock_client) { double("Pgbus::Client", pgmq: double("pgmq")) }
 - [ ] No skipped tests without reason
 - [ ] Edge cases covered (nil messages, expired VT, max retries exceeded)
 - [ ] Error paths tested (connection failures, deserialization errors)
+- [ ] Dashboard change: `spec/system/accessibility_spec.rb` green, light + dark screenshots attached to the PR

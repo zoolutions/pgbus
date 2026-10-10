@@ -4,18 +4,18 @@
 </div>
 
 <div class="mb-6 grid grid-cols-3 gap-4">
-  <div class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
+  <dl class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
     <dt class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.outbox.index.stats.unpublished") %></dt>
     <dd class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white"><%= pgbus_number(@stats[:unpublished]) %></dd>
-  </div>
-  <div class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
+  </dl>
+  <dl class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
     <dt class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.outbox.index.stats.total") %></dt>
     <dd class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white"><%= pgbus_number(@stats[:total]) %></dd>
-  </div>
-  <div class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
+  </dl>
+  <dl class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
     <dt class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.outbox.index.stats.oldest_unpublished") %></dt>
     <dd class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white"><%= @stats[:oldest_unpublished_age] ? t("pgbus.outbox.index.stats.oldest_age", seconds: @stats[:oldest_unpublished_age]) : t("pgbus.outbox.index.stats.no_age") %></dd>
-  </div>
+  </dl>
 </div>
 
 <div class="overflow-hidden rounded-lg bg-white dark:bg-gray-800 shadow ring-1 ring-gray-200 dark:ring-gray-700">

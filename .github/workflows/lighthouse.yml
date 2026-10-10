@@ -1,0 +1,96 @@
+# Lighthouse budgets for the dashboard (#498): monthly and on demand only,
+# report-only. Nothing here gates a merge — the merge-time accessibility gate
+# is spec/system/accessibility_spec.rb in main.yml's system job. A red run is
+# the report: the failed scheduled workflow notifies the repo owner.
+#
+# Pages and budgets live in lighthouserc.dashboard.json, the same list the axe
+# gate and bin/lighthouse read. The audit runs against `rake dummy:server`
+# (stub sample data, no database).
+name: Lighthouse
+
+on:
+  schedule:
+    - cron: "0 3 1 * *" # monthly, 03:00 UTC on the 1st
+  workflow_dispatch:
+
+concurrency:
+  group: lighthouse
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  lighthouse:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4"
+          bundler-cache: true
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: ".bun-version"
+
+      - name: Install Dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Resolve Chrome
+        run: echo "CHROME_PATH=$(which google-chrome || which chromium-browser)" >> "$GITHUB_ENV"
+
+      # setsid nohup: a plain `&` dies with the step's shell.
+      - name: Boot the dummy app
+        run: |
+          mkdir -p tmp
+          PORT=3003 setsid nohup bundle exec rake dummy:server > tmp/server.log 2>&1 < /dev/null & disown
+          for _ in $(seq 1 60); do
+            if curl -fs -o /dev/null http://127.0.0.1:3003/pgbus; then exit 0; fi
+            sleep 2
+          done
+          tail -100 tmp/server.log
+          exit 1
+
+      # Upload before assert, so an over-budget month still has its report.
+      - name: Lighthouse
+        run: |
+          set -o pipefail
+          bunx --bun lhci collect --config lighthouserc.dashboard.json
+          bunx --bun lhci upload --config lighthouserc.dashboard.json
+          bunx --bun lhci assert --config lighthouserc.dashboard.json 2>&1 | tee tmp/lhci-assert.txt
+
+      - name: Job summary
+        if: always()
+        run: |
+          ruby -rjson -ruri -e '
+            path = ".lighthouseci/manifest.json"
+            abort "no Lighthouse manifest" unless File.exist?(path)
+            puts "## Lighthouse — dashboard", "", "| Page | Perf | A11y | Best practices |", "|---|---:|---:|---:|"
+            JSON.parse(File.read(path)).select { |run| run["isRepresentativeRun"] }.each do |run|
+              s = run["summary"].transform_values { |v| (v.to_f * 100).round }
+              puts "| `#{URI.parse(run["url"]).request_uri}` | #{s["performance"]} | #{s["accessibility"]} | #{s["best-practices"]} |"
+            end
+          ' >> "$GITHUB_STEP_SUMMARY"
+          if [ -f tmp/lhci-assert.txt ]; then
+            { echo; echo '### Assertions'; echo '```'; cat tmp/lhci-assert.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Server log
+        if: failure()
+        run: tail -100 tmp/server.log
+
+      - name: Upload report
+        uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          name: lighthouse-dashboard
+          path: .lighthouseci/
+          include-hidden-files: true
+          retention-days: 30
+          overwrite: true

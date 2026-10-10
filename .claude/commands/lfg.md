@@ -207,6 +207,16 @@ bundle exec rubocop              # Style
 bundle exec rspec <relevant_specs>  # Tests
 ```
 
+**Dashboard change?** (`app/views/pgbus/`, `app/controllers/pgbus/`, `app/frontend/pgbus/`, the badge helpers) also run, in this order:
+
+```bash
+bundle exec rspec spec/system/      # includes the axe gate, light + dark (spec/system/accessibility_spec.rb)
+bundle exec rake frontend:css       # after any new Tailwind class; leaves no diff when done
+bun run lint:herb                   # ERB lint
+```
+
+See `.claude/rules/dashboard.md`.
+
 ### Solution Verification
 
 Re-read the original requirements and verify:
@@ -285,6 +295,8 @@ rm /tmp/pr-body.md
 ```
 
 The `--body-file` path avoids the double-layer of shell interpretation entirely and makes long PR bodies easier to read in the terminal buffer.
+
+**Dashboard change? Attach before/after screenshots, light + dark**, with `gh pr create --attach` (AGENTS.md, "Screenshots on PRs and issues"), taken from `bundle exec rake dummy:server`.
 
 **Label the PR — every time.** Exactly one `type` and at least one `area`, never a `status` label (`plan`, `epic`, …). The type is the one from Phase 1 (the issue's, or the one you pinned there). The areas are the issue's or plan's area labels; when it has none, they come from `bin/labels infer $(git diff --name-only origin/main...HEAD)`, and when `infer` prints nothing (only unmapped paths, such as the README or the Gemfile) pick the closest area by hand — never zero. `gh pr create` fails on a label that doesn't exist on GitHub: run `bin/labels sync` first, then re-run the create (`gh pr edit <n> --add-label …` labels a PR that is already open, once the labels exist).
 

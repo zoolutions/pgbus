@@ -32,6 +32,12 @@ RSpec.describe "Dashboard dark-mode contrast" do # rubocop:disable RSpec/Describ
   # surfaces: gray-400 on white is ~2.5:1, gray-500/600 on gray-800 ~3:1.
   # Disabled controls (cursor-not-allowed) are exempt, as WCAG allows.
   let(:low_contrast_tokens) { %w[text-gray-400 dark:text-gray-500 dark:text-gray-600] }
+  # Shades the axe gate (#498) measured below 4.5:1 as body text on white:
+  # every -500 but gray (blue-500 3.7:1, red-500 3.8:1, indigo-500 4.5- under
+  # the pointer) and the warm -600s (amber 3.2:1, yellow 3.2:1, green 3.3:1).
+  # Large text (text-2xl and up) only needs 3:1, so stat numbers may keep them.
+  let(:low_light_shade) { /\A(?:hover:)?text-(?:(?!gray)[a-z]+-500|(?:amber|yellow|green|lime|orange)-600)\z/ }
+  let(:large_text) { /\Atext-[2-9]xl\z/ }
 
   # Each class attribute as token lists: one per ERB ternary branch (the text
   # outside ERB tags plus that branch's single-quoted literal), so a dark
@@ -76,6 +82,43 @@ RSpec.describe "Dashboard dark-mode contrast" do # rubocop:disable RSpec/Describ
       next if tokens.any? { |t| t.start_with?("dark:hover:#{property}-") }
 
       token
+    end
+  end
+
+  # Dark pairings the gate caught: indigo-400 on its own /30 badge tint
+  # (4.4:1), and gray-400 text on a gray-700 chip (4.0:1).
+  def low_contrast_pairing(tokens)
+    found = tokens.any? { |t| t.match?(large_text) } ? [] : tokens.grep(low_light_shade)
+    found << "dark:text-indigo-400" if (tokens & %w[dark:text-indigo-400 dark:bg-indigo-900/30]).size == 2
+    found << "dark:text-gray-400" if (tokens & %w[dark:text-gray-400 dark:bg-gray-700]).size == 2
+    found
+  end
+
+  describe "low-contrast shades" do
+    it "flags small -500 text and warm -600 text in light mode" do
+      expect(low_contrast_pairing(%w[text-xs text-blue-500 dark:text-blue-400])).to eq(%w[text-blue-500])
+      expect(low_contrast_pairing(%w[text-sm text-amber-600 dark:text-amber-400])).to eq(%w[text-amber-600])
+      expect(low_contrast_pairing(%w[hover:text-indigo-500 dark:hover:text-indigo-300])).to eq(%w[hover:text-indigo-500])
+    end
+
+    it "allows them on large text and allows the passing shades" do
+      expect(low_contrast_pairing(%w[text-3xl text-amber-600 dark:text-amber-400])).to be_empty
+      expect(low_contrast_pairing(%w[text-sm text-gray-500 text-indigo-600 text-red-600 text-amber-700])).to be_empty
+    end
+
+    it "flags indigo-400 on an indigo-900/30 badge and gray-400 on a gray-700 chip" do
+      expect(low_contrast_pairing(%w[bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-400]))
+        .to eq(%w[dark:text-indigo-400])
+      expect(low_contrast_pairing(%w[bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-400]))
+        .to eq(%w[dark:text-gray-400])
+      expect(low_contrast_pairing(%w[dark:bg-indigo-900/30 dark:text-indigo-300 dark:bg-gray-700 dark:text-gray-200]))
+        .to be_empty
+    end
+
+    it "keeps the views and badge helpers clear of them" do
+      found = offenders(:low_contrast_pairing)
+
+      expect(found).to be_empty, "#{found.size} low-contrast shade(s):\n  #{found.join("\n  ")}"
     end
   end
 

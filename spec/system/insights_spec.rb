@@ -23,7 +23,7 @@ RSpec.describe "Insights", type: :system do
     it "shows the time range selector with 4h option" do
       visit "/pgbus/insights"
 
-      within("nav[aria-label='Time range']") do
+      within("[role='group'][aria-label='Time range']") do
         expect(page).to have_link("1h")
         expect(page).to have_link("4h")
         expect(page).to have_link("24h")

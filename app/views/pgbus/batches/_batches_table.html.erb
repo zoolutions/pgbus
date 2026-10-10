@@ -37,7 +37,7 @@
             <td data-label="Jobs" class="px-4 py-3 text-sm text-right font-mono text-gray-500 dark:text-gray-400">
               <%= batch[:completed_jobs] %>/<%= batch[:total_jobs] %>
               <% if batch[:failed_jobs].to_i > 0 %>
-                <span class="text-red-500">(<%= batch[:failed_jobs] %> failed)</span>
+                <span class="text-red-700 dark:text-red-400">(<%= batch[:failed_jobs] %> failed)</span>
               <% end %>
             </td>
             <td data-label="Created" class="px-4 py-3 text-sm text-right text-gray-500 dark:text-gray-400">
