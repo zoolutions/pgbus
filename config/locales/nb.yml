@@ -114,6 +114,9 @@ nb:
         dlq_see_why: åpne dead-letter-siden for å se hvorfor hver enkelt døde
         enqueued: I kø
         enqueued_detail: "%{claimable} kan hentes nå · %{waiting} planlagt, kjører eller prøves på nytt"
+        enqueued_paused:
+          one: "%{count} i køer satt på pause"
+          other: "%{count} i køer satt på pause"
         parked_jobs: Parkerte jobber
         parked_jobs_oldest: eldst %{age}
         processes: Prosesser

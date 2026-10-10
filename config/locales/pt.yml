@@ -114,6 +114,9 @@ pt:
         dlq_see_why: abra a página de mensagens mortas para ver por que cada uma morreu
         enqueued: Enfileirado
         enqueued_detail: "%{claimable} disponíveis agora · %{waiting} agendados, em execução ou em nova tentativa"
+        enqueued_paused:
+          one: "%{count} em filas pausadas"
+          other: "%{count} em filas pausadas"
         parked_jobs: Trabalhos estacionados
         parked_jobs_oldest: mais antigo %{age}
         processes: Processos

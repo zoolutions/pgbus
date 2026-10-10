@@ -64,6 +64,13 @@ module Pgbus
       safe_join(parts, PART_SEPARATOR)
     end
 
+    def pgbus_enqueued_card_words(queues)
+      parts = [t("pgbus.dashboard.stats_cards.enqueued_detail", claimable: number_with_delimiter(queues[:claimable]),
+                                                                waiting: number_with_delimiter(queues[:waiting]))]
+      parts << t("pgbus.dashboard.stats_cards.enqueued_paused", count: queues[:paused_depth]) if queues[:paused_depth].positive?
+      safe_join(parts, PART_SEPARATOR)
+    end
+
     def pgbus_process_card_words(processes)
       return t("pgbus.dashboard.stats_cards.processes_none") if processes[:total].zero?
 
@@ -80,7 +87,11 @@ module Pgbus
       if retrying[:next_attempt_at]
         parts << t("pgbus.dashboard.stats_cards.retrying_next_html", time: pgbus_time(retrying[:next_attempt_at], clock: true))
       end
-      parts << t("pgbus.dashboard.stats_cards.retrying_due", count: retrying[:due_now_count]) if retrying[:due_now_count].positive?
+      if retrying[:due_now_count].positive?
+        # Past the per-queue cap the due count is a lower bound, like the total.
+        due = retrying[:capped] ? "#{number_with_delimiter(retrying[:due_now_count])}+" : retrying[:due_now_count]
+        parts << t("pgbus.dashboard.stats_cards.retrying_due", count: due)
+      end
       parts << t("pgbus.dashboard.stats_cards.retrying_newest", error_class: retrying[:newest_error_class]) if retrying[:newest_error_class]
       safe_join(parts, PART_SEPARATOR)
     end
@@ -133,8 +144,11 @@ module Pgbus
       "#{row["retry_count"].to_i + 1} / #{Pgbus.configuration.max_retries}"
     end
 
+    # The payload arrives as a JSON string or, when the column is typecast,
+    # an already-parsed Hash.
     def pgbus_failure_job(row)
-      payload = JSON.parse(row["payload"].to_s)
+      payload = row["payload"]
+      payload = JSON.parse(payload.to_s) unless payload.is_a?(Hash)
       (payload["job_class"] if payload.is_a?(Hash)).presence || row["handler_class"].presence || Web::TimeFormat::NONE
     rescue JSON::ParserError
       row["handler_class"].presence || Web::TimeFormat::NONE

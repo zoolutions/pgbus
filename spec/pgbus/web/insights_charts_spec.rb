@@ -27,7 +27,7 @@ RSpec.describe Pgbus::Web::InsightsCharts do
       chart = described_class.throughput(many, minutes: minutes)
 
       expect(chart.step_minutes).to eq(720)
-      expect(chart.rows.size).to be <= described_class::MAX_TABLE_ROWS + 1
+      expect(chart.rows.size).to eq(described_class::MAX_TABLE_ROWS)
       expect(chart.rows.sum { |r| r[:count] }).to eq(minutes)
       expect(chart.total).to eq(minutes)
     end
@@ -47,6 +47,10 @@ RSpec.describe Pgbus::Web::InsightsCharts do
       expect(chart[:failed]).to eq(5)
     end
 
+    it "reads a status with no row as zero" do
+      expect(described_class.status({ "success" => 3 })[:dead_lettered]).to eq(0)
+    end
+
     # The sparse stub, and a fresh install, report every status at zero.
     it "is empty when every count is zero" do
       expect(described_class.status({ "success" => 0, "failed" => 0 })).to be_empty
@@ -60,7 +64,7 @@ RSpec.describe Pgbus::Web::InsightsCharts do
       chart = described_class.latency(points, minutes: 240)
 
       expect(chart.step_minutes).to eq(4)
-      expect(chart.rows).to eq([{ from: Time.utc(2026, 10, 10, 11, 56), avg_ms: 50, p95_ms: 300 }])
+      expect(chart.rows).to eq([{ from: now - 120, avg_ms: 50, p95_ms: 300 }])
     end
 
     it "is empty without points" do

@@ -114,6 +114,9 @@ es:
         dlq_see_why: abre la página de mensajes muertos para ver por qué murió cada uno
         enqueued: Encolado
         enqueued_detail: "%{claimable} disponibles ahora · %{waiting} programados, en ejecución o reintentando"
+        enqueued_paused:
+          one: "%{count} en colas en pausa"
+          other: "%{count} en colas en pausa"
         parked_jobs: Trabajos aparcados
         parked_jobs_oldest: más antiguo %{age}
         processes: Procesos

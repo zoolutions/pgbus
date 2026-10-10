@@ -114,6 +114,9 @@ en:
         dlq_see_why: open the dead-letter page to see why each died
         enqueued: Enqueued
         enqueued_detail: "%{claimable} claimable now · %{waiting} scheduled, running or retrying"
+        enqueued_paused:
+          one: "%{count} in paused queues"
+          other: "%{count} in paused queues"
         parked_jobs: Parked jobs
         parked_jobs_oldest: oldest %{age}
         processes: Processes

@@ -41,7 +41,7 @@ class Views::Docs::Pages::Dashboard < DocsUI::Page
           [ "Events", "Pending events with their state, the handler that runs each one and why it waits (or which attempt failed with what error); processed events say whether each claim completed, is being handled or went silent, with Replay when the claim completed, its handler is still registered and the archive still holds the event; subscribers say whether a running consumer drains them." ],
           [ "Outbox", "Transactional outbox entries pending publication." ],
           [ "Locks", "Uniqueness locks and concurrency keys — value, limit, lease, parked jobs; release a key or discard its parked jobs." ],
-          [ "Insights", "Throughput, status distribution and queue latency charts, each with a caption saying what it shows and a data table behind it, themed for light and dark mode; slowest job classes and latency by queue." ]
+          [ "Insights", [ :md, "Throughput and status distribution charts, each with a caption saying what it shows and a data table behind it, themed for light and dark mode; slowest job classes. The queue latency chart and latency by queue appear once `rails generate pgbus:add_job_stats_latency` has added the latency columns." ] ]
         ]
       )
       DocsUI::Callout(:note) do

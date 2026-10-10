@@ -11,7 +11,7 @@
   <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
     <% chart.rows.each do |row| %>
       <tr>
-        <td data-label="<%= t("pgbus.insights.show.tables.headers.from") %>" class="px-4 py-2 text-sm text-gray-700 dark:text-gray-300"><%= pgbus_time(row[:from], clock: true) %></td>
+        <td data-label="<%= t("pgbus.insights.show.tables.headers.from") %>" class="px-4 py-2 text-sm text-gray-700 dark:text-gray-300"><%= pgbus_absolute_time(row[:from]) %></td>
         <td data-label="<%= t("pgbus.insights.show.tables.headers.avg") %>" class="px-4 py-2 text-sm text-right font-mono text-gray-700 dark:text-gray-300"><%= pgbus_ms_duration(row[:avg_ms]) %></td>
         <td data-label="<%= t("pgbus.insights.show.tables.headers.highest_p95") %>" class="px-4 py-2 text-sm text-right font-mono text-gray-700 dark:text-gray-300"><%= pgbus_ms_duration(row[:p95_ms]) %></td>
       </tr>

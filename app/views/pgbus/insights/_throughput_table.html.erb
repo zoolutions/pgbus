@@ -10,7 +10,7 @@
   <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
     <% chart.rows.each do |row| %>
       <tr>
-        <td data-label="<%= t("pgbus.insights.show.tables.headers.from") %>" class="px-4 py-2 text-sm text-gray-700 dark:text-gray-300"><%= pgbus_time(row[:from], clock: true) %></td>
+        <td data-label="<%= t("pgbus.insights.show.tables.headers.from") %>" class="px-4 py-2 text-sm text-gray-700 dark:text-gray-300"><%= pgbus_absolute_time(row[:from]) %></td>
         <td data-label="<%= t("pgbus.insights.show.tables.headers.jobs") %>" class="px-4 py-2 text-sm text-right font-mono text-gray-700 dark:text-gray-300"><%= number_with_delimiter(row[:count]) %></td>
       </tr>
     <% end %>

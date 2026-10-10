@@ -62,10 +62,16 @@ RSpec.describe "Dashboard dark-mode contrast" do # rubocop:disable RSpec/Describ
     content.scan(/"([^"\n]*)"/).flatten.grep(/\b(?:bg|text)-[a-z]+-\d{2,3}\b/).map(&:split)
   end
 
-  # JS strings in any quote style: "…", '…' and `…` template literals.
+  # JS strings in any quote style: "…", '…' and `…` template literals. A
+  # template's ${…} expressions are read as their own strings, so a class
+  # chosen inside one (`${on ? 'text-gray-400' : ''}`) is checked too.
   def js_class_strings(content)
-    content.scan(/"([^"\n]*)"|'([^'\n]*)'|`([^`]*)`/).flatten.compact
-           .grep(/\b(?:bg|text)-[a-z]+-\d{2,3}\b/).map { |s| s.gsub(/\$\{.*?\}/, " ").split }
+    content.scan(/"([^"\n]*)"|'([^'\n]*)'|`([^`]*)`/).flat_map do |double, single, template|
+      next [double || single] unless template
+
+      expressions = template.scan(/\$\{(.*?)\}/m).flatten
+      [template.gsub(/\$\{.*?\}/m, " "), *expressions.flat_map { |e| e.scan(/"([^"\n]*)"|'([^'\n]*)'/).flatten.compact }]
+    end.grep(/\b(?:bg|text)-[a-z]+-\d{2,3}\b/).map(&:split)
   end
 
   def gaps(tokens)
@@ -131,6 +137,12 @@ RSpec.describe "Dashboard dark-mode contrast" do # rubocop:disable RSpec/Describ
 
       expect(template).to include("text-gray-400").and(satisfy { |tokens| tokens.none? { |t| t.include?("${") } })
       expect(single).to eq(%w[bg-red-100 text-red-800])
+    end
+
+    it "reads the class literals chosen inside a template's interpolations" do
+      js = "el.innerHTML = `<p class=\"text-sm ${dim ? 'text-gray-400' : 'text-gray-700 dark:text-gray-300'}\">x</p>`;"
+
+      expect(js_class_strings(js)).to include(%w[text-gray-400], %w[text-gray-700 dark:text-gray-300])
     end
   end
 

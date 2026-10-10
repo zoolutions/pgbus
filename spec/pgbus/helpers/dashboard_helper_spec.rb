@@ -56,6 +56,12 @@ RSpec.describe Pgbus::DashboardHelper do
     it "marks a capped count as a lower bound" do
       expect(helper.pgbus_retrying_count(retrying.merge(count: 10_000, capped: true))).to eq("10,000+")
     end
+
+    it "marks the due count as a lower bound too when the count is capped" do
+      words = helper.pgbus_retrying_card_words(retrying.merge(capped: true, next_attempt_at: nil, due_now_count: 10_001))
+
+      expect(text(words)).to start_with("10,001+ due now")
+    end
   end
 
   describe "#pgbus_dlq_card_words" do
@@ -113,6 +119,7 @@ RSpec.describe Pgbus::DashboardHelper do
       expect(helper.pgbus_failure_job({ "payload" => "{}", "handler_class" => "Billing::Handler" }))
         .to eq("Billing::Handler")
       expect(helper.pgbus_failure_job({ "payload" => "not json" })).to eq("—")
+      expect(helper.pgbus_failure_job({ "payload" => { "job_class" => "TypecastJob" } })).to eq("TypecastJob")
     end
   end
 end

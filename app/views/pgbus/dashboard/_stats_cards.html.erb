@@ -40,8 +40,8 @@
 
     <%= link_to pgbus.jobs_path(state: "ready"), data: { turbo_frame: "_top" }, class: card do %>
       <p class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.stats_cards.enqueued") %></p>
-      <p class="<%= number %>"><%= pgbus_number(@stats[:total_depth]) %></p>
-      <p class="text-xs text-gray-600 dark:text-gray-300"><%= t("pgbus.dashboard.stats_cards.enqueued_detail", claimable: number_with_delimiter(@stats[:total_visible]), waiting: number_with_delimiter([@stats[:total_depth].to_i - @stats[:total_visible].to_i, 0].max)) %></p>
+      <p class="<%= number %>"><%= pgbus_number(@signals[:queues][:depth]) %></p>
+      <p class="text-xs text-gray-600 dark:text-gray-300"><%= pgbus_enqueued_card_words(@signals[:queues]) %></p>
     <% end %>
 
     <%= link_to pgbus.processes_path, data: { turbo_frame: "_top" }, class: card do %>

@@ -114,6 +114,9 @@ fr:
         dlq_see_why: ouvrez la page dead-letter pour voir pourquoi chacun est mort
         enqueued: Enregistré
         enqueued_detail: "%{claimable} disponibles maintenant · %{waiting} planifiés, en cours ou en nouvelle tentative"
+        enqueued_paused:
+          one: "%{count} dans des files en pause"
+          other: "%{count} dans des files en pause"
         parked_jobs: Jobs en attente
         parked_jobs_oldest: le plus ancien %{age}
         processes: Processus

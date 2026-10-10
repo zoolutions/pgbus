@@ -63,6 +63,7 @@ RSpec.describe Pgbus::Web::DataSource::QueueSummary do
       expect(states["pgbus_test_default"]).to include(paused: false)
       expect(states["pgbus_test_mailers_p0"]).to include(paused: true, reason: "maintenance")
       expect(states["pgbus_test_mailers_p1"]).to eq(states["pgbus_test_mailers_p0"])
+      expect(Pgbus::QueueState).to have_received(:where).once
     end
   end
 

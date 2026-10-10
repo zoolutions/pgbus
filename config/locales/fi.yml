@@ -114,6 +114,9 @@ fi:
         dlq_see_why: avaa dead letter -sivu nähdäksesi, miksi kukin kuoli
         enqueued: Lisätty jonoon
         enqueued_detail: "%{claimable} otettavissa nyt · %{waiting} ajastettu, käynnissä tai uudelleenyrityksessä"
+        enqueued_paused:
+          one: "%{count} keskeytetyissä jonoissa"
+          other: "%{count} keskeytetyissä jonoissa"
         parked_jobs: Pysäköidyt työt
         parked_jobs_oldest: vanhin %{age}
         processes: Prosessit

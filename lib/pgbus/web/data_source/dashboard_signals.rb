@@ -25,10 +25,11 @@ module Pgbus
         end
 
         # The Retrying tab of the Jobs page (handler queues left to the Events
-        # page), plus when the next backoff ends and how many are due now.
-        # Each queue contributes its earliest COUNT_CAP + 1 rows by vt (the
-        # vt index), so the next attempt is exact and the due count is a
-        # lower bound only past the cap, like the tab counts.
+        # page), plus when the next backoff ends, how many are due now and the
+        # newest error among those rows. Each queue contributes its earliest
+        # COUNT_CAP + 1 rows by vt (the vt index), so the next attempt is exact
+        # and the due count is a lower bound past the cap, like the tab counts
+        # (capped: marks both).
         def retrying_signal
           counts = job_state_counts(exclude: handler_queue_physical_names)
           return EMPTY_RETRYING if counts["retrying"].zero?
@@ -37,7 +38,7 @@ module Pgbus
           {
             count: counts["retrying"], capped: counts.capped?("retrying"),
             next_attempt_at: JobState.time(schedule&.dig("next_at")), due_now_count: schedule&.dig("due").to_i,
-            newest_error_class: newest_retry_error_class
+            newest_error_class: schedule&.dig("newest_error")
           }
         rescue StandardError => e
           Pgbus.logger.error { "[Pgbus::Web] Error reading the retry signal: #{e.class}: #{e.message}" }
@@ -66,10 +67,18 @@ module Pgbus
 
         # undrained follows the health verdict: an active (unpaused) backlog on
         # a job queue no capsule or handler drains. A wildcard drains everything.
+        # depth, claimable and waiting leave the DLQs out (their card counts
+        # them) and the paused queues (paused_depth), whose visible messages
+        # no worker claims.
         def queue_signal
           queues = queues_with_metrics
           dlq, live = queues.partition { |q| q[:name].to_s.end_with?(Pgbus::DEAD_LETTER_SUFFIX) }
-          { total: queues.size, paused: live.count { |q| q[:paused] }, dlq: dlq.size, undrained: undrained_count(live) }
+          paused, active = live.partition { |q| q[:paused] }
+          depth = ->(list) { list.sum { |q| q[:queue_length].to_i } }
+          claimable = active.sum { |q| q[:queue_visible_length].to_i }
+          { total: queues.size, paused: paused.size, dlq: dlq.size, undrained: undrained_count(live),
+            depth: depth.call(live), claimable: claimable, waiting: [depth.call(active) - claimable, 0].max,
+            paused_depth: depth.call(paused) }
         end
 
         def throughput_signal
@@ -120,22 +129,16 @@ module Pgbus
 
           fragments = scope[:queues].map do |(qtable, logical)|
             <<~SQL.strip
-              (SELECT m.vt FROM pgmq.q_#{qtable} m #{failed_join(qtable, logical)}
+              (SELECT m.vt, f.error_class, f.failed_at FROM pgmq.q_#{qtable} m #{failed_join(qtable, logical)}
                WHERE #{JobList::STATE_PREFILTER["retrying"]} AND (#{JobList::STATE_CASE}) = 'retrying'
                ORDER BY m.vt LIMIT #{JobList::COUNT_CAP + 1})
             SQL
           end
           connection.select_one(<<~SQL, "Pgbus Retry Schedule")
-            SELECT MIN(vt) FILTER (WHERE vt > now()) AS next_at, COUNT(*) FILTER (WHERE vt <= now()) AS due
+            SELECT MIN(vt) FILTER (WHERE vt > now()) AS next_at, COUNT(*) FILTER (WHERE vt <= now()) AS due,
+                   (array_agg(error_class ORDER BY failed_at DESC))[1] AS newest_error
             FROM (#{fragments.join("\nUNION ALL\n")}) AS retrying
           SQL
-        end
-
-        def newest_retry_error_class
-          connection.select_value(
-            "SELECT error_class FROM pgbus_failed_events WHERE #{NOT_HANDLER_QUEUE} ORDER BY failed_at DESC LIMIT 1",
-            "Pgbus Newest Retry Error", [handler_queue_names_literal]
-          )
         end
 
         def newest_dead_letter(names)

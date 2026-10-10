@@ -48,6 +48,7 @@ RSpec.describe Pgbus::Web::HealthApp do
       get("/livez")
 
       expect(Pgbus::MCP::HealthAnalyzer).not_to have_received(:new)
+      expect(data_source).not_to have_received(:reset_cache!)
     end
   end
 

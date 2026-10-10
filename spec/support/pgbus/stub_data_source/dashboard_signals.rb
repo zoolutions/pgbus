@@ -39,15 +39,19 @@ module Pgbus
 
         private
 
+        # As DashboardSignals#retrying_signal: the count is the Retrying tab;
+        # next attempt, due count and newest error come from the retrying rows
+        # still in their queue (orphaned failed rows have no vt).
         def retrying_signal
           rows = state_rows(job_rows_in(nil, handler_queue_physical_names), "retrying")
           return Pgbus::Web::DataSource::DashboardSignals::EMPTY_RETRYING if rows.empty?
 
           now = Time.now
-          vts = rows.filter_map { |r| Pgbus::Web::JobState.time(r[:vt]) }
-          newest = @failed_events_list.max_by { |f| Pgbus::Web::JobState.time(f["failed_at"]) || Time.at(0) }
+          queued = rows.select { |r| r[:source] == "queue" }
+          vts = queued.filter_map { |r| Pgbus::Web::JobState.time(r[:vt]) }
+          newest = queued.max_by { |r| Pgbus::Web::JobState.time(r[:last_read_at]) || Time.at(0) }
           { count: rows.size, capped: false, next_attempt_at: vts.select { |t| t > now }.min,
-            due_now_count: vts.count { |t| t <= now }, newest_error_class: newest&.dig("error_class") }
+            due_now_count: vts.count { |t| t <= now }, newest_error_class: newest&.dig(:error_class) }
         end
 
         def dlq_signal
@@ -72,8 +76,12 @@ module Pgbus
           undrained = live.count do |q|
             !queue_paused?(q[:name]) && !drained.include?(q[:name]) && q[:queue_visible_length].to_i.positive?
           end
-          { total: @queues.size, paused: live.count { |q| queue_paused?(q[:name]) }, dlq: dlq.size,
-            undrained: undrained }
+          paused, active = live.partition { |q| queue_paused?(q[:name]) }
+          depth = ->(list) { list.sum { |q| q[:queue_length].to_i } }
+          claimable = active.sum { |q| q[:queue_visible_length].to_i }
+          { total: @queues.size, paused: paused.size, dlq: dlq.size, undrained: undrained,
+            depth: depth.call(live), claimable: claimable, waiting: [depth.call(active) - claimable, 0].max,
+            paused_depth: depth.call(paused) }
         end
 
         def verdict_signal

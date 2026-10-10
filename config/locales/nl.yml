@@ -114,6 +114,9 @@ nl:
         dlq_see_why: open de dead-letterpagina om te zien waarom elke job stierf
         enqueued: In de wachtrij geplaatst
         enqueued_detail: "%{claimable} nu op te pakken · %{waiting} gepland, actief of opnieuw proberend"
+        enqueued_paused:
+          one: "%{count} in gepauzeerde wachtrijen"
+          other: "%{count} in gepauzeerde wachtrijen"
         parked_jobs: Geparkeerde jobs
         parked_jobs_oldest: oudste %{age}
         processes: Processen

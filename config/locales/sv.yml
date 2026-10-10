@@ -114,6 +114,9 @@ sv:
         dlq_see_why: öppna dead letter-sidan för att se varför varje jobb dog
         enqueued: Inlagda
         enqueued_detail: "%{claimable} hämtbara nu · %{waiting} schemalagda, pågående eller nytt försök"
+        enqueued_paused:
+          one: "%{count} i pausade köer"
+          other: "%{count} i pausade köer"
         parked_jobs: Parkerade jobb
         parked_jobs_oldest: äldst %{age}
         processes: Processer

@@ -19,7 +19,12 @@ module Pgbus
 
       Status = Data.define(:total, :rows) do
         def empty? = total.zero?
-        def [](status) = rows.find { |r| r[:status] == status.to_s }&.dig(:count).to_i
+
+        # 0 for a status with no row: grouped counts omit statuses with none.
+        def [](status)
+          row = rows.find { |r| r[:status] == status.to_s }
+          row ? row[:count] : 0
+        end
       end
 
       Latency = Data.define(:step_minutes, :rows) do
@@ -61,12 +66,18 @@ module Pgbus
         [(minutes.to_f / MAX_TABLE_ROWS).ceil, 1].max
       end
 
-      # [[bucket start, [entries]], ...] in time order; entries start with their Time.
+      # [[bucket start, [entries]], ...] in time order; entries start with their
+      # Time. Buckets are anchored at the first entry, and the last one absorbs
+      # an entry exactly a window's length later, so a table never exceeds
+      # MAX_TABLE_ROWS rows.
       def bucket(series, step)
+        return [] if series.empty?
+
         seconds = step * 60
-        series.group_by { |entry| (entry.first.to_i / seconds) * seconds }
+        first = series.map(&:first).min.to_i
+        series.group_by { |entry| [(entry.first.to_i - first) / seconds, MAX_TABLE_ROWS - 1].min }
               .sort_by(&:first)
-              .map { |start, group| [Time.at(start).utc, group] }
+              .map { |index, group| [Time.at(first + (index * seconds)).utc, group] }
       end
     end
   end

@@ -34,7 +34,6 @@ RSpec.describe Pgbus::Web::DataSource::DashboardSignals do
     allow(Pgbus.configuration).to receive(:queue_prefix).and_return("pgbus_test")
     allow(data_source).to receive_messages(queues_with_metrics: queues, processes: processes,
                                            handler_queue_physical_names: %w[pgbus_test_billing],
-                                           handler_queue_names_literal: "{billing,pgbus_test_billing}",
                                            stream_queue_names: Set.new)
   end
 
@@ -46,9 +45,8 @@ RSpec.describe Pgbus::Web::DataSource::DashboardSignals do
     before do
       allow(data_source).to receive(:job_state_counts).and_return(counts)
       allow(mock_connection).to receive(:select_one)
-        .with(anything, "Pgbus Retry Schedule").and_return({ "next_at" => "2026-10-10 12:00:40+00", "due" => 2 })
-      allow(mock_connection).to receive(:select_value)
-        .with(anything, "Pgbus Newest Retry Error", ["{billing,pgbus_test_billing}"]).and_return("Net::ReadTimeout")
+        .with(anything, "Pgbus Retry Schedule")
+        .and_return({ "next_at" => "2026-10-10 12:00:40+00", "due" => 2, "newest_error" => "Net::ReadTimeout" })
     end
 
     it "counts retrying jobs the way the Jobs page does, outside the handler queues" do
@@ -73,6 +71,9 @@ RSpec.describe Pgbus::Web::DataSource::DashboardSignals do
       expect(sql).to include(Pgbus::Web::DataSource::JobList::STATE_PREFILTER["retrying"])
       expect(sql).to include("= 'retrying'", "ORDER BY m.vt LIMIT #{Pgbus::Web::DataSource::JobList::COUNT_CAP + 1}")
       expect(sql).to include("MIN(vt) FILTER (WHERE vt > now())", "COUNT(*) FILTER (WHERE vt <= now())")
+      # The newest error comes from the rows still backing off, not from any
+      # failed event (one that already re-ran or was dead-lettered).
+      expect(sql).to include("SELECT m.vt, f.error_class, f.failed_at", "(array_agg(error_class ORDER BY failed_at DESC))[1]")
     end
 
     it "flags a capped count" do
@@ -152,7 +153,13 @@ RSpec.describe Pgbus::Web::DataSource::DashboardSignals do
     it "counts paused, dead-letter and undrained queues from the cached metrics" do
       # As in the health verdict: only an active backlog nothing drains counts.
       # default qualifies; mailers is paused, billing is empty, the DLQ is a DLQ.
-      expect(data_source.queue_signal).to eq(total: 4, paused: 1, dlq: 1, undrained: 1)
+      expect(data_source.queue_signal).to include(total: 4, paused: 1, dlq: 1, undrained: 1)
+    end
+
+    # Paused queues' visible messages wait for a resume, not a worker; the
+    # DLQs have their own card.
+    it "counts only unpaused job queues as claimable" do
+      expect(data_source.queue_signal).to include(depth: 14, claimable: 8, waiting: 2, paused_depth: 4)
     end
 
     it "leaves stream queues out of the undrained count" do

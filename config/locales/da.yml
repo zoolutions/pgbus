@@ -114,6 +114,9 @@ da:
         dlq_see_why: åbn dead letter-siden for at se, hvorfor hver døde
         enqueued: Sat i kø
         enqueued_detail: "%{claimable} kan hentes nu · %{waiting} planlagt, kørende eller prøver igen"
+        enqueued_paused:
+          one: "%{count} i køer sat på pause"
+          other: "%{count} i køer sat på pause"
         parked_jobs: Parkerede job
         parked_jobs_oldest: ældst %{age}
         processes: Processer

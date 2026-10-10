@@ -114,6 +114,9 @@ it:
         dlq_see_why: apri la pagina dead-letter per vedere perché ciascuno è morto
         enqueued: In coda
         enqueued_detail: "%{claimable} disponibili ora · %{waiting} pianificati, in esecuzione o in ripetizione"
+        enqueued_paused:
+          one: "%{count} in code in pausa"
+          other: "%{count} in code in pausa"
         parked_jobs: Job parcheggiati
         parked_jobs_oldest: il più vecchio %{age}
         processes: Processi

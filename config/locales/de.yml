@@ -114,6 +114,9 @@ de:
         dlq_see_why: öffne die Dead-Letter-Seite, um zu sehen, warum jeder gestorben ist
         enqueued: Eingereiht
         enqueued_detail: "%{claimable} jetzt abholbar · %{waiting} geplant, laufend oder in Wiederholung"
+        enqueued_paused:
+          one: "%{count} in pausierten Warteschlangen"
+          other: "%{count} in pausierten Warteschlangen"
         parked_jobs: Geparkte Jobs
         parked_jobs_oldest: ältester %{age}
         processes: Prozesse

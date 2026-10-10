@@ -114,6 +114,9 @@ ja:
         dlq_see_why: デッドレターのページで、それぞれが失敗した理由を確認できます
         enqueued: キューに追加済み
         enqueued_detail: 今すぐ取得可能 %{claimable} 件 · スケジュール済み・実行中・再試行待ち %{waiting} 件
+        enqueued_paused:
+          one: 一時停止中のキューに %{count} 件
+          other: 一時停止中のキューに %{count} 件
         parked_jobs: 待機中のジョブ
         parked_jobs_oldest: 最古 %{age}
         processes: プロセス
