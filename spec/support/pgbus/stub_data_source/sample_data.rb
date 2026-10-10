@@ -121,11 +121,11 @@ module Pgbus
           Array.new(6) do |i|
             job_class = JOB_CLASSES[i % JOB_CLASSES.size]
             { msg_id: 900 - i, queue_name: "pgbus_default", read_ct: i,
-              enqueued_at: (now - (i * 300)).utc.iso8601, vt: (now - (i * 180)).utc.iso8601,
+              enqueued_at: (now - (i * 300)).utc.iso8601, vt: i == 1 ? now + 900 : (now - (i * 180)).utc.iso8601,
               last_read_at: i.positive? ? (now - (i * 120)).utc.iso8601 : nil,
               message: { job_class: job_class, job_id: "job-#{900 - i}", queue_name: "default",
                          priority: [1, 2, 5][i % 3], arguments: sample_arguments(job_class), locale: "en",
-                         timezone: "UTC", scheduled_at: i.even? ? (now + 60).utc.iso8601 : nil }.compact.to_json,
+                         timezone: "UTC", scheduled_at: sample_scheduled_at(now, i) }.compact.to_json,
               headers: i.even? ? { "X-Request-Id" => "req-#{900 - i}" }.to_json : nil }
           end
         end
@@ -181,14 +181,22 @@ module Pgbus
           ]
         end
 
+        # payload["scheduled_at"] in every shape ActiveJob has used: an ISO string
+        # (Rails >= 7.1) and epoch seconds (before), or absent.
+        def sample_scheduled_at(now, index)
+          return (now + 60).utc.iso8601 if index.even?
+
+          (now + 120).to_f if index == 3
+        end
+
         def sample_dlq_messages(now)
           [
             { msg_id: 501, queue_name: "pgbus_default_dlq", read_ct: 6, enqueued_at: (now - 7200).utc.iso8601,
-              vt: (now - 3600).utc.iso8601, headers: nil,
+              vt: (now - 3600).utc.iso8601, last_read_at: (now - 3600).utc.iso8601, headers: nil,
               message: { job_class: "ProcessPaymentJob", job_id: "dlq-aaa", arguments: [{ amount: 99.99 }],
                          priority: 1 }.to_json },
-            { msg_id: 502, queue_name: "pgbus_default_dlq", read_ct: 4, enqueued_at: (now - 18_000).utc.iso8601,
-              vt: (now - 14_400).utc.iso8601, headers: nil,
+            { msg_id: 502, queue_name: "pgbus_default_dlq", read_ct: 4, enqueued_at: now - 18_000,
+              vt: now - 14_400, last_read_at: now - 14_400, headers: nil,
               message: { job_class: "SyncInventoryJob", job_id: "dlq-bbb", arguments: [{ sku: "WIDGET-42" }],
                          priority: 2 }.to_json }
           ]
@@ -272,7 +280,8 @@ module Pgbus
             ["evt-pending-1", "invoice.created", "pgbus_billing_invoice_handler", { invoice_id: 7 }],
             ["evt-pending-2", "user.signed_up", "pgbus_notifications_slack_handler", { user_id: 42 }]
           ].each_with_index.map do |(event_id, type, queue, payload), i|
-            { msg_id: 701 + i, read_ct: i + 1, queue_name: queue, enqueued_at: (now - (600 * (i + 1))).utc.iso8601,
+            enqueued_at = now - (600 * (i + 1))
+            { msg_id: 701 + i, read_ct: i + 1, queue_name: queue, enqueued_at: i.zero? ? enqueued_at.utc.iso8601 : enqueued_at,
               last_read_at: (now - 60).utc.iso8601, vt: (now + 30).utc.iso8601, headers: nil,
               message: { event_id: event_id, event_type: type, payload: payload,
                          published_at: (now - (600 * (i + 1))).utc.iso8601 }.to_json }
@@ -283,7 +292,7 @@ module Pgbus
           [["Billing::InvoiceHandler", 120], ["Notifications::SlackHandler", 900],
            ["Billing::InvoiceHandler", 3600]].each_with_index.map do |(handler, ago), i|
             { "id" => i + 1, "event_id" => "evt-processed-#{i + 1}", "handler_class" => handler,
-              "processed_at" => (now - ago).utc.iso8601 }
+              "processed_at" => i.zero? ? now - ago : (now - ago).utc.iso8601 }
           end
         end
 
