@@ -32,7 +32,7 @@ module Pgbus
             logical: logical, capsules: capsules, wildcard: wildcard,
             handler: handler_queue_physical_names.include?(name), stream: stream_queue_names.include?(name),
             live_workers: healthy.count { |p| p[:kind].to_s == "worker" && worker_drains?(p, logical) },
-            live_consumers: healthy.count { |p| p[:kind].to_s == "consumer" },
+            live_consumers: healthy.count { |p| p[:kind].to_s == "consumer" && consumer_drains?(p, name) },
             siblings: level ? priority_siblings(name, logical) : [], priority_level: level
           }
         end
@@ -80,6 +80,18 @@ module Pgbus
         def worker_drains?(process, logical)
           queues = Array((process[:metadata] || {})["queues"]).flat_map { |q| q.to_s.split(",") }.map(&:strip)
           queues.include?("*") || queues.any? { |q| normalized_queue(q) == logical }
+        end
+
+        # A consumer drains a handler queue when one of its topic filters
+        # overlaps a subscription routed to it (the rule the consumer itself
+        # uses to pick queues). A heartbeat without topics counts.
+        def consumer_drains?(process, name)
+          topics = Array((process[:metadata] || {})["topics"])
+          return true if topics.empty?
+
+          patterns = registered_subscribers.select { |s| s[:physical_queue_name] == name }.map { |s| s[:pattern] }
+          registry = EventBus::Registry.instance
+          topics.any? { |t| patterns.any? { |pattern| registry.pattern_overlaps?(t.to_s, pattern) } }
         end
 
         def normalized_queue(queue)

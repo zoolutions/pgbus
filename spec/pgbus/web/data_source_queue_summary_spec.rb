@@ -107,6 +107,19 @@ RSpec.describe Pgbus::Web::DataSource::QueueSummary do
       expect(data_source.queue_drainers("pgbus_test_default")).to include(wildcard: true, capsules: [], live_workers: 1)
     end
 
+    it "counts only the consumers whose topics route to this handler queue" do
+      allow(data_source).to receive_messages(
+        registered_subscribers: [{ pattern: "invoice.*", physical_queue_name: "pgbus_test_billing" },
+                                 { pattern: "user.signed_up", physical_queue_name: "pgbus_test_slack" }],
+        processes: [{ kind: "consumer", healthy: true, metadata: { "topics" => ["invoice.*"] } },
+                    { kind: "consumer", healthy: true, metadata: { "topics" => ["user.signed_up"] } },
+                    { kind: "consumer", healthy: true, metadata: { "topics" => ["#"] } },
+                    { kind: "consumer", healthy: false, metadata: { "topics" => ["invoice.*"] } }]
+      )
+
+      expect(data_source.queue_drainers("pgbus_test_billing")).to include(live_consumers: 2)
+    end
+
     it "flags handler and stream queues" do
       allow(data_source).to receive_messages(handler_queue_physical_names: %w[pgbus_test_default],
                                              stream_queue_names: Set["pgbus_test_default"])
