@@ -607,6 +607,8 @@ config.capsule :render, queues: %w[render], threads: 1, processes: 4
 - **With `single_active_consumer: true`** each queue is locked by one fork at a time; a fork can still process the capsule's other queues. For a single-queue capsule that makes the extra forks hot standbys: use `processes:` there for failover, not throughput.
 - `processes:` must be a positive Integer (default `1`, so existing configs are unchanged). It is set on `c.capsule` or on an Array-form `workers` entry; the string DSL has no syntax for it.
 
+The three most common reasons to reach for `processes:` or per-capsule limits: CPU-bound rendering (PDFs, reports, templates) that one GVL serializes; one memory-hungry capsule among light ones, which gets its own `max_memory_mb:` instead of a separate container with a raised limit; and the same capsule string listed twice to get two processes, which becomes one named capsule with `processes: 2`. Use cases, a decision table and the memory and connection math for a job host: [Sizing capsules](https://pgbus.zoolutions.llc/docs/sizing-capsules).
+
 ### Retry backoff
 
 When a job fails, Pgbus extends the PGMQ visibility timeout with exponential backoff so retries are spread out instead of bunched at fixed intervals:

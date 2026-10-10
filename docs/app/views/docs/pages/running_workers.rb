@@ -196,6 +196,8 @@ class Views::Docs::Pages::RunningWorkers < DocsUI::Page
         `single_active_consumer: true` each queue is locked by one fork at a
         time; a fork can still process the capsule's other queues, so in a
         single-queue capsule the extra forks are hot standbys.
+
+        When to reach for which, with worked examples: [Sizing capsules](/docs/sizing-capsules).
       MD
     end
   end

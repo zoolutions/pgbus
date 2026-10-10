@@ -36,6 +36,7 @@ class Doc
 
   # Operations
   page "Running workers",       group: "Operations", slug: "running-workers", view: "RunningWorkers"
+  page "Sizing capsules",       group: "Operations", slug: "sizing-capsules", view: "SizingCapsules"
   page "Dashboard",             group: "Operations"
   page "Observability",         group: "Operations"
   page "Performance & tuning",  group: "Operations", slug: "performance-tuning", view: "PerformanceTuning"
