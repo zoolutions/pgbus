@@ -6,6 +6,7 @@ module Pgbus
   module Web
     class DataSource
       include JobList
+      include ListCounts
 
       # Ceiling on how many parked jobs one dashboard release promotes, so a
       # key with thousands parked cannot hold the request open. The dispatcher
@@ -505,8 +506,11 @@ module Pgbus
       end
 
       # Recurring tasks
-      def recurring_tasks
-        records = RecurringTask.order(:key).to_a
+      # page/per_page nil returns every task (the MCP tool's default).
+      def recurring_tasks(page: nil, per_page: nil)
+        scope = RecurringTask.order(:key)
+        scope = scope.limit(per_page).offset((page - 1) * per_page) if per_page
+        records = scope.to_a
         last_runs = RecurringExecution
                     .where(task_key: records.map(&:key))
                     .select("task_key, MAX(run_at) AS run_at")
@@ -618,13 +622,6 @@ module Pgbus
         false
       end
 
-      def recurring_tasks_count
-        RecurringTask.count
-      rescue StandardError => e
-        Pgbus.logger.debug { "[Pgbus::Web] Error counting recurring tasks: #{e.message}" }
-        0
-      end
-
       # Outbox
       def outbox_stats
         {
@@ -670,8 +667,8 @@ module Pgbus
       end
 
       # Job uniqueness keys
-      def job_locks
-        UniquenessKey.order(created_at: :desc).limit(100).map do |key|
+      def job_locks(page: 1, per_page: 100)
+        UniquenessKey.order(created_at: :desc).limit(per_page).offset((page - 1) * per_page).map do |key|
           {
             lock_key: key.lock_key,
             queue_name: key.queue_name,
@@ -686,12 +683,11 @@ module Pgbus
       end
 
       # Concurrency keys — the `limits_concurrency` slot table and the jobs
-      # parked behind it. Aggregate numbers plus up to 100 key rows, busiest
-      # first. The two tables are joined FULL OUTER, not LEFT: a key can have
-      # parked rows and no semaphore (its holder died and the sweep removed the
-      # row) or a semaphore and nothing parked — an operator needs to see both.
-      def concurrency_stats
-        concurrency_summary.merge(keys: concurrency_keys)
+      # parked behind it. Aggregate numbers plus one page of key rows (100 by
+      # default), busiest first. The two tables are joined FULL OUTER, not LEFT
+      # (ListCounts::CONCURRENCY_KEYS_FROM) — an operator needs to see both.
+      def concurrency_stats(page: 1, per_page: 100)
+        concurrency_summary.merge(keys: concurrency_keys(page: page, per_page: per_page))
       end
 
       # Drop a key's semaphore row and promote whatever can now run.
@@ -763,8 +759,8 @@ module Pgbus
       end
 
       # Batches
-      def batches(limit: 100)
-        records = BatchEntry.order(created_at: :desc).limit(limit).to_a
+      def batches(page: 1, per_page: 25)
+        records = BatchEntry.order(created_at: :desc).limit(per_page).offset((page - 1) * per_page).to_a
         pending = pending_jobs_by_batch(records.map(&:batch_id))
         records.map { |r| format_batch(r, pending_jobs: pending[r.batch_id]) }
       rescue StandardError => e
@@ -788,13 +784,6 @@ module Pgbus
       rescue StandardError => e
         Pgbus.logger.debug { "[Pgbus::Web] Error fetching batch #{batch_id}: #{e.message}" }
         nil
-      end
-
-      def batches_count
-        BatchEntry.count
-      rescue StandardError => e
-        Pgbus.logger.debug { "[Pgbus::Web] Error counting batches: #{e.message}" }
-        0
       end
 
       def active_batches_count
@@ -1154,7 +1143,7 @@ module Pgbus
       # `lease_fresh` is the one fact an operator needs before releasing a key:
       # a live lease means a holder is probably still running, so releasing lets
       # another job start beside it.
-      def concurrency_keys(limit: 100)
+      def concurrency_keys(page: 1, per_page: 100)
         rows = connection.select_all(<<~SQL, "Pgbus Concurrency Keys")
           SELECT COALESCE(s.key, b.concurrency_key) AS key,
                  s.value AS value,
@@ -1163,14 +1152,9 @@ module Pgbus
                  (s.value > 0 AND s.expires_at > now()) AS lease_fresh,
                  COALESCE(b.parked_count, 0) AS parked_count,
                  EXTRACT(EPOCH FROM (now() - b.oldest_parked_at))::bigint AS oldest_parked_age_sec
-          FROM pgbus_semaphores s
-          FULL OUTER JOIN (
-            SELECT concurrency_key, COUNT(*) AS parked_count, MIN(created_at) AS oldest_parked_at
-            FROM pgbus_blocked_executions
-            GROUP BY concurrency_key
-          ) b ON s.key = b.concurrency_key
+          #{CONCURRENCY_KEYS_FROM}
           ORDER BY COALESCE(b.parked_count, 0) DESC, s.expires_at ASC NULLS LAST
-          LIMIT #{limit.to_i}
+          LIMIT #{per_page.to_i} OFFSET #{(page.to_i - 1) * per_page.to_i}
         SQL
 
         rows.to_a.map { |row| format_concurrency_key(row) }

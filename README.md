@@ -1211,9 +1211,9 @@ All tools are read-only — no tool mutates state, and there is no raw-SQL passt
 | `pgbus_processes` | Every process with kind, pid, heartbeat age, and `healthy`/`stale`/`stalled` status. |
 | `pgbus_jobs` / `pgbus_job_detail` | Inspect enqueued messages (`read_ct`, `vt`, `enqueued_at`). Paginated. |
 | `pgbus_dlq` / `pgbus_dlq_detail` | Dead-letter inspection. Paginated. |
-| `pgbus_locks` | Active uniqueness locks (the leaked-lock diagnostic). |
+| `pgbus_locks` | Active uniqueness locks (the leaked-lock diagnostic). Paginated (`page`, `per_page` max 100; returns `total`, `has_more`). |
 | `pgbus_throughput` / `pgbus_stats` | Recent throughput time series and status counts. |
-| `pgbus_recurring` | Recurring task schedule + last/next run times. |
+| `pgbus_recurring` | Recurring task schedule + last/next run times. All tasks unless `page` / `per_page` is given; returns `total`, `has_more`. |
 
 #### Security
 
