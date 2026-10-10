@@ -24,7 +24,7 @@ RSpec.describe "Pgbus::QueuesController", type: :request do
       it "lists this queue's jobs on the requested tab" do
         get "/pgbus/queues/pgbus_default", params: { state: "ready" }
 
-        expect(job_rows_call).to eq(state: "ready", queue_name: "pgbus_default", page: 1,
+        expect(job_rows_call).to eq(state: "ready", queue_name: "pgbus_default", queues: nil, exclude: nil, page: 1,
                                     per_page: Pgbus.configuration.web_per_page)
       end
 
