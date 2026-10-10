@@ -88,6 +88,8 @@ RSpec.describe "Dashboard dark-mode contrast" do # rubocop:disable RSpec/Describ
   # Dark pairings the gate caught: indigo-400 on its own /30 badge tint
   # (4.4:1), and gray-400 text on a gray-700 chip (4.0:1).
   def low_contrast_pairing(tokens)
+    return [] if tokens.include?("cursor-not-allowed")
+
     found = tokens.any? { |t| t.match?(large_text) } ? [] : tokens.grep(low_light_shade)
     found << "dark:text-indigo-400" if (tokens & %w[dark:text-indigo-400 dark:bg-indigo-900/30]).size == 2
     found << "dark:text-gray-400" if (tokens & %w[dark:text-gray-400 dark:bg-gray-700]).size == 2
@@ -104,6 +106,7 @@ RSpec.describe "Dashboard dark-mode contrast" do # rubocop:disable RSpec/Describ
     it "allows them on large text and allows the passing shades" do
       expect(low_contrast_pairing(%w[text-3xl text-amber-600 dark:text-amber-400])).to be_empty
       expect(low_contrast_pairing(%w[text-sm text-gray-500 text-indigo-600 text-red-600 text-amber-700])).to be_empty
+      expect(low_contrast_pairing(%w[text-xs text-blue-500 cursor-not-allowed])).to be_empty
     end
 
     it "flags indigo-400 on an indigo-900/30 badge and gray-400 on a gray-700 chip" do

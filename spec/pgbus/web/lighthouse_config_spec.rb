@@ -52,7 +52,7 @@ RSpec.describe "Lighthouse dashboard config" do # rubocop:disable RSpec/Describe
     )
   end
 
-  it "only warns on the JavaScript-weight audits" do
+  it "keeps the JavaScript-weight audits non-blocking" do
     expect(assertions.values_at("unminified-javascript", "unused-javascript")).to all(eq("warn"))
   end
 
