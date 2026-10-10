@@ -1,0 +1,23 @@
+.github/workflows/main.yml
+  ai_agent 149
+spec/pgbus/ci_coverage_spec.rb
+  s_11df82d1e5ec0a::t_59d1877e05dfbf 10-31,38,41-43,53-61,64-65,68-69
+CHANGELOG.md
+  ai_agent 25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "0379555cb8d2222a51f318e4c43280929e30e6eb",
+  "prompts": {},
+  "sessions": {
+    "s_11df82d1e5ec0a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "61900b5f-cb9d-4cfa-94c4-48d41c649d92",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
