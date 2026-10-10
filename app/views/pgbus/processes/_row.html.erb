@@ -8,12 +8,12 @@
     <details data-job-toggle class="group">
       <summary class="cursor-pointer list-none font-medium text-indigo-600 hover:text-indigo-800 dark:hover:text-indigo-300 dark:text-indigo-400"><%= process[:kind] %></summary>
     </details>
-    <span class="block text-xs font-mono text-gray-700 dark:text-gray-300"><%= process[:hostname] %> · <%= process[:pid] %></span>
+    <span class="block whitespace-nowrap text-xs font-mono text-gray-700 dark:text-gray-300"><%= process[:hostname] %> · <%= process[:pid] %></span>
     <% if metadata["capsule"] %>
       <span class="block text-xs text-gray-600 dark:text-gray-300"><%= t("pgbus.processes.processes_table.capsule", capsule: metadata["capsule"], process: metadata["process"] || "—") %></span>
     <% end %>
     <% if state.supervisor_pid %>
-      <span class="block text-xs text-gray-600 dark:text-gray-300"><%= t("pgbus.processes.processes_table.under_supervisor", pid: state.supervisor_pid) %></span>
+      <span class="block whitespace-nowrap text-xs text-gray-600 dark:text-gray-300"><%= t("pgbus.processes.processes_table.under_supervisor", pid: state.supervisor_pid) %></span>
     <% end %>
   </td>
   <td data-label="<%= t("pgbus.processes.processes_table.headers.status") %>" class="px-4 py-3 text-sm align-top">
