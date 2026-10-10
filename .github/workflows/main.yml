@@ -309,6 +309,10 @@ jobs:
       RAILS_ENV: test
       HEADLESS: "true"
       PLAYWRIGHT_BROWSERS_PATH: /home/runner/.cache/ms-playwright
+      # Playwright 1.58 has no ubuntu26.04 build mapping and refuses to
+      # install; the 24.04 Chromium build runs on 26.04. Without this every
+      # bun.lock change (a Playwright cache miss) breaks the job.
+      PLAYWRIGHT_HOST_PLATFORM_OVERRIDE: ubuntu24.04-x64
 
     steps:
       - uses: actions/checkout@v6
