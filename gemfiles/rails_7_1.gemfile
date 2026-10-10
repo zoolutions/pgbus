@@ -9,7 +9,8 @@
 #
 # Usage:
 #   BUNDLE_GEMFILE=gemfiles/rails_7_1.gemfile bundle install
-#   BUNDLE_GEMFILE=gemfiles/rails_7_1.gemfile bundle exec rspec spec/pgbus/ spec/generators/
+#   BUNDLE_GEMFILE=gemfiles/rails_7_1.gemfile bundle exec rspec spec/pgbus/ spec/generators/ \
+#     spec/requests/ spec/rubocop/ spec/benchmarks/ spec/i18n_spec.rb spec/pgbus_spec.rb
 #
 # The companion lock (rails_7_1.gemfile.lock) is checked in — like the root
 # Gemfile.lock — so CI resolves the exact 7.1.x set.
