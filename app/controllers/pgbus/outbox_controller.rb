@@ -7,6 +7,7 @@ module Pgbus
       @page = page_param
       @per_page = per_page
       @entries = data_source.outbox_entries(page: @page, per_page: @per_page)
+      @entries_count = data_source.list_count(:outbox)
     end
   end
 end

@@ -70,6 +70,12 @@ module Pgbus
           ::MCP::Tool::Response.new([{ type: "text", text: JSON.generate(redacted) }])
         end
 
+        # Past the count cap the total is a lower bound, so only a full page
+        # can have another one behind it.
+        def more_pages?(count, page:, per_page:, shown:)
+          count.capped? ? shown == per_page : page * per_page < count.total
+        end
+
         # Wrap an error message as an MCP error response (isError: true) so the
         # client surfaces it as a tool failure rather than a normal result.
         def error_response(message)

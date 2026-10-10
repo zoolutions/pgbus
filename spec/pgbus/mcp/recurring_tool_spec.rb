@@ -82,8 +82,14 @@ RSpec.describe Pgbus::MCP::Tools::RecurringTool do
     let(:total) { 10_000 }
     let(:capped) { true }
 
-    it "reports has_more even on the last counted page" do
+    it "reports has_more on a full page past the counted cap" do
+      allow(data_source).to receive(:recurring_tasks).and_return(Array.new(100) { |i| { key: "t#{i}" } })
+
       expect(result(page: 100, per_page: 100)).to include("total" => 10_000, "has_more" => true)
+    end
+
+    it "stops reporting has_more on a short page past the cap" do
+      expect(result(page: 102, per_page: 100)).to include("has_more" => false)
     end
   end
 end

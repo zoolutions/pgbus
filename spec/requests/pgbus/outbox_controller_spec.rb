@@ -27,6 +27,14 @@ RSpec.describe "Pgbus::OutboxController", type: :request do
         expect(response.body).to include("Showing 26–30 of 30", 'aria-label="Pagination"', "orders.row25")
         expect(response.body).not_to include("orders.row24<")
       end
+
+      it "shows a lower bound when the count is capped" do
+        @stub_data_source.capped_lists = [:outbox]
+
+        get "/pgbus/outbox"
+
+        expect(response.body).to include("Showing 1–25 of 10,000+")
+      end
     end
   end
 end

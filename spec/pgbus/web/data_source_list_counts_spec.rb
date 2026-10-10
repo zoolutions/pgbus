@@ -20,6 +20,7 @@ RSpec.describe Pgbus::Web::DataSource::ListCounts do
     {
       batches: Pgbus::BatchEntry,
       job_locks: Pgbus::UniquenessKey,
+      outbox: Pgbus::OutboxEntry,
       recurring_tasks: Pgbus::RecurringTask
     }.each do |list, model|
       it "counts #{list} through a LIMIT cap + 1 probe" do
@@ -68,7 +69,7 @@ RSpec.describe Pgbus::Web::DataSource::ListCounts do
   describe "#batches" do
     it "pages with an offset" do
       scope = double("scope")
-      allow(Pgbus::BatchEntry).to receive(:order).with(created_at: :desc).and_return(scope)
+      allow(Pgbus::BatchEntry).to receive(:order).with(created_at: :desc, id: :desc).and_return(scope)
       allow(scope).to receive(:limit).with(25).and_return(scope)
       allow(scope).to receive(:offset).with(25).and_return([])
 
@@ -81,7 +82,7 @@ RSpec.describe Pgbus::Web::DataSource::ListCounts do
     let(:scope) { double("scope") }
 
     before do
-      allow(Pgbus::UniquenessKey).to receive(:order).with(created_at: :desc).and_return(scope)
+      allow(Pgbus::UniquenessKey).to receive(:order).with(created_at: :desc, lock_key: :asc).and_return(scope)
       allow(scope).to receive_messages(limit: scope, offset: [])
     end
 
@@ -115,6 +116,8 @@ RSpec.describe Pgbus::Web::DataSource::ListCounts do
 
       expect(stats.keys).to eq(%i[parked_total oldest_parked_age_sec slots_held keys_at_limit keys])
       expect(keys_sql.last).to include("LIMIT 100 OFFSET 0")
+      # A unique last sort key, so OFFSET pages never skip or repeat a tied row.
+      expect(keys_sql.last).to match(/ORDER BY .*COALESCE\(s\.key, b\.concurrency_key\)\s+LIMIT/m)
     end
 
     it "pages the key rows" do
@@ -131,6 +134,12 @@ RSpec.describe Pgbus::Web::DataSource::ListCounts do
       allow(Pgbus::RecurringTask).to receive(:order).with(:key).and_return(scope)
       allow(scope).to receive_messages(limit: scope, offset: scope)
       allow(Pgbus::RecurringExecution).to receive(:where).and_return(double(select: double(group: double(index_by: {}))))
+    end
+
+    it "starts at page 1 when only a page size is given" do
+      data_source.recurring_tasks(per_page: 10)
+
+      expect(scope).to have_received(:offset).with(0)
     end
 
     it "returns every row when called with no arguments (MCP default)" do

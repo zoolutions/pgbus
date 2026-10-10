@@ -37,7 +37,7 @@ module Pgbus
 
           json_response(
             { locks: locks, page: page, per_page: per_page, total: count.total,
-              has_more: count.capped? || (page * per_page) < count.total }
+              has_more: more_pages?(count, page: page, per_page: per_page, shown: locks.size) }
           )
         end
       end

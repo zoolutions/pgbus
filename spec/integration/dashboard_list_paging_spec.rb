@@ -49,5 +49,17 @@ RSpec.describe "Dashboard list paging (integration)", :integration do
       expect(data_source.job_locks(page: 2, per_page: 2).size).to eq(1)
       expect(data_source.job_locks.size).to eq(3)
     end
+
+    it "pages rows that share one created_at without skipping or repeating any" do
+      Pgbus::UniquenessKey.delete_all
+      # One transaction: now() is the same for every row, so created_at ties.
+      Pgbus::UniquenessKey.transaction do
+        7.times { |i| Pgbus::UniquenessKey.acquire!("tied-lock-#{i}", queue_name: "default", msg_id: i) }
+      end
+
+      keys = (1..4).flat_map { |page| data_source.job_locks(page: page, per_page: 2).map { |l| l[:lock_key] } }
+
+      expect(keys).to match_array(Array.new(7) { |i| "tied-lock-#{i}" })
+    end
   end
 end

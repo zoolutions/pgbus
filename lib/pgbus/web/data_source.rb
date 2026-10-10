@@ -509,7 +509,7 @@ module Pgbus
       # page/per_page nil returns every task (the MCP tool's default).
       def recurring_tasks(page: nil, per_page: nil)
         scope = RecurringTask.order(:key)
-        scope = scope.limit(per_page).offset((page - 1) * per_page) if per_page
+        scope = scope.limit(per_page).offset(((page || 1) - 1) * per_page) if per_page
         records = scope.to_a
         last_runs = RecurringExecution
                     .where(task_key: records.map(&:key))
@@ -668,7 +668,7 @@ module Pgbus
 
       # Job uniqueness keys
       def job_locks(page: 1, per_page: 100)
-        UniquenessKey.order(created_at: :desc).limit(per_page).offset((page - 1) * per_page).map do |key|
+        UniquenessKey.order(created_at: :desc, lock_key: :asc).limit(per_page).offset((page - 1) * per_page).map do |key|
           {
             lock_key: key.lock_key,
             queue_name: key.queue_name,
@@ -760,7 +760,7 @@ module Pgbus
 
       # Batches
       def batches(page: 1, per_page: 25)
-        records = BatchEntry.order(created_at: :desc).limit(per_page).offset((page - 1) * per_page).to_a
+        records = BatchEntry.order(created_at: :desc, id: :desc).limit(per_page).offset((page - 1) * per_page).to_a
         pending = pending_jobs_by_batch(records.map(&:batch_id))
         records.map { |r| format_batch(r, pending_jobs: pending[r.batch_id]) }
       rescue StandardError => e
@@ -1153,7 +1153,7 @@ module Pgbus
                  COALESCE(b.parked_count, 0) AS parked_count,
                  EXTRACT(EPOCH FROM (now() - b.oldest_parked_at))::bigint AS oldest_parked_age_sec
           #{CONCURRENCY_KEYS_FROM}
-          ORDER BY COALESCE(b.parked_count, 0) DESC, s.expires_at ASC NULLS LAST
+          ORDER BY COALESCE(b.parked_count, 0) DESC, s.expires_at ASC NULLS LAST, COALESCE(s.key, b.concurrency_key)
           LIMIT #{per_page.to_i} OFFSET #{(page.to_i - 1) * per_page.to_i}
         SQL
 

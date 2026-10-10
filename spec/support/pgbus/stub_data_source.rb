@@ -142,6 +142,7 @@ module Pgbus
       # capped_lists names the lists whose count reports "more than COUNT_CAP".
       def list_count(list)
         rows = { batches: @batches_list, job_locks: @locks_list, recurring_tasks: @recurring_tasks_list,
+                 outbox: @outbox_entries_list,
                  concurrency_keys: @concurrency_stats_hash[:keys] }.fetch(list)
         counts = Pgbus::Web::DataSource::ListCounts
         return counts::Count.new(total: counts::COUNT_CAP, capped: true) if @capped_lists.include?(list)

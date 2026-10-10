@@ -31,10 +31,11 @@ module Pgbus
         LIST_MODELS = {
           batches: -> { BatchEntry },
           job_locks: -> { UniquenessKey },
+          outbox: -> { OutboxEntry },
           recurring_tasks: -> { RecurringTask }
         }.freeze
 
-        # list – :batches, :job_locks, :concurrency_keys or :recurring_tasks.
+        # list – :batches, :job_locks, :concurrency_keys, :outbox or :recurring_tasks.
         def list_count(list)
           raise ArgumentError, "unknown list: #{list.inspect}" unless list == :concurrency_keys || LIST_MODELS.key?(list)
 
