@@ -1,0 +1,25 @@
+spec/integration/dead_letter_reason_spec.rb
+  s_364c84711a3705::t_65e2102463f50d 1-123
+docs/app/views/docs/pages/retries_dead_letters.rb
+  s_364c84711a3705::t_97fbab77c9a82c 16,97-136
+lib/pgbus/instrumentation.rb
+  s_364c84711a3705::t_97fbab77c9a82c 18-19
+docs/app/views/docs/pages/dashboard.rb
+  s_364c84711a3705::t_97fbab77c9a82c 39
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "28863a767db356ad48006cb0296ea78982d8e13f",
+  "prompts": {},
+  "sessions": {
+    "s_364c84711a3705": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8cab8bba-398f-49c5-ab3b-66a236e3b01c",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
