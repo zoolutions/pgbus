@@ -185,8 +185,8 @@ class Views::Docs::Pages::RunningWorkers < DocsUI::Page
         and concurrency controls behave as with one process. Each fork has its own
         restart backoff, liveness pipe and `pgbus_processes` row; a crashed fork
         restarts alone. The boot banner prints `processes=N`, readiness counts every
-        fork, and the Processes page labels each row `capsule: render`,
-        `process: 2/4`.
+        fork, and the Processes page labels each row `capsule render ·
+        process 2/4`.
 
         Budget `boot RSS + peak job RSS` per process; the forks share the booted
         app copy-on-write until they write to it. Every process has its own pool,

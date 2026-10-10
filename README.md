@@ -600,7 +600,7 @@ config.capsule :render, queues: %w[render], threads: 1, processes: 4
 | Burning CPU | `processes:` up to the cores you can give the capsule, `threads: 1`–`2` |
 
 - **One queue, N processes.** All N workers read the same queues with `FOR UPDATE SKIP LOCKED`; there is no sharding, so enqueue-time uniqueness and concurrency controls behave as with one process. The queue-overlap rule for named capsules is unchanged: the forks belong to one capsule.
-- **Each fork is supervised on its own.** It has its own restart backoff, liveness pipe, wake pipe and `pgbus_processes` row. A crashed fork restarts alone; its siblings keep running. The boot banner prints `processes=N`, readiness counts every fork, and the dashboard's Processes page labels each row `capsule: render` and `process: 2/4`.
+- **Each fork is supervised on its own.** It has its own restart backoff, liveness pipe, wake pipe and `pgbus_processes` row. A crashed fork restarts alone; its siblings keep running. The boot banner prints `processes=N`, readiness counts every fork, and the dashboard's Processes page labels each row `capsule render · process 2/4`.
 - **Memory.** Budget roughly `boot RSS + peak job RSS` per process. The forks share the booted app's memory copy-on-write until they write to it, so N forks cost less than N separate supervisors, which each boot the app.
 - **Connections.** Every process has its own pool (`pool=` in the boot banner), so a host holds about `processes × pool_size` connections for the capsule. Under the default `worker_notify_scope: :supervisor` the host still holds one LISTEN connection; under `:fork` each fork holds its own, and `pgbus doctor`'s connection budget counts them.
 - **Shutdown.** The stop timeout applies to every fork at once, so N forks drain in parallel and need no longer `shutdown_timeout`.
@@ -2174,7 +2174,7 @@ The dashboard is a mountable Rails engine at `/pgbus` with:
 - **Queues** — per-queue metrics, purge/pause/resume/delete actions
 - **Jobs** — one list of every job with its state (Ready / Scheduled / Running / Retrying / Blocked), why it is waiting and when it will run, filter tabs with counts, paging, retry/discard actions
 - **Dead letter** — DLQ messages with retry/discard, bulk actions
-- **Processes** — active workers/dispatcher/consumers with heartbeat status **and per-worker throughput** (e.g. `12.4/s processed · 0.2/s failed`)
+- **Processes** — every process with its status in words: why it is Healthy, Stalled or Stale (against which limit) and what happens next (the supervisor's watchdog restarts it, the dispatcher removes it within 5 minutes, or nothing will); what it is doing (queues or topics, busy threads, buffered claims, jobs/s); recycle progress (`1,240 / 10,000 jobs · 310 / 512 MB · up 42m 0s / 1h 0m`); uptime; and the supervisor that owns it
 - **Events** — one list of pending events with their state (Ready / Scheduled / Handling / Retrying), the handler that will run each one and why it is waiting (jobs ahead, queue paused, no running consumer subscribes to its pattern), the failed attempt and its error, tabs, paging and the existing actions; the processed-events audit says whether each claim completed, is being handled or went silent, with Replay for completed claims still in the archive; subscribers say whether a running consumer drains them
 - **Outbox** — transactional outbox entries pending publication
 - **Locks** — active job uniqueness locks with state (queued/executing), owner PID@hostname, age
@@ -2182,7 +2182,7 @@ The dashboard is a mountable Rails engine at `/pgbus` with:
 
 All tables use Turbo Frames for periodic auto-refresh without page reloads. Destructive actions use styled confirmation dialogs (not browser `confirm()`), and flash messages appear as auto-dismissing toast notifications.
 
-Each worker snapshots its live in-process rate counter (dequeued/processed/failed) into its heartbeat metadata on every beat, so the Processes panel shows a cluster-wide, near-real-time throughput view with no extra query. Zero rates are omitted from the rendered string. Non-worker processes (dispatcher, scheduler, consumers) carry no rate data and render only their static boot metadata, unchanged.
+Each process writes what the Processes page states into its heartbeat metadata, once per 60 s beat and never per job: `started_at`, `supervisor_pid` (the forking supervisor's pid), and for workers and consumers the pool's `capacity`/`busy`, `buffered`, `memory_mb`, handled/processed counts, live rates and the recycle limits that process resolved (`max_jobs`, `max_memory_mb`, `max_lifetime`; a capsule's own limits when set). A process from before these keys existed shows "—" where a fact is missing. A row is grouped under a supervisor only when that supervisor's row is on the same host. The stall limits the page quotes are the dashboard host's `stall_threshold`. `pgbus_worker_pool_capacity` and `pgbus_worker_pool_busy` (`/pgbus/api/metrics`) read the same `capacity`/`busy` keys.
 
 #### Queue management
 

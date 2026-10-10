@@ -37,7 +37,7 @@ class Views::Docs::Pages::Dashboard < DocsUI::Page
           [ "Queues", "Per-queue metrics with purge / pause / resume / delete." ],
           [ "Jobs", "Enqueued and failed jobs, with retry / discard." ],
           [ "Dead letter", "New dead messages show why they died — the last recorded error when available, attempts, and source queue — filterable by DLQ and error class, with retry / discard and bulk actions." ],
-          [ "Processes", [ :md, "Active workers, dispatcher, consumers with heartbeat status **and per-worker throughput** (e.g. `12.4/s processed · 0.2/s failed`)." ] ],
+          [ "Processes", [ :md, "Every process with its status in words: why it is Healthy, Stalled or Stale against which limit, and what happens next (the supervisor's watchdog restarts it, the dispatcher removes it within 5 minutes, or nothing will). Each row also says what the process is doing (queues or topics, busy threads, buffered claims, jobs/s), how close it is to a recycle (`1,240 / 10,000 jobs · 310 / 512 MB · up 42m 0s / 1h 0m`), its uptime and its supervisor." ] ],
           [ "Events", "Pending events with their state, the handler that runs each one and why it waits (or which attempt failed with what error); processed events say whether each claim completed, is being handled or went silent, with Replay when the claim completed, its handler is still registered and the archive still holds the event; subscribers say whether a running consumer drains them." ],
           [ "Outbox", "Transactional outbox entries pending publication." ],
           [ "Locks", "Uniqueness locks and concurrency keys — value, limit, lease, parked jobs; release a key or discard its parked jobs." ],
@@ -52,13 +52,15 @@ class Views::Docs::Pages::Dashboard < DocsUI::Page
         plain ". Stats are buffered and bulk-inserted; if the migration hasn't run, recording is silently skipped."
       end
       md <<~'MD'
-        Each worker snapshots its live in-process rate counter (dequeued / processed
-        / failed) into its heartbeat metadata on every beat, so the Processes panel
-        shows a cluster-wide, near-real-time throughput view with no extra query —
-        `Web::DataSource` just passes the existing heartbeat metadata through.
-        Zero rates are omitted from the rendered string. Non-worker processes
-        (dispatcher, scheduler, consumers) carry no rate data and render only their
-        static boot metadata, unchanged.
+        Each process writes what the Processes page states into its heartbeat
+        metadata, once per 60 s beat and never per job: its start time, the pid of
+        the supervisor that forked it, and (workers and consumers) the pool's
+        capacity and busy count, buffered claims, RSS, handled/processed counts,
+        live rates and the recycle limits that process resolved (a capsule's own
+        limits when set). A process from before these keys existed shows "—" where
+        a fact is missing. A row is grouped under a supervisor only when that
+        supervisor's row is on the same host. The stall limits the page quotes are
+        the dashboard host's `stall_threshold`, as the badge always was.
       MD
     end
   end
