@@ -76,7 +76,7 @@ RSpec.describe "Events", type: :system do
       end
     end
 
-    it "explains every row in words: handler, state, attempts and what happens next" do
+    it "explains waiting rows in words: handler, state, attempts and what happens next" do
       visit "/pgbus/events"
 
       within("tr[data-event-row][data-msg-id='11']") do
@@ -91,6 +91,11 @@ RSpec.describe "Events", type: :system do
         expect(page).to have_text("No running consumer subscribes to webhook.* (WebhookHandler)")
       end
       within("tr[data-event-row][data-msg-id='13']") { expect(page).to have_text("Scheduled — handled by OrderHandler in 1h") }
+    end
+
+    it "explains handling, failed and orphaned rows in words" do
+      visit "/pgbus/events"
+
       within("tr[data-event-row][data-msg-id='14']") do
         expect(page).to have_text("Handling")
         expect(page).to have_text(/Being handled by OrderHandler — claimed \d+s ago · lease expires in \d+s/)
@@ -148,7 +153,7 @@ RSpec.describe "Events", type: :system do
       accept_confirm_dialog
 
       expect(page).to have_toast("handled")
-      expect(@stub_data_source.calls[:mark_event_handled].last).to eq(["pgbus_orders_handler", "11", "OrderHandler"])
+      expect(@stub_data_source.calls[:mark_event_handled].last).to eq(%w[pgbus_orders_handler 11 OrderHandler])
     end
 
     it "offers no Mark Handled while the handler is running" do
@@ -167,7 +172,7 @@ RSpec.describe "Events", type: :system do
       accept_confirm_dialog
 
       expect(page).to have_toast("discarded")
-      expect(@stub_data_source.calls[:discard_event].last).to eq(["pgbus_orders_handler", "11"])
+      expect(@stub_data_source.calls[:discard_event].last).to eq(%w[pgbus_orders_handler 11])
     end
 
     it "reroutes an event to another handler" do
@@ -182,7 +187,7 @@ RSpec.describe "Events", type: :system do
 
       expect(page).to have_toast("rerouted")
       expect(@stub_data_source.calls[:reroute_event].last)
-        .to eq(["pgbus_orders_handler", "11", "pgbus_webhook_handler"])
+        .to eq(%w[pgbus_orders_handler 11 pgbus_webhook_handler])
     end
 
     it "edits the payload and re-enqueues the event" do

@@ -59,9 +59,11 @@ RSpec.describe Pgbus::EventsHelper do
   end
 
   describe "processed events" do
-    def processed(state, key, tone) = Pgbus::Web::EventState::ProcessedResult.new(
-      state: state, reason_key: key, reason_args: { ago: now - 300 }, badge_tone: tone
-    )
+    def processed(state, key, tone)
+      Pgbus::Web::EventState::ProcessedResult.new(
+        state: state, reason_key: key, reason_args: { ago: now - 300 }, badge_tone: tone
+      )
+    end
 
     it "badges a completed claim green" do
       expect(helper.pgbus_processed_event_badge(processed("completed", "completed", :green)))
