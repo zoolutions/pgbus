@@ -175,6 +175,30 @@ module Pgbus
       I18n.t("pgbus.jobs.list.reasons.#{result.reason_key}", **args)
     end
 
+    # A QueueSummary::Line in words. :ago is a past moment, :time a future
+    # one, :age a wait in seconds.
+    def pgbus_queue_summary_line(line)
+      args = line.args.to_h do |key, value|
+        case key
+        when :ago then [key, pgbus_time_ago(value)]
+        when :time then [key, pgbus_job_eta(value)]
+        when :age then [key, pgbus_duration(value)]
+        else [key, value]
+        end
+      end
+      I18n.t("pgbus.queues.show.summary.#{line.key}", **args)
+    end
+
+    QUEUE_SUMMARY_TONE_CSS = {
+      yellow: "bg-yellow-50 text-yellow-800 ring-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-200 dark:ring-yellow-800",
+      red: "bg-red-50 text-red-800 ring-red-200 dark:bg-red-900/30 dark:text-red-200 dark:ring-red-800",
+      gray: "bg-gray-50 text-gray-700 ring-gray-200 dark:bg-gray-900/40 dark:text-gray-200 dark:ring-gray-700"
+    }.freeze
+
+    def pgbus_queue_summary_classes(tone)
+      QUEUE_SUMMARY_TONE_CSS.fetch(tone, QUEUE_SUMMARY_TONE_CSS[:gray])
+    end
+
     def pgbus_job_eta(time)
       return "—" unless time
 

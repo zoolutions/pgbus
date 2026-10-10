@@ -555,51 +555,62 @@ ja:
           visible: 表示中
         pause: 一時停止
         pause_confirm: "%{name} の処理を一時停止しますか？"
-        paused: 一時停止中
         purge: パージ
         purge_confirm: "%{name} からすべてのメッセージを削除しますか？"
         resume: 再開
       show:
-        arguments: 引数
         back: キューに戻る
         delete_confirm: このキューを完全に削除しますか？この操作は取り消せません。
         delete_queue: キューを削除
-        depth: 深さ：
-        discard: 破棄
-        discard_confirm: このメッセージを破棄しますか？
-        empty: キューは空です
-        full_json_payload: 完全なJSONペイロード
-        headers:
-          enqueued: エンキュー済み
-          id: ID
-          job_class: ジョブクラス
-          reads: 読み取り回数
-          vt: VT
-        headers_section: ヘッダー
-        job_id: ジョブID：
+        dlq_link: デッドレターページで再試行または破棄
+        dlq_pointer:
+          one: "%{logical} のデッドレターキュー — メッセージ %{count} 件。"
+          other: "%{logical} のデッドレターキュー — メッセージ %{count} 件。"
         message_discard_failed: メッセージを破棄できませんでした。
         message_discarded: メッセージを破棄しました。
         message_retried: メッセージの可視性をリセットしました。
         message_retry_failed: メッセージをリトライできませんでした。
-        metadata: メタデータ
-        metadata_labels:
-          last_read: 最終読み取り：
-          locale: ロケール：
-          priority: 優先度：
-          queue: キュー：
-          scheduled: スケジュール済み：
-          timezone: タイムゾーン：
-          visible_at: 表示可能日時：
-        oldest: '最古:'
-        oldest_claimable: '取得可能な最古:'
-        parked: '待機中:'
+        metrics:
+          claimable: 取得可能
+          depth: 深さ
+          oldest: 最古
+          oldest_claimable: 最古の取得可能
+          parked: 保留中
+          total: 累計
+        other_levels: 他の優先度レベル：
         pause: 一時停止
         pause_confirm: 処理を一時停止しますか？
         purge_confirm: すべてのメッセージを削除しますか？
         purge_queue: キューをパージ
         resume: 再開
-        retry: リトライ
-        retry_confirm: 可視性タイムアウトをリセットしてリトライしますか？
+        summary:
+          backlog: 現在取得可能 %{visible} 件、最古は %{age} 待機中 · %{parked} 件保留中（予定または再試行）
+          backlog_parked_only: 現在取得可能なものはありません · %{parked} 件保留中（予定または再試行）
+          dlq: "%{logical} のデッドレターキュー：%{max} 回失敗したジョブがここに入ります"
+          drained_by:
+            one: "%{capsules} が処理（正常なワーカー %{count}）"
+            other: "%{capsules} が処理（正常なワーカー %{count}）"
+          drained_live:
+            one: このキューを監視する正常なワーカー %{count} が処理
+            other: このキューを監視する正常なワーカー %{count} が処理
+          drained_wildcard:
+            one: ワイルドカードのワーカーカプセルが処理（正常なワーカー %{count}）
+            other: ワイルドカードのワーカーカプセルが処理（正常なワーカー %{count}）
+          empty: 待機中のものはありません
+          handler: イベントハンドラーキュー — コンシューマーが処理（正常 %{count}）
+          no_consumers:
+            one: 正常なコンシューマーがいないイベントハンドラーキュー — %{count} 件のイベントが待機中
+            other: 正常なコンシューマーがいないイベントハンドラーキュー — %{count} 件のイベントが待機中
+          no_workers:
+            one: 正常なワーカーが稼働していません — %{count} 件のジョブが取得可能ですが、誰も取得していません
+            other: 正常なワーカーが稼働していません — %{count} 件のジョブが取得可能ですが、誰も取得していません
+          not_drained: このキューを処理するワーカーカプセルがありません — 設定されるまでジョブは待機します
+          paused_circuit_breaker: "%{failures} 回連続の失敗により %{ago} に自動で一時停止 — %{time} に再開（%{trip} 回目の作動）"
+          paused_operator: "%{ago} に一時停止 — %{reason}"
+          paused_operator_no_reason: "%{ago} にオペレーターが一時停止"
+          priority_level: "%{logical} の優先度レベル %{level}"
+          stream: ストリームキュー — peek で配信され、ワーカーは処理しません
+        summary_label: キューの概要
         table_health:
           headers:
             bloat: Bloat
@@ -609,8 +620,6 @@ ja:
             table: テーブル
           oldest_txn: '最も古い未完了トランザクション:'
           title: テーブルの健全性
-        total: 合計：
-        visible: 表示中：
     recurring_tasks:
       index:
         task_count:

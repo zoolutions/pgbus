@@ -555,51 +555,62 @@ en:
           visible: Visible
         pause: Pause
         pause_confirm: Pause processing for %{name}?
-        paused: Paused
         purge: Purge
         purge_confirm: Purge all messages from %{name}?
         resume: Resume
       show:
-        arguments: Arguments
         back: Back to Queues
         delete_confirm: Permanently delete this queue? This cannot be undone.
         delete_queue: Delete Queue
-        depth: 'Depth:'
-        discard: Discard
-        discard_confirm: Discard this message?
-        empty: Queue is empty
-        full_json_payload: Full JSON payload
-        headers:
-          enqueued: Enqueued
-          id: ID
-          job_class: Job Class
-          reads: Reads
-          vt: VT
-        headers_section: Headers
-        job_id: 'Job ID:'
+        dlq_link: Retry or discard them on the Dead Letter page
+        dlq_pointer:
+          one: Dead-letter queue for %{logical} — %{count} message.
+          other: Dead-letter queue for %{logical} — %{count} messages.
         message_discard_failed: Could not discard message.
         message_discarded: Message discarded.
         message_retried: Message visibility reset.
         message_retry_failed: Could not retry message.
-        metadata: Metadata
-        metadata_labels:
-          last_read: 'Last read:'
-          locale: 'Locale:'
-          priority: 'Priority:'
-          queue: 'Queue:'
-          scheduled: 'Scheduled at:'
-          timezone: 'Timezone:'
-          visible_at: 'Visible at:'
-        oldest: 'Oldest:'
-        oldest_claimable: 'Oldest claimable:'
-        parked: 'Parked:'
+        metrics:
+          claimable: Claimable now
+          depth: Depth
+          oldest: Oldest
+          oldest_claimable: Oldest claimable
+          parked: Parked
+          total: Total ever
+        other_levels: 'Other priority levels:'
         pause: Pause
         pause_confirm: Pause processing?
         purge_confirm: Purge all messages?
         purge_queue: Purge Queue
         resume: Resume
-        retry: Retry
-        retry_confirm: Reset visibility timeout and retry?
+        summary:
+          backlog: "%{visible} claimable now, oldest waiting %{age} · %{parked} parked (scheduled or retrying)"
+          backlog_parked_only: Nothing claimable now · %{parked} parked (scheduled or retrying)
+          dlq: 'Dead-letter queue for %{logical}: jobs land here after %{max} failed attempts'
+          drained_by:
+            one: Drained by %{capsules} (%{count} healthy worker)
+            other: Drained by %{capsules} (%{count} healthy workers)
+          drained_live:
+            one: Drained by %{count} healthy worker listening on this queue
+            other: Drained by %{count} healthy workers listening on this queue
+          drained_wildcard:
+            one: Drained by a wildcard worker capsule (%{count} healthy worker)
+            other: Drained by a wildcard worker capsule (%{count} healthy workers)
+          empty: Nothing waiting
+          handler: Event handler queue — drained by consumers (%{count} healthy)
+          no_consumers:
+            one: Event handler queue with no healthy consumer — %{count} event waits
+            other: Event handler queue with no healthy consumer — %{count} events wait
+          no_workers:
+            one: No healthy worker running — %{count} job is claimable but nothing claims it
+            other: No healthy worker running — %{count} jobs are claimable but nothing claims them
+          not_drained: No worker capsule drains this queue — jobs wait until one is configured
+          paused_circuit_breaker: 'Paused automatically %{ago} after %{failures} consecutive failures — resumes %{time} (trip #%{trip})'
+          paused_operator: Paused %{ago} — %{reason}
+          paused_operator_no_reason: Paused %{ago} by an operator
+          priority_level: Priority level %{level} of %{logical}
+          stream: Stream queue — delivered by peek, not drained by workers
+        summary_label: Queue summary
         table_health:
           headers:
             bloat: Bloat
@@ -609,8 +620,6 @@ en:
             table: Table
           oldest_txn: 'Oldest open transaction:'
           title: Table Health
-        total: 'Total:'
-        visible: 'Visible:'
     recurring_tasks:
       index:
         task_count:

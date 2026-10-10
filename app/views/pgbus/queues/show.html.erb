@@ -1,24 +1,12 @@
 <div class="mb-3">
   <%= pgbus_link_to "← #{t("pgbus.queues.show.back")}", pgbus.queues_path %>
 </div>
-<div class="flex items-center justify-between mb-6">
+<div class="flex flex-wrap items-center justify-between gap-4 mb-6">
   <div>
     <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
       <%= @queue&.dig(:name) || params[:name] %>
-      <% if @paused %>
-        <span class="inline-flex items-center rounded-full bg-yellow-100 dark:bg-yellow-900/30 px-2.5 py-0.5 text-xs font-medium text-yellow-800 dark:text-yellow-400"><%= t("pgbus.queues.queues_list.paused") %></span>
-      <% end %>
+      <%= pgbus_paused_badge(@paused) %>
     </h1>
-    <% if @queue %>
-      <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
-        <%= t("pgbus.queues.show.depth") %> <span class="font-mono"><%= @queue[:queue_length] %></span> |
-        <%= t("pgbus.queues.show.visible") %> <span class="font-mono"><%= @queue[:queue_visible_length] %></span> |
-        <%= t("pgbus.queues.show.parked") %> <span class="font-mono"><%= @queue[:parked_length] %></span> |
-        <%= t("pgbus.queues.show.oldest") %> <span class="font-mono"><%= @queue[:oldest_msg_age_sec] || "—" %></span> |
-        <%= t("pgbus.queues.show.oldest_claimable") %> <span class="font-mono"><%= @queue[:oldest_claimable_age_sec] || "—" %></span> |
-        <%= t("pgbus.queues.show.total") %> <span class="font-mono"><%= pgbus_number(@queue[:total_messages]) %></span>
-      </p>
-    <% end %>
   </div>
   <div class="flex space-x-2">
     <% if @paused %>
@@ -37,6 +25,35 @@
           data: { turbo_confirm: t("pgbus.queues.show.delete_confirm") } %>
   </div>
 </div>
+
+<%# The queue in words (Pgbus::Web::QueueSummary), then its numbers. %>
+<section aria-label="<%= t("pgbus.queues.show.summary_label") %>" data-testid="queue-summary" class="mb-6 space-y-2">
+  <% @summary.each do |line| %>
+    <p data-summary-line="<%= line.key %>" class="rounded-md px-3 py-2 text-sm ring-1 <%= pgbus_queue_summary_classes(line.tone) %>"><%= pgbus_queue_summary_line(line) %></p>
+  <% end %>
+  <% if @drainers[:siblings].any? %>
+    <p class="text-sm text-gray-700 dark:text-gray-200">
+      <%= t("pgbus.queues.show.other_levels") %>
+      <% @drainers[:siblings].each do |sibling| %>
+        <%= pgbus_link_to sibling, pgbus.queue_path(name: sibling), size: :sm, class: "font-mono" %>
+      <% end %>
+    </p>
+  <% end %>
+</section>
+
+<dl data-testid="queue-metrics" class="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+  <% [[:depth, pgbus_number(@queue[:queue_length])],
+      [:claimable, pgbus_number(@queue[:queue_visible_length])],
+      [:parked, pgbus_number(@queue[:parked_length])],
+      [:oldest_claimable, pgbus_duration(@queue[:oldest_claimable_age_sec])],
+      [:oldest, pgbus_duration(@queue[:oldest_msg_age_sec])],
+      [:total, pgbus_number(@queue[:total_messages])]].each do |key, value| %>
+    <div class="rounded-lg bg-white dark:bg-gray-800 px-4 py-3 shadow ring-1 ring-gray-200 dark:ring-gray-700">
+      <dt class="text-xs font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.queues.show.metrics.#{key}") %></dt>
+      <dd class="mt-1 text-lg font-semibold font-mono text-gray-900 dark:text-white"><%= value %></dd>
+    </div>
+  <% end %>
+</dl>
 
 <!-- Table Health -->
 <% if @health && @health[:tables].any? %>
@@ -75,79 +92,19 @@
   </div>
 <% end %>
 
-<!-- Messages in Queue -->
-<div class="overflow-hidden rounded-lg bg-white dark:bg-gray-800 shadow ring-1 ring-gray-200 dark:ring-gray-700">
-  <table class="pgbus-table min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-    <thead class="bg-gray-50 dark:bg-gray-900">
-      <tr>
-        <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.queues.show.headers.id") %></th>
-        <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.queues.show.headers.job_class") %></th>
-        <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.queues.show.headers.enqueued") %></th>
-        <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.queues.show.headers.reads") %></th>
-        <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.queues.show.headers.vt") %></th>
-      </tr>
-    </thead>
-    <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
-      <% @messages.each do |m| %>
-        <% payload = pgbus_parse_message(m[:message]) %>
-        <tr>
-          <td colspan="5" class="p-0">
-            <details class="group">
-              <summary class="flex cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 list-none">
-                <span class="w-16 shrink-0 px-4 py-3 text-sm font-mono text-gray-900 dark:text-white"><%= m[:msg_id] %></span>
-                <span class="flex-1 px-4 py-3 text-sm font-medium text-gray-900 dark:text-white"><%= payload["job_class"] || "—" %></span>
-                <span class="w-28 shrink-0 px-4 py-3 text-sm text-gray-500 dark:text-gray-400"><%= pgbus_time_ago(m[:enqueued_at]) %></span>
-                <span class="w-16 shrink-0 px-4 py-3 text-sm text-gray-500 dark:text-gray-400"><%= m[:read_ct] %></span>
-                <span class="w-28 shrink-0 px-4 py-3 text-sm text-gray-500 dark:text-gray-400"><%= pgbus_time_ago(m[:vt]) %></span>
-              </summary>
-              <div class="px-4 pb-4 bg-gray-50 dark:bg-gray-900 border-t border-gray-100 dark:border-gray-700">
-                <div class="flex items-center mt-3 mb-3">
-                  <span class="text-xs font-mono text-gray-500 dark:text-gray-400"><%= t("pgbus.queues.show.job_id") %> <%= payload["job_id"] %></span>
-                </div>
-                <div class="grid grid-cols-2 gap-4 mb-3">
-                  <div>
-                    <span class="text-xs font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.queues.show.arguments") %></span>
-                    <pre class="text-xs text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 rounded p-2 mt-1 overflow-x-auto max-h-40"><%= JSON.pretty_generate(payload["arguments"] || []) rescue "—" %></pre>
-                  </div>
-                  <div>
-                    <span class="text-xs font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.queues.show.metadata") %></span>
-                    <div class="text-xs text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 rounded p-2 mt-1 space-y-1">
-                      <% if payload["queue_name"] %><p><strong><%= t("pgbus.queues.show.metadata_labels.queue") %></strong> <%= payload["queue_name"] %></p><% end %>
-                      <% if payload["priority"] %><p><strong><%= t("pgbus.queues.show.metadata_labels.priority") %></strong> <%= payload["priority"] %></p><% end %>
-                      <% if payload["locale"] %><p><strong><%= t("pgbus.queues.show.metadata_labels.locale") %></strong> <%= payload["locale"] %></p><% end %>
-                      <% if payload["timezone"] %><p><strong><%= t("pgbus.queues.show.metadata_labels.timezone") %></strong> <%= payload["timezone"] %></p><% end %>
-                      <% if payload["scheduled_at"] %><p><strong><%= t("pgbus.queues.show.metadata_labels.scheduled") %></strong> <%= payload["scheduled_at"] %></p><% end %>
-                      <% if m[:vt] %><p><strong><%= t("pgbus.queues.show.metadata_labels.visible_at") %></strong> <%= m[:vt] %></p><% end %>
-                      <% if m[:last_read_at] %><p><strong><%= t("pgbus.queues.show.metadata_labels.last_read") %></strong> <%= m[:last_read_at] %></p><% end %>
-                    </div>
-                  </div>
-                </div>
-                <details class="mt-2">
-                  <summary class="text-xs font-medium text-gray-500 dark:text-gray-400 cursor-pointer hover:text-gray-700 dark:hover:text-gray-200"><%= t("pgbus.queues.show.full_json_payload") %></summary>
-                  <pre class="text-xs text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 rounded p-2 mt-1 overflow-x-auto max-h-96"><%= JSON.pretty_generate(payload) rescue m[:message] %></pre>
-                </details>
-                <% if m[:headers] %>
-                  <details class="mt-2">
-                    <summary class="text-xs font-medium text-gray-500 dark:text-gray-400 cursor-pointer hover:text-gray-700 dark:hover:text-gray-200"><%= t("pgbus.queues.show.headers_section") %></summary>
-                    <pre class="text-xs text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 rounded p-2 mt-1 overflow-x-auto"><%= JSON.pretty_generate(JSON.parse(m[:headers])) rescue m[:headers] %></pre>
-                  </details>
-                <% end %>
-                <div class="flex space-x-2 mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
-                  <%= pgbus_button_to t("pgbus.queues.show.retry"), pgbus.retry_message_queue_path(name: params[:name], msg_id: m[:msg_id]),
-                        method: :post, variant: :primary, size: :sm,
-                        data: { turbo_confirm: t("pgbus.queues.show.retry_confirm") } %>
-                  <%= pgbus_button_to t("pgbus.queues.show.discard"), pgbus.discard_message_queue_path(name: params[:name], msg_id: m[:msg_id]),
-                        method: :post, variant: :danger, size: :sm,
-                        data: { turbo_confirm: t("pgbus.queues.show.discard_confirm") } %>
-                </div>
-              </div>
-            </details>
-          </td>
-        </tr>
-      <% end %>
-      <% if @messages.empty? %>
-        <tr><td colspan="5" class="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400"><%= t("pgbus.queues.show.empty") %></td></tr>
-      <% end %>
-    </tbody>
-  </table>
-</div>
+<% if @dlq %>
+  <%# DLQ tables are not part of the unified list; their messages live on the Dead Letter page. %>
+  <div data-testid="dlq-pointer" class="rounded-lg bg-white dark:bg-gray-800 px-4 py-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
+    <p class="text-sm text-gray-700 dark:text-gray-200">
+      <%= t("pgbus.queues.show.dlq_pointer", logical: @drainers[:logical], count: @queue[:queue_length].to_i) %>
+      <%= pgbus_link_to t("pgbus.queues.show.dlq_link"), pgbus.dead_letter_index_path(dlq: params[:name]), size: :sm %>
+    </p>
+  </div>
+<% else %>
+  <%# Scoped to this physical table. Known warts of job_rows on a _pN table:
+      blocked rows match the logical name, so a queue's blocked jobs show on
+      every level's page (they are parked before a level is chosen), and a
+      failed event whose message sits in a sibling level reads as an orphan. %>
+  <%= render "pgbus/jobs/tabs", state: @state, counts: @counts, list_path: @list_path %>
+  <%= render "pgbus/jobs/list" %>
+<% end %>

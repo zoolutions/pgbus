@@ -32,11 +32,10 @@ module Pgbus
           now = Time.now
           @stats = sample_stats
           @queues = sample_queues
-          @paused_queues = ["pgbus_mailers"]
           @jobs_list = sample_jobs(now)
           @job_rows_list = sample_job_rows(now.utc)
-          @jobs_ahead_hash = { ["pgbus_default", 905] => 0, ["pgbus_mailers", 906] => 14 }
-          @job_context = @job_context.with(paused: Set["mailers"])
+          @jobs_ahead_hash = { ["pgbus_default", 905] => 0, ["pgbus_mailers", 906] => 14, ["pgbus_imports", 907] => 3,
+                               ["pgbus_default_p1", 908] => 8 }
           @failed_events_list = sample_failed_events(now)
           @dlq_messages_list = sample_dlq_messages(now)
           @processes_list = sample_processes(now)
@@ -61,10 +60,29 @@ module Pgbus
           fill_sample_insights(now)
           @health_stats = sample_health_stats(now)
           @health_detail_hash = { tables: @health_stats[:tables].first(2), oldest_transaction_age_sec: 8 }
+          fill_sample_queue_summaries(now)
           self
         end
 
         private
+
+        # The queue page summary (issue #491): an operator pause, a
+        # circuit-breaker pause, a queue two capsules drain and one nobody does.
+        def fill_sample_queue_summaries(now)
+          @paused_queues = %w[pgbus_mailers pgbus_events]
+          @job_context = @job_context.with(paused: Set["mailers", "events"])
+          @queue_pause_states = {
+            "pgbus_mailers" => { reason: "Mail provider maintenance", paused_at: now - 1500 },
+            "pgbus_events" => { reason: "circuit_breaker: 5 consecutive failures", paused_at: now - 60,
+                                resumes_at: now + 240, trip_count: 2 }
+          }
+          @queue_drainers_hash = {
+            "pgbus_default" => { capsules: %w[default bulk], live_workers: 2 },
+            "pgbus_mailers" => { capsules: %w[default], live_workers: 1 },
+            "pgbus_events" => { capsules: %w[events], live_workers: 1 },
+            "pgbus_imports" => { capsules: [], live_workers: 0 }
+          }
+        end
 
         def fill_sample_insights(now)
           @insights_summary = { total: 342, success: 335, failed: 5, dead_lettered: 2,
@@ -103,7 +121,7 @@ module Pgbus
         end
 
         def sample_stats
-          { total_queues: 4, total_depth: 125, total_visible: 96, active_processes: 4, failed_count: 5, dlq_depth: 3,
+          { total_queues: 7, total_depth: 144, total_visible: 114, active_processes: 4, failed_count: 5, dlq_depth: 3,
             recurring_count: PAGED_ROWS, throughput_rate: 42.7, total_dead_tuples: 1_250, tables_needing_vacuum: 1,
             oldest_transaction_age_sec: 8, parked_total: 5, oldest_parked_age_sec: 300, slots_held: 3,
             keys_at_limit: 1 }
@@ -119,6 +137,12 @@ module Pgbus
               oldest_msg_age_sec: 45, oldest_claimable_age_sec: 30, newest_msg_age_sec: 1, total_messages: 8_320 },
             { name: "pgbus_events", queue_length: 15, queue_visible_length: 13, parked_length: 2,
               oldest_msg_age_sec: 120, oldest_claimable_age_sec: 100, newest_msg_age_sec: 5, total_messages: 45_000 },
+            { name: "pgbus_imports", queue_length: 4, queue_visible_length: 4, parked_length: 0,
+              oldest_msg_age_sec: 1800, oldest_claimable_age_sec: 1800, newest_msg_age_sec: 600, total_messages: 4 },
+            { name: "pgbus_default_p0", queue_length: 6, queue_visible_length: 5, parked_length: 1,
+              oldest_msg_age_sec: 90, oldest_claimable_age_sec: 80, newest_msg_age_sec: 3, total_messages: 2_100 },
+            { name: "pgbus_default_p1", queue_length: 9, queue_visible_length: 9, parked_length: 0,
+              oldest_msg_age_sec: 420, oldest_claimable_age_sec: 420, newest_msg_age_sec: 12, total_messages: 3_900 },
             { name: "pgbus_default_dlq", queue_length: 3, queue_visible_length: 3, parked_length: 0,
               oldest_msg_age_sec: 7200, oldest_claimable_age_sec: 7200, newest_msg_age_sec: 3600, total_messages: 47 }
           ]
@@ -157,6 +181,10 @@ module Pgbus
                        error_class: "Net::ReadTimeout", error_message: "execution expired"),
             base.merge(id: 901, msg_id: 901, job_class: "SyncInventoryJob", state: "ready", read_ct: 1,
                        enqueued_at: now - 900, last_read_at: now - 400, vt: now - 100),
+            base.merge(id: 907, msg_id: 907, job_class: "ImportCsvJob", state: "ready", queue_name: "pgbus_imports",
+                       logical_queue: "imports", enqueued_at: now - 1800, vt: now - 1800),
+            base.merge(id: 908, msg_id: 908, job_class: "GenerateReportJob", state: "ready",
+                       queue_name: "pgbus_default_p1", enqueued_at: now - 420, vt: now - 420),
             base.merge(source: "failed", id: 2, msg_id: 870, job_class: "SyncInventoryJob", state: "retrying",
                        read_ct: 4, enqueued_at: nil, vt: nil, failed_event_id: 2, queue_name: "events",
                        logical_queue: "events", error_class: "Stripe::InvalidRequestError",

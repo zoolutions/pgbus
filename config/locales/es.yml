@@ -555,51 +555,62 @@ es:
           visible: Visible
         pause: Pausar
         pause_confirm: "¿Pausar el procesamiento de %{name}?"
-        paused: Pausado
         purge: Purgar
         purge_confirm: "¿Purgar todos los mensajes de %{name}?"
         resume: Reanudar
       show:
-        arguments: Argumentos
         back: Volver a colas
         delete_confirm: "¿Eliminar permanentemente esta cola? Esto no se puede deshacer."
         delete_queue: Eliminar cola
-        depth: 'Profundidad:'
-        discard: Descartar
-        discard_confirm: "¿Descartar este mensaje?"
-        empty: La cola está vacía
-        full_json_payload: Carga JSON completa
-        headers:
-          enqueued: Encolado
-          id: ID
-          job_class: Clase de Trabajo
-          reads: Lecturas
-          vt: VT
-        headers_section: Encabezados
-        job_id: 'ID del Trabajo:'
+        dlq_link: Reintentarlos o descartarlos en la página de Dead Letter
+        dlq_pointer:
+          one: Cola de mensajes muertos de %{logical} — %{count} mensaje.
+          other: Cola de mensajes muertos de %{logical} — %{count} mensajes.
         message_discard_failed: No se pudo descartar el mensaje.
         message_discarded: Mensaje descartado.
         message_retried: Visibilidad del mensaje restablecida.
         message_retry_failed: No se pudo reintentar el mensaje.
-        metadata: Metadatos
-        metadata_labels:
-          last_read: 'Última lectura:'
-          locale: 'Configuración regional:'
-          priority: 'Prioridad:'
-          queue: 'Cola:'
-          scheduled: 'Programado:'
-          timezone: 'Zona horaria:'
-          visible_at: 'Visible en:'
-        oldest: 'Más antiguo:'
-        oldest_claimable: 'Más antiguo disponible:'
-        parked: 'Aparcados:'
+        metrics:
+          claimable: Disponibles ahora
+          depth: Profundidad
+          oldest: Más antiguo
+          oldest_claimable: Más antiguo disponible
+          parked: Aparcados
+          total: Total histórico
+        other_levels: 'Otros niveles de prioridad:'
         pause: Pausar
         pause_confirm: "¿Pausar el procesamiento?"
         purge_confirm: "¿Purgar todos los mensajes?"
         purge_queue: Purgar cola
         resume: Reanudar
-        retry: Reintentar
-        retry_confirm: "¿Restablecer tiempo de visibilidad y reintentar?"
+        summary:
+          backlog: "%{visible} disponibles ahora, el más antiguo lleva %{age} esperando · %{parked} aparcados (programados o en reintento)"
+          backlog_parked_only: Nada disponible ahora · %{parked} aparcados (programados o en reintento)
+          dlq: 'Cola de mensajes muertos de %{logical}: los trabajos llegan aquí tras %{max} intentos fallidos'
+          drained_by:
+            one: La vacía %{capsules} (%{count} worker sano)
+            other: La vacía %{capsules} (%{count} workers sanos)
+          drained_live:
+            one: La vacía %{count} worker sano que escucha esta cola
+            other: La vacían %{count} workers sanos que escuchan esta cola
+          drained_wildcard:
+            one: La vacía una cápsula de workers comodín (%{count} worker sano)
+            other: La vacía una cápsula de workers comodín (%{count} workers sanos)
+          empty: Nada en espera
+          handler: Cola de manejador de eventos — la vacían los consumidores (%{count} sanos)
+          no_consumers:
+            one: Cola de manejador de eventos sin consumidor sano — %{count} evento espera
+            other: Cola de manejador de eventos sin consumidor sano — %{count} eventos esperan
+          no_workers:
+            one: Ningún worker sano en ejecución — %{count} trabajo está disponible pero nadie lo toma
+            other: Ningún worker sano en ejecución — %{count} trabajos están disponibles pero nadie los toma
+          not_drained: Ninguna cápsula de workers vacía esta cola — los trabajos esperan hasta que se configure una
+          paused_circuit_breaker: 'Pausada automáticamente %{ago} tras %{failures} fallos consecutivos — se reanuda %{time} (disparo #%{trip})'
+          paused_operator: Pausada %{ago} — %{reason}
+          paused_operator_no_reason: Pausada %{ago} por un operador
+          priority_level: Nivel de prioridad %{level} de %{logical}
+          stream: Cola de stream — se entrega con peek, los workers no la vacían
+        summary_label: Resumen de la cola
         table_health:
           headers:
             bloat: Bloat
@@ -609,8 +620,6 @@ es:
             table: Tabla
           oldest_txn: 'Transacción abierta más antigua:'
           title: Salud de Tablas
-        total: 'Total:'
-        visible: 'Visible:'
     recurring_tasks:
       index:
         task_count:
