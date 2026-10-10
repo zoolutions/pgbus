@@ -17,7 +17,7 @@ RSpec.describe "Mobile card labels", type: :system do
     "/pgbus/recurring_tasks/1" => "pgbus.recurring_tasks.show.execution_headers.scheduled_for",
     "/pgbus/queues" => "pgbus.queues.queues_list.headers.total_ever",
     "/pgbus/processes" => "pgbus.processes.processes_table.headers.hostname",
-    "/pgbus/events" => "pgbus.events.index.processed_headers.processed_at",
+    "/pgbus/events" => "pgbus.events.processed.headers.reason",
     "/pgbus/insights" => "pgbus.insights.show.slowest.headers.job_class",
     "/pgbus" => "pgbus.dashboard.recent_failures.headers.when"
   }.each do |path, key|
