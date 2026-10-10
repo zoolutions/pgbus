@@ -1,0 +1,58 @@
+app/helpers/pgbus/button_helper.rb
+  s_b0a979e77aaac2::t_48d8082269ce85 14-20
+spec/support/pgbus/stub_data_source/sample_data.rb
+  s_b0a979e77aaac2::t_c2219161a4e7cc 52-54
+CHANGELOG.md
+  s_b0a979e77aaac2::t_c2219161a4e7cc 9
+lib/pgbus/mcp/base_tool.rb
+  s_b0a979e77aaac2::t_48d8082269ce85 74-75,77-78
+spec/pgbus/helpers/button_helper_spec.rb
+  s_b0a979e77aaac2::t_bf415fe0337113 28-30,32
+app/controllers/pgbus/application_controller.rb
+  s_b0a979e77aaac2::t_48d8082269ce85 81-82
+spec/pgbus/mcp/concurrency_tool_spec.rb
+  s_b0a979e77aaac2::t_bf415fe0337113 84-87
+spec/support/pgbus/stub_data_source.rb
+  s_b0a979e77aaac2::t_48d8082269ce85 137
+README.md
+  s_b0a979e77aaac2::t_c2219161a4e7cc 1214,1216,1224
+spec/pgbus/mcp/recurring_tool_spec.rb
+  s_b0a979e77aaac2::t_bf415fe0337113 91-94
+app/views/pgbus/queues/show.html.erb
+  s_b0a979e77aaac2::t_48d8082269ce85 36
+app/frontend/pgbus/style.css
+  s_b0a979e77aaac2::t_a4f26d417873e1 2
+lib/pgbus/web/data_source/list_counts.rb
+  s_b0a979e77aaac2::t_c2219161a4e7cc 6,9-11
+spec/requests/pgbus/recurring_tasks_controller_spec.rb
+  s_b0a979e77aaac2::t_bf415fe0337113 36
+spec/pgbus/web/dark_mode_contrast_spec.rb
+  s_b0a979e77aaac2::t_48d8082269ce85 49
+spec/pgbus/web/compiled_css_coverage_spec.rb
+  s_b0a979e77aaac2::t_48d8082269ce85 62,64-65
+  ai_agent 69
+  s_b0a979e77aaac2::t_a4f26d417873e1 58-60,63,73,77
+  s_b0a979e77aaac2::t_d3fa1503c73310 68,70-72,74-76
+spec/pgbus/mcp/locks_tool_spec.rb
+  s_b0a979e77aaac2::t_bf415fe0337113 79-82
+lib/pgbus/mcp/tools/recurring_tool.rb
+  s_b0a979e77aaac2::t_c2219161a4e7cc 18-19
+spec/requests/pgbus/locks_controller_spec.rb
+  s_b0a979e77aaac2::t_bf415fe0337113 48-54
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "97036bad4dbbf6bde8b5d191cc6f571b4026280c",
+  "prompts": {},
+  "sessions": {
+    "s_b0a979e77aaac2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1beb5e41-62dd-40e5-aaf9-5b08c42be586",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
