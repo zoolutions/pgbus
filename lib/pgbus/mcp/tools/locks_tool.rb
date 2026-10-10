@@ -12,15 +12,33 @@ module Pgbus
         description <<~DESC
           List active job uniqueness locks with their lock_key, queue_name,
           msg_id, and age in seconds. A lock that outlives its message
-          indicates a leaked uniqueness key blocking re-enqueues. Returns the
-          100 most recent locks.
+          indicates a leaked uniqueness key blocking re-enqueues. Paginated
+          (default 100 per page, capped at 100); the response carries page,
+          per_page, total (capped at 10000) and has_more.
         DESC
 
-        input_schema(properties: {}, required: [])
+        MAX_PER_PAGE = 100
+        MAX_PAGE = 1_000
 
-        def self.call(server_context: nil)
+        input_schema(
+          properties: {
+            page: { type: "integer", description: "1-based page number (default 1, max 1000).", minimum: 1 },
+            per_page: { type: "integer", description: "Rows per page (default 100, max 100).", minimum: 1 }
+          },
+          required: []
+        )
+
+        def self.call(page: 1, per_page: MAX_PER_PAGE, server_context: nil)
           data_source = data_source_from(server_context)
-          json_response({ locks: data_source.job_locks })
+          per_page = per_page.to_i.clamp(1, MAX_PER_PAGE)
+          page = page.to_i.clamp(1, MAX_PAGE)
+          locks = data_source.job_locks(page: page, per_page: per_page)
+          count = data_source.list_count(:job_locks)
+
+          json_response(
+            { locks: locks, page: page, per_page: per_page, total: count.total,
+              has_more: more_pages?(count, page: page, per_page: per_page, shown: locks.size) }
+          )
         end
       end
     end

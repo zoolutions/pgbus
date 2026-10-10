@@ -3,10 +3,15 @@
 module Pgbus
   class LocksController < ApplicationController
     def index
-      @concurrency = data_source.concurrency_stats
+      @per_page = per_page
+      @page = page_param
+      @keys_page = page_param(:keys_page)
+      @concurrency = data_source.concurrency_stats(page: @keys_page, per_page: @per_page)
+      @keys_count = data_source.list_count(:concurrency_keys)
       return render_frame("pgbus/locks/concurrency") if params[:frame] == "concurrency"
 
-      @locks = data_source.job_locks
+      @locks = data_source.job_locks(page: @page, per_page: @per_page)
+      @locks_count = data_source.list_count(:job_locks)
     end
 
     def discard

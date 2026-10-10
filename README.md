@@ -1211,9 +1211,9 @@ All tools are read-only — no tool mutates state, and there is no raw-SQL passt
 | `pgbus_processes` | Every process with kind, pid, heartbeat age, and `healthy`/`stale`/`stalled` status. |
 | `pgbus_jobs` / `pgbus_job_detail` | Inspect enqueued messages (`read_ct`, `vt`, `enqueued_at`). Paginated. |
 | `pgbus_dlq` / `pgbus_dlq_detail` | Dead-letter inspection. Paginated. |
-| `pgbus_locks` | Active uniqueness locks (the leaked-lock diagnostic). |
+| `pgbus_locks` | Active uniqueness locks (the leaked-lock diagnostic). Paginated (`page`, `per_page` max 100; returns `total`, capped at 10,000, and `has_more`). |
 | `pgbus_throughput` / `pgbus_stats` | Recent throughput time series and status counts. |
-| `pgbus_recurring` | Recurring task schedule + last/next run times. |
+| `pgbus_recurring` | Recurring task schedule + last/next run times. All tasks unless `page` / `per_page` is given (then `total` is capped at 10,000); returns `total`, `has_more`. |
 
 #### Security
 
@@ -1221,7 +1221,7 @@ The server is built to be safe against a production datastore:
 
 - **Read-only by default.** No tool mutates state and no arbitrary-query tool exists.
 - **Payloads redacted.** Message bodies, headers, and job arguments are replaced with `[redacted]` unless payloads are explicitly allowed **and** `include_payloads: true` is passed on the call. Both gates must be open. Allow payloads with `PGBUS_MCP_ALLOW_PAYLOADS=1` (stdio) or `Pgbus::MCP.rack_app(allow_payloads: true)` (HTTP).
-- **Bounded queries.** Every list tool paginates with a row cap (`pgbus_jobs` / `pgbus_dlq` cap at 100 rows/page; time windows cap at 1440 minutes).
+- **Bounded queries.** Every list tool paginates with a row cap (`pgbus_jobs` / `pgbus_dlq` / `pgbus_locks` / `pgbus_concurrency` cap at 100 rows/page; time windows cap at 1440 minutes). The one exception is `pgbus_recurring` called without `page`/`per_page`, which returns every task as it always has.
 - **Reuses your DB credentials.** No new privileged path — it reads through the app's existing connection config.
 - **Authentication.**
   - *HTTP:* set `token:` (clients send `Authorization: Bearer <token>`) or a custom `auth:` callable; unauthenticated requests get `401`.

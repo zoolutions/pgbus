@@ -451,6 +451,7 @@ da:
           other: Kassér de %{count} job der er parkeret bag denne nøgle? De vil aldrig køre.
         empty: Ingen samtidighedsnøgler i brug
         headers:
+          actions: Handlinger
           in_use: I brug
           key: Nøgle
           lease: Lease
@@ -484,6 +485,7 @@ da:
         discard_selected_confirm: Vil du kassere valgte låse?
         empty: Ingen aktive låse
         headers:
+          actions: Handlinger
           age: Alder
           lock_key: Låsenøgle
           msg_id: Besked-ID

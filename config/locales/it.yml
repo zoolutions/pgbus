@@ -451,6 +451,7 @@ it:
           other: Scartare i %{count} job parcheggiati dietro questa chiave? Non verranno mai eseguiti.
         empty: Nessuna chiave di concorrenza in uso
         headers:
+          actions: Azioni
           in_use: In uso
           key: Chiave
           lease: Lease
@@ -484,6 +485,7 @@ it:
         discard_selected_confirm: Scartare i blocchi selezionati?
         empty: Nessun blocco attivo
         headers:
+          actions: Azioni
           age: Età
           lock_key: Chiave di blocco
           msg_id: ID messaggio

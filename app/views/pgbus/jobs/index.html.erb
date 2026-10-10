@@ -3,11 +3,9 @@
   <div class="flex space-x-2">
     <%# Retry All / Discard All act on failed events in every queue, not just a filtered one. %>
     <% if @failed_total.positive? %>
-      <%= button_to t("pgbus.jobs.index.retry_all"), pgbus.retry_all_jobs_path, method: :post,
-            class: "rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500",
+      <%= pgbus_button_to t("pgbus.jobs.index.retry_all"), pgbus.retry_all_jobs_path, method: :post, variant: :primary,
             data: { turbo_confirm: t("pgbus.jobs.index.retry_all_confirm") } %>
-      <%= button_to t("pgbus.jobs.index.discard_all"), pgbus.discard_all_jobs_path, method: :post,
-            class: "rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-500",
+      <%= pgbus_button_to t("pgbus.jobs.index.discard_all"), pgbus.discard_all_jobs_path, method: :post, variant: :danger,
             data: { turbo_confirm: t("pgbus.jobs.index.discard_all_confirm") } %>
     <% end %>
   </div>

@@ -451,6 +451,7 @@ pt:
           other: Descartar os %{count} trabalhos estacionados atrás desta chave? Nunca serão executados.
         empty: Nenhuma chave de concorrência em uso
         headers:
+          actions: Ações
           in_use: Em uso
           key: Chave
           lease: Concessão
@@ -484,6 +485,7 @@ pt:
         discard_selected_confirm: Descartar bloqueios selecionados?
         empty: Nenhum bloqueio ativo
         headers:
+          actions: Ações
           age: Idade
           lock_key: Chave de Bloqueio
           msg_id: ID da mensagem

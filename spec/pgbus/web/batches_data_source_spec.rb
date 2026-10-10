@@ -29,8 +29,9 @@ RSpec.describe Pgbus::Web::DataSource do
 
     before do
       scope = double("scope")
-      allow(Pgbus::BatchEntry).to receive(:order).with(created_at: :desc).and_return(scope)
-      allow(scope).to receive(:limit).with(100).and_return(records)
+      allow(Pgbus::BatchEntry).to receive(:order).with(created_at: :desc, id: :desc).and_return(scope)
+      allow(scope).to receive(:limit).with(25).and_return(scope)
+      allow(scope).to receive(:offset).with(0).and_return(records)
     end
 
     it "returns all batches ordered by most recent first" do
@@ -56,8 +57,9 @@ RSpec.describe Pgbus::Web::DataSource do
                                     on_finish_class: nil, on_success_class: nil, on_discard_class: nil,
                                     created_at: Time.current, finished_at: Time.current)
       scope = double("scope")
-      allow(Pgbus::BatchEntry).to receive(:order).with(created_at: :desc).and_return(scope)
-      allow(scope).to receive(:limit).with(100).and_return([record])
+      allow(Pgbus::BatchEntry).to receive(:order).with(created_at: :desc, id: :desc).and_return(scope)
+      allow(scope).to receive(:limit).with(25).and_return(scope)
+      allow(scope).to receive(:offset).with(0).and_return([record])
 
       result = data_source.batches
       expect(result.first[:progress_pct]).to eq(100)

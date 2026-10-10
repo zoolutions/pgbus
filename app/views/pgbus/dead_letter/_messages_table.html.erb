@@ -54,11 +54,11 @@
                   <div class="flex items-center justify-between mt-3 mb-3">
                     <span class="text-xs font-mono text-gray-500 dark:text-gray-400"><%= t("pgbus.dead_letter.messages_table.job_id") %> <%= payload["job_id"] %></span>
                     <div class="flex space-x-2">
-                      <%= button_to t("pgbus.dead_letter.messages_table.retry"), pgbus.retry_dead_letter_path(m[:msg_id], queue_name: m[:queue_name]), method: :post,
-                            class: "rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-500",
+                      <%= pgbus_button_to t("pgbus.dead_letter.messages_table.retry"), pgbus.retry_dead_letter_path(m[:msg_id], queue_name: m[:queue_name]), method: :post,
+                            variant: :primary, size: :sm,
                             data: { turbo_frame: "_top" } %>
-                      <%= button_to t("pgbus.dead_letter.messages_table.discard"), pgbus.discard_dead_letter_path(m[:msg_id], queue_name: m[:queue_name]), method: :post,
-                            class: "rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-500",
+                      <%= pgbus_button_to t("pgbus.dead_letter.messages_table.discard"), pgbus.discard_dead_letter_path(m[:msg_id], queue_name: m[:queue_name]), method: :post,
+                            variant: :danger, size: :sm,
                             data: { turbo_confirm: t("pgbus.dead_letter.messages_table.discard_confirm"), turbo_frame: "_top" } %>
                     </div>
                   </div>

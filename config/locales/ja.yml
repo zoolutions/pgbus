@@ -451,6 +451,7 @@ ja:
           other: このキーの背後で待機中の%{count}件のジョブを破棄しますか？二度と実行されません。
         empty: 使用中の同時実行キーはありません
         headers:
+          actions: アクション
           in_use: 使用中
           key: キー
           lease: リース
@@ -484,6 +485,7 @@ ja:
         discard_selected_confirm: 選択したロックを破棄しますか？
         empty: アクティブなロックはありません
         headers:
+          actions: アクション
           age: 経過時間
           lock_key: ロックキー
           msg_id: メッセージID

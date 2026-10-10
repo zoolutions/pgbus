@@ -451,6 +451,7 @@ fi:
           other: Hylätäänkö tämän avaimen taakse pysäköityä %{count} työtä? Ne eivät koskaan suoritu.
         empty: Ei rinnakkaisuusavaimia käytössä
         headers:
+          actions: Toiminnot
           in_use: Käytössä
           key: Avain
           lease: Varaus
@@ -484,6 +485,7 @@ fi:
         discard_selected_confirm: Hylätäänkö valitut lukot?
         empty: Ei aktiivisia lukkoja
         headers:
+          actions: Toiminnot
           age: Ikä
           lock_key: Lukon avain
           msg_id: Viestin tunnus

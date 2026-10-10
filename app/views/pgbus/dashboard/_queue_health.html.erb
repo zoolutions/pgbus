@@ -62,12 +62,12 @@
           <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
             <% @health[:tables].each do |t| %>
               <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                <td class="px-4 py-3 text-sm font-mono text-gray-900 dark:text-white"><%= t[:table] %></td>
-                <td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.queue_health.kinds.#{t[:kind]}") %></td>
-                <td class="px-4 py-3 text-sm text-right text-gray-700 dark:text-gray-300"><%= pgbus_number(t[:live_tuples]) %></td>
-                <td class="px-4 py-3 text-sm text-right <%= t[:dead_tuples] > 1000 ? 'text-amber-700 dark:text-amber-400 font-semibold' : 'text-gray-700 dark:text-gray-300' %>"><%= pgbus_number(t[:dead_tuples]) %></td>
-                <td class="px-4 py-3 text-sm text-right <%= t[:bloat_ratio] > 0.2 ? 'text-red-600 dark:text-red-400 font-semibold' : t[:bloat_ratio] > 0.1 ? 'text-amber-700 dark:text-amber-400' : 'text-gray-500 dark:text-gray-400' %>"><%= (t[:bloat_ratio] * 100).round(1) %>%</td>
-                <td class="px-4 py-3 text-sm text-right text-gray-500 dark:text-gray-400"><%= t[:last_vacuum_ago_sec] ? pgbus_duration(t[:last_vacuum_ago_sec]) : "—" %></td>
+                <td data-label="<%= t("pgbus.dashboard.queue_health.headers.table") %>" class="px-4 py-3 text-sm font-mono text-gray-900 dark:text-white"><%= t[:table] %></td>
+                <td data-label="<%= t("pgbus.dashboard.queue_health.headers.kind") %>" class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.queue_health.kinds.#{t[:kind]}") %></td>
+                <td data-label="<%= t("pgbus.dashboard.queue_health.headers.live") %>" class="px-4 py-3 text-sm text-right text-gray-700 dark:text-gray-300"><%= pgbus_number(t[:live_tuples]) %></td>
+                <td data-label="<%= t("pgbus.dashboard.queue_health.headers.dead") %>" class="px-4 py-3 text-sm text-right <%= t[:dead_tuples] > 1000 ? 'text-amber-700 dark:text-amber-400 font-semibold' : 'text-gray-700 dark:text-gray-300' %>"><%= pgbus_number(t[:dead_tuples]) %></td>
+                <td data-label="<%= t("pgbus.dashboard.queue_health.headers.bloat") %>" class="px-4 py-3 text-sm text-right <%= t[:bloat_ratio] > 0.2 ? 'text-red-600 dark:text-red-400 font-semibold' : t[:bloat_ratio] > 0.1 ? 'text-amber-700 dark:text-amber-400' : 'text-gray-500 dark:text-gray-400' %>"><%= (t[:bloat_ratio] * 100).round(1) %>%</td>
+                <td data-label="<%= t("pgbus.dashboard.queue_health.headers.last_vacuum") %>" class="px-4 py-3 text-sm text-right text-gray-500 dark:text-gray-400"><%= t[:last_vacuum_ago_sec] ? pgbus_duration(t[:last_vacuum_ago_sec]) : "—" %></td>
               </tr>
             <% end %>
           </tbody>

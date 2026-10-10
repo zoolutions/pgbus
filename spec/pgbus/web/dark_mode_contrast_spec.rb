@@ -13,7 +13,7 @@ require "pathname"
 RSpec.describe "Dashboard dark-mode contrast" do # rubocop:disable RSpec/DescribeClass
   let(:engine_root) { Pathname.new(__dir__).join("..", "..", "..").expand_path }
   let(:view_files) { Dir[engine_root.join("app", "views", "pgbus", "**", "*.erb")].sort }
-  let(:helper_file) { engine_root.join("app", "helpers", "pgbus", "application_helper.rb").to_s }
+  let(:helper_files) { Dir[engine_root.join("app", "helpers", "pgbus", "*.rb")].sort }
 
   # Light tokens that need a dark partner for the same property.
   let(:light_rules) do
@@ -27,7 +27,8 @@ RSpec.describe "Dashboard dark-mode contrast" do # rubocop:disable RSpec/Describ
     }
   end
 
-  let(:erb_tag) { /<%.*?%>/m }
+  # An ERB tag, or a Ruby interpolation inside a `class:` string literal.
+  let(:erb_tag) { /<%.*?%>|#\{.*?\}/m }
   # Text colours below WCAG AA (4.5:1) for body text on the dashboard's
   # surfaces: gray-400 on white is ~2.5:1, gray-500/600 on gray-800 ~3:1.
   # Disabled controls (cursor-not-allowed) are exempt, as WCAG allows.
@@ -41,10 +42,11 @@ RSpec.describe "Dashboard dark-mode contrast" do # rubocop:disable RSpec/Describ
 
   # Each class attribute as token lists: one per ERB ternary branch (the text
   # outside ERB tags plus that branch's single-quoted literal), so a dark
-  # token in one branch cannot mask an unpaired light token in another.
+  # token in one branch cannot mask an unpaired light token in another. A
+  # `class:` built from "…" \ "…" continuations is read as one string.
   def class_attributes(content)
-    content.scan(/class(?:=|:\s*)"([^"]*)"|class(?:=|:\s*)'([^']*)'/).flat_map do |double, single|
-      value = (double || single).to_s
+    content.scan(/class(?:=|:\s*)((?:"[^"]*"\s*\\\s*)*"[^"]*")|class(?:=|:\s*)'([^']*)'/).flat_map do |double, single|
+      value = double ? double.scan(/"([^"]*)"/).join : single.to_s
       base = value.gsub(erb_tag, " ").split(/\s+/)
       branches = value.scan(erb_tag).flat_map { |tag| tag.scan(/'([^']*)'/).flatten }
       branches.empty? ? [base] : branches.map { |branch| base + branch.split(/\s+/) }
@@ -96,6 +98,18 @@ RSpec.describe "Dashboard dark-mode contrast" do # rubocop:disable RSpec/Describ
     found
   end
 
+  describe "class attribute parsing" do
+    it "reads a class: built from string continuations with an interpolated ternary" do
+      erb = <<~'ERB'
+        <%= button_to "x", "/x",
+              class: "inline-flex rounded " \
+                     "#{on ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 dark:bg-green-900/30'}" %>
+      ERB
+
+      expect(class_attributes(erb).map { |tokens| gaps(tokens) }).to eq([%w[bg-yellow-100 text-yellow-700], []])
+    end
+  end
+
   describe "low-contrast shades" do
     it "flags small -500 text and warm -600 text in light mode" do
       expect(low_contrast_pairing(%w[text-xs text-blue-500 dark:text-blue-400])).to eq(%w[text-blue-500])
@@ -129,8 +143,8 @@ RSpec.describe "Dashboard dark-mode contrast" do # rubocop:disable RSpec/Describ
     found = view_files.flat_map do |file|
       class_attributes(File.read(file)).flat_map { |tokens| send(check, tokens).map { |t| "#{relative(file)}: #{t}" } }
     end
-    found += helper_class_strings(File.read(helper_file)).flat_map do |tokens|
-      send(check, tokens).map { |t| "#{relative(helper_file)}: #{t}" }
+    found += helper_files.flat_map do |file|
+      helper_class_strings(File.read(file)).flat_map { |tokens| send(check, tokens).map { |t| "#{relative(file)}: #{t}" } }
     end
     found.uniq
   end
@@ -141,8 +155,8 @@ RSpec.describe "Dashboard dark-mode contrast" do # rubocop:disable RSpec/Describ
     missing = view_files.flat_map do |file|
       class_attributes(File.read(file)).flat_map { |tokens| gaps(tokens).map { |t| "#{relative(file)}: #{t}" } }
     end
-    missing += helper_class_strings(File.read(helper_file)).flat_map do |tokens|
-      gaps(tokens).map { |t| "#{relative(helper_file)}: #{t}" }
+    missing += helper_files.flat_map do |file|
+      helper_class_strings(File.read(file)).flat_map { |tokens| gaps(tokens).map { |t| "#{relative(file)}: #{t}" } }
     end
 
     expect(missing.uniq).to be_empty, <<~MSG

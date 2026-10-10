@@ -2,11 +2,12 @@
 
 The dashboard (`app/views/pgbus/`, `app/controllers/pgbus/`, `app/frontend/pgbus/`, the badge
 helpers in `app/helpers/pgbus/application_helper.rb`) meets WCAG 2.1 AA (plus 2.2 AA target size) in light and dark mode on
-every page. Three checks keep it there, and a change is not done until all three are green:
+every page. These checks keep it there, and a change is not done until all of them are green:
 
 | Check | File | Runs |
 |---|---|---|
 | Static contrast guard | `spec/pgbus/web/dark_mode_contrast_spec.rb` | Ruby matrix, every push |
+| View conventions guard | `spec/pgbus/web/view_conventions_spec.rb` | Ruby matrix, every push |
 | axe gate (light + dark, every page) | `spec/system/accessibility_spec.rb` | `system_test` job, every push |
 | Lighthouse budgets | `lighthouserc.dashboard.json`, `bin/lighthouse` | monthly + `workflow_dispatch`, report-only |
 
@@ -33,6 +34,19 @@ the same PR; nothing is skipped, tagged out or excused.
 6. Before/after screenshots, light + dark, on the PR (`gh pr create --attach`, see `AGENTS.md`).
 7. `bin/lighthouse` on demand when the change touches page weight (a new vendored library, a new
    chart).
+
+## Buttons, tables and lists (`view_conventions_spec.rb`)
+
+- Every button and action link goes through `Pgbus::ButtonHelper`: `pgbus_button_to`, `pgbus_link_to`,
+  `pgbus_button_tag` (a submit outside its form, `form: "bulk-…"`) or `pgbus_button_classes` (for a
+  `<summary>`). Variants `primary danger success warning secondary outline menu link`, sizes `sm md`,
+  link tones `indigo red green yellow`; `confirm:` emits `data-turbo-confirm`. No hand-written colour
+  classes on `button_to`, `link_to` or `<button>`. A new variant spells its classes out in full.
+- Every `<table>` is a `pgbus-table`; every cell carries `data-label="<%= t("…headers.<col>") %>"`,
+  the same key as its column header (checkbox and `colspan` cells excepted); empty states render
+  `shared/_empty_row`; thead/tbody/th use the one chrome the spec lists.
+- A list that can grow renders `shared/_pager` against `DataSource#list_count` (bounded, `has_more`
+  when capped). A second list on one page pages on `<list>_page`, parsed by `page_param(:<list>_page)`.
 
 ## The helpers (`spec/system/support/accessibility.rb`)
 
