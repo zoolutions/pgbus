@@ -1,0 +1,23 @@
+lib/pgbus/web/data_source/dead_letter.rb
+  s_364c84711a3705::t_456c6facdb11f9 1-112
+lib/pgbus/web/data_source.rb
+  s_364c84711a3705::t_456c6facdb11f9 9
+spec/pgbus/web/data_source_dead_letter_spec.rb
+  s_364c84711a3705::t_456c6facdb11f9 1-128
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "a54bdeaaaeffdeb79477d760cbdfaae0e3690501",
+  "prompts": {},
+  "sessions": {
+    "s_364c84711a3705": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8cab8bba-398f-49c5-ab3b-66a236e3b01c",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
