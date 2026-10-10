@@ -3,36 +3,17 @@
     <table class="pgbus-table min-w-full divide-y divide-gray-200 dark:divide-gray-700">
       <thead class="bg-gray-50 dark:bg-gray-900">
         <tr>
-          <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.processes.processes_table.headers.kind") %></th>
-          <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.processes.processes_table.headers.hostname") %></th>
-          <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.processes.processes_table.headers.pid") %></th>
-          <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.processes.processes_table.headers.status") %></th>
-          <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.processes.processes_table.headers.last_heartbeat") %></th>
-          <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.processes.processes_table.headers.metadata") %></th>
+          <% %w[process status activity recycle heartbeat].each do |column| %>
+            <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.processes.processes_table.headers.#{column}") %></th>
+          <% end %>
         </tr>
       </thead>
       <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
-        <% @processes.each do |p| %>
-          <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-            <td data-label="<%= t("pgbus.processes.processes_table.headers.kind") %>" class="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white"><%= p[:kind] %></td>
-            <td data-label="<%= t("pgbus.processes.processes_table.headers.hostname") %>" class="px-4 py-3 text-sm text-gray-700 dark:text-gray-200"><%= p[:hostname] %></td>
-            <td data-label="<%= t("pgbus.processes.processes_table.headers.pid") %>" class="px-4 py-3 text-sm font-mono text-gray-700 dark:text-gray-200"><%= p[:pid] %></td>
-            <td data-label="<%= t("pgbus.processes.processes_table.headers.status") %>" class="px-4 py-3 text-sm"><%= pgbus_status_badge(p[:status] || p[:healthy]) %></td>
-            <td data-label="<%= t("pgbus.processes.processes_table.headers.last_heartbeat") %>" class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400"><%= pgbus_time(p[:last_heartbeat_at]) %></td>
-            <td data-label="<%= t("pgbus.processes.processes_table.headers.metadata") %>" class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 font-mono text-xs max-w-xs truncate">
-              <% if p[:metadata].is_a?(Hash) %>
-                <% if (rates = pgbus_worker_rates(p[:metadata])) %>
-                  <span class="inline-flex items-center rounded bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 px-1.5 py-0.5 text-xs mr-1 font-medium"><%= rates %></span>
-                <% end %>
-                <% pgbus_display_metadata(p[:metadata]).each do |k, v| %>
-                  <span class="inline-flex items-center rounded bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 text-xs text-gray-700 dark:text-gray-200 mr-1"><%= k %>: <%= v %></span>
-                <% end %>
-              <% end %>
-            </td>
-          </tr>
+        <% @processes.each do |process| %>
+          <%= render "pgbus/processes/row", process: process, state: @process_states.fetch(process[:id]) %>
         <% end %>
         <% if @processes.empty? %>
-          <%= render "pgbus/shared/empty_row", colspan: 6, message: t("pgbus.processes.processes_table.empty") %>
+          <%= render "pgbus/shared/empty_row", colspan: 5, message: t("pgbus.processes.processes_table.empty") %>
         <% end %>
       </tbody>
     </table>

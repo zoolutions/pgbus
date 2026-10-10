@@ -654,7 +654,7 @@ RSpec.describe Pgbus::Process::Dispatcher do
       dispatcher.send(:start_heartbeat)
       expect(Pgbus::Process::Heartbeat).to have_received(:new).with(
         kind: "dispatcher",
-        metadata: { pid: Process.pid },
+        metadata: { pid: Process.pid, started_at: a_value_within(5).of(Time.now.to_f), supervisor_pid: Process.ppid },
         loop_tick_supplier: kind_of(Proc)
       )
       expect(heartbeat).to have_received(:start)

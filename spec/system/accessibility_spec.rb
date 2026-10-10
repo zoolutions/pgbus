@@ -26,6 +26,16 @@ RSpec.describe "Dashboard accessibility", type: :system do
         end
       end
 
+      # The expanded process row (issue #493): start time and raw metadata.
+      it_behaves_like "an accessible page", "/pgbus/processes", mode do
+        let(:interaction) do
+          lambda do
+            first("details[data-job-toggle] summary").click
+            page.assert_selector("tr[data-process-detail]", visible: :visible)
+          end
+        end
+      end
+
       # The expanded event row (issue #494): error line, reroute, edit form.
       it_behaves_like "an accessible page", "/pgbus/events", mode do
         let(:interaction) do

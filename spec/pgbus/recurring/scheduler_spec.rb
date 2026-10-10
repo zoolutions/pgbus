@@ -147,7 +147,8 @@ RSpec.describe Pgbus::Recurring::Scheduler do
 
       expect(Pgbus::Process::Heartbeat).to have_received(:new).with(
         kind: "scheduler",
-        metadata: { pid: Process.pid, tasks: 1 },
+        metadata: { pid: Process.pid, tasks: 1, started_at: a_value_within(5).of(Time.now.to_f),
+                    supervisor_pid: Process.ppid },
         loop_tick_supplier: kind_of(Proc)
       )
       expect(heartbeat).to have_received(:start)

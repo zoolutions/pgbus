@@ -119,7 +119,7 @@ module Pgbus
         end
 
         def sample_stats
-          { total_queues: 8, total_depth: 145, total_visible: 115, active_processes: 4, failed_count: 5, dlq_depth: 4,
+          { total_queues: 8, total_depth: 145, total_visible: 115, active_processes: 10, failed_count: 5, dlq_depth: 4,
             recurring_count: PAGED_ROWS, throughput_rate: 42.7, total_dead_tuples: 1_250, tables_needing_vacuum: 1,
             oldest_transaction_age_sec: 8, parked_total: 5, oldest_parked_age_sec: 300, slots_held: 3,
             keys_at_limit: 1 }
@@ -268,23 +268,6 @@ module Pgbus
         def sample_backtrace(file)
           ["app/jobs/#{file}.rb:14:in 'perform'", "lib/pgbus/active_job/executor.rb:211:in 'execute_job'",
            "activejob (8.1.0) lib/active_job/execution.rb:32:in 'perform_now'"].join("\n")
-        end
-
-        def sample_processes(now)
-          [
-            { id: 1, kind: "worker", hostname: "web-01.prod", pid: 12_345,
-              metadata: { "queues" => "default,mailers", "threads" => 5 },
-              last_heartbeat_at: now - 10, healthy: true, created_at: now - 7200 },
-            { id: 2, kind: "worker", hostname: "worker-01.prod", pid: 67_890,
-              metadata: { "queues" => "events", "threads" => 3 },
-              last_heartbeat_at: now - 45, healthy: true, created_at: now - 86_400 },
-            # A processes: 2 capsule (issue #503): one row per fork.
-            *[1, 2].map do |n|
-              { id: 2 + n, kind: "worker", hostname: "worker-02.prod", pid: 70_000 + n,
-                metadata: { "capsule" => "render", "process" => "#{n}/2", "queues" => "render", "threads" => 1 },
-                last_heartbeat_at: now - (5 * n), healthy: true, created_at: now - 3600 }
-            end
-          ]
         end
 
         def sample_recurring_tasks(now)

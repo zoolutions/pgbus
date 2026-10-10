@@ -59,6 +59,45 @@ RSpec.describe "Dashboard", type: :system do
     expect(page).to have_text("12345")
   end
 
+  # Issue #493: the home panel says why each process has its status.
+  context "with sample processes" do
+    include ActiveSupport::Testing::TimeHelpers
+
+    let(:now) { Time.utc(2026, 10, 10, 12, 0, 0) }
+
+    around { |example| travel_to(now) { example.run } }
+
+    before { @stub_data_source.processes_list = @stub_data_source.sample_processes(now) }
+
+    it "puts the reason and what happens next under each badge, one line per process", :aggregate_failures do
+      visit "/pgbus"
+
+      within("turbo-frame#dashboard-processes") do
+        expect(page).to have_css("tbody tr", count: 10)
+        expect(page).to have_css("tbody tr [data-testid=process-reason]", count: 10)
+        {
+          1 => "Heartbeat 12s ago (limit 5m 0s)",
+          2 => "Loop ticked 5s ago (limit 1m 30s)",
+          3 => "Loop last ticked 2m ago (limit 1m 30s) — the supervisor's watchdog restarts it",
+          4 => "Loop ticked 3s ago (limit 1m 31s)",
+          6 => "No heartbeat for 7m 0s (limit 5m 0s) — probably dead",
+          7 => "no supervisor to restart it",
+          10 => "Loop ticked 4s ago (limit 1m 30s)"
+        }.each do |id, words|
+          expect(find("tr#dashboard-process-#{id}")).to have_text(words)
+        end
+      end
+    end
+
+    it "shows the empty state across all four columns" do
+      @stub_data_source.processes_list = []
+
+      visit "/pgbus"
+
+      expect(page).to have_css("turbo-frame#dashboard-processes td[colspan='4']", text: "No processes running")
+    end
+  end
+
   it "shows empty state for failures" do
     visit "/pgbus"
 

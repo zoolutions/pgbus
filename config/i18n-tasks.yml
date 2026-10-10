@@ -40,6 +40,10 @@ ignore_unused:
   - "pgbus.insights.show.charts.failed_to_load"
   - "pgbus.insights.show.charts.no_data"
   - "pgbus.recurring_tasks.index.task_count.*"
+  - "pgbus.processes.state.activity.schedule.*"
+  - "pgbus.processes.state.activity.slots.*"
+  - "pgbus.processes.state.activity.threads.*"
+  - "pgbus.processes.state.kinds.*"
   # Plural forms reached through the dynamic summary.<key> lookup (issue #491).
   - "pgbus.queues.show.summary.drained_by_html.*"
   - "pgbus.queues.show.summary.drained_wildcard_html.*"

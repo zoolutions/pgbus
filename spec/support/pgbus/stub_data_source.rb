@@ -2,6 +2,7 @@
 
 require_relative "stub_data_source/sample_data"
 require_relative "stub_data_source/sample_events"
+require_relative "stub_data_source/sample_processes"
 
 module Pgbus
   module Test
@@ -13,6 +14,7 @@ module Pgbus
     class StubDataSource
       include SampleData
       include SampleEvents
+      include SampleProcesses
 
       attr_accessor :stats, :queues, :processes_list, :failed_events_list,
                     :dlq_messages_list, :events_list, :subscribers_list, :jobs_list,
@@ -25,7 +27,8 @@ module Pgbus
                     :promoted_count, :job_rows_list, :jobs_ahead_hash, :job_context,
                     :recurring_executions_list, :health_stats, :health_detail_hash, :live_stream_metrics_hash,
                     :capped_lists, :queue_pause_states, :queue_drainers_hash,
-                    :event_rows_list, :events_ahead_hash, :event_context, :replay_states_hash
+                    :event_rows_list, :events_ahead_hash, :event_context, :replay_states_hash,
+                    :process_thresholds_overrides
       attr_reader :calls
 
       def initialize
@@ -69,6 +72,7 @@ module Pgbus
         @events_ahead_hash = {}
         @event_context = default_event_context
         @replay_states_hash = {}
+        @process_thresholds_overrides = {}
         @calls = Hash.new { |h, k| h[k] = [] }
       end
 
@@ -76,7 +80,26 @@ module Pgbus
       def reset_cache! = self
       def queues_with_metrics = @queues
       def queue_detail(name) = @queues.find { |q| q[:name].include?(name) }
-      def processes = @processes_list
+      # The stub never derives; thresholds is accepted for DataSource's signature.
+      def processes(thresholds: nil) = @processes_list
+
+      # The real config and constants, as DataSource builds them;
+      # process_thresholds_overrides lets a spec turn stall detection off.
+      def process_thresholds(now: Time.now)
+        config = Pgbus.configuration
+        Pgbus::Web::ProcessState::Thresholds.new(
+          now: now, alive_threshold: Pgbus::Process::Heartbeat::ALIVE_THRESHOLD,
+          stall_threshold: config.stall_threshold, dispatch_interval: config.dispatch_interval,
+          recurring_schedule_interval: config.recurring_schedule_interval, polling_interval: config.polling_interval,
+          notify_fallback_poll: Pgbus::Process::Consumer::NOTIFY_FALLBACK_POLL_SECONDS,
+          notify_wakeup: config.worker_notify_wakeup?, reap_interval: Pgbus::Process::Dispatcher::REAP_INTERVAL
+        ).with(**@process_thresholds_overrides)
+      end
+
+      def process_context(rows:, thresholds: process_thresholds)
+        Pgbus::Web::ProcessState.context_for(rows, thresholds)
+      end
+
       def failed_events(page: 1, per_page: 25) = @failed_events_list
       def failed_events_count = @failed_events_list.size
       def failed_event(id) = @failed_events_list.find { |e| e["id"].to_s == id.to_s }

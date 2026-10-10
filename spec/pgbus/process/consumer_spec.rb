@@ -980,6 +980,60 @@ RSpec.describe Pgbus::Process::Consumer do
         expect(kwargs[:loop_tick_supplier].call).to eq(tick)
       end
     end
+
+    # Issue #493: the Processes page states uptime, the owning supervisor,
+    # pool use and recycle progress for consumers too.
+    it "registers its start time and parent pid" do
+      allow(Pgbus::Process::Heartbeat).to receive(:new).and_return(mock_heartbeat)
+
+      consumer.send(:start_heartbeat)
+
+      expect(Pgbus::Process::Heartbeat).to have_received(:new) do |kwargs|
+        expect(kwargs[:metadata]).to include(started_at: a_value_within(5).of(Time.now.to_f),
+                                             supervisor_pid: Process.ppid)
+      end
+    end
+
+    it "supplies the recycle limits it checks on every beat" do
+      allow(Pgbus::Process::MemoryUsage).to receive(:current_mb).and_return(128)
+      allow(Pgbus.configuration).to receive_messages(max_jobs_per_worker: nil, max_memory_mb: 256,
+                                                     max_worker_lifetime: 3600)
+      supplier = nil
+      allow(Pgbus::Process::Heartbeat).to receive(:new) do |**kwargs|
+        supplier = kwargs[:metadata_supplier]
+        mock_heartbeat
+      end
+
+      consumer.send(:start_heartbeat)
+
+      expect(supplier.call).to include("max_memory_mb" => 256, "max_lifetime" => 3600)
+      expect(supplier.call).not_to have_key("max_jobs")
+    end
+
+    it "registers its execution mode so an async consumer counts slots, not threads" do
+      allow(Pgbus::Process::Heartbeat).to receive(:new).and_return(mock_heartbeat)
+      async = described_class.new(topics: ["orders.#"], queue_names: ["q_orders"], execution_mode: :async)
+
+      async.send(:start_heartbeat)
+
+      expect(Pgbus::Process::Heartbeat).to have_received(:new)
+        .with(hash_including(metadata: hash_including(execution_mode: :async)))
+    end
+
+    it "supplies handled count, buffer, pool use and memory on every beat" do
+      allow(Pgbus::Process::MemoryUsage).to receive(:current_mb).and_return(128)
+      allow(mock_pool).to receive(:metadata).and_return({ mode: :threads, capacity: 3, busy: 1 })
+      supplier = nil
+      allow(Pgbus::Process::Heartbeat).to receive(:new) do |**kwargs|
+        supplier = kwargs[:metadata_supplier]
+        mock_heartbeat
+      end
+
+      consumer.send(:start_heartbeat)
+
+      expect(supplier.call).to eq("jobs_processed" => 0, "buffered" => 0, "capacity" => 3, "busy" => 1,
+                                  "memory_mb" => 128)
+    end
   end
 
   # Consumer consults the circuit breaker before fetching so a poison queue

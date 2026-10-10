@@ -305,6 +305,18 @@ RSpec.describe Pgbus::Process::Supervisor do
     end
   end
 
+  # Issue #493: the Processes page states the supervisor's uptime.
+  describe "start_heartbeat (private)" do
+    it "registers its pid, hostname and start time" do
+      described_class.new.send(:start_heartbeat)
+
+      expect(Pgbus::Process::Heartbeat).to have_received(:new).with(
+        kind: "supervisor",
+        metadata: { pid: Process.pid, hostname: Socket.gethostname, started_at: a_value_within(5).of(Time.now.to_f) }
+      )
+    end
+  end
+
   describe "restart_child (private)" do
     let(:supervisor) { described_class.new }
 

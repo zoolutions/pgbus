@@ -1,0 +1,48 @@
+<%# One process plus its expansion row (issue #493). Locals: process (a
+    DataSource#processes hash), state (its ProcessState::Result). A child of
+    a supervisor row is indented under it. %>
+<% metadata = process[:metadata].is_a?(Hash) ? process[:metadata] : {} %>
+<% raw = pgbus_process_raw_metadata(metadata) %>
+<tr id="process-<%= process[:id] %>" class="hover:bg-gray-50 dark:hover:bg-gray-700/50" data-process-row data-status="<%= state.status %>">
+  <td data-label="<%= t("pgbus.processes.processes_table.headers.process") %>" class="px-4 py-3 text-sm align-top <%= "lg:pl-10" if state.supervisor_pid %>">
+    <details data-job-toggle class="group">
+      <summary class="cursor-pointer list-none font-medium text-indigo-600 hover:text-indigo-800 dark:hover:text-indigo-300 dark:text-indigo-400"><%= process[:kind] %></summary>
+    </details>
+    <span class="block lg:whitespace-nowrap text-xs font-mono text-gray-700 dark:text-gray-300"><%= process[:hostname] %> · <%= process[:pid] %></span>
+    <% if metadata["capsule"] %>
+      <span class="block text-xs text-gray-600 dark:text-gray-300"><%= t("pgbus.processes.processes_table.capsule", capsule: metadata["capsule"], process: metadata["process"] || "—") %></span>
+    <% end %>
+    <% if state.supervisor_pid %>
+      <span class="block lg:whitespace-nowrap text-xs text-gray-600 dark:text-gray-300"><%= t("pgbus.processes.processes_table.under_supervisor", pid: state.supervisor_pid) %></span>
+    <% end %>
+  </td>
+  <td data-label="<%= t("pgbus.processes.processes_table.headers.status") %>" class="px-4 py-3 text-sm align-top">
+    <%= render "pgbus/processes/status", state: state %>
+  </td>
+  <td data-label="<%= t("pgbus.processes.processes_table.headers.activity") %>" class="px-4 py-3 text-sm text-gray-700 dark:text-gray-200 align-top" data-testid="process-activity"><%= pgbus_process_activity(state) %></td>
+  <td data-label="<%= t("pgbus.processes.processes_table.headers.recycle") %>" class="px-4 py-3 text-sm text-gray-700 dark:text-gray-200 align-top" data-testid="process-recycle"><%= pgbus_process_recycle(state) %></td>
+  <td data-label="<%= t("pgbus.processes.processes_table.headers.heartbeat") %>" class="px-4 py-3 text-sm text-gray-700 dark:text-gray-200 align-top">
+    <span class="block"><%= pgbus_time(process[:last_heartbeat_at]) %></span>
+    <% if state.uptime_seconds %>
+      <span class="block text-xs text-gray-600 dark:text-gray-300"><%= t("pgbus.processes.processes_table.uptime", duration: pgbus_duration(state.uptime_seconds)) %></span>
+    <% end %>
+  </td>
+</tr>
+<tr class="pgbus-job-detail" data-process-detail="<%= process[:id] %>">
+  <td colspan="5" class="px-4 pb-4 bg-gray-50 dark:bg-gray-900 border-t border-gray-100 dark:border-gray-700">
+    <dl class="mt-3 grid grid-cols-1 gap-2 text-sm sm:grid-cols-[auto_1fr] sm:gap-x-6">
+      <dt class="font-medium text-gray-700 dark:text-gray-200"><%= t("pgbus.processes.processes_table.started") %></dt>
+      <dd class="text-gray-700 dark:text-gray-200"><%= pgbus_timestamp(state.started_at) %></dd>
+      <dt class="font-medium text-gray-700 dark:text-gray-200"><%= t("pgbus.processes.processes_table.raw_metadata") %></dt>
+      <dd class="font-mono text-xs">
+        <% if raw.empty? %>
+          <span class="text-gray-700 dark:text-gray-200"><%= t("pgbus.processes.processes_table.no_raw_metadata") %></span>
+        <% else %>
+          <% raw.each do |k, v| %>
+            <span class="inline-flex items-center rounded bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 text-xs text-gray-700 dark:text-gray-200 mr-1 mb-1"><%= k %>: <%= v %></span>
+          <% end %>
+        <% end %>
+      </dd>
+    </dl>
+  </td>
+</tr>

@@ -636,18 +636,76 @@ es:
       index:
         title: Procesos
       processes_table:
+        capsule: cápsula %{capsule} · proceso %{process}
         empty: No hay procesos en ejecución
         headers:
-          hostname: Nombre del host
-          kind: Tipo
-          last_heartbeat: Último latido
-          metadata: Metadatos
-          pid: PID
+          activity: Actividad
+          heartbeat: Latido
+          process: Proceso
+          recycle: Reciclaje
           status: Estado
-        rates:
-          dequeued: extraídos
-          failed: fallidos
-          processed: procesados
+        no_raw_metadata: Sin otros metadatos
+        raw_metadata: Otros metadatos
+        started: Iniciado
+        under_supervisor: bajo el supervisor %{pid}
+        uptime: activo %{duration}
+      state:
+        activity:
+          buffered: "%{number} en búfer"
+          busy_slots: "%{busy}/%{capacity} slots ocupados"
+          busy_threads: "%{busy}/%{capacity} hilos ocupados"
+          consumes: Consume %{topics}
+          drains: Vacía %{queues}
+          drains_all: Vacía todas las colas
+          failed_rate: "%{rate} fallidos/s"
+          handled: "%{number} gestionados"
+          maintenance: Ejecuta mantenimiento cada %{interval} (trabajos programados, procesos caídos, archivos)
+          outbox: Publica entradas del outbox
+          rate: "%{rate} trabajos/s"
+          schedule:
+            one: Ejecuta %{count} tarea recurrente, revisa cada %{interval}
+            other: Ejecuta %{count} tareas recurrentes, revisa cada %{interval}
+          slots:
+            one: "%{count} slot"
+            other: "%{count} slots"
+          supervises: Supervisa %{children}
+          supervises_none: No supervisa procesos en este host
+          threads:
+            one: "%{count} hilo"
+            other: "%{count} hilos"
+        kinds:
+          consumer:
+            one: "%{count} consumidor"
+            other: "%{count} consumidores"
+          dispatcher:
+            one: dispatcher
+            other: "%{count} dispatchers"
+          outbox_poller:
+            one: poller del outbox
+            other: "%{count} pollers del outbox"
+          scheduler:
+            one: scheduler
+            other: "%{count} schedulers"
+          worker:
+            one: "%{count} worker"
+            other: "%{count} workers"
+        next:
+          stale_reaped: probablemente muerto; se elimina en la próxima pasada del dispatcher (en menos de %{within})
+          stale_unreaped: probablemente muerto; no hay un dispatcher vivo que lo elimine
+          stalled_maintenance: los trabajos programados, la limpieza de procesos caídos y la compactación de archivos no avanzan
+          stalled_schedule: las tareas recurrentes no se están encolando
+          stalled_standalone: no hay supervisor que lo reinicie
+          stalled_supervised: el watchdog del supervisor lo reinicia
+        reasons:
+          healthy_detection_off_html: Latido %{ago} (límite %{limit}) · detección de bloqueos desactivada
+          healthy_heartbeat_html: Latido %{ago} (límite %{limit})
+          healthy_loop_html: El bucle avanzó %{ago} (límite %{limit})
+          stale_html: Sin latido desde hace %{age} (límite %{limit})
+          stalled_html: El bucle avanzó por última vez %{ago} (límite %{limit})
+        recycle:
+          jobs: "%{done} / %{limit} trabajos"
+          lifetime: activo %{uptime} / %{limit}
+          memory: "%{used} / %{limit} MB"
     queues:
       destroy:
         success: Cola %{name} eliminada.

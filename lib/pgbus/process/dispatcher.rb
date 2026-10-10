@@ -697,7 +697,7 @@ module Pgbus
       def start_heartbeat
         @heartbeat = Heartbeat.new(
           kind: "dispatcher",
-          metadata: { pid: ::Process.pid },
+          metadata: { pid: ::Process.pid, started_at: Time.now.to_f, supervisor_pid: ::Process.ppid },
           loop_tick_supplier: -> { @loop_tick_at.get }
         )
         @heartbeat.start

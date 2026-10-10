@@ -77,6 +77,8 @@ module Pgbus
         @claim_buffer = ClaimBuffer.new(config: config)
         @loop_tick_at = Concurrent::AtomicReference.new(nil)
         @started_at_monotonic = started_at_monotonic || monotonic_now
+        # Wall clock for the Processes page's uptime (issue #493).
+        @started_at = Time.current
         @wake_signal = WakeSignal.new
         @pool = ExecutionPools.build(
           mode: @execution_mode,
@@ -613,11 +615,28 @@ module Pgbus
       def start_heartbeat
         @heartbeat = Heartbeat.new(
           kind: "consumer",
-          metadata: { topics: topics, threads: threads, pid: ::Process.pid },
+          metadata: {
+            topics: topics, threads: threads, pid: ::Process.pid, execution_mode: @execution_mode,
+            started_at: @started_at.to_f, supervisor_pid: ::Process.ppid
+          },
           on_beat: -> { on_heartbeat },
-          loop_tick_supplier: -> { @loop_tick_at.get }
+          loop_tick_supplier: -> { @loop_tick_at.get },
+          metadata_supplier: -> { throughput_metadata }
         )
         @heartbeat.start
+      end
+
+      # What the Processes page states about a consumer (issue #493), read
+      # once per beat, never per message. String keys: the value round-trips
+      # through JSON in the metadata column.
+      def throughput_metadata
+        pool = @pool.metadata
+        {
+          "jobs_processed" => @jobs_processed.value, "buffered" => @claim_buffer.size,
+          "capacity" => pool[:capacity], "busy" => pool[:busy], "memory_mb" => current_memory_mb,
+          "max_jobs" => config.max_jobs_per_worker, "max_memory_mb" => config.max_memory_mb,
+          "max_lifetime" => config.max_worker_lifetime
+        }.compact
       end
 
       # Runs once per heartbeat interval (not per message), so it's the right

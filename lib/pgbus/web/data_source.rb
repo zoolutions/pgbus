@@ -10,6 +10,7 @@ module Pgbus
       include ListCounts
       include QueueSummary
       include EventList
+      include ProcessList
 
       # pgbus_failed_events rows outside the EventBus handler queues; binds
       # handler_queue_names_literal as $1.
@@ -363,17 +364,6 @@ module Pgbus
       rescue StandardError => e
         Pgbus.logger.debug { "[Pgbus::Web] Error discarding all failed events: #{e.message}" }
         0
-      end
-
-      # Processes
-      def processes
-        rows = connection.select_all(
-          "SELECT * FROM pgbus_processes ORDER BY kind, created_at"
-        )
-        rows.to_a.map { |r| format_process(r) }
-      rescue StandardError => e
-        Pgbus.logger.debug { "[Pgbus::Web] Error fetching processes: #{e.message}" }
-        []
       end
 
       # Processed events (audit trail)
@@ -1429,72 +1419,6 @@ module Pgbus
           headers: msg.headers,
           queue_name: queue_name
         }
-      end
-
-      def format_process(row)
-        heartbeat = row["last_heartbeat_at"]
-        heartbeat_time = heartbeat.is_a?(String) ? Time.parse(heartbeat) : heartbeat
-        stale = heartbeat_time && (Time.now - heartbeat_time) > Process::Heartbeat::ALIVE_THRESHOLD
-        metadata = row["metadata"].is_a?(String) ? JSON.parse(row["metadata"]) : row["metadata"]
-        status = derive_process_status(stale, metadata, row["kind"])
-
-        {
-          id: row["id"].to_i,
-          kind: row["kind"],
-          hostname: row["hostname"],
-          pid: row["pid"].to_i,
-          metadata: metadata,
-          last_heartbeat_at: heartbeat_time,
-          healthy: status == :healthy,
-          status: status,
-          created_at: row["created_at"]
-        }
-      end
-
-      def derive_process_status(stale, metadata, kind)
-        return :stale if stale
-        return :healthy unless metadata.is_a?(Hash)
-
-        threshold = stall_threshold_for(kind)
-        return :healthy unless threshold
-
-        loop_tick = metadata["loop_tick_at"]
-        return :healthy unless loop_tick
-
-        age = Time.now.to_f - loop_tick.to_f
-        age > threshold ? :stalled : :healthy
-      end
-
-      # Kind-aware stall threshold. Workers run a tight loop, so the base
-      # stall_threshold applies directly. The dispatcher and scheduler sleep
-      # between iterations, so their beacon is naturally up to one sleep
-      # interval stale even when healthy — widen the window by that interval to
-      # avoid false stalls. Consumers idle on an empty-read wait that can reach
-      # NOTIFY_FALLBACK_POLL_SECONDS (15s) when a live listener drives wake-up,
-      # so widen by that max wait when notify is on, or by the poll interval
-      # otherwise. Kinds with no loop beacon (nil) are never stalled.
-      def stall_threshold_for(kind)
-        config = Pgbus.configuration
-        base = config.stall_threshold
-        return nil unless base&.positive?
-
-        case kind
-        when "worker" then base
-        when "dispatcher" then base + config.dispatch_interval
-        when "scheduler" then base + config.recurring_schedule_interval
-        when "consumer" then base + consumer_stall_slack(config)
-        end
-      end
-
-      # Widen the consumer's stall window by its maximum empty-read wait. With
-      # notify wake-up live, that wait rises to NOTIFY_FALLBACK_POLL_SECONDS as a
-      # safety net; without it, the consumer polls at polling_interval.
-      def consumer_stall_slack(config)
-        if config.worker_notify_wakeup?
-          [config.polling_interval, Pgbus::Process::Consumer::NOTIFY_FALLBACK_POLL_SECONDS].max
-        else
-          config.polling_interval
-        end
       end
 
       def format_batch(record, pending_jobs: nil)

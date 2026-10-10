@@ -1,0 +1,4 @@
+<%# A process's status in words (issue #493): the badge, then why, then what
+    happens next. Locals: state (a ProcessState::Result). %>
+<%= pgbus_status_badge(state.status) %>
+<p class="mt-1 text-xs text-gray-700 dark:text-gray-200" data-testid="process-reason"><%= pgbus_process_status(state) %></p>

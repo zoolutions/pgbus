@@ -156,6 +156,52 @@ RSpec.describe Pgbus::Process::Worker do
         .with(hash_including(metadata: hash_excluding(:capsule, :process)))
     end
 
+    # Issue #493: the Processes page states uptime, the owning supervisor and
+    # recycle progress from the worker's own limits.
+    it "registers its start time and parent pid" do
+      worker.send(:start_heartbeat)
+
+      expect(Pgbus::Process::Heartbeat).to have_received(:new).with(
+        hash_including(metadata: hash_including(started_at: a_value_within(5).of(Time.now.to_f),
+                                                supervisor_pid: Process.ppid))
+      )
+    end
+
+    # Resolved on every beat, as the recycle check resolves them, so a config
+    # change shows up on the page the way it takes effect.
+    it "supplies its own resolved recycle limits on every beat" do
+      allow(Pgbus::Process::MemoryUsage).to receive(:current_mb).and_return(100)
+      allow(Pgbus.configuration).to receive_messages(max_jobs_per_worker: 10_000, max_memory_mb: 512,
+                                                     max_worker_lifetime: nil)
+      supplier = nil
+      allow(Pgbus::Process::Heartbeat).to receive(:new) do |**kwargs|
+        supplier = kwargs[:metadata_supplier]
+        heartbeat
+      end
+      described_class.new(queues: %w[default], threads: 5, recycle_limits: { max_jobs_per_worker: 50 })
+                     .send(:start_heartbeat)
+
+      expect(supplier.call).to include("max_jobs" => 50, "max_memory_mb" => 512)
+      expect(supplier.call).not_to have_key("max_lifetime")
+
+      allow(Pgbus.configuration).to receive(:max_memory_mb).and_return(1024)
+      expect(supplier.call).to include("max_memory_mb" => 1024)
+    end
+
+    it "supplies the pool's capacity and busy count and its memory on every beat" do
+      allow(Pgbus::Process::MemoryUsage).to receive(:current_mb).and_return(310)
+      allow(pool).to receive(:metadata).and_return({ mode: :threads, capacity: 5, busy: 3 })
+      supplier = nil
+      allow(Pgbus::Process::Heartbeat).to receive(:new) do |**kwargs|
+        supplier = kwargs[:metadata_supplier]
+        heartbeat
+      end
+
+      worker.send(:start_heartbeat)
+
+      expect(supplier.call).to include("capacity" => 5, "busy" => 3, "memory_mb" => 310, "buffered" => 0)
+    end
+
     it "snapshots the rate counter before the supplier reads it" do
       supplier = nil
       allow(Pgbus::Process::Heartbeat).to receive(:new) do |**kwargs|
