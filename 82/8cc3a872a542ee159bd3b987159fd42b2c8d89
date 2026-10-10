@@ -1,0 +1,46 @@
+app/views/pgbus/dead_letter/_row.html.erb
+  s_364c84711a3705::t_043d5d0831a046 41
+spec/requests/pgbus/dead_letter_controller_spec.rb
+  s_364c84711a3705::t_568228a96ea1b8 79-90
+spec/pgbus/web/dead_letter_reason_spec.rb
+  s_364c84711a3705::t_7f8fd857193f1b 82-87
+lib/pgbus/web/data_source/dead_letter.rb
+  s_364c84711a3705::t_043d5d0831a046 54-57,59,63
+spec/pgbus/web/data_source_dead_letter_spec.rb
+  s_364c84711a3705::t_568228a96ea1b8 63,220-244
+docs/app/views/docs/pages/dashboard.rb
+  s_364c84711a3705::t_043d5d0831a046 39
+lib/pgbus/dead_letter_header.rb
+  s_364c84711a3705::t_043d5d0831a046 35,61,68-78,124-126
+lib/pgbus/web/dead_letter_reason.rb
+  s_364c84711a3705::t_7f8fd857193f1b 34-35,41,55,70-72
+lib/pgbus/cli/dlq.rb
+  s_364c84711a3705::t_043d5d0831a046 152-155
+app/controllers/pgbus/dead_letter_controller.rb
+  s_364c84711a3705::t_043d5d0831a046 25,81-82
+spec/support/pgbus/stub_data_source.rb
+  s_364c84711a3705::t_f621f388a2d12e 96
+  s_364c84711a3705::t_043d5d0831a046 93-95
+docs/app/views/docs/pages/retries_dead_letters.rb
+  s_364c84711a3705::t_043d5d0831a046 104-106
+spec/pgbus/cli_dlq_spec.rb
+  s_364c84711a3705::t_568228a96ea1b8 108-121
+spec/pgbus/dead_letter_header_spec.rb
+  s_364c84711a3705::t_568228a96ea1b8 91-96,137-146
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "828cc3a872a542ee159bd3b987159fd42b2c8d89",
+  "prompts": {},
+  "sessions": {
+    "s_364c84711a3705": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8cab8bba-398f-49c5-ab3b-66a236e3b01c",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
