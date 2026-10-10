@@ -2,8 +2,10 @@
 
 module Pgbus
   class ProcessesController < ApplicationController
+    include ProcessListing
+
     def index
-      @processes = data_source.processes
+      load_processes
       render_frame("pgbus/processes/processes_table") if params[:frame] == "list"
     end
   end

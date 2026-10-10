@@ -42,43 +42,6 @@ module Pgbus
       end
     end
 
-    # Order the rate keys are rendered in, and their i18n label suffixes.
-    WORKER_RATE_KEYS = %w[processed failed dequeued].freeze
-
-    # Metadata keys rendered specially elsewhere (throughput badge, health
-    # status) and therefore excluded from the generic key/value dump.
-    WORKER_INTERNAL_METADATA_KEYS = %w[rates jobs_processed jobs_failed in_flight loop_tick_at].freeze
-
-    # The subset of a process's metadata to render as generic key/value badges:
-    # everything except the throughput/health keys that have dedicated rendering.
-    def pgbus_display_metadata(metadata)
-      return {} unless metadata.is_a?(Hash)
-
-      metadata.reject { |k, _| WORKER_INTERNAL_METADATA_KEYS.include?(k.to_s) }
-    end
-
-    # Render a worker's per-second throughput rates (from heartbeat metadata)
-    # as a compact human-readable string, e.g. "12.4/s processed · 0.2/s failed".
-    # Zero rates are omitted; returns nil when there are no non-zero rates so
-    # callers can fall back to the raw metadata rendering.
-    def pgbus_worker_rates(metadata)
-      return nil unless metadata.is_a?(Hash)
-
-      rates = metadata["rates"]
-      return nil unless rates.is_a?(Hash)
-
-      parts = WORKER_RATE_KEYS.filter_map do |key|
-        value = rates[key].to_f
-        next if value.zero?
-
-        label = I18n.t("pgbus.processes.processes_table.rates.#{key}", default: key)
-        "#{value}/s #{label}"
-      end
-      return nil if parts.empty?
-
-      parts.join(" · ")
-    end
-
     def pgbus_status_badge(healthy_or_status)
       status = case healthy_or_status
                when true then :healthy

@@ -636,18 +636,76 @@ en:
       index:
         title: Processes
       processes_table:
+        capsule: capsule %{capsule} · process %{process}
         empty: No processes running
         headers:
-          hostname: Hostname
-          kind: Kind
-          last_heartbeat: Last Heartbeat
-          metadata: Metadata
-          pid: PID
+          activity: Activity
+          heartbeat: Heartbeat
+          process: Process
+          recycle: Recycle
           status: Status
-        rates:
-          dequeued: dequeued
-          failed: failed
-          processed: processed
+        no_raw_metadata: No other metadata
+        raw_metadata: Other metadata
+        started: Started
+        under_supervisor: under supervisor %{pid}
+        uptime: up %{duration}
+      state:
+        activity:
+          buffered: "%{number} buffered"
+          busy_slots: "%{busy}/%{capacity} slots busy"
+          busy_threads: "%{busy}/%{capacity} threads busy"
+          consumes: Consumes %{topics}
+          drains: Drains %{queues}
+          drains_all: Drains every queue
+          failed_rate: "%{rate} failed/s"
+          handled: "%{number} handled"
+          maintenance: Runs maintenance every %{interval} (scheduled jobs, stale processes, archives)
+          outbox: Publishes outbox entries
+          rate: "%{rate} jobs/s"
+          schedule:
+            one: Runs %{count} recurring task, checks every %{interval}
+            other: Runs %{count} recurring tasks, checks every %{interval}
+          slots:
+            one: "%{count} slot"
+            other: "%{count} slots"
+          supervises: Supervises %{children}
+          supervises_none: Supervises no processes on this host
+          threads:
+            one: "%{count} thread"
+            other: "%{count} threads"
+        kinds:
+          consumer:
+            one: "%{count} consumer"
+            other: "%{count} consumers"
+          dispatcher:
+            one: dispatcher
+            other: "%{count} dispatchers"
+          outbox_poller:
+            one: outbox poller
+            other: "%{count} outbox pollers"
+          scheduler:
+            one: scheduler
+            other: "%{count} schedulers"
+          worker:
+            one: "%{count} worker"
+            other: "%{count} workers"
+        next:
+          stale_reaped: probably dead; removed at the dispatcher's next sweep (within %{within})
+          stale_unreaped: probably dead; no live dispatcher to remove it
+          stalled_maintenance: scheduled jobs, stale-process cleanup and archive compaction are not advancing
+          stalled_schedule: recurring tasks are not being enqueued
+          stalled_standalone: no supervisor to restart it
+          stalled_supervised: the supervisor's watchdog restarts it
+        reasons:
+          healthy_detection_off_html: Heartbeat %{ago} (limit %{limit}) · stall detection off
+          healthy_heartbeat_html: Heartbeat %{ago} (limit %{limit})
+          healthy_loop_html: Loop ticked %{ago} (limit %{limit})
+          stale_html: No heartbeat for %{age} (limit %{limit})
+          stalled_html: Loop last ticked %{ago} (limit %{limit})
+        recycle:
+          jobs: "%{done} / %{limit} jobs"
+          lifetime: up %{uptime} / %{limit}
+          memory: "%{used} / %{limit} MB"
     queues:
       destroy:
         success: Queue %{name} deleted.

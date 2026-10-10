@@ -636,18 +636,76 @@ ja:
       index:
         title: プロセス
       processes_table:
+        capsule: カプセル %{capsule} · プロセス %{process}
         empty: 実行中のプロセスはありません
         headers:
-          hostname: ホスト名
-          kind: 種類
-          last_heartbeat: 最終ハートビート
-          metadata: メタデータ
-          pid: PID
+          activity: アクティビティ
+          heartbeat: ハートビート
+          process: プロセス
+          recycle: リサイクル
           status: ステータス
-        rates:
-          dequeued: 取得
-          failed: 失敗
-          processed: 処理
+        no_raw_metadata: その他のメタデータはありません
+        raw_metadata: その他のメタデータ
+        started: 開始
+        under_supervisor: スーパーバイザー %{pid} の配下
+        uptime: 稼働 %{duration}
+      state:
+        activity:
+          buffered: "%{number} 件バッファ中"
+          busy_slots: "%{busy}/%{capacity} スロット使用中"
+          busy_threads: "%{busy}/%{capacity} スレッド使用中"
+          consumes: "%{topics} を購読"
+          drains: "%{queues} を処理"
+          drains_all: すべてのキューを処理
+          failed_rate: "%{rate} 失敗/秒"
+          handled: "%{number} 件処理済み"
+          maintenance: "%{interval} ごとにメンテナンスを実行（予約ジョブ、停止プロセス、アーカイブ）"
+          outbox: outbox のエントリを公開
+          rate: "%{rate} ジョブ/秒"
+          schedule:
+            one: "%{count} 件の定期タスクを実行、%{interval} ごとに確認"
+            other: "%{count} 件の定期タスクを実行、%{interval} ごとに確認"
+          slots:
+            one: "%{count} スロット"
+            other: "%{count} スロット"
+          supervises: '監視対象: %{children}'
+          supervises_none: このホストで監視しているプロセスはありません
+          threads:
+            one: "%{count} スレッド"
+            other: "%{count} スレッド"
+        kinds:
+          consumer:
+            one: コンシューマー %{count}
+            other: コンシューマー %{count}
+          dispatcher:
+            one: ディスパッチャー
+            other: ディスパッチャー %{count}
+          outbox_poller:
+            one: outbox ポーラー
+            other: outbox ポーラー %{count}
+          scheduler:
+            one: スケジューラー
+            other: スケジューラー %{count}
+          worker:
+            one: ワーカー %{count}
+            other: ワーカー %{count}
+        next:
+          stale_reaped: 停止している可能性が高い。ディスパッチャーの次回の掃除で削除されます（%{within} 以内）
+          stale_unreaped: 停止している可能性が高い。削除できる稼働中のディスパッチャーがありません
+          stalled_maintenance: 予約ジョブ、停止プロセスの掃除、アーカイブの圧縮が進んでいません
+          stalled_schedule: 定期タスクがキューに投入されていません
+          stalled_standalone: 再起動するスーパーバイザーがありません
+          stalled_supervised: スーパーバイザーのウォッチドッグが再起動します
+        reasons:
+          healthy_detection_off_html: ハートビート %{ago}（上限 %{limit}）· 停滞検知オフ
+          healthy_heartbeat_html: ハートビート %{ago}（上限 %{limit}）
+          healthy_loop_html: ループ実行 %{ago}（上限 %{limit}）
+          stale_html: "%{age} ハートビートなし（上限 %{limit}）"
+          stalled_html: 最後のループ実行 %{ago}（上限 %{limit}）
+        recycle:
+          jobs: "%{done} / %{limit} ジョブ"
+          lifetime: 稼働 %{uptime} / %{limit}
+          memory: "%{used} / %{limit} MB"
     queues:
       destroy:
         success: キュー %{name} を削除しました。

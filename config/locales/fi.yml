@@ -636,18 +636,76 @@ fi:
       index:
         title: Prosessit
       processes_table:
+        capsule: kapseli %{capsule} · prosessi %{process}
         empty: Ei käynnissä olevia prosesseja
         headers:
-          hostname: Isäntänimi
-          kind: Tyyppi
-          last_heartbeat: Viimeisin sydämenlyönti
-          metadata: Metatiedot
-          pid: PID
+          activity: Toiminta
+          heartbeat: Sydämenlyönti
+          process: Prosessi
+          recycle: Kierrätys
           status: Tila
-        rates:
-          dequeued: haettu
-          failed: epäonnistui
-          processed: käsitelty
+        no_raw_metadata: Ei muita metatietoja
+        raw_metadata: Muut metatiedot
+        started: Käynnistetty
+        under_supervisor: valvoja %{pid}
+        uptime: käynnissä %{duration}
+      state:
+        activity:
+          buffered: "%{number} puskurissa"
+          busy_slots: "%{busy}/%{capacity} paikkaa varattu"
+          busy_threads: "%{busy}/%{capacity} säiettä varattu"
+          consumes: Kuluttaa %{topics}
+          drains: Tyhjentää %{queues}
+          drains_all: Tyhjentää kaikki jonot
+          failed_rate: "%{rate} epäonnistui/s"
+          handled: "%{number} käsitelty"
+          maintenance: Ajaa ylläpidon %{interval} välein (ajastetut työt, kuolleet prosessit, arkistot)
+          outbox: Julkaisee outbox-merkintöjä
+          rate: "%{rate} työtä/s"
+          schedule:
+            one: Ajaa %{count} toistuvan tehtävän, tarkistaa %{interval} välein
+            other: Ajaa %{count} toistuvaa tehtävää, tarkistaa %{interval} välein
+          slots:
+            one: "%{count} paikka"
+            other: "%{count} paikkaa"
+          supervises: 'Valvoo: %{children}'
+          supervises_none: Ei valvo prosesseja tällä isännällä
+          threads:
+            one: "%{count} säie"
+            other: "%{count} säiettä"
+        kinds:
+          consumer:
+            one: "%{count} kuluttaja"
+            other: "%{count} kuluttajaa"
+          dispatcher:
+            one: dispatcher
+            other: "%{count} dispatcheria"
+          outbox_poller:
+            one: outbox-poller
+            other: "%{count} outbox-polleria"
+          scheduler:
+            one: ajastin
+            other: "%{count} ajastinta"
+          worker:
+            one: "%{count} worker"
+            other: "%{count} workeria"
+        next:
+          stale_reaped: todennäköisesti kuollut; poistetaan dispatcherin seuraavassa siivouksessa (%{within} sisällä)
+          stale_unreaped: todennäköisesti kuollut; ei elävää dispatcheria poistamaan sitä
+          stalled_maintenance: ajastetut työt, kuolleiden prosessien siivous ja arkistojen tiivistys eivät etene
+          stalled_schedule: toistuvia tehtäviä ei lisätä jonoon
+          stalled_standalone: ei valvojaa käynnistämään sitä uudelleen
+          stalled_supervised: valvojan vahtikoira käynnistää sen uudelleen
+        reasons:
+          healthy_detection_off_html: Sydämenlyönti %{ago} (raja %{limit}) · jumiutumisen tunnistus pois
+          healthy_heartbeat_html: Sydämenlyönti %{ago} (raja %{limit})
+          healthy_loop_html: Silmukka eteni %{ago} (raja %{limit})
+          stale_html: Ei sydämenlyöntiä %{age} aikana (raja %{limit})
+          stalled_html: Silmukka eteni viimeksi %{ago} (raja %{limit})
+        recycle:
+          jobs: "%{done} / %{limit} työtä"
+          lifetime: käynnissä %{uptime} / %{limit}
+          memory: "%{used} / %{limit} Mt"
     queues:
       destroy:
         success: Jono %{name} poistettu.

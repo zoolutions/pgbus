@@ -636,18 +636,76 @@ nl:
       index:
         title: Processen
       processes_table:
+        capsule: capsule %{capsule} · proces %{process}
         empty: Geen processen actief
         headers:
-          hostname: Hostnaam
-          kind: Type
-          last_heartbeat: Laatste hartslag
-          metadata: Metadata
-          pid: PID
+          activity: Activiteit
+          heartbeat: Hartslag
+          process: Proces
+          recycle: Recycling
           status: Status
-        rates:
-          dequeued: opgehaald
-          failed: mislukt
-          processed: verwerkt
+        no_raw_metadata: Geen andere metadata
+        raw_metadata: Andere metadata
+        started: Gestart
+        under_supervisor: onder supervisor %{pid}
+        uptime: actief %{duration}
+      state:
+        activity:
+          buffered: "%{number} gebufferd"
+          busy_slots: "%{busy}/%{capacity} slots bezet"
+          busy_threads: "%{busy}/%{capacity} threads bezet"
+          consumes: Consumeert %{topics}
+          drains: Verwerkt %{queues}
+          drains_all: Verwerkt alle queues
+          failed_rate: "%{rate} mislukt/s"
+          handled: "%{number} afgehandeld"
+          maintenance: Voert elke %{interval} onderhoud uit (geplande jobs, dode processen, archieven)
+          outbox: Publiceert outbox-items
+          rate: "%{rate} jobs/s"
+          schedule:
+            one: Voert %{count} terugkerende taak uit, controleert elke %{interval}
+            other: Voert %{count} terugkerende taken uit, controleert elke %{interval}
+          slots:
+            one: "%{count} slot"
+            other: "%{count} slots"
+          supervises: Bewaakt %{children}
+          supervises_none: Bewaakt geen processen op deze host
+          threads:
+            one: "%{count} thread"
+            other: "%{count} threads"
+        kinds:
+          consumer:
+            one: "%{count} consumer"
+            other: "%{count} consumers"
+          dispatcher:
+            one: dispatcher
+            other: "%{count} dispatchers"
+          outbox_poller:
+            one: outbox-poller
+            other: "%{count} outbox-pollers"
+          scheduler:
+            one: scheduler
+            other: "%{count} schedulers"
+          worker:
+            one: "%{count} worker"
+            other: "%{count} workers"
+        next:
+          stale_reaped: waarschijnlijk dood; verwijderd bij de volgende ronde van de dispatcher (binnen %{within})
+          stale_unreaped: waarschijnlijk dood; geen levende dispatcher om het te verwijderen
+          stalled_maintenance: geplande jobs, opruimen van dode processen en archiefcompactie lopen niet door
+          stalled_schedule: terugkerende taken worden niet in de queue gezet
+          stalled_standalone: geen supervisor om het te herstarten
+          stalled_supervised: de watchdog van de supervisor herstart het
+        reasons:
+          healthy_detection_off_html: Hartslag %{ago} (limiet %{limit}) · vastloopdetectie uit
+          healthy_heartbeat_html: Hartslag %{ago} (limiet %{limit})
+          healthy_loop_html: Lus tikte %{ago} (limiet %{limit})
+          stale_html: Geen hartslag sinds %{age} (limiet %{limit})
+          stalled_html: Lus tikte laatst %{ago} (limiet %{limit})
+        recycle:
+          jobs: "%{done} / %{limit} jobs"
+          lifetime: actief %{uptime} / %{limit}
+          memory: "%{used} / %{limit} MB"
     queues:
       destroy:
         success: Wachtrij %{name} verwijderd.

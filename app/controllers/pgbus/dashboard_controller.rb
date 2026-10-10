@@ -2,6 +2,8 @@
 
 module Pgbus
   class DashboardController < ApplicationController
+    include ProcessListing
+
     def show
       case params[:frame]
       when "stats"
@@ -11,7 +13,7 @@ module Pgbus
         @queues = data_source.queues_with_metrics
         render_frame("pgbus/dashboard/queues_table")
       when "processes"
-        @processes = data_source.processes
+        load_processes
         render_frame("pgbus/dashboard/processes_table")
       when "failures"
         @recent_failures = data_source.failed_events(page: 1, per_page: 5)
@@ -22,7 +24,7 @@ module Pgbus
       else
         @stats = data_source.summary_stats
         @queues = data_source.queues_with_metrics
-        @processes = data_source.processes
+        load_processes
         @recent_failures = data_source.failed_events(page: 1, per_page: 5)
         @health = data_source.queue_health_stats
       end

@@ -636,18 +636,76 @@ da:
       index:
         title: Processer
       processes_table:
+        capsule: capsule %{capsule} · proces %{process}
         empty: Ingen processer kører
         headers:
-          hostname: Værtsnavn
-          kind: Type
-          last_heartbeat: Sidste Heartbeat
-          metadata: Metadata
-          pid: PID
+          activity: Aktivitet
+          heartbeat: Heartbeat
+          process: Proces
+          recycle: Genbrug
           status: Status
-        rates:
-          dequeued: hentet
-          failed: mislykkedes
-          processed: behandlet
+        no_raw_metadata: Ingen andre metadata
+        raw_metadata: Andre metadata
+        started: Startet
+        under_supervisor: under supervisor %{pid}
+        uptime: oppe %{duration}
+      state:
+        activity:
+          buffered: "%{number} i buffer"
+          busy_slots: "%{busy}/%{capacity} slots optaget"
+          busy_threads: "%{busy}/%{capacity} tråde optaget"
+          consumes: Forbruger %{topics}
+          drains: Tømmer %{queues}
+          drains_all: Tømmer alle køer
+          failed_rate: "%{rate} fejlede/s"
+          handled: "%{number} håndteret"
+          maintenance: Kører vedligehold hvert %{interval} (planlagte jobs, døde processer, arkiver)
+          outbox: Publicerer outbox-poster
+          rate: "%{rate} jobs/s"
+          schedule:
+            one: Kører %{count} tilbagevendende opgave, tjekker hvert %{interval}
+            other: Kører %{count} tilbagevendende opgaver, tjekker hvert %{interval}
+          slots:
+            one: "%{count} slot"
+            other: "%{count} slots"
+          supervises: Overvåger %{children}
+          supervises_none: Overvåger ingen processer på denne vært
+          threads:
+            one: "%{count} tråd"
+            other: "%{count} tråde"
+        kinds:
+          consumer:
+            one: "%{count} consumer"
+            other: "%{count} consumers"
+          dispatcher:
+            one: dispatcher
+            other: "%{count} dispatchers"
+          outbox_poller:
+            one: outbox-poller
+            other: "%{count} outbox-pollere"
+          scheduler:
+            one: scheduler
+            other: "%{count} schedulere"
+          worker:
+            one: "%{count} worker"
+            other: "%{count} workers"
+        next:
+          stale_reaped: sandsynligvis død; fjernes ved dispatcherens næste oprydning (inden for %{within})
+          stale_unreaped: sandsynligvis død; ingen levende dispatcher til at fjerne den
+          stalled_maintenance: planlagte jobs, oprydning af døde processer og arkivkomprimering står stille
+          stalled_schedule: tilbagevendende opgaver sættes ikke i kø
+          stalled_standalone: ingen supervisor til at genstarte den
+          stalled_supervised: supervisorens watchdog genstarter den
+        reasons:
+          healthy_detection_off_html: Heartbeat %{ago} (grænse %{limit}) · stop-detektion slået fra
+          healthy_heartbeat_html: Heartbeat %{ago} (grænse %{limit})
+          healthy_loop_html: Løkken tikkede %{ago} (grænse %{limit})
+          stale_html: Intet heartbeat i %{age} (grænse %{limit})
+          stalled_html: Løkken tikkede sidst %{ago} (grænse %{limit})
+        recycle:
+          jobs: "%{done} / %{limit} jobs"
+          lifetime: oppe %{uptime} / %{limit}
+          memory: "%{used} / %{limit} MB"
     queues:
       destroy:
         success: Køen %{name} slettet.

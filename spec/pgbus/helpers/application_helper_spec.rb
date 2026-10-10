@@ -134,63 +134,6 @@ RSpec.describe Pgbus::ApplicationHelper do
     end
   end
 
-  describe "#pgbus_worker_rates" do
-    it "returns nil when the metadata carries no rates" do
-      expect(helper.pgbus_worker_rates({ "queues" => %w[default] })).to be_nil
-      expect(helper.pgbus_worker_rates(nil)).to be_nil
-    end
-
-    it "renders the known rate keys as a human-readable string" do
-      rates = { "processed" => 12.4, "failed" => 0.2, "dequeued" => 10.1 }
-
-      result = helper.pgbus_worker_rates({ "rates" => rates })
-
-      expect(result).to include("12.4/s")
-      expect(result).to include("0.2/s")
-      expect(result).to include("10.1/s")
-    end
-
-    it "omits zero rates to keep the label compact" do
-      rates = { "processed" => 3.0, "failed" => 0.0, "dequeued" => 0.0 }
-
-      result = helper.pgbus_worker_rates({ "rates" => rates })
-
-      expect(result).to include("3.0/s")
-      expect(result).not_to include("0.0/s")
-    end
-
-    it "returns nil when all rates are zero" do
-      rates = { "processed" => 0.0, "failed" => 0.0, "dequeued" => 0.0 }
-
-      expect(helper.pgbus_worker_rates({ "rates" => rates })).to be_nil
-    end
-  end
-
-  describe "#pgbus_display_metadata" do
-    it "returns an empty hash for non-hash input" do
-      expect(helper.pgbus_display_metadata(nil)).to eq({})
-      expect(helper.pgbus_display_metadata("nope")).to eq({})
-    end
-
-    it "strips the throughput and internal keys, keeping the rest" do
-      metadata = {
-        "queues" => %w[default], "threads" => 5, "pid" => 1234,
-        "rates" => { "processed" => 1.0 }, "jobs_processed" => 10,
-        "jobs_failed" => 1, "in_flight" => 2, "loop_tick_at" => 123.4
-      }
-
-      result = helper.pgbus_display_metadata(metadata)
-
-      expect(result).to eq("queues" => %w[default], "threads" => 5, "pid" => 1234)
-    end
-
-    it "handles symbol keys for the internal names" do
-      metadata = { queues: %w[default], rates: { "processed" => 1.0 }, in_flight: 3 }
-
-      expect(helper.pgbus_display_metadata(metadata)).to eq(queues: %w[default])
-    end
-  end
-
   describe "#pgbus_duration" do
     it "returns dash for nil" do
       expect(helper.pgbus_duration(nil)).to eq("—")

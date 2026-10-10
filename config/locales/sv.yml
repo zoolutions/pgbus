@@ -636,18 +636,76 @@ sv:
       index:
         title: Processer
       processes_table:
+        capsule: kapsel %{capsule} · process %{process}
         empty: Inga processer körs
         headers:
-          hostname: Värdnamn
-          kind: Typ
-          last_heartbeat: Senaste hjärtslag
-          metadata: Metadata
-          pid: PID
+          activity: Aktivitet
+          heartbeat: Hjärtslag
+          process: Process
+          recycle: Återvinning
           status: Status
-        rates:
-          dequeued: hämtade
-          failed: misslyckade
-          processed: bearbetade
+        no_raw_metadata: Inga andra metadata
+        raw_metadata: Andra metadata
+        started: Startad
+        under_supervisor: under supervisor %{pid}
+        uptime: uppe %{duration}
+      state:
+        activity:
+          buffered: "%{number} i buffert"
+          busy_slots: "%{busy}/%{capacity} platser upptagna"
+          busy_threads: "%{busy}/%{capacity} trådar upptagna"
+          consumes: Konsumerar %{topics}
+          drains: Tömmer %{queues}
+          drains_all: Tömmer alla köer
+          failed_rate: "%{rate} misslyckade/s"
+          handled: "%{number} hanterade"
+          maintenance: Kör underhåll var %{interval} (schemalagda jobb, döda processer, arkiv)
+          outbox: Publicerar outbox-poster
+          rate: "%{rate} jobb/s"
+          schedule:
+            one: Kör %{count} återkommande uppgift, kontrollerar var %{interval}
+            other: Kör %{count} återkommande uppgifter, kontrollerar var %{interval}
+          slots:
+            one: "%{count} plats"
+            other: "%{count} platser"
+          supervises: Övervakar %{children}
+          supervises_none: Övervakar inga processer på den här värden
+          threads:
+            one: "%{count} tråd"
+            other: "%{count} trådar"
+        kinds:
+          consumer:
+            one: "%{count} consumer"
+            other: "%{count} consumers"
+          dispatcher:
+            one: dispatcher
+            other: "%{count} dispatchers"
+          outbox_poller:
+            one: outbox-poller
+            other: "%{count} outbox-pollers"
+          scheduler:
+            one: schemaläggare
+            other: "%{count} schemaläggare"
+          worker:
+            one: "%{count} worker"
+            other: "%{count} workers"
+        next:
+          stale_reaped: troligen död; tas bort vid dispatcherns nästa städning (inom %{within})
+          stale_unreaped: troligen död; ingen levande dispatcher som kan ta bort den
+          stalled_maintenance: schemalagda jobb, städning av döda processer och arkivkomprimering står still
+          stalled_schedule: återkommande uppgifter läggs inte i kö
+          stalled_standalone: ingen supervisor som kan starta om den
+          stalled_supervised: supervisorns watchdog startar om den
+        reasons:
+          healthy_detection_off_html: Hjärtslag %{ago} (gräns %{limit}) · stoppdetektering av
+          healthy_heartbeat_html: Hjärtslag %{ago} (gräns %{limit})
+          healthy_loop_html: Loopen tickade %{ago} (gräns %{limit})
+          stale_html: Inget hjärtslag på %{age} (gräns %{limit})
+          stalled_html: Loopen tickade senast %{ago} (gräns %{limit})
+        recycle:
+          jobs: "%{done} / %{limit} jobb"
+          lifetime: uppe %{uptime} / %{limit}
+          memory: "%{used} / %{limit} MB"
     queues:
       destroy:
         success: Kön %{name} borttagen.

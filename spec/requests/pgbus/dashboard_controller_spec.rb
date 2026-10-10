@@ -15,5 +15,14 @@ RSpec.describe "Pgbus::DashboardController", type: :request do
         expect(response).to have_http_status(:ok)
       end
     end
+
+    # Issue #493: the processes frame says why each process has its status.
+    it "puts each process's reason in the processes frame" do
+      @stub_data_source.processes_list = @stub_data_source.sample_processes(Time.now)
+
+      get "/pgbus", params: { frame: "processes" }
+
+      expect(response.body).to include("no supervisor to restart it")
+    end
   end
 end

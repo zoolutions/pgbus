@@ -141,7 +141,7 @@ RSpec.describe "Time presentation", type: :system do
     it "renders the heartbeat as <time> with the exact value in its tooltip" do
       visit "/pgbus/processes"
 
-      expect(page).to have_css("td[data-label='Last Heartbeat'] #{stamp}", text: /\A(now|\d+s ago)\z/)
+      expect(page).to have_css("td[data-label='Heartbeat'] #{stamp}", text: /\A(now|\d+s ago)\z/)
     end
   end
 
