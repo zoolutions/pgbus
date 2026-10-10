@@ -8,6 +8,8 @@ every page. These checks keep it there, and a change is not done until all of th
 |---|---|---|
 | Static contrast guard | `spec/pgbus/web/dark_mode_contrast_spec.rb` | Ruby matrix, every push |
 | View conventions guard | `spec/pgbus/web/view_conventions_spec.rb` | Ruby matrix, every push |
+| Time conventions guard (ERB) | `spec/pgbus/web/time_conventions_spec.rb` | Ruby matrix, every push |
+| Time formatting cop (Ruby) | `Pgbus/DashboardTimeFormatting` (`rubocop/cop/pgbus/`) | Lint job, every push |
 | axe gate (light + dark, every page) | `spec/system/accessibility_spec.rb` | `system_test` job, every push |
 | Lighthouse budgets | `lighthouserc.dashboard.json`, `bin/lighthouse` | monthly + `workflow_dispatch`, report-only |
 
@@ -47,6 +49,31 @@ the same PR; nothing is skipped, tagged out or excused.
   `shared/_empty_row`; thead/tbody/th use the one chrome the spec lists.
 - A list that can grow renders `shared/_pager` against `DataSource#list_count` (bounded, `has_more`
   when capped). A second list on one page pages on `<list>_page`, parsed by `page_param(:<list>_page)`.
+
+## Timestamps, ages and durations (`time_conventions_spec.rb`, `Pgbus/DashboardTimeFormatting`)
+
+Every time the dashboard prints goes through `Pgbus::Web::TimeFormat` and its view helpers. They are
+in `Time.zone`, translated in all 12 locales (`pgbus.helpers.time`), past/future-aware, and they accept
+every shape a data source returns (`Time`, `TimeWithZone`, `DateTime`, ISO strings, epoch seconds, nil).
+
+| What you print | Helper | Renders |
+|---|---|---|
+| A moment in a list cell | `pgbus_time(value)` | `<time datetime="UTC" title="absolute">5m ago</time>` |
+| A future moment whose clock time matters | `pgbus_time(value, clock: true)` | `in 2h (21:40)` |
+| A moment in an expanded row or on a show page | `pgbus_timestamp(value)` | `2026-10-10 02:08:54 CEST (5m ago)` |
+| The absolute next to a relative already shown | `pgbus_absolute_time(value)` | `2026-10-10 02:08:54 CEST` |
+| An age or duration in seconds | `pgbus_duration(seconds)` | `2m 5s` (never negative; nil → `—`) |
+| A duration in milliseconds | `pgbus_ms_duration(millis)` | `1.5s` |
+| A moment inside a translated sentence | an `_html` key, the helper as the argument | `t("….running_html", ago: pgbus_time(t))` |
+
+- Never print a time field raw (`<%= row[:enqueued_at] %>`, `<%= q[:oldest_age_sec] || "—" %>`): that is
+  `Time#to_s`, an ISO string or bare seconds, and differs between the stub and production.
+- Never `strftime`, `time_ago_in_words`, `distance_of_time_in_words`, `to_fs` or `l`/`localize` in a
+  view or a dashboard helper, nor `iso8601` in a view (it is a wire format); never a hard-coded unit or "ago"/"in". A new word or format is a key under
+  `pgbus.helpers.time` in all 12 locales, read by `TimeFormat`.
+- A column header never carries a unit ("Oldest (s)"): the cell prints its own.
+- Specs that assert relative times freeze the clock (`travel_to(now)` with `now` truncated to the
+  second); fixtures mix `Time` and ISO-string values so both coercions stay exercised.
 
 ## The helpers (`spec/system/support/accessibility.rb`)
 
