@@ -555,51 +555,52 @@ fi:
           visible: Näkyvissä
         pause: Tauko
         pause_confirm: Keskeytä käsittely %{name} ajan?
-        paused: Keskeytetty
         purge: Tyhjennä
         purge_confirm: Tyhjennä kaikki viestit %{name}:sta?
         resume: Jatka
       show:
-        arguments: Argumentit
         back: Takaisin jonoihin
         delete_confirm: Poista tämä jono pysyvästi? Tätä ei voi kumota.
         delete_queue: Poista jono
-        depth: 'Syvyys:'
-        discard: Hylkää
-        discard_confirm: Hylätä tämä viesti?
-        empty: Jono on tyhjä
-        full_json_payload: Täysi JSON-payload
-        headers:
-          enqueued: Jonoon lisätty
-          id: ID
-          job_class: Työn luokka
-          reads: Lukukerrat
-          vt: VT
-        headers_section: Otsikot
-        job_id: 'Työn ID:'
+        dlq_link: Yritä uudelleen tai hylkää ne Dead Letter -sivulla
+        dlq_pointer: Kuolleiden viestien jono jonolle %{logical} — %{count} viestiä.
         message_discard_failed: Viestiä ei voitu hylätä.
         message_discarded: Viesti hylätty.
         message_retried: Viestin näkyvyys nollattu.
         message_retry_failed: Viestiä ei voitu yrittää uudelleen.
-        metadata: Metatiedot
-        metadata_labels:
-          last_read: 'Viimeksi luettu:'
-          locale: 'Alue:'
-          priority: 'Prioriteetti:'
-          queue: 'Jono:'
-          scheduled: 'Aikataulutettu:'
-          timezone: 'Aikavyöhyke:'
-          visible_at: 'Näkyvissä:'
-        oldest: 'Vanhin:'
-        oldest_claimable: 'Vanhin saatavilla:'
-        parked: 'Pysäköidyt:'
+        metrics:
+          claimable: Noudettavissa nyt
+          depth: Syvyys
+          oldest: Vanhin
+          oldest_claimable: Vanhin noudettavissa
+          parked: Pysäköity
+          total: Yhteensä koskaan
+        other_levels: 'Muut prioriteettitasot:'
         pause: Tauko
         pause_confirm: Keskeytetäänkö käsittely?
         purge_confirm: Tyhjennetäänkö kaikki viestit?
         purge_queue: Tyhjennä jono
         resume: Jatka
-        retry: Yritä uudelleen
-        retry_confirm: Nollaa näkyvyysaika ja yritä uudelleen?
+        summary:
+          backlog: "%{visible} noudettavissa nyt, vanhin odottanut %{age} · %{parked} pysäköity (ajastettu tai uudelleenyritys)"
+          backlog_parked_only: Ei mitään noudettavissa nyt · %{parked} pysäköity (ajastettu tai uudelleenyritys)
+          dlq: 'Kuolleiden viestien jono jonolle %{logical}: työt päätyvät tänne %{max} epäonnistuneen yrityksen jälkeen'
+          drained_by:
+            one: Tyhjentää %{capsules} (%{count} terve worker)
+            other: Tyhjentää %{capsules} (%{count} tervettä workeria)
+          drained_wildcard:
+            one: Tyhjentää jokerimerkki-worker-kapseli (%{count} terve worker)
+            other: Tyhjentää jokerimerkki-worker-kapseli (%{count} tervettä workeria)
+          empty: Mitään ei odota
+          handler: Tapahtumankäsittelijän jono — consumerit tyhjentävät (%{count} tervettä)
+          no_workers: Yksikään terve worker ei ole käynnissä — %{visible} työtä on noudettavissa, mutta kukaan ei nouda niitä
+          not_drained: Mikään worker-kapseli ei tyhjennä tätä jonoa — työt odottavat, kunnes sellainen määritetään
+          paused_circuit_breaker: 'Keskeytetty automaattisesti %{ago} %{failures} peräkkäisen virheen jälkeen — jatkuu %{time} (laukaisu #%{trip})'
+          paused_operator: Keskeytetty %{ago} — %{reason}
+          paused_operator_no_reason: Operaattori keskeytti %{ago}
+          priority_level: Prioriteettitaso %{level} jonosta %{logical}
+          stream: Stream-jono — toimitetaan peekillä, workerit eivät tyhjennä sitä
+        summary_label: Jonon yhteenveto
         table_health:
           headers:
             bloat: Bloat
@@ -609,8 +610,6 @@ fi:
             table: Taulu
           oldest_txn: 'Vanhin avoin transaktio:'
           title: Taulun kunto
-        total: 'Yhteensä:'
-        visible: 'Näkyvissä:'
     recurring_tasks:
       index:
         task_count:

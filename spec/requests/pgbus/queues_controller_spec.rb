@@ -18,6 +18,50 @@ RSpec.describe "Pgbus::QueuesController", type: :request do
       end
     end
 
+    context "with the unified job list" do
+      def job_rows_call = @stub_data_source.calls[:job_rows].last.first
+
+      it "lists this queue's jobs on the requested tab" do
+        get "/pgbus/queues/pgbus_default", params: { state: "ready" }
+
+        expect(job_rows_call).to eq(state: "ready", queue_name: "pgbus_default", page: 1,
+                                    per_page: Pgbus.configuration.web_per_page)
+      end
+
+      it "renders only the list frame for frame=list" do
+        get "/pgbus/queues/pgbus_default", params: { frame: "list" }
+
+        expect(response).to have_http_status(:ok)
+        expect(response.body).to include('<turbo-frame id="jobs-list"')
+        expect(response.body).not_to include("<h1")
+      end
+
+      it "refreshes the frame from the queue page, never from /pgbus/jobs" do
+        get "/pgbus/queues/pgbus_default", params: { state: "ready", page: "2" }
+
+        src = CGI.unescapeHTML(response.body[/data-src="([^"]+)"/, 1])
+        expect(src).to include("/pgbus/queues/pgbus_default?", "frame=list", "page=2", "state=ready")
+        expect(src).not_to include("/pgbus/jobs")
+        expect(src.scan("state=").size).to eq(1)
+      end
+
+      it "keeps the state tabs on the queue page" do
+        get "/pgbus/queues/pgbus_default"
+
+        tabs = response.body.scan(/<a href="([^"]+)"[^>]*data-state=/).flatten.map { |h| CGI.unescapeHTML(h) }
+        expect(tabs).not_to be_empty
+        expect(tabs).to all(start_with("/pgbus/queues/pgbus_default"))
+      end
+
+      it "renders no job list for a dead-letter queue" do
+        get "/pgbus/queues/pgbus_default_dlq"
+
+        expect(response.body).not_to include('<turbo-frame id="jobs-list"')
+        expect(response.body).to include("/pgbus/dlq?dlq=pgbus_default_dlq")
+        expect(@stub_data_source.calls[:job_rows]).to be_empty
+      end
+    end
+
     context "when the queue is unknown" do
       it "redirects to the index with an alert" do
         get "/pgbus/queues/missing"

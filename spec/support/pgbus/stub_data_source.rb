@@ -22,7 +22,7 @@ module Pgbus
                     :batches_list, :batch_detail_hash, :concurrency_stats_hash,
                     :promoted_count, :job_rows_list, :jobs_ahead_hash, :job_context,
                     :recurring_executions_list, :health_stats, :health_detail_hash, :live_stream_metrics_hash,
-                    :capped_lists
+                    :capped_lists, :queue_pause_states, :queue_drainers_hash
       attr_reader :calls
 
       def initialize
@@ -61,6 +61,8 @@ module Pgbus
         @health_detail_hash = { tables: [], oldest_transaction_age_sec: nil }
         @live_stream_metrics_hash = default_live_stream_metrics
         @capped_lists = []
+        @queue_pause_states = {}
+        @queue_drainers_hash = {}
         @calls = Hash.new { |h, k| h[k] = [] }
       end
 
@@ -131,6 +133,25 @@ module Pgbus
       end
 
       def queue_paused?(name) = @paused_queues.include?(name)
+
+      # Queue page summary (issue #491). The two hashes hold per-queue
+      # overrides (by physical name) merged onto a default derived from the
+      # rest of the stub, so paused_queues still drives the paused flag.
+      def queue_pause_state(name)
+        { paused: queue_paused?(name), reason: nil, paused_at: nil, resumes_at: nil, trip_count: 0 }
+          .merge(@queue_pause_states.fetch(name, {}))
+      end
+
+      def queue_drainers(name)
+        logical = name.delete_suffix(Pgbus::DEAD_LETTER_SUFFIX).delete_prefix("pgbus_").sub(/_p\d+\z/, "")
+        siblings = if name.match?(/_p\d+\z/)
+                     @queues.map { |q| q[:name] }.select { |n| n != name && n.match?(/\Apgbus_#{logical}_p\d+\z/) }
+                   else
+                     []
+                   end
+        { logical: logical, capsules: ["default"], wildcard: false, handler: false, stream: false,
+          live_workers: 1, live_consumers: 0, siblings: siblings }.merge(@queue_drainers_hash.fetch(name, {}))
+      end
 
       def recurring_tasks(page: nil, per_page: nil)
         record(:recurring_tasks, { page: page, per_page: per_page })

@@ -555,51 +555,52 @@ nb:
           visible: Synlig
         pause: Pause
         pause_confirm: Pause behandling for %{name}?
-        paused: Pauset
         purge: Rens
         purge_confirm: Rens alle meldinger fra %{name}?
         resume: Gjenoppta
       show:
-        arguments: Argumenter
         back: Tilbake til køer
         delete_confirm: Slette denne køen permanent? Dette kan ikke angres.
         delete_queue: Slett kø
-        depth: 'Dybde:'
-        discard: Forkast
-        discard_confirm: Forkaste denne meldingen?
-        empty: Køen er tom
-        full_json_payload: Full JSON-payload
-        headers:
-          enqueued: I kø
-          id: ID
-          job_class: Jobbklasse
-          reads: Lesninger
-          vt: VT
-        headers_section: Overskrifter
-        job_id: 'Jobb-ID:'
+        dlq_link: Prøv på nytt eller forkast dem på Dead Letter-siden
+        dlq_pointer: Dead letter-kø for %{logical} — %{count} meldinger.
         message_discard_failed: Kunne ikke forkaste meldingen.
         message_discarded: Melding forkastet.
         message_retried: Meldingens synlighet tilbakestilt.
         message_retry_failed: Kunne ikke prøve meldingen igjen.
-        metadata: Metadata
-        metadata_labels:
-          last_read: 'Sist lest:'
-          locale: 'Språk:'
-          priority: 'Prioritet:'
-          queue: 'Kø:'
-          scheduled: 'Planlagt:'
-          timezone: 'Tidssone:'
-          visible_at: 'Synlig fra:'
-        oldest: 'Eldste:'
-        oldest_claimable: 'Eldste tilgjengelig:'
-        parked: 'Parkert:'
+        metrics:
+          claimable: Klare nå
+          depth: Dybde
+          oldest: Eldste
+          oldest_claimable: Eldste klare
+          parked: Parkert
+          total: Totalt noensinne
+        other_levels: 'Andre prioritetsnivåer:'
         pause: Pause
         pause_confirm: Pause behandling?
         purge_confirm: Rens alle meldinger?
         purge_queue: Rens kø
         resume: Gjenoppta
-        retry: Prøv igjen
-        retry_confirm: Tilbakestill synlighetstidsavbrudd og prøv igjen?
+        summary:
+          backlog: "%{visible} klare til henting nå, eldste har ventet %{age} · %{parked} parkert (planlagt eller nytt forsøk)"
+          backlog_parked_only: Ingenting klart til henting nå · %{parked} parkert (planlagt eller nytt forsøk)
+          dlq: 'Dead letter-kø for %{logical}: jobber havner her etter %{max} mislykkede forsøk'
+          drained_by:
+            one: Tømmes av %{capsules} (%{count} frisk worker)
+            other: Tømmes av %{capsules} (%{count} friske workers)
+          drained_wildcard:
+            one: Tømmes av en jokertegn-worker-kapsel (%{count} frisk worker)
+            other: Tømmes av en jokertegn-worker-kapsel (%{count} friske workers)
+          empty: Ingenting venter
+          handler: Hendelsesbehandler-kø — tømmes av consumers (%{count} friske)
+          no_workers: Ingen frisk worker kjører — %{visible} jobber kan hentes, men ingenting henter dem
+          not_drained: Ingen worker-kapsel tømmer denne køen — jobber venter til en er konfigurert
+          paused_circuit_breaker: 'Automatisk satt på pause %{ago} etter %{failures} feil på rad — gjenopptas %{time} (utløsning #%{trip})'
+          paused_operator: Satt på pause %{ago} — %{reason}
+          paused_operator_no_reason: Satt på pause %{ago} av en operatør
+          priority_level: Prioritetsnivå %{level} av %{logical}
+          stream: Stream-kø — leveres med peek, tømmes ikke av workers
+        summary_label: Køoversikt
         table_health:
           headers:
             bloat: Bloat
@@ -609,8 +610,6 @@ nb:
             table: Tabell
           oldest_txn: 'Eldste åpne transaksjon:'
           title: Tabellhelse
-        total: 'Totalt:'
-        visible: 'Synlig:'
     recurring_tasks:
       index:
         task_count:

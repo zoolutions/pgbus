@@ -555,51 +555,52 @@ de:
           visible: Sichtbar
         pause: Pause
         pause_confirm: Verarbeitung für %{name} pausieren?
-        paused: Pausiert
         purge: Bereinigen
         purge_confirm: Alle Nachrichten von %{name} löschen?
         resume: Fortsetzen
       show:
-        arguments: Argumente
         back: Zurück zu Warteschlangen
         delete_confirm: Diese Warteschlange dauerhaft löschen? Dies kann nicht rückgängig gemacht werden.
         delete_queue: Warteschlange löschen
-        depth: 'Tiefe:'
-        discard: Verwerfen
-        discard_confirm: Diese Nachricht verwerfen?
-        empty: Warteschlange ist leer
-        full_json_payload: Vollständige JSON-Nutzlast
-        headers:
-          enqueued: Eingereiht
-          id: ID
-          job_class: Job-Klasse
-          reads: Lesevorgänge
-          vt: VT
-        headers_section: Header
-        job_id: 'Job-ID:'
+        dlq_link: Auf der Dead-Letter-Seite wiederholen oder verwerfen
+        dlq_pointer: Dead-Letter-Queue für %{logical} — %{count} Nachrichten.
         message_discard_failed: Nachricht konnte nicht verworfen werden.
         message_discarded: Nachricht verworfen.
         message_retried: Sichtbarkeit der Nachricht zurückgesetzt.
         message_retry_failed: Nachricht konnte nicht wiederholt werden.
-        metadata: Metadaten
-        metadata_labels:
-          last_read: 'Letzter Lesevorgang:'
-          locale: 'Sprache:'
-          priority: 'Priorität:'
-          queue: 'Warteschlange:'
-          scheduled: 'Geplant:'
-          timezone: 'Zeitzone:'
-          visible_at: 'Sichtbar ab:'
-        oldest: 'Älteste:'
-        oldest_claimable: 'Älteste verfügbar:'
-        parked: 'Geparkt:'
+        metrics:
+          claimable: Jetzt abholbar
+          depth: Tiefe
+          oldest: Ältester
+          oldest_claimable: Ältester abholbar
+          parked: Geparkt
+          total: Gesamt bisher
+        other_levels: 'Andere Prioritätsstufen:'
         pause: Pause
         pause_confirm: Verarbeitung pausieren?
         purge_confirm: Alle Nachrichten löschen?
         purge_queue: Warteschlange bereinigen
         resume: Fortsetzen
-        retry: Wiederholen
-        retry_confirm: Sichtbarkeits-Timeout zurücksetzen und erneut versuchen?
+        summary:
+          backlog: "%{visible} jetzt abholbar, ältester wartet seit %{age} · %{parked} geparkt (geplant oder in Wiederholung)"
+          backlog_parked_only: Nichts jetzt abholbar · %{parked} geparkt (geplant oder in Wiederholung)
+          dlq: 'Dead-Letter-Queue für %{logical}: Jobs landen hier nach %{max} fehlgeschlagenen Versuchen'
+          drained_by:
+            one: Abgearbeitet von %{capsules} (%{count} gesunder Worker)
+            other: Abgearbeitet von %{capsules} (%{count} gesunde Worker)
+          drained_wildcard:
+            one: Abgearbeitet von einer Wildcard-Worker-Kapsel (%{count} gesunder Worker)
+            other: Abgearbeitet von einer Wildcard-Worker-Kapsel (%{count} gesunde Worker)
+          empty: Nichts wartet
+          handler: Event-Handler-Queue — von Consumern abgearbeitet (%{count} gesund)
+          no_workers: Kein gesunder Worker läuft — %{visible} Jobs sind abholbar, aber niemand holt sie ab
+          not_drained: Keine Worker-Kapsel arbeitet diese Queue ab — Jobs warten, bis eine konfiguriert ist
+          paused_circuit_breaker: 'Automatisch pausiert %{ago} nach %{failures} Fehlern in Folge — wird fortgesetzt %{time} (Auslösung #%{trip})'
+          paused_operator: Pausiert %{ago} — %{reason}
+          paused_operator_no_reason: Pausiert %{ago} durch einen Operator
+          priority_level: Prioritätsstufe %{level} von %{logical}
+          stream: Stream-Queue — per Peek zugestellt, nicht von Workern abgearbeitet
+        summary_label: Queue-Übersicht
         table_health:
           headers:
             bloat: Bloat
@@ -609,8 +610,6 @@ de:
             table: Tabelle
           oldest_txn: 'Älteste offene Transaktion:'
           title: Tabellen-Gesundheit
-        total: 'Insgesamt:'
-        visible: 'Sichtbar:'
     recurring_tasks:
       index:
         task_count:

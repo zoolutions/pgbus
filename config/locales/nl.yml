@@ -555,51 +555,52 @@ nl:
           visible: Zichtbaar
         pause: Pauzeren
         pause_confirm: Verwerking pauzeren voor %{name}?
-        paused: Gepauzeerd
         purge: Opschonen
         purge_confirm: Alle berichten verwijderen uit %{name}?
         resume: Hervatten
       show:
-        arguments: Argumenten
         back: Terug naar wachtrijen
         delete_confirm: Deze wachtrij permanent verwijderen? Dit kan niet ongedaan worden gemaakt.
         delete_queue: Wachtrij verwijderen
-        depth: 'Diepte:'
-        discard: Verwerpen
-        discard_confirm: Dit bericht verwerpen?
-        empty: Wachtrij is leeg
-        full_json_payload: Volledige JSON payload
-        headers:
-          enqueued: In de wachtrij geplaatst
-          id: ID
-          job_class: Taakklasse
-          reads: Lezingen
-          vt: VT
-        headers_section: Headers
-        job_id: 'Taak ID:'
+        dlq_link: Opnieuw proberen of verwijderen op de Dead Letter-pagina
+        dlq_pointer: Dead-letterwachtrij voor %{logical} — %{count} berichten.
         message_discard_failed: Kon bericht niet verwerpen.
         message_discarded: Bericht verworpen.
         message_retried: Zichtbaarheid van bericht gereset.
         message_retry_failed: Kon bericht niet opnieuw proberen.
-        metadata: Metadata
-        metadata_labels:
-          last_read: 'Laatst gelezen:'
-          locale: 'Locale:'
-          priority: 'Prioriteit:'
-          queue: 'Wachtrij:'
-          scheduled: 'Gepland:'
-          timezone: 'Tijdzone:'
-          visible_at: 'Zichtbaar op:'
-        oldest: 'Oudste:'
-        oldest_claimable: 'Oudste beschikbaar:'
-        parked: 'Geparkeerd:'
+        metrics:
+          claimable: Nu op te pakken
+          depth: Diepte
+          oldest: Oudste
+          oldest_claimable: Oudste op te pakken
+          parked: Geparkeerd
+          total: Totaal ooit
+        other_levels: 'Andere prioriteitsniveaus:'
         pause: Pauzeren
         pause_confirm: Verwerking pauzeren?
         purge_confirm: Alle berichten verwijderen?
         purge_queue: Wachtrij opschonen
         resume: Hervatten
-        retry: Opnieuw proberen
-        retry_confirm: Zichtbaarheidstimeout resetten en opnieuw proberen?
+        summary:
+          backlog: "%{visible} nu op te pakken, oudste wacht al %{age} · %{parked} geparkeerd (gepland of opnieuw proberen)"
+          backlog_parked_only: Niets nu op te pakken · %{parked} geparkeerd (gepland of opnieuw proberen)
+          dlq: 'Dead-letterwachtrij voor %{logical}: jobs komen hier na %{max} mislukte pogingen'
+          drained_by:
+            one: Leeggemaakt door %{capsules} (%{count} gezonde worker)
+            other: Leeggemaakt door %{capsules} (%{count} gezonde workers)
+          drained_wildcard:
+            one: Leeggemaakt door een wildcard-workercapsule (%{count} gezonde worker)
+            other: Leeggemaakt door een wildcard-workercapsule (%{count} gezonde workers)
+          empty: Niets in de wacht
+          handler: Event-handlerwachtrij — leeggemaakt door consumers (%{count} gezond)
+          no_workers: Geen gezonde worker actief — %{visible} jobs zijn op te pakken maar niemand pakt ze op
+          not_drained: Geen workercapsule maakt deze wachtrij leeg — jobs wachten tot er een is geconfigureerd
+          paused_circuit_breaker: 'Automatisch gepauzeerd %{ago} na %{failures} opeenvolgende fouten — hervat %{time} (activering #%{trip})'
+          paused_operator: Gepauzeerd %{ago} — %{reason}
+          paused_operator_no_reason: Gepauzeerd %{ago} door een operator
+          priority_level: Prioriteitsniveau %{level} van %{logical}
+          stream: Streamwachtrij — bezorgd via peek, niet leeggemaakt door workers
+        summary_label: Wachtrijoverzicht
         table_health:
           headers:
             bloat: Bloat
@@ -609,8 +610,6 @@ nl:
             table: Tabel
           oldest_txn: 'Oudste open transactie:'
           title: Tabelgezondheid
-        total: 'Totaal:'
-        visible: 'Zichtbaar:'
     recurring_tasks:
       index:
         task_count:

@@ -33,6 +33,22 @@ RSpec.describe "Dashboard sample data", type: :system do
     expect(page).to have_text("ImportCsvJob/account:42")
   end
 
+  it "explains each sample queue in words" do
+    visit "/pgbus/queues/pgbus_mailers"
+    expect(page).to have_text("Paused 25m ago — Mail provider maintenance")
+
+    visit "/pgbus/queues/pgbus_events"
+    expect(page).to have_text("Paused automatically 1m ago after 5 consecutive failures")
+
+    visit "/pgbus/queues/pgbus_imports"
+    expect(page).to have_text("No worker capsule drains this queue")
+    expect(page).to have_text("ImportCsvJob")
+
+    visit "/pgbus/queues/pgbus_default_p1"
+    expect(page).to have_text("Priority level 1 of default")
+    expect(page).to have_link("pgbus_default_p0")
+  end
+
   it "serves the DLQ list" do
     visit "/pgbus/dlq"
     expect(page).to have_text("ProcessPaymentJob")

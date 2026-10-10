@@ -18,15 +18,6 @@ RSpec.describe "Jobs", type: :system do
     ]
   end
 
-  def job_row(state, **attrs)
-    { source: "queue", id: attrs[:msg_id] || 1, queue_name: "pgbus_default", logical_queue: "default",
-      job_class: "#{state.capitalize}Job", read_ct: 0, enqueued_at: now - 60, last_read_at: nil,
-      vt: now - 1, state: state, error_class: nil, error_message: nil, failed_event_id: nil,
-      concurrency_key: nil, slots_held: nil, slots_max: nil,
-      payload: { job_class: "#{state.capitalize}Job", job_id: "job-#{state}", arguments: [42] }.to_json,
-      headers: nil }.merge(attrs)
-  end
-
   it "shows an empty state for every tab" do
     visit "/pgbus/jobs"
 
@@ -172,6 +163,15 @@ RSpec.describe "Jobs", type: :system do
 
       expect(page).to have_text("No jobs")
       expect(page).to have_button("Retry All")
+    end
+
+    it "offers Discard All Enqueued only while no queue filter is set" do
+      visit "/pgbus/jobs"
+      expect(page).to have_button("Discard All Enqueued")
+
+      visit "/pgbus/jobs?queue=pgbus_default"
+      expect(page).to have_css("tr[data-job-row]", minimum: 1)
+      expect(page).to have_no_button("Discard All Enqueued")
     end
 
     it "shows Retry All and Discard All while jobs are retrying" do

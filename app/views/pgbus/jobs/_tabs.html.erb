@@ -1,0 +1,14 @@
+<%# State tabs of the unified job list. Locals: state (the active tab),
+    counts (DataSource#job_state_counts), list_path (->(extra) { url }, so
+    the queue page keeps its tabs on its own URL). %>
+<nav class="mb-4 flex flex-wrap gap-2" aria-label="<%= t("pgbus.jobs.list.tabs_label") %>" data-testid="job-state-tabs">
+  <% Pgbus::JobListing::STATES.each do |tab| %>
+    <% active = tab == state %>
+    <a href="<%= list_path.call(state: (tab unless tab == "all"), page: nil) %>"
+       data-state="<%= tab %>" aria-current="<%= active ? "page" : "false" %>"
+       class="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium <%= active ? 'bg-gray-800 text-white dark:bg-gray-700' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white' %>">
+      <span><%= t("pgbus.jobs.list.tabs.#{tab}") %></span>
+      <span class="rounded-full px-2 py-0.5 text-xs <%= active ? 'bg-gray-600 text-white' : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200' %>"><%= pgbus_job_count(counts, tab) %></span>
+    </a>
+  <% end %>
+</nav>

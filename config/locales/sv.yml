@@ -555,51 +555,52 @@ sv:
           visible: Synliga
         pause: Pausa
         pause_confirm: Pausa bearbetning för %{name}?
-        paused: Pausad
         purge: Rensa
         purge_confirm: Rensa alla meddelanden från %{name}?
         resume: Återuppta
       show:
-        arguments: Argument
         back: Tillbaka till köer
         delete_confirm: Ta bort denna kö permanent? Detta kan inte ångras.
         delete_queue: Ta bort kö
-        depth: 'Djup:'
-        discard: Kassera
-        discard_confirm: Kassera detta meddelande?
-        empty: Kön är tom
-        full_json_payload: Fullständig JSON-payload
-        headers:
-          enqueued: Inlagd
-          id: ID
-          job_class: Jobbklass
-          reads: Läsningar
-          vt: VT
-        headers_section: Headers
-        job_id: 'Jobb-ID:'
+        dlq_link: Försök igen eller kassera dem på Dead Letter-sidan
+        dlq_pointer: Dead letter-kö för %{logical} — %{count} meddelanden.
         message_discard_failed: Kunde inte kassera meddelandet.
         message_discarded: Meddelande kasserat.
         message_retried: Meddelandets synlighet återställd.
         message_retry_failed: Kunde inte försöka igen med meddelandet.
-        metadata: Metadata
-        metadata_labels:
-          last_read: 'Senast läst:'
-          locale: 'Språk:'
-          priority: 'Prioritet:'
-          queue: 'Kö:'
-          scheduled: 'Schemalagt:'
-          timezone: 'Tidszon:'
-          visible_at: 'Synlig vid:'
-        oldest: 'Äldsta:'
-        oldest_claimable: 'Äldsta tillgänglig:'
-        parked: 'Parkerade:'
+        metrics:
+          claimable: Hämtbara nu
+          depth: Djup
+          oldest: Äldsta
+          oldest_claimable: Äldsta hämtbara
+          parked: Parkerade
+          total: Totalt hittills
+        other_levels: 'Andra prioritetsnivåer:'
         pause: Pausa
         pause_confirm: Pausa bearbetning?
         purge_confirm: Rensa alla meddelanden?
         purge_queue: Rensa kö
         resume: Återuppta
-        retry: Försök igen
-        retry_confirm: Återställ synlighetstimeout och försök igen?
+        summary:
+          backlog: "%{visible} hämtbara nu, äldsta har väntat %{age} · %{parked} parkerade (schemalagda eller nytt försök)"
+          backlog_parked_only: Inget hämtbart nu · %{parked} parkerade (schemalagda eller nytt försök)
+          dlq: 'Dead letter-kö för %{logical}: jobb hamnar här efter %{max} misslyckade försök'
+          drained_by:
+            one: Töms av %{capsules} (%{count} frisk worker)
+            other: Töms av %{capsules} (%{count} friska workers)
+          drained_wildcard:
+            one: Töms av en jokertecken-worker-kapsel (%{count} frisk worker)
+            other: Töms av en jokertecken-worker-kapsel (%{count} friska workers)
+          empty: Inget väntar
+          handler: Händelsehanterarkö — töms av consumers (%{count} friska)
+          no_workers: Ingen frisk worker körs — %{visible} jobb är hämtbara men inget hämtar dem
+          not_drained: Ingen worker-kapsel tömmer den här kön — jobb väntar tills en är konfigurerad
+          paused_circuit_breaker: 'Automatiskt pausad %{ago} efter %{failures} fel i rad — återupptas %{time} (utlösning #%{trip})'
+          paused_operator: Pausad %{ago} — %{reason}
+          paused_operator_no_reason: Pausad %{ago} av en operatör
+          priority_level: Prioritetsnivå %{level} av %{logical}
+          stream: Stream-kö — levereras med peek, töms inte av workers
+        summary_label: Kööversikt
         table_health:
           headers:
             bloat: Bloat
@@ -609,8 +610,6 @@ sv:
             table: Tabell
           oldest_txn: 'Äldsta öppna transaktion:'
           title: Tabellhälsa
-        total: 'Totalt:'
-        visible: 'Synliga:'
     recurring_tasks:
       index:
         task_count:

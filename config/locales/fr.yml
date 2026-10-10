@@ -555,51 +555,52 @@ fr:
           visible: Visible
         pause: Pause
         pause_confirm: Mettre en pause le traitement pour %{name} ?
-        paused: En pause
         purge: Purger
         purge_confirm: Purger tous les messages de %{name} ?
         resume: Reprendre
       show:
-        arguments: Arguments
         back: Retour aux files d'attente
         delete_confirm: Supprimer définitivement cette file d'attente ? Cette action est irréversible.
         delete_queue: Supprimer la file d'attente
-        depth: 'Profondeur :'
-        discard: Rejeter
-        discard_confirm: Rejeter ce message ?
-        empty: La file d'attente est vide
-        full_json_payload: Charge utile JSON complète
-        headers:
-          enqueued: Enregistré
-          id: ID
-          job_class: Classe de travail
-          reads: Lectures
-          vt: VT
-        headers_section: En-têtes
-        job_id: 'ID du travail :'
+        dlq_link: Les relancer ou les supprimer sur la page Dead Letter
+        dlq_pointer: File de lettres mortes de %{logical} — %{count} messages.
         message_discard_failed: Impossible de rejeter le message.
         message_discarded: Message rejeté.
         message_retried: Visibilité du message réinitialisée.
         message_retry_failed: Impossible de réessayer le message.
-        metadata: Métadonnées
-        metadata_labels:
-          last_read: 'Dernière lecture :'
-          locale: 'Langue :'
-          priority: 'Priorité :'
-          queue: 'File d''attente :'
-          scheduled: 'Planifié :'
-          timezone: 'Fuseau horaire :'
-          visible_at: 'Visible à :'
-        oldest: 'Plus ancien :'
-        oldest_claimable: 'Plus ancien disponible :'
-        parked: 'Différés :'
+        metrics:
+          claimable: Récupérables
+          depth: Profondeur
+          oldest: Plus ancien
+          oldest_claimable: Plus ancien récupérable
+          parked: En attente
+          total: Total cumulé
+        other_levels: 'Autres niveaux de priorité :'
         pause: Pause
         pause_confirm: Mettre en pause le traitement ?
         purge_confirm: Purger tous les messages ?
         purge_queue: Purger la file d'attente
         resume: Reprendre
-        retry: Réessayer
-        retry_confirm: Réinitialiser le délai de visibilité et réessayer ?
+        summary:
+          backlog: "%{visible} récupérables maintenant, le plus ancien attend depuis %{age} · %{parked} en attente (planifiés ou en nouvelle tentative)"
+          backlog_parked_only: Rien de récupérable maintenant · %{parked} en attente (planifiés ou en nouvelle tentative)
+          dlq: 'File de lettres mortes de %{logical} : les jobs arrivent ici après %{max} tentatives échouées'
+          drained_by:
+            one: Vidée par %{capsules} (%{count} worker sain)
+            other: Vidée par %{capsules} (%{count} workers sains)
+          drained_wildcard:
+            one: Vidée par une capsule de workers joker (%{count} worker sain)
+            other: Vidée par une capsule de workers joker (%{count} workers sains)
+          empty: Rien en attente
+          handler: File de gestionnaire d'événements — vidée par les consommateurs (%{count} sains)
+          no_workers: Aucun worker sain en cours — %{visible} jobs sont récupérables mais personne ne les prend
+          not_drained: Aucune capsule de workers ne vide cette file — les jobs attendent qu'une soit configurée
+          paused_circuit_breaker: Mise en pause automatiquement %{ago} après %{failures} échecs consécutifs — reprend %{time} (déclenchement n°%{trip})
+          paused_operator: En pause %{ago} — %{reason}
+          paused_operator_no_reason: Mise en pause %{ago} par un opérateur
+          priority_level: Niveau de priorité %{level} de %{logical}
+          stream: File de stream — distribuée par peek, non vidée par les workers
+        summary_label: Résumé de la file
         table_health:
           headers:
             bloat: Bloat
@@ -609,8 +610,6 @@ fr:
             table: Table
           oldest_txn: 'Plus ancienne transaction ouverte :'
           title: Santé des tables
-        total: 'Total :'
-        visible: 'Visible :'
     recurring_tasks:
       index:
         task_count:
