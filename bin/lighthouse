@@ -51,7 +51,10 @@ end.parse!
 
 def request_uri(url) = URI.parse(url).request_uri
 
-urls = JSON.parse(File.read(CONFIG_PATH)).dig("ci", "collect", "url")
+collect = JSON.parse(File.read(CONFIG_PATH)).dig("ci", "collect")
+# The audits lhci skips on http://localhost, so both paths score the same set.
+SKIP_AUDITS = collect.dig("settings", "skipAudits").join(",")
+urls = collect.fetch("url")
 urls = urls.map { |url| "#{options[:base_url].chomp("/")}#{request_uri(url)}" } if options[:base_url]
 urls = urls.select { |url| options[:pages].include?(request_uri(url)) } if options[:pages]
 if urls.empty?
@@ -64,7 +67,7 @@ def audit(url)
     out = File.join(dir, "report.json")
     # The CLI by path: with bin/ on PATH a bare `lighthouse` resolves to this script.
     cmd = [File.join(ROOT, "node_modules/.bin/lighthouse"), url, "--quiet", "--output=json", "--output-path=#{out}",
-           "--only-categories=#{CATEGORIES.join(",")}", "--preset=desktop",
+           "--only-categories=#{CATEGORIES.join(",")}", "--preset=desktop", "--skip-audits=#{SKIP_AUDITS}",
            "--chrome-flags=--headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage"]
     _stdout, stderr, status = Open3.capture3(*cmd)
     return { error: stderr.lines.last(2).join.strip } unless status.success? && File.exist?(out)

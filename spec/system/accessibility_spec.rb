@@ -29,6 +29,14 @@ RSpec.describe "Dashboard accessibility", type: :system do
   end
 
   describe "empty states" do
+    # The sparse stub still carries two queues and a worker (other specs rely
+    # on them), so clear those for a truly empty dashboard.
+    before do
+      @stub_data_source.queues = []
+      @stub_data_source.processes_list = []
+      @stub_data_source.stats = @stub_data_source.stats.transform_values { |v| v.is_a?(Numeric) ? 0 : v }
+    end
+
     %w[/pgbus /pgbus/queues /pgbus/jobs /pgbus/recurring_tasks /pgbus/processes /pgbus/events
        /pgbus/batches /pgbus/dlq /pgbus/outbox /pgbus/locks /pgbus/insights].each do |path|
       it_behaves_like "an accessible page", path, :light

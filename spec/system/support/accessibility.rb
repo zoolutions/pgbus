@@ -77,10 +77,21 @@ module DarkModeHelpers
   # script adds `.dark` before first paint and the body's transition-colors
   # never runs under the audit (toggling in place measures mid-transition).
   def visit_dark(path)
+    visit_theme(path, dark: true)
+  end
+
+  # Light is pinned the same way: with no stored value the head script
+  # follows prefers-color-scheme, so a dark-preferring browser (or a
+  # preference left behind by an earlier example) would audit dark DOM.
+  def visit_light(path)
+    visit_theme(path, dark: false)
+  end
+
+  def visit_theme(path, dark:)
     visit path
-    page.execute_script("localStorage.setItem('pgbus-dark', 'true')")
+    page.execute_script("localStorage.setItem('pgbus-dark', '#{dark}')")
     visit path
-    expect(page).to have_css("html.dark")
+    expect(page).to(dark ? have_css("html.dark") : have_no_css("html.dark"))
   end
 end
 
@@ -93,7 +104,7 @@ RSpec.shared_examples "an accessible page" do |path, mode|
   # block (RSpec evaluates that block inside the nested group, so a `let` is
   # the way to pass behaviour in — a `&block` parameter never receives it).
   it "has no WCAG AA violations on #{path} (#{mode})", :a11y do
-    mode == :dark ? visit_dark(path) : visit(path)
+    mode == :dark ? visit_dark(path) : visit_light(path)
 
     # A 404 or 500 page can be accessible, so without this a URL the stub
     # cannot serve passes the audit while measuring nothing.
