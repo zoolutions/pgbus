@@ -1,0 +1,21 @@
+spec/pgbus/web/data_source_queue_summary_spec.rb
+  s_b2b362dc3d0d9a::t_27a1cae0da7ac6 110-122
+lib/pgbus/web/data_source/queue_summary.rb
+  s_b2b362dc3d0d9a::t_89a6f236354383 35,85-94
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "3130f9a8531985287e81c16a75b97b9f5f28c52c",
+  "prompts": {},
+  "sessions": {
+    "s_b2b362dc3d0d9a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7dad693a-9123-47dd-ab8d-513473fb4c7f",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
