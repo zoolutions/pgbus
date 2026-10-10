@@ -51,6 +51,11 @@ RSpec.describe Pgbus::Web::TimeFormat do
     it "returns nil for a string that is not a time" do
       expect(described_class.coerce("not a time")).to be_nil
     end
+
+    it "returns nil for a number that is not a moment (NaN, Infinity)" do
+      expect(described_class.coerce(Float::NAN)).to be_nil
+      expect(described_class.coerce(Float::INFINITY)).to be_nil
+    end
   end
 
   describe ".relative" do
@@ -105,6 +110,10 @@ RSpec.describe Pgbus::Web::TimeFormat do
       expect(described_class.duration(125)).to eq("2m 5s")
       expect(described_class.duration(3725)).to eq("1h 2m")
       expect(described_class.duration(90_000)).to eq("1d 1h")
+    end
+
+    it "never renders a negative age (clock skew between the web host and the database)" do
+      expect(described_class.duration(-45)).to eq("0s")
     end
   end
 

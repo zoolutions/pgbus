@@ -1,14 +1,21 @@
 # frozen_string_literal: true
 
 require "system_helper"
+require "active_support/testing/time_helpers"
 
 # Issue #497: every timestamp is a <time datetime title> (relative, with the
 # exact value in the tooltip) or, in expanded rows and on show pages, the
 # absolute followed by the relative. Every age is a duration with units.
 RSpec.describe "Time presentation", type: :system do
-  let(:now) { Time.now.utc }
+  include ActiveSupport::Testing::TimeHelpers
+
+  # Frozen (to the whole second, as travel_to truncates) so the minute and
+  # hour buckets asserted below never depend on how long a page takes to render.
+  let(:now) { Time.now.utc.change(usec: 0) }
   let(:absolute) { /\d{4}-\d\d-\d\d \d\d:\d\d:\d\d UTC/ }
   let(:stamp) { "time[datetime][title]" }
+
+  around { |example| travel_to(now) { example.run } }
 
   describe "Jobs" do
     def job_row(state, **attrs)
@@ -94,7 +101,7 @@ RSpec.describe "Time presentation", type: :system do
       it "says when it becomes visible instead of a negative age" do
         visit "/pgbus/queues/pgbus_default"
 
-        expect(page).to have_css(stamp, text: /\Ain (59m|1h)\z/)
+        expect(page).to have_css(stamp, text: "in 1h")
         expect(page).to have_no_text(/-\d+[smhd] ago/)
       end
 
@@ -102,7 +109,7 @@ RSpec.describe "Time presentation", type: :system do
         visit "/pgbus/queues/pgbus_default"
         find("details.group summary").click
 
-        expect(page).to have_text(/Visible at: \d{4}-\d\d-\d\d \d\d:\d\d:\d\d UTC \(in (59m|1h)\)/)
+        expect(page).to have_text(/Visible at: \d{4}-\d\d-\d\d \d\d:\d\d:\d\d UTC \(in 1h\)/)
         expect(page).to have_css("time[datetime]", text: absolute, minimum: 2)
       end
     end

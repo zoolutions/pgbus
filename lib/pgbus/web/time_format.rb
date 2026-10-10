@@ -27,9 +27,16 @@ module Pgbus
         case value
         when nil then nil
         when Time, DateTime, ActiveSupport::TimeWithZone then value.in_time_zone
-        when Numeric then Time.at(value).in_time_zone
+        when Numeric then epoch(value)
         when String then parse(value)
         end
+      end
+
+      # NaN and Infinity are not moments.
+      def epoch(seconds)
+        Time.at(seconds).in_time_zone
+      rescue RangeError
+        nil
       end
 
       def parse(string)
@@ -69,7 +76,8 @@ module Pgbus
       def duration(seconds)
         return NONE unless seconds
 
-        seconds = seconds.to_i
+        # An age is never negative; one is clock skew between hosts.
+        seconds = [seconds.to_i, 0].max
         if seconds < MINUTE then unit(:seconds, seconds)
         elsif seconds < HOUR then pair(:minutes, seconds / MINUTE, :seconds, seconds % MINUTE)
         elsif seconds < DAY then pair(:hours, seconds / HOUR, :minutes, (seconds % HOUR) / MINUTE)
