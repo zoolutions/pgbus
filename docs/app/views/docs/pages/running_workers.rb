@@ -152,7 +152,7 @@ class Views::Docs::Pages::RunningWorkers < DocsUI::Page
         RSS is sampled from `/proc/self/statm` on Linux and `ps -o rss` on macOS.
 
         A capsule can set its own limits. They apply to that capsule's workers only;
-        any limit it leaves unset falls back to the global value:
+        any limit it leaves unset (or `nil`) falls back to the global value:
       MD
       DocsUI::Code(<<~RUBY, filename: "config/initializers/pgbus.rb")
         Pgbus.configure do |config|
@@ -192,7 +192,9 @@ class Views::Docs::Pages::RunningWorkers < DocsUI::Page
         app copy-on-write until they write to it. Every process has its own pool,
         so a host holds about `processes × pool_size` connections for the capsule.
         Under the default `worker_notify_scope: :supervisor` the host still holds
-        one LISTEN connection; under `:fork` each fork holds its own.
+        one LISTEN connection; under `:fork` each fork holds its own. With
+        `single_active_consumer: true` only one fork holds the queue lock at a
+        time; the others are hot standbys.
       MD
     end
   end

@@ -574,7 +574,7 @@ end
 
 When a limit is hit, the worker drains its thread pool, exits, and the supervisor forks a fresh process. RSS memory is sampled from `/proc/self/statm` (Linux) or `ps -o rss` (macOS).
 
-A capsule can set its own limits. They apply to that capsule's workers only, and any limit it leaves unset falls back to the global value. One heavyweight capsule no longer forces a high global limit on the lightweight ones:
+A capsule can set its own limits. They apply to that capsule's workers only, and any limit it leaves unset (or sets to `nil`) falls back to the global value, so a capsule can raise or lower a limit but not switch it off while the global one is set. One heavyweight capsule no longer forces a high global limit on the lightweight ones:
 
 ```ruby
 Pgbus.configure do |config|
@@ -604,6 +604,7 @@ config.capsule :render, queues: %w[render], threads: 1, processes: 4
 - **Memory.** Budget roughly `boot RSS + peak job RSS` per process. The forks share the booted app's memory copy-on-write until they write to it, so N forks cost less than N separate supervisors, which each boot the app.
 - **Connections.** Every process has its own pool (`pool=` in the boot banner), so a host holds about `processes × pool_size` connections for the capsule. Under the default `worker_notify_scope: :supervisor` the host still holds one LISTEN connection; under `:fork` each fork holds its own, and `pgbus doctor`'s connection budget counts them.
 - **Shutdown.** The stop timeout applies to every fork at once, so N forks drain in parallel and need no longer `shutdown_timeout`.
+- **With `single_active_consumer: true`** only one fork holds the queue lock at a time; the others are hot standbys. Use `processes:` there for failover, not throughput.
 - `processes:` must be a positive Integer (default `1`, so existing configs are unchanged). It is set on `c.capsule` or on an Array-form `workers` entry; the string DSL has no syntax for it.
 
 ### Retry backoff
