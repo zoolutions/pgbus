@@ -12,6 +12,7 @@ RSpec.describe "Compiled dashboard CSS covers the classes views use" do # ruboco
   let(:engine_root) { Pathname.new(__dir__).join("..", "..", "..").expand_path }
   let(:frontend_dir) { engine_root.join("app", "frontend", "pgbus") }
   let(:views_dir) { engine_root.join("app", "views") }
+  let(:helpers_dir) { engine_root.join("app", "helpers", "pgbus") }
   let(:compiled_css) { File.read(frontend_dir.join("style.css")) }
 
   # Selectors Tailwind emitted, with CSS escapes (\:, \., \/) unwrapped so
@@ -51,6 +52,30 @@ RSpec.describe "Compiled dashboard CSS covers the classes views use" do # ruboco
   def literal_class_text(value)
     erb_literals = value.scan(erb_tag).flat_map { |tag| tag.scan(/'([^']*)'/).flatten }
     [value.gsub(erb_tag, " "), *erb_literals]
+  end
+
+  # Helpers build class lists in constants and string literals (the badge
+  # helpers, Pgbus::ButtonHelper). Take every double-quoted literal that reads
+  # like a colour class list.
+  def helper_class_tokens(content)
+    content.scan(/"([^"\n]*)"/).flatten.grep(/\b(?:bg|text)-[a-z]+-\d{2,3}\b/)
+           .flat_map(&:split).grep(static_class_token)
+  end
+
+  it "emits every static Tailwind class the helpers reference" do
+    missing = Dir[helpers_dir.join("*.rb")].flat_map do |file|
+      relative = Pathname.new(file).relative_path_from(engine_root)
+      helper_class_tokens(File.read(file)).uniq
+                                          .reject { |token| allowed_uncompiled.include?(token) || compiled_classes.include?(token) }
+                                          .map { |token| "#{token} (#{relative})" }
+    end
+
+    expect(missing).to be_empty, <<~MSG
+      #{missing.size} class(es) used in helpers are absent from app/frontend/pgbus/style.css.
+      Rebuild the artifact with `bundle exec rake frontend:css` and commit it.
+
+        #{missing.join("\n  ")}
+    MSG
   end
 
   it "emits every static Tailwind class the ERB templates reference" do

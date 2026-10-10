@@ -451,6 +451,7 @@ sv:
           other: Kasta de %{count} jobb som parkerats bakom denna nyckel? De kommer aldrig att köras.
         empty: Inga samtidighetsnycklar används
         headers:
+          actions: Åtgärder
           in_use: Används
           key: Nyckel
           lease: Lås
@@ -484,6 +485,7 @@ sv:
         discard_selected_confirm: Kassera valda lås?
         empty: Inga aktiva lås
         headers:
+          actions: Åtgärder
           age: Ålder
           lock_key: Låsningsnyckel
           msg_id: Meddelande-ID

@@ -17,6 +17,7 @@ module Pgbus
     layout "pgbus/application"
 
     helper Pgbus::ApplicationHelper unless self < Pgbus::ApplicationHelper
+    helper Pgbus::ButtonHelper unless self < Pgbus::ButtonHelper
 
     # Make `pgbus` route proxy available in views (e.g. pgbus.root_path).
     # With isolate_namespace, the non-prefixed helpers (root_path) work inside

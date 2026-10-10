@@ -451,6 +451,7 @@ en:
           other: Discard the %{count} jobs parked behind this key? They will never run.
         empty: No concurrency keys in use
         headers:
+          actions: Actions
           in_use: In use
           key: Key
           lease: Lease
@@ -484,6 +485,7 @@ en:
         discard_selected_confirm: Discard selected locks?
         empty: No active locks
         headers:
+          actions: Actions
           age: Age
           lock_key: Lock Key
           msg_id: Message ID

@@ -115,14 +115,14 @@
     <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
       <% @latency_by_queue.each do |row| %>
         <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-          <td data-label="Queue" class="px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-300"><%= row[:queue_name] %></td>
-          <td data-label="Count" class="px-4 py-3 text-sm text-right font-mono text-gray-700 dark:text-gray-300"><%= pgbus_number(row[:count]) %></td>
-          <td data-label="Avg" class="px-4 py-3 text-sm text-right font-mono text-gray-700 dark:text-gray-300"><%= pgbus_ms_duration(row[:avg_ms]) %></td>
-          <td data-label="P95" class="px-4 py-3 text-sm text-right font-mono text-gray-700 dark:text-gray-300"><%= pgbus_ms_duration(row[:p95_ms]) %></td>
+          <td data-label="<%= t("pgbus.insights.show.latency_by_queue.headers.queue") %>" class="px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-300"><%= row[:queue_name] %></td>
+          <td data-label="<%= t("pgbus.insights.show.latency_by_queue.headers.count") %>" class="px-4 py-3 text-sm text-right font-mono text-gray-700 dark:text-gray-300"><%= pgbus_number(row[:count]) %></td>
+          <td data-label="<%= t("pgbus.insights.show.latency_by_queue.headers.avg") %>" class="px-4 py-3 text-sm text-right font-mono text-gray-700 dark:text-gray-300"><%= pgbus_ms_duration(row[:avg_ms]) %></td>
+          <td data-label="<%= t("pgbus.insights.show.latency_by_queue.headers.p95") %>" class="px-4 py-3 text-sm text-right font-mono text-gray-700 dark:text-gray-300"><%= pgbus_ms_duration(row[:p95_ms]) %></td>
         </tr>
       <% end %>
       <% if @latency_by_queue.empty? %>
-        <tr><td colspan="4" class="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400"><%= t("pgbus.insights.show.latency_by_queue.empty") %></td></tr>
+        <%= render "pgbus/shared/empty_row", colspan: 4, message: t("pgbus.insights.show.latency_by_queue.empty") %>
       <% end %>
     </tbody>
   </table>
@@ -146,14 +146,14 @@
     <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
       <% @slowest.each do |row| %>
         <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-          <td data-label="Job Class" class="px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-300"><%= row[:job_class] %></td>
-          <td data-label="Count" class="px-4 py-3 text-sm text-right font-mono text-gray-700 dark:text-gray-300"><%= pgbus_number(row[:count]) %></td>
-          <td data-label="Avg" class="px-4 py-3 text-sm text-right font-mono text-gray-700 dark:text-gray-300"><%= pgbus_ms_duration(row[:avg_ms]) %></td>
-          <td data-label="Max" class="px-4 py-3 text-sm text-right font-mono text-gray-700 dark:text-gray-300"><%= pgbus_ms_duration(row[:max_ms]) %></td>
+          <td data-label="<%= t("pgbus.insights.show.slowest.headers.job_class") %>" class="px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-300"><%= row[:job_class] %></td>
+          <td data-label="<%= t("pgbus.insights.show.slowest.headers.count") %>" class="px-4 py-3 text-sm text-right font-mono text-gray-700 dark:text-gray-300"><%= pgbus_number(row[:count]) %></td>
+          <td data-label="<%= t("pgbus.insights.show.slowest.headers.avg") %>" class="px-4 py-3 text-sm text-right font-mono text-gray-700 dark:text-gray-300"><%= pgbus_ms_duration(row[:avg_ms]) %></td>
+          <td data-label="<%= t("pgbus.insights.show.slowest.headers.max") %>" class="px-4 py-3 text-sm text-right font-mono text-gray-700 dark:text-gray-300"><%= pgbus_ms_duration(row[:max_ms]) %></td>
         </tr>
       <% end %>
       <% if @slowest.empty? %>
-        <tr><td colspan="4" class="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400"><%= t("pgbus.insights.show.slowest.empty") %></td></tr>
+        <%= render "pgbus/shared/empty_row", colspan: 4, message: t("pgbus.insights.show.slowest.empty") %>
       <% end %>
     </tbody>
   </table>
@@ -199,14 +199,14 @@
       <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
         <% @live_stream_metrics[:streams].sort_by { |_name, data| -data[:broadcasts] }.each do |name, data| %>
           <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-            <td data-label="Stream" class="px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-300"><%= name %></td>
-            <td data-label="Broadcasts" class="px-4 py-3 text-sm text-right font-mono text-gray-700 dark:text-gray-300"><%= pgbus_number(data[:broadcasts]) %></td>
-            <td data-label="Active" class="px-4 py-3 text-sm text-right font-mono text-gray-700 dark:text-gray-300"><%= pgbus_number(data[:active_connections]) %></td>
-            <td data-label="Total" class="px-4 py-3 text-sm text-right font-mono text-gray-700 dark:text-gray-300"><%= pgbus_number(data[:total_connections]) %></td>
+            <td data-label="<%= t("pgbus.insights.show.live_streams.stream") %>" class="px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-300"><%= name %></td>
+            <td data-label="<%= t("pgbus.insights.show.live_streams.broadcasts") %>" class="px-4 py-3 text-sm text-right font-mono text-gray-700 dark:text-gray-300"><%= pgbus_number(data[:broadcasts]) %></td>
+            <td data-label="<%= t("pgbus.insights.show.live_streams.active_connections") %>" class="px-4 py-3 text-sm text-right font-mono text-gray-700 dark:text-gray-300"><%= pgbus_number(data[:active_connections]) %></td>
+            <td data-label="<%= t("pgbus.insights.show.live_streams.total_connections") %>" class="px-4 py-3 text-sm text-right font-mono text-gray-700 dark:text-gray-300"><%= pgbus_number(data[:total_connections]) %></td>
           </tr>
         <% end %>
         <% if @live_stream_metrics[:streams].empty? %>
-          <tr><td colspan="4" class="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400"><%= t("pgbus.insights.show.live_streams.empty") %></td></tr>
+          <%= render "pgbus/shared/empty_row", colspan: 4, message: t("pgbus.insights.show.live_streams.empty") %>
         <% end %>
       </tbody>
     </table>
@@ -258,14 +258,14 @@
       <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
         <% @top_streams.each do |row| %>
           <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-            <td data-label="Stream" class="px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-300"><%= row[:stream_name] %></td>
-            <td data-label="Broadcasts" class="px-4 py-3 text-sm text-right font-mono text-gray-700 dark:text-gray-300"><%= pgbus_number(row[:count]) %></td>
-            <td data-label="Avg Fanout" class="px-4 py-3 text-sm text-right font-mono text-gray-700 dark:text-gray-300"><%= row[:avg_fanout]&.round(1) || 0 %></td>
-            <td data-label="Avg Duration" class="px-4 py-3 text-sm text-right font-mono text-gray-700 dark:text-gray-300"><%= pgbus_ms_duration(row[:avg_ms]) %></td>
+            <td data-label="<%= t("pgbus.insights.show.streams.top.headers.stream") %>" class="px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-300"><%= row[:stream_name] %></td>
+            <td data-label="<%= t("pgbus.insights.show.streams.top.headers.broadcasts") %>" class="px-4 py-3 text-sm text-right font-mono text-gray-700 dark:text-gray-300"><%= pgbus_number(row[:count]) %></td>
+            <td data-label="<%= t("pgbus.insights.show.streams.top.headers.avg_fanout") %>" class="px-4 py-3 text-sm text-right font-mono text-gray-700 dark:text-gray-300"><%= row[:avg_fanout]&.round(1) || 0 %></td>
+            <td data-label="<%= t("pgbus.insights.show.streams.top.headers.avg_ms") %>" class="px-4 py-3 text-sm text-right font-mono text-gray-700 dark:text-gray-300"><%= pgbus_ms_duration(row[:avg_ms]) %></td>
           </tr>
         <% end %>
         <% if @top_streams.empty? %>
-          <tr><td colspan="4" class="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400"><%= t("pgbus.insights.show.streams.top.empty") %></td></tr>
+          <%= render "pgbus/shared/empty_row", colspan: 4, message: t("pgbus.insights.show.streams.top.empty") %>
         <% end %>
       </tbody>
     </table>

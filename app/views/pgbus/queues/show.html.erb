@@ -1,5 +1,5 @@
 <div class="mb-3">
-  <%= link_to "← #{t("pgbus.queues.show.back")}", pgbus.queues_path, class: "text-sm text-indigo-600 hover:text-indigo-800 dark:hover:text-indigo-300 dark:text-indigo-400" %>
+  <%= pgbus_link_to "← #{t("pgbus.queues.show.back")}", pgbus.queues_path %>
 </div>
 <div class="flex items-center justify-between mb-6">
   <div>
@@ -22,22 +22,18 @@
   </div>
   <div class="flex space-x-2">
     <% if @paused %>
-      <%= button_to t("pgbus.queues.show.resume"), pgbus.resume_queue_path(name: params[:name]),
-            method: :post,
-            class: "rounded-md bg-green-600 px-3 py-2 text-sm font-medium text-white hover:bg-green-500" %>
+      <%= pgbus_button_to t("pgbus.queues.show.resume"), pgbus.resume_queue_path(name: params[:name]),
+            method: :post, variant: :success %>
     <% else %>
-      <%= button_to t("pgbus.queues.show.pause"), pgbus.pause_queue_path(name: params[:name]),
-            method: :post,
-            class: "rounded-md bg-yellow-400 px-3 py-2 text-sm font-medium text-yellow-950 hover:bg-yellow-300",
+      <%= pgbus_button_to t("pgbus.queues.show.pause"), pgbus.pause_queue_path(name: params[:name]),
+            method: :post, variant: :warning,
             data: { turbo_confirm: t("pgbus.queues.show.pause_confirm") } %>
     <% end %>
-    <%= button_to t("pgbus.queues.show.purge_queue"), pgbus.purge_queue_path(name: params[:name]),
-          method: :post,
-          class: "rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-500",
+    <%= pgbus_button_to t("pgbus.queues.show.purge_queue"), pgbus.purge_queue_path(name: params[:name]),
+          method: :post, variant: :danger,
           data: { turbo_confirm: t("pgbus.queues.show.purge_confirm") } %>
-    <%= button_to t("pgbus.queues.show.delete_queue"), pgbus.queue_path(name: params[:name]),
-          method: :delete,
-          class: "rounded-md bg-red-800 px-3 py-2 text-sm font-medium text-white hover:bg-red-700",
+    <%= pgbus_button_to t("pgbus.queues.show.delete_queue"), pgbus.queue_path(name: params[:name]),
+          method: :delete, variant: :danger,
           data: { turbo_confirm: t("pgbus.queues.show.delete_confirm") } %>
   </div>
 </div>
@@ -67,11 +63,11 @@
       <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
         <% @health[:tables].each do |t| %>
           <tr>
-            <td class="px-4 py-2 text-sm font-mono text-gray-900 dark:text-white"><%= t[:table] %></td>
-            <td class="px-4 py-2 text-sm text-right text-gray-700 dark:text-gray-300"><%= pgbus_number(t[:live_tuples]) %></td>
-            <td class="px-4 py-2 text-sm text-right <%= t[:dead_tuples] > 1000 ? 'text-amber-700 dark:text-amber-400 font-semibold' : 'text-gray-700 dark:text-gray-300' %>"><%= pgbus_number(t[:dead_tuples]) %></td>
-            <td class="px-4 py-2 text-sm text-right <%= t[:bloat_ratio] > 0.2 ? 'text-red-600 dark:text-red-400 font-semibold' : t[:bloat_ratio] > 0.1 ? 'text-amber-700 dark:text-amber-400' : 'text-gray-500 dark:text-gray-400' %>"><%= (t[:bloat_ratio] * 100).round(1) %>%</td>
-            <td class="px-4 py-2 text-sm text-right text-gray-500 dark:text-gray-400"><%= t[:last_vacuum_ago_sec] ? pgbus_duration(t[:last_vacuum_ago_sec]) : "—" %></td>
+            <td data-label="<%= t("pgbus.queues.show.table_health.headers.table") %>" class="px-4 py-2 text-sm font-mono text-gray-900 dark:text-white"><%= t[:table] %></td>
+            <td data-label="<%= t("pgbus.queues.show.table_health.headers.live") %>" class="px-4 py-2 text-sm text-right text-gray-700 dark:text-gray-300"><%= pgbus_number(t[:live_tuples]) %></td>
+            <td data-label="<%= t("pgbus.queues.show.table_health.headers.dead") %>" class="px-4 py-2 text-sm text-right <%= t[:dead_tuples] > 1000 ? 'text-amber-700 dark:text-amber-400 font-semibold' : 'text-gray-700 dark:text-gray-300' %>"><%= pgbus_number(t[:dead_tuples]) %></td>
+            <td data-label="<%= t("pgbus.queues.show.table_health.headers.bloat") %>" class="px-4 py-2 text-sm text-right <%= t[:bloat_ratio] > 0.2 ? 'text-red-600 dark:text-red-400 font-semibold' : t[:bloat_ratio] > 0.1 ? 'text-amber-700 dark:text-amber-400' : 'text-gray-500 dark:text-gray-400' %>"><%= (t[:bloat_ratio] * 100).round(1) %>%</td>
+            <td data-label="<%= t("pgbus.queues.show.table_health.headers.last_vacuum") %>" class="px-4 py-2 text-sm text-right text-gray-500 dark:text-gray-400"><%= t[:last_vacuum_ago_sec] ? pgbus_duration(t[:last_vacuum_ago_sec]) : "—" %></td>
           </tr>
         <% end %>
       </tbody>
@@ -137,13 +133,11 @@
                   </details>
                 <% end %>
                 <div class="flex space-x-2 mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
-                  <%= button_to t("pgbus.queues.show.retry"), pgbus.retry_message_queue_path(name: params[:name], msg_id: m[:msg_id]),
-                        method: :post,
-                        class: "rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-500",
+                  <%= pgbus_button_to t("pgbus.queues.show.retry"), pgbus.retry_message_queue_path(name: params[:name], msg_id: m[:msg_id]),
+                        method: :post, variant: :primary, size: :sm,
                         data: { turbo_confirm: t("pgbus.queues.show.retry_confirm") } %>
-                  <%= button_to t("pgbus.queues.show.discard"), pgbus.discard_message_queue_path(name: params[:name], msg_id: m[:msg_id]),
-                        method: :post,
-                        class: "rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-500",
+                  <%= pgbus_button_to t("pgbus.queues.show.discard"), pgbus.discard_message_queue_path(name: params[:name], msg_id: m[:msg_id]),
+                        method: :post, variant: :danger, size: :sm,
                         data: { turbo_confirm: t("pgbus.queues.show.discard_confirm") } %>
                 </div>
               </div>

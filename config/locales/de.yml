@@ -451,6 +451,7 @@ de:
           other: Die %{count} hinter diesem Schlüssel geparkten Jobs verwerfen? Sie werden nie ausgeführt.
         empty: Keine Nebenläufigkeitsschlüssel in Verwendung
         headers:
+          actions: Aktionen
           in_use: Belegt
           key: Schlüssel
           lease: Lease
@@ -484,6 +485,7 @@ de:
         discard_selected_confirm: Ausgewählte Sperren verwerfen?
         empty: Keine aktiven Sperren
         headers:
+          actions: Aktionen
           age: Alter
           lock_key: Sperrschlüssel
           msg_id: Nachrichten-ID

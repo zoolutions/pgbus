@@ -451,6 +451,7 @@ nl:
           other: De %{count} jobs die achter deze sleutel geparkeerd staan verwijderen? Ze draaien nooit meer.
         empty: Geen gelijktijdigheidssleutels in gebruik
         headers:
+          actions: Acties
           in_use: In gebruik
           key: Sleutel
           lease: Lease
@@ -484,6 +485,7 @@ nl:
         discard_selected_confirm: Geselecteerde sloten verwijderen?
         empty: Geen actieve vergrendelingen
         headers:
+          actions: Acties
           age: Leeftijd
           lock_key: Vergrendelingssleutel
           msg_id: Bericht-ID

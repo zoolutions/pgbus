@@ -17,14 +17,14 @@
     <% if total_pages > 1 || has_more %>
       <nav class="inline-flex rounded-lg shadow-sm" role="navigation" aria-label="<%= t("pgbus.helpers.pagination.label") %>">
         <% if page > 1 %>
-          <%= link_to t("pgbus.helpers.pagination.previous"), page_path.call(page - 1),
-                class: "px-3 py-1.5 text-xs font-medium border border-gray-300 dark:border-gray-600 rounded-l-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700" %>
+          <%= pgbus_link_to t("pgbus.helpers.pagination.previous"), page_path.call(page - 1),
+                variant: :outline, size: :sm, class: "rounded-l-lg rounded-r-none" %>
         <% else %>
           <span class="px-3 py-1.5 text-xs font-medium border border-gray-300 dark:border-gray-600 rounded-l-lg bg-gray-100 dark:bg-gray-900 text-gray-400 dark:text-gray-600 cursor-not-allowed"><%= t("pgbus.helpers.pagination.previous") %></span>
         <% end %>
         <% if page < total_pages || has_more %>
-          <%= link_to t("pgbus.helpers.pagination.next"), page_path.call(page + 1),
-                class: "-ml-px px-3 py-1.5 text-xs font-medium border border-gray-300 dark:border-gray-600 rounded-r-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700" %>
+          <%= pgbus_link_to t("pgbus.helpers.pagination.next"), page_path.call(page + 1),
+                variant: :outline, size: :sm, class: "-ml-px rounded-r-lg rounded-l-none" %>
         <% else %>
           <span class="-ml-px px-3 py-1.5 text-xs font-medium border border-gray-300 dark:border-gray-600 rounded-r-lg bg-gray-100 dark:bg-gray-900 text-gray-400 dark:text-gray-600 cursor-not-allowed"><%= t("pgbus.helpers.pagination.next") %></span>
         <% end %>
