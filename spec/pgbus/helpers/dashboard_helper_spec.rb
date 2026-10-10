@@ -61,13 +61,17 @@ RSpec.describe Pgbus::DashboardHelper do
   describe "#pgbus_dlq_card_words" do
     let(:message) { { job_class: "SendWelcomeEmailJob" }.to_json }
 
-    def row(headers) = { msg_id: 7, queue_name: "pgbus_default_dlq", enqueued_at: now - 7200, headers: headers,
-                         message: message }
+    def row(headers)
+      { msg_id: 7, queue_name: "pgbus_default_dlq", enqueued_at: now - 7200, headers: headers,
+        message: message }
+    end
 
-    def block(error) = Pgbus::DeadLetterHeader.build(
-      existing: nil, reason: Pgbus::DeadLetterHeader::REASON_MAX_RETRIES, source: "worker",
-      source_queue: "pgbus_default", attempts: 6, max_retries: 5, now: now - 7200, error: error
-    )
+    def block(error)
+      Pgbus::DeadLetterHeader.build(
+        existing: nil, reason: Pgbus::DeadLetterHeader::REASON_MAX_RETRIES, source: "worker",
+        source_queue: "pgbus_default", attempts: 6, max_retries: 5, now: now - 7200, error: error
+      )
+    end
 
     it "names the newest error and job" do
       dlq = { depth: 2, newest: row(block(error_class: "RuntimeError", error_message: "boom", retry_count: 5)) }

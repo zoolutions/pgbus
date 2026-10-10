@@ -421,21 +421,25 @@ en:
     insights:
       show:
         charts:
-          failed_to_load: Failed to load chart data
-          latency: Queue Latency (ms)
+          captions:
+            latency: Jobs waited %{avg} on average before a worker picked them up, p95 %{p95}
+            status: "%{success} succeeded, %{failed} failed, %{dead_lettered} dead-lettered"
+            throughput_html: "%{total} jobs in the last %{range}, peak %{peak} jobs/min %{at}"
+          data_table: Data table
+          latency: Queue Latency
           latency_avg: Avg
           latency_p95: P95
           no_data: No data yet
           series_name: Jobs/min
           status_distribution: Status Distribution
-          throughput: Throughput (jobs/min)
+          throughput: Throughput
         description_html: Job performance metrics for the last %{range}
         latency_by_queue:
           empty: No latency data yet
           headers:
-            avg: Avg (ms)
+            avg: Avg
             count: Count
-            p95: P95 (ms)
+            p95: P95
             queue: Queue
           title: Latency by Queue
         live_streams:
@@ -455,6 +459,10 @@ en:
             job_class: Job Class
             max: Max
           title: Slowest Job Classes (avg duration)
+        statuses:
+          dead_lettered: Dead-lettered
+          failed: Failed
+          success: Succeeded
         streams:
           summary:
             active: Active
@@ -483,6 +491,20 @@ en:
           p99_latency: P99 Latency
           succeeded: Succeeded
           total_jobs: Total Jobs
+        tables:
+          captions:
+            latency_minute: Queue latency per minute
+            latency_step: Queue latency per %{step}
+            status: Jobs by final status
+            throughput_minute: Jobs per minute
+            throughput_step: Jobs per %{step}
+          headers:
+            avg: Avg
+            from: From
+            highest_p95: Highest p95
+            jobs: Jobs
+            share: Share
+            status: Status
         time_ranges:
           1h: 1h
           24h: 24h

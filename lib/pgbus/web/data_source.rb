@@ -725,6 +725,11 @@ module Pgbus
         []
       end
 
+      # Whether job stats record enqueue latency (rails g pgbus:add_job_stats_latency).
+      def latency_available?
+        JobStat.latency_columns?
+      end
+
       def latency_trend(minutes: 60)
         JobStat.latency_trend(minutes: minutes)
       rescue StandardError => e

@@ -37,8 +37,6 @@ ignore_unused:
   - "pgbus.helpers.*"
   - "pgbus.insights.show.time_ranges.*"
   - "pgbus.insights.show.charts.series_name"
-  - "pgbus.insights.show.charts.failed_to_load"
-  - "pgbus.insights.show.charts.no_data"
   - "pgbus.recurring_tasks.index.task_count.*"
   - "pgbus.processes.state.activity.schedule.*"
   - "pgbus.processes.state.activity.slots.*"

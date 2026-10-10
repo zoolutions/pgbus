@@ -22,7 +22,7 @@ module Pgbus
                     :dlq_messages_list, :events_list, :subscribers_list, :jobs_list,
                     :paused_queues, :locks_list, :recurring_tasks_list,
                     :insights_summary, :insights_slowest, :insights_latency_by_queue,
-                    :insights_latency_trend, :insights_throughput, :insights_status_counts,
+                    :insights_latency_trend, :insights_throughput, :insights_status_counts, :insights_latency_available,
                     :stream_stats_available, :stream_summary, :top_streams_list,
                     :outbox_stats_hash, :outbox_entries_list,
                     :batches_list, :batch_detail_hash, :concurrency_stats_hash,
@@ -51,6 +51,7 @@ module Pgbus
         @insights_latency_trend = []
         @insights_throughput = []
         @insights_status_counts = { "success" => 0, "failed" => 0, "dead_lettered" => 0 }
+        @insights_latency_available = false
         @stream_stats_available = false
         @stream_summary = default_stream_summary
         @top_streams_list = []
@@ -313,7 +314,15 @@ module Pgbus
       def slowest_job_classes(limit: 10, minutes: 60) = @insights_slowest.first(limit)
       def latency_by_queue(minutes: 60) = @insights_latency_by_queue
       def latency_trend(minutes: 60) = @insights_latency_trend
-      def job_throughput(minutes: 60) = @insights_throughput
+      def latency_available? = @insights_latency_available
+
+      # Recorded so a spec can prove the Insights page reads its chart series
+      # once per view (issue #492).
+      def job_throughput(minutes: 60)
+        record(:job_throughput, minutes)
+        @insights_throughput
+      end
+
       def job_status_counts(minutes: 60) = @insights_status_counts
 
       # Live stream metrics (always-on in-memory counters)

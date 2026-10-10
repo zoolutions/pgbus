@@ -1,0 +1,20 @@
+<% chart = @charts[:latency] %>
+<table class="pgbus-table min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+  <caption class="sr-only"><%= chart.step_minutes == 1 ? t("pgbus.insights.show.tables.captions.latency_minute") : t("pgbus.insights.show.tables.captions.latency_step", step: pgbus_duration(chart.step_minutes * 60)) %></caption>
+  <thead class="bg-gray-50 dark:bg-gray-900">
+    <tr>
+      <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.insights.show.tables.headers.from") %></th>
+      <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.insights.show.tables.headers.avg") %></th>
+      <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.insights.show.tables.headers.highest_p95") %></th>
+    </tr>
+  </thead>
+  <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+    <% chart.rows.each do |row| %>
+      <tr>
+        <td data-label="<%= t("pgbus.insights.show.tables.headers.from") %>" class="px-4 py-2 text-sm text-gray-700 dark:text-gray-300"><%= pgbus_time(row[:from], clock: true) %></td>
+        <td data-label="<%= t("pgbus.insights.show.tables.headers.avg") %>" class="px-4 py-2 text-sm text-right font-mono text-gray-700 dark:text-gray-300"><%= pgbus_ms_duration(row[:avg_ms]) %></td>
+        <td data-label="<%= t("pgbus.insights.show.tables.headers.highest_p95") %>" class="px-4 py-2 text-sm text-right font-mono text-gray-700 dark:text-gray-300"><%= pgbus_ms_duration(row[:p95_ms]) %></td>
+      </tr>
+    <% end %>
+  </tbody>
+</table>
