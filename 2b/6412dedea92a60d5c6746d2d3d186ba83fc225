@@ -1,0 +1,51 @@
+app/controllers/pgbus/dashboard_controller.rb
+  s_0e6d613f560fed::t_3696acfb10ce49 10,13,25-26,32-42
+config/locales/en.yml
+  s_0e6d613f560fed::t_0269703acf4aab 44,64-82,91,99,101,109-114,116,120-122,124-127,129-136,138-154
+app/views/pgbus/dashboard/_queue_health.html.erb
+  s_0e6d613f560fed::t_2babb06c145334 2,9,11,16,18,20,25,27,32,34,38-59,61-67
+app/views/pgbus/dashboard/_stats_cards.html.erb
+  s_0e6d613f560fed::t_a498f74db5ae9e 2-31,34-35,37-39,41,43-45,47-48,50-52,54,56-58,60-65,67-74,78-80,85
+  s_0e6d613f560fed::t_a570f9e66cd140 32-33
+  s_0e6d613f560fed::t_bbab03d07c3e1c 76-77
+spec/pgbus/helpers/dashboard_helper_spec.rb
+  s_0e6d613f560fed::t_34309ad56e27b3 1-114
+app/helpers/pgbus/dashboard_helper.rb
+  s_0e6d613f560fed::t_9ef6edbb501d88 56
+  s_0e6d613f560fed::t_a570f9e66cd140 10-14
+  s_0e6d613f560fed::t_8b0866fe2e8aff 1-9,15-55,57-62,64-83,85-143
+  s_0e6d613f560fed::t_bbab03d07c3e1c 63,84
+spec/system/dashboard_spec.rb
+  s_0e6d613f560fed::t_86282607425ea4 15-16
+app/frontend/pgbus/style.css
+  s_0e6d613f560fed::t_17541fb934f645 2
+spec/system/dashboard_words_spec.rb
+  s_0e6d613f560fed::t_2d0fc0a01ddc3c 1-13,15-19,21-62,64-113
+  s_0e6d613f560fed::t_86282607425ea4 14
+  s_0e6d613f560fed::t_440512ec85860a 63
+  s_0e6d613f560fed::t_bbab03d07c3e1c 20
+app/views/pgbus/dashboard/_queues_table.html.erb
+  s_0e6d613f560fed::t_c2878d32dbd59c 13,28,37
+app/views/pgbus/dashboard/_recent_failures.html.erb
+  s_0e6d613f560fed::t_c2878d32dbd59c 5,11,14,20-23,25-26,31
+spec/pgbus/web/health_verdict_spec.rb
+  s_0e6d613f560fed::t_4761478595416e 33,40
+lib/pgbus/web/health_verdict.rb
+  s_0e6d613f560fed::t_4761478595416e 45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "2b6412dedea92a60d5c6746d2d3d186ba83fc225",
+  "prompts": {},
+  "sessions": {
+    "s_0e6d613f560fed": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "aa2a0c60-2e9f-428e-bb15-9bb101988d9e",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
