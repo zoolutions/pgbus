@@ -218,7 +218,8 @@ module Pgbus
       sentence = translate("pgbus.dead_letter.reasons.#{result.reason_key}_html", **args)
       return sentence unless result.retried_before.to_i.positive?
 
-      safe_join([sentence, " ", t("pgbus.dead_letter.reasons.retried_before", count: result.retried_before)])
+      note = t("pgbus.dead_letter.reasons.retried_before", count: result.retried_before)
+      safe_join([sentence, tag.span(note, class: "mt-1 block text-xs text-gray-600 dark:text-gray-300")])
     end
 
     def pgbus_dead_letter_attempts(result)
