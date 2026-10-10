@@ -876,6 +876,7 @@ module Pgbus
       def discard_event(queue_name, msg_id)
         release_lock_for_message(queue_name, msg_id)
         @client.archive_message(queue_name, msg_id.to_i, prefixed: false)
+        clear_event_failure(queue_name, msg_id)
         true
       rescue StandardError => e
         Pgbus.logger.debug { "[Pgbus::Web] Error discarding event #{msg_id}: #{e.message}" }
@@ -909,6 +910,7 @@ module Pgbus
         # discard_event.
         release_lock_for_payload(detail[:message])
         @client.archive_message(queue_name, msg_id.to_i, prefixed: false)
+        clear_event_failure(queue_name, msg_id)
         true
       rescue StandardError => e
         Pgbus.logger.debug { "[Pgbus::Web] Error marking event #{msg_id} handled: #{e.message}" }
@@ -933,6 +935,7 @@ module Pgbus
           txn.produce(queue_name, parsed.to_json, headers: detail[:headers])
           txn.delete(queue_name, msg_id.to_i)
         end
+        clear_event_failure(queue_name, msg_id)
         true
       rescue StandardError => e
         Pgbus.logger.debug { "[Pgbus::Web] Error editing event #{msg_id}: #{e.message}" }
@@ -950,6 +953,7 @@ module Pgbus
           txn.produce(target_queue, detail[:message], headers: detail[:headers])
           txn.delete(source_queue, msg_id.to_i)
         end
+        clear_event_failure(source_queue, msg_id)
         true
       rescue StandardError => e
         Pgbus.logger.debug { "[Pgbus::Web] Error rerouting event #{msg_id}: #{e.message}" }
@@ -968,6 +972,18 @@ module Pgbus
           next
         end
         count
+      end
+
+      # The failed row of an event message an action just took out of its
+      # handler queue (issue #494). The consumer records the logical name;
+      # both spellings are cleared. A failure here never undoes the action.
+      def clear_event_failure(queue_name, msg_id)
+        connection.exec_delete(
+          "DELETE FROM pgbus_failed_events WHERE queue_name IN ($1, $2) AND msg_id = $3", "Pgbus Clear Event Failure",
+          [logical_queue_name(queue_name), queue_name, msg_id.to_i]
+        )
+      rescue StandardError => e
+        Pgbus.logger.error { "[Pgbus::Web] Error clearing the failed row of event #{msg_id}: #{e.class}: #{e.message}" }
       end
 
       # Subscriber registry. `queue_name` is the logical name the subscriber

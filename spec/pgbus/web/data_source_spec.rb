@@ -1070,7 +1070,63 @@ RSpec.describe Pgbus::Web::DataSource do
     end
   end
 
+  # The consumer records event failures (issue #494): an action that takes the
+  # message out of its handler queue must take its failed row with it, or the
+  # Events page keeps listing it as "message no longer in queue".
+  describe "clearing an event's failed row" do
+    let(:detail) do
+      { "msg_id" => 42, "read_ct" => 2, "enqueued_at" => Time.now.to_s, "vt" => Time.now.to_s,
+        "message" => '{"event_id":"evt-1","payload":{}}', "headers" => nil, "last_read_at" => nil }
+    end
+    let(:txn) { double("txn", produce: 1, delete: true) }
+    let(:cleared) { [] }
+
+    before do
+      allow(Pgbus.configuration).to receive(:queue_prefix).and_return("pgbus")
+      allow(mock_connection).to receive(:select_one).with(anything, "Pgbus Job Detail", [42]).and_return(detail)
+      allow(mock_connection).to receive(:exec_delete) { |sql, label, binds| cleared << [sql, label, binds] }
+      allow(mock_client).to receive(:archive_message)
+      allow(mock_client).to receive(:transaction).and_yield(txn)
+      allow(Pgbus::ProcessedEvent).to receive(:insert)
+    end
+
+    def expect_cleared
+      expect(cleared).to eq([["DELETE FROM pgbus_failed_events WHERE queue_name IN ($1, $2) AND msg_id = $3",
+                              "Pgbus Clear Event Failure", ["orders_handler", "pgbus_orders_handler", 42]]])
+    end
+
+    it "clears it on discard" do
+      expect(data_source.discard_event("pgbus_orders_handler", "42")).to be(true)
+      expect_cleared
+    end
+
+    it "clears it on mark handled" do
+      expect(data_source.mark_event_handled("pgbus_orders_handler", 42, "OrderHandler")).to be(true)
+      expect_cleared
+    end
+
+    it "clears it when an edited payload replaces the message" do
+      expect(data_source.edit_event_payload("pgbus_orders_handler", 42, '{"event_id":"evt-1"}')).to be(true)
+      expect_cleared
+    end
+
+    it "clears it when the event is rerouted" do
+      expect(data_source.reroute_event("pgbus_orders_handler", 42, "pgbus_other_handler")).to be(true)
+      expect_cleared
+    end
+
+    it "still succeeds when the clear fails, logging it" do
+      allow(mock_connection).to receive(:exec_delete).and_raise(StandardError, "boom")
+      allow(Pgbus.logger).to receive(:error)
+
+      expect(data_source.discard_event("pgbus_orders_handler", 42)).to be(true)
+      expect(Pgbus.logger).to have_received(:error)
+    end
+  end
+
   describe "#discard_event" do
+    before { allow(mock_connection).to receive(:exec_delete) }
+
     it "archives the message from the handler queue" do
       allow(mock_client).to receive(:archive_message)
       allow(mock_connection).to receive(:select_one).and_return(nil)
@@ -1099,6 +1155,8 @@ RSpec.describe Pgbus::Web::DataSource do
   end
 
   describe "#mark_event_handled" do
+    before { allow(mock_connection).to receive(:exec_delete) }
+
     let(:event_detail) do
       {
         "msg_id" => 42, "read_ct" => 3,
@@ -1165,6 +1223,8 @@ RSpec.describe Pgbus::Web::DataSource do
   end
 
   describe "#edit_event_payload" do
+    before { allow(mock_connection).to receive(:exec_delete) }
+
     let(:txn) { double("txn") }
 
     it "uses a PGMQ transaction to produce new message and delete the old atomically" do
@@ -1206,6 +1266,8 @@ RSpec.describe Pgbus::Web::DataSource do
   end
 
   describe "#reroute_event" do
+    before { allow(mock_connection).to receive(:exec_delete) }
+
     let(:txn) { double("txn") }
 
     it "uses a PGMQ transaction to produce on target and delete on source atomically" do
@@ -1241,6 +1303,8 @@ RSpec.describe Pgbus::Web::DataSource do
   end
 
   describe "#discard_selected_events" do
+    before { allow(mock_connection).to receive(:exec_delete) }
+
     it "archives multiple messages and returns count" do
       allow(mock_client).to receive(:archive_message)
       allow(mock_connection).to receive(:select_one).and_return(nil)
