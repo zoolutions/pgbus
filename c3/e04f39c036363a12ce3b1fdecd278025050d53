@@ -1,0 +1,58 @@
+app/frontend/pgbus/style.css
+  s_4242253cc7e550::t_971b7c7a0ae70a 2
+app/views/pgbus/dashboard/_queues_table.html.erb
+  s_4242253cc7e550::t_e7944ce0a27f5e 5,24
+app/views/pgbus/processes/_processes_table.html.erb
+  s_4242253cc7e550::t_5596b30ef7415f 28
+app/views/pgbus/outbox/index.html.erb
+  s_4242253cc7e550::t_464c2c1fb080d8 7,10-11,14-15,18
+app/views/pgbus/dead_letter/show.html.erb
+  s_4242253cc7e550::t_e7944ce0a27f5e 2
+app/views/pgbus/queues/_queues_list.html.erb
+  s_4242253cc7e550::t_e7944ce0a27f5e 20,36,41
+app/views/pgbus/jobs/_row.html.erb
+  s_4242253cc7e550::t_e7944ce0a27f5e 24
+  s_4242253cc7e550::t_5596b30ef7415f 38,43,47,54,59,71
+spec/pgbus/web/dark_mode_contrast_spec.rb
+  s_4242253cc7e550::t_5106777a0e2c5f 91
+  s_4242253cc7e550::t_174a3d63bca5d7 35-40
+  s_4242253cc7e550::t_26295164f0d262 88-90,92-124
+app/views/pgbus/dashboard/_recent_failures.html.erb
+  s_4242253cc7e550::t_e7944ce0a27f5e 6
+app/views/pgbus/insights/show.html.erb
+  s_4242253cc7e550::t_464c2c1fb080d8 28,31-32,35-36,39-40,43-44,47-48,51,57,60-61,64-65,68-69,72-73,76,83,87,96,104,135,168,171-172,175-176,179-180,183,223,226-227,230-231,234-235,238-239,242
+app/views/pgbus/events/_pending_table.html.erb
+  s_4242253cc7e550::t_e7944ce0a27f5e 67,128
+app/views/pgbus/queues/show.html.erb
+  s_4242253cc7e550::t_e7944ce0a27f5e 2,31,53,72-73
+app/views/pgbus/locks/_concurrency.html.erb
+  s_4242253cc7e550::t_e7944ce0a27f5e 67
+app/helpers/pgbus/application_helper.rb
+  s_4242253cc7e550::t_5596b30ef7415f 155
+app/views/pgbus/dashboard/_queue_health.html.erb
+  s_4242253cc7e550::t_e7944ce0a27f5e 20,68-69
+app/views/pgbus/dashboard/_stats_cards.html.erb
+  s_4242253cc7e550::t_e7944ce0a27f5e 25
+app/views/pgbus/events/show.html.erb
+  s_4242253cc7e550::t_e7944ce0a27f5e 2
+app/views/pgbus/batches/_batches_table.html.erb
+  s_4242253cc7e550::t_e7944ce0a27f5e 40
+app/views/pgbus/jobs/show.html.erb
+  s_4242253cc7e550::t_e7944ce0a27f5e 2
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "c3e04f39c036363a12ce3b1fdecd278025050d53",
+  "prompts": {},
+  "sessions": {
+    "s_4242253cc7e550": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4fe2a4bd-8a7a-43f0-a807-a713cef7f01f",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
