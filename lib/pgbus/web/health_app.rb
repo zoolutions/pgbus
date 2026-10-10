@@ -106,10 +106,14 @@ module Pgbus
       end
 
       # Reuse an injected DataSource (tests, an app that wants one shared
-      # instance); otherwise build a fresh one each check so per-instance
-      # memoization can never serve stale queue/process metrics.
+      # instance), dropping its per-instance memos first; otherwise build a
+      # fresh one each check. Either way no check sees the last one's queue,
+      # process, stream or table metrics.
       def data_source_for_check
-        @data_source || DataSource.new
+        return DataSource.new unless @data_source
+
+        @data_source.reset_cache! if @data_source.respond_to?(:reset_cache!)
+        @data_source
       end
 
       def not_found

@@ -26,6 +26,9 @@ module Pgbus
 
         # The Retrying tab of the Jobs page (handler queues left to the Events
         # page), plus when the next backoff ends and how many are due now.
+        # Each queue contributes its earliest COUNT_CAP + 1 rows by vt (the
+        # vt index), so the next attempt is exact and the due count is a
+        # lower bound only past the cap, like the tab counts.
         def retrying_signal
           counts = job_state_counts(exclude: handler_queue_physical_names)
           return EMPTY_RETRYING if counts["retrying"].zero?
@@ -119,7 +122,7 @@ module Pgbus
             <<~SQL.strip
               (SELECT m.vt FROM pgmq.q_#{qtable} m #{failed_join(qtable, logical)}
                WHERE #{JobList::STATE_PREFILTER["retrying"]} AND (#{JobList::STATE_CASE}) = 'retrying'
-               LIMIT #{JobList::COUNT_CAP + 1})
+               ORDER BY m.vt LIMIT #{JobList::COUNT_CAP + 1})
             SQL
           end
           connection.select_one(<<~SQL, "Pgbus Retry Schedule")

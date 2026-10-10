@@ -71,7 +71,7 @@ RSpec.describe Pgbus::Web::DataSource::DashboardSignals do
       expect(sql).to include("FROM pgmq.q_pgbus_test_default m", "FROM pgmq.q_pgbus_test_mailers m")
       expect(sql).not_to include("q_pgbus_test_billing", "q_pgbus_test_default_dlq")
       expect(sql).to include(Pgbus::Web::DataSource::JobList::STATE_PREFILTER["retrying"])
-      expect(sql).to include("= 'retrying'", "LIMIT #{Pgbus::Web::DataSource::JobList::COUNT_CAP + 1}")
+      expect(sql).to include("= 'retrying'", "ORDER BY m.vt LIMIT #{Pgbus::Web::DataSource::JobList::COUNT_CAP + 1}")
       expect(sql).to include("MIN(vt) FILTER (WHERE vt > now())", "COUNT(*) FILTER (WHERE vt <= now())")
     end
 
