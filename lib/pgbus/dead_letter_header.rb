@@ -84,7 +84,7 @@ module Pgbus
 
     def iso(value)
       case value
-      when Time then value.utc.iso8601(6)
+      when Time then value.getutc.iso8601(6)
       when String then value
       else value.respond_to?(:to_time) ? value.to_time.utc.iso8601(6) : value.to_s
       end
