@@ -68,6 +68,8 @@ RSpec.describe Pgbus::Web::DataSource::ListCounts do
 
   describe "#batches" do
     it "pages with an offset" do
+      # Pending-job lookup is not under test; keep it off the mocked connection.
+      allow(Pgbus::Batch).to receive(:executions_migrated?).and_return(false)
       scope = double("scope")
       allow(Pgbus::BatchEntry).to receive(:order).with(created_at: :desc, id: :desc).and_return(scope)
       allow(scope).to receive(:limit).with(25).and_return(scope)
