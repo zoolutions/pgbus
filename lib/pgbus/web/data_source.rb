@@ -64,6 +64,8 @@ module Pgbus
         @queues_with_metrics = nil
         @concurrency_summary = nil
         @queue_health_stats = nil
+        @process_rows = nil
+        @stream_queue_names = nil
         self
       end
 
@@ -99,13 +101,18 @@ module Pgbus
       # archive msg_id index fingerprint (issue #366). Stream delivery is a
       # non-consuming peek, so stream messages sit visible with read_ct=0
       # forever — health verdicts must not read that as a wedge (issue #359).
-      # Loaded fresh per call (reset + registry + fingerprint queries):
-      # verdicts run on coarse intervals and a long-lived process must see
-      # streams registered since the last check. Degrades to an empty Set
-      # when the registry/pgmq schema is absent or unreadable.
+      # Loaded fresh per instance (reset + registry + fingerprint queries),
+      # then memoized until reset_cache!: the home page asks three times per
+      # render (issue #492). A long-lived holder (the MCP server, the AppSignal
+      # probe) calls reset_cache! per check and HealthApp builds a DataSource
+      # per check, so each verdict still sees streams registered since the
+      # last one. Degrades to an empty Set when the registry/pgmq schema is
+      # absent or unreadable.
       def stream_queue_names
-        StreamQueue.reset_cache!
-        StreamQueue.known_names
+        @stream_queue_names ||= begin
+          StreamQueue.reset_cache!
+          StreamQueue.known_names
+        end
       end
 
       # Fingerprint-matched stream queues missing from the registry (issue #366).
