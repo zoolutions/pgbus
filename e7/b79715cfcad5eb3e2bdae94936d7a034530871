@@ -1,0 +1,25 @@
+spec/support/pgbus/stub_data_source/sample_data.rb
+  s_540e3f35d90225::t_6737ae52a1e39a 122
+app/views/pgbus/dashboard/_processes_table.html.erb
+  s_540e3f35d90225::t_6737ae52a1e39a 18
+app/frontend/pgbus/style.css
+  s_540e3f35d90225::t_6737ae52a1e39a 2
+app/views/pgbus/processes/_row.html.erb
+  s_540e3f35d90225::t_6737ae52a1e39a 11,16
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "e7b79715cfcad5eb3e2bdae94936d7a034530871",
+  "prompts": {},
+  "sessions": {
+    "s_540e3f35d90225": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2c199a61-e66f-4ee7-882c-a60330f340ab",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
