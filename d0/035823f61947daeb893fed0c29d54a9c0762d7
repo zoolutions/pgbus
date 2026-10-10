@@ -1,0 +1,9 @@
+spec/requests/pgbus/queues_controller_spec.rb
+  ai_agent 27
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "d0035823f61947daeb893fed0c29d54a9c0762d7",
+  "prompts": {}
+}
