@@ -46,7 +46,7 @@ it_behaves_like "an accessible page", "/pgbus/jobs", :dark do    # with an inter
 end
 
 visit_dark("/pgbus/queues")     # in any system spec: dark mode the way a user enters it
-expect(page).to be_accessible   # axe, tags wcag2a + wcag2aa + wcag21aa
+expect(page).to be_accessible   # axe, tags wcag2a + wcag2aa + wcag21aa + wcag22aa (target size)
 ```
 
 `visit_dark` stores `localStorage['pgbus-dark'] = 'true'` and visits again, so the layout's head

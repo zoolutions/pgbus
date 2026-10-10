@@ -3,7 +3,7 @@
     <h1 class="text-2xl font-bold text-gray-900 dark:text-white"><%= t("pgbus.insights.show.title") %></h1>
     <p class="mt-1 text-sm text-gray-500 dark:text-gray-400"><%= t("pgbus.insights.show.description_html", range: pgbus_time_range_label(@minutes)) %></p>
   </div>
-  <nav class="inline-flex rounded-lg shadow-sm" role="group" aria-label="Time range">
+  <div class="inline-flex rounded-lg shadow-sm" role="group" aria-label="Time range">
     <% ranges = [["1h", 60], ["4h", 240], ["24h", 1440], ["7d", 10_080], ["30d", 43_200]] %>
     <% ranges.each_with_index do |(label, mins), i| %>
       <%
@@ -20,7 +20,7 @@
       %>
       <%= link_to label, pgbus.insights_path(minutes: mins), class: "#{base} #{colors} #{rounded}" %>
     <% end %>
-  </nav>
+  </div>
 </div>
 
 <!-- Summary cards -->

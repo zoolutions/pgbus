@@ -3,7 +3,8 @@
 require "json"
 
 # The accessibility gate (#498). A dashboard page is accessible when axe-core
-# finds no WCAG 2.1 AA violation in the rendered DOM, in light AND dark mode.
+# finds no WCAG 2.1 AA violation (plus 2.2 AA target size, which Lighthouse also
+# scores) in the rendered DOM, in light AND dark mode.
 #
 #   it_behaves_like "an accessible page", "/pgbus/queues", :dark
 #
@@ -15,7 +16,7 @@ module Accessibility
   ROOT = Pathname.new(__dir__).join("../../..").expand_path
   SOURCE_PATH = ROOT.join("node_modules/axe-core/axe.min.js")
   CONFIG_PATH = ROOT.join("lighthouserc.dashboard.json")
-  TAGS = %w[wcag2a wcag2aa wcag21aa].freeze
+  TAGS = %w[wcag2a wcag2aa wcag21aa wcag22aa].freeze
 
   # Targets are capped so one broken component cannot bury the report; the
   # cap is stated rather than silently applied.
