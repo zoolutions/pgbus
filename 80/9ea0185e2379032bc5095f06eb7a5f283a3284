@@ -1,0 +1,25 @@
+spec/pgbus/event_bus/handler_spec.rb
+  s_9453362ee84c49::t_ea4ba6b405412a 558-564
+spec/pgbus/process/consumer_spec.rb
+  s_9453362ee84c49::t_34ff75b9e056e4 499-575
+lib/pgbus/process/consumer.rb
+  s_9453362ee84c49::t_671cc118fb42ea 266-268,276,289-290,299-310
+lib/pgbus/event_bus/handler.rb
+  s_9453362ee84c49::t_6aa88978d1792e 18-34,217
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "809ea0185e2379032bc5095f06eb7a5f283a3284",
+  "prompts": {},
+  "sessions": {
+    "s_9453362ee84c49": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "56ff4e96-ee2f-43de-ae18-5e04d8b3efea",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
