@@ -6,28 +6,49 @@ module Pgbus
       # The dead-letter queue pages (issue #495): list, count, detail, and the
       # retry/discard actions. Moved out of data_source.rb unchanged.
       module DeadLetter
-        # Dead letter queue
-        # Note: DLQ queue names from queues_with_metrics are already fully qualified
-        # (e.g., "pgbus_default_dlq"), so we use them directly without re-prefixing.
-        def dlq_messages(page: 1, per_page: 25)
-          dlq_suffix = Pgbus::DEAD_LETTER_SUFFIX
-          queues = queues_with_metrics.select { |q| q[:name].end_with?(dlq_suffix) }
-          offset = (page - 1) * per_page
+        # The header path the error-class filter reads (DeadLetterHeader::KEY).
+        ERROR_CLASS_SQL = "headers #>> '{#{Pgbus::DeadLetterHeader::KEY},error_class}'".freeze
 
-          paginated_queue_messages(queues.map { |q| q[:name] }, per_page, offset)
+        # DLQ queue names from queues_with_metrics are already fully qualified
+        # (e.g., "pgbus_default_dlq"), so we use them directly without re-prefixing.
+        # dlq: one DLQ by its full name (unknown names list nothing);
+        # error_class: only messages whose dead-letter block names that class.
+        def dlq_messages(page: 1, per_page: 25, dlq: nil, error_class: nil)
+          offset = (page - 1) * per_page
+          names = dlq_queue_names(dlq)
+          return [] if names.empty?
+          return paginated_queue_messages(names, per_page, offset) unless error_class
+
+          paginated_queue_messages(names, per_page, offset, where: "#{ERROR_CLASS_SQL} = $3", binds: [error_class])
         rescue StandardError => e
           Pgbus.logger.debug { "[Pgbus::Web] Error fetching DLQ messages: #{e.message}" }
           []
         end
 
-        def dlq_total_count
-          dlq_suffix = Pgbus::DEAD_LETTER_SUFFIX
-          queues_with_metrics
-            .select { |q| q[:name].end_with?(dlq_suffix) }
-            .sum { |q| q[:queue_length] }
+        def dlq_total_count(dlq: nil, error_class: nil)
+          names = dlq_queue_names(dlq)
+          return 0 if names.empty?
+          return dlq_counts_by_queue.values_at(*names).sum unless error_class
+
+          connection.select_value(
+            "SELECT COUNT(*) FROM (#{queue_message_fragments(names, "#{ERROR_CLASS_SQL} = $1")}) AS combined",
+            "Pgbus DLQ Count",
+            [error_class]
+          ).to_i
         rescue StandardError => e
           Pgbus.logger.debug { "[Pgbus::Web] Error fetching DLQ count: #{e.message}" }
           0
+        end
+
+        # { "pgbus_default_dlq" => 12, ... } for the filter chips, from the
+        # cached metrics (no query of its own).
+        def dlq_counts_by_queue
+          queues_with_metrics
+            .select { |q| q[:name].end_with?(Pgbus::DEAD_LETTER_SUFFIX) }
+            .to_h { |q| [q[:name], q[:queue_length].to_i] }
+        rescue StandardError => e
+          Pgbus.logger.debug { "[Pgbus::Web] Error fetching DLQ counts: #{e.message}" }
+          {}
         end
 
         def dlq_message_detail(msg_id)
@@ -60,7 +81,8 @@ module Pgbus
           return false unless row
 
           @client.transaction do |txn|
-            txn.produce(original_queue, row["message"], headers: row["headers"])
+            # A live message must not claim to be dead: strip the block, count the trip.
+            txn.produce(original_queue, row["message"], headers: DeadLetterHeader.strip_for_retry(row["headers"]))
             txn.delete(queue_name, msg_id.to_i)
           end
           true
@@ -105,6 +127,14 @@ module Pgbus
             Pgbus.logger.debug { "[Pgbus::Web] Error batch-discarding DLQ messages from #{queue_name}: #{e.message}" }
             0
           end
+        end
+
+        private
+
+        # Only names that are real DLQs ever reach sanitize_name and SQL.
+        def dlq_queue_names(dlq)
+          names = dlq_counts_by_queue.keys
+          dlq.nil? ? names : names & [dlq]
         end
       end
     end

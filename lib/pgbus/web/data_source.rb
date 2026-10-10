@@ -1240,26 +1240,32 @@ module Pgbus
       # name goes through sanitize_name (which calls QueueNameValidator)
       # so it's safe to interpolate into both the schema-qualified table
       # and the literal column. limit/offset are bound parameters.
-      def paginated_queue_messages(queue_names, limit, offset)
+      #
+      # where: an optional condition appended inside every fragment, with its
+      # values in binds (numbered from $3, after limit and offset). The
+      # default call builds exactly the unfiltered query.
+      def paginated_queue_messages(queue_names, limit, offset, where: nil, binds: [])
         return [] if queue_names.empty?
 
-        sanitized = queue_names.map { |name| [name, sanitize_name(name)] }
-        fragments = sanitized.map do |(name, qtable)|
-          <<~SQL.strip
-            SELECT msg_id, read_ct, enqueued_at, last_read_at, vt, message, headers,
-                   '#{name}' AS queue_name
-            FROM pgmq.q_#{qtable}
-          SQL
-        end
-
         sql = <<~SQL
-          SELECT * FROM (#{fragments.join("\nUNION ALL\n")}) AS combined
+          SELECT * FROM (#{queue_message_fragments(queue_names, where)}) AS combined
           ORDER BY msg_id DESC
           LIMIT $1 OFFSET $2
         SQL
 
-        rows = connection.select_all(sql, "Pgbus Paginated Queue Messages", [limit, offset])
+        rows = connection.select_all(sql, "Pgbus Paginated Queue Messages", [limit, offset, *binds])
         rows.to_a.map { |r| format_message(r, r["queue_name"]) }
+      end
+
+      def queue_message_fragments(queue_names, where = nil)
+        queue_names.map do |name|
+          fragment = <<~SQL.strip
+            SELECT msg_id, read_ct, enqueued_at, last_read_at, vt, message, headers,
+                   '#{name}' AS queue_name
+            FROM pgmq.q_#{sanitize_name(name)}
+          SQL
+          where ? "#{fragment}\nWHERE #{where}" : fragment
+        end.join("\nUNION ALL\n")
       end
 
       def batched_queue_metrics(queue_names)
