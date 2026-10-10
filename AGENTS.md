@@ -49,7 +49,7 @@ bundle exec rake bench:streams            # SSE streaming benchmarks (requires P
 bundle exec rake bench:worker_profile     # Real Worker: jobs/s + where a job's time goes (requires PGBUS_DATABASE_URL)
 bundle exec rake frontend:css             # Rebuild app/frontend/pgbus/style.css after adding a Tailwind class to a view
 bundle exec rake dummy:server            # Dashboard on http://localhost:3003/pgbus with stub sample data (no database)
-bundle exec rspec spec/system/accessibility_spec.rb  # axe WCAG 2.1 AA gate, every dashboard page, light + dark
+bundle exec rspec spec/system/accessibility_spec.rb  # axe WCAG 2.1 AA (+ 2.2 target size) gate, every dashboard page, light + dark
 bin/lighthouse [-i N] [--pages /pgbus,…]  # Lighthouse scores per page, against a running dummy:server
 bin/release list                          # Last releases + next patch/minor/major version
 bin/release [minor|major|X.Y.Z] [-n]      # Cut a release (patch by default) via rake release (rakelib/release.rake, shared across the zoolutions gems); -n = dry run

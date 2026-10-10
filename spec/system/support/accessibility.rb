@@ -68,7 +68,7 @@ RSpec::Matchers.define :be_accessible do
   end
 
   failure_message do |_page|
-    "expected no WCAG 2.1 AA violations, found #{@violations.size}:\n#{@violations.join("\n")}"
+    "expected no WCAG 2.1 AA / 2.2 AA target-size violations, found #{@violations.size}:\n#{@violations.join("\n")}"
   end
 end
 
@@ -92,7 +92,7 @@ RSpec.shared_examples "an accessible page" do |path, mode|
   # A caller may add `let(:interaction) { -> { … } }` in the it_behaves_like
   # block (RSpec evaluates that block inside the nested group, so a `let` is
   # the way to pass behaviour in — a `&block` parameter never receives it).
-  it "has no WCAG 2.1 AA violations on #{path} (#{mode})", :a11y do
+  it "has no WCAG AA violations on #{path} (#{mode})", :a11y do
     mode == :dark ? visit_dark(path) : visit(path)
 
     # A 404 or 500 page can be accessible, so without this a URL the stub

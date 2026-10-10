@@ -11,7 +11,7 @@ RSpec.describe "bin/lighthouse" do # rubocop:disable RSpec/DescribeClass
   let(:script) { root.join("bin/lighthouse").to_s }
 
   def run(*args)
-    Bundler.with_unbundled_env { Open3.capture3(script, *args, chdir: root.to_s) }
+    Bundler.with_original_env { Open3.capture3(script, *args, chdir: root.to_s) }
   end
 
   it "is executable" do

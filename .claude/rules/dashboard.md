@@ -1,7 +1,7 @@
 # Dashboard Rules
 
 The dashboard (`app/views/pgbus/`, `app/controllers/pgbus/`, `app/frontend/pgbus/`, the badge
-helpers in `app/helpers/pgbus/application_helper.rb`) meets WCAG 2.1 AA in light and dark mode on
+helpers in `app/helpers/pgbus/application_helper.rb`) meets WCAG 2.1 AA (plus 2.2 AA target size) in light and dark mode on
 every page. Three checks keep it there, and a change is not done until all three are green:
 
 | Check | File | Runs |
