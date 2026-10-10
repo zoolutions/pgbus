@@ -1,0 +1,43 @@
+lib/pgbus/process/dispatcher.rb
+  s_540e3f35d90225::t_b31d8295368da8 700
+lib/pgbus/process/worker.rb
+  s_540e3f35d90225::t_b31d8295368da8 836-837,879-880,884-900
+spec/pgbus/process/consumer_spec.rb
+  s_540e3f35d90225::t_5564dc922f8e9c 995
+  s_540e3f35d90225::t_591dc0d3568746 983-994,996-1013
+spec/pgbus/process/dispatcher_spec.rb
+  s_540e3f35d90225::t_364151a252f6cc 657
+lib/pgbus/recurring/scheduler.rb
+  s_540e3f35d90225::t_b31d8295368da8 119-120
+lib/pgbus/process/supervisor.rb
+  s_540e3f35d90225::t_b31d8295368da8 906
+lib/pgbus/outbox/poller.rb
+  s_540e3f35d90225::t_b31d8295368da8 142
+spec/pgbus/process/worker_spec.rb
+  s_540e3f35d90225::t_5564dc922f8e9c 169-172
+  s_540e3f35d90225::t_09d2b79bfd72c5 159-168,173-190
+lib/pgbus/process/consumer.rb
+  s_540e3f35d90225::t_b31d8295368da8 80-81,618-623,625-626,631-639
+spec/pgbus/recurring/scheduler_spec.rb
+  s_540e3f35d90225::t_364151a252f6cc 150-151
+spec/pgbus/process/supervisor_spec.rb
+  s_540e3f35d90225::t_0f1bc91e5aede0 308-319
+spec/pgbus/outbox/poller_spec.rb
+  s_540e3f35d90225::t_0f1bc91e5aede0 126-136
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "c3b581e8673dadb4b74fd8ebaf3f4b2b9dbbb79c",
+  "prompts": {},
+  "sessions": {
+    "s_540e3f35d90225": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2c199a61-e66f-4ee7-882c-a60330f340ab",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
