@@ -3,14 +3,15 @@
 module Pgbus
   module Web
     module Streamer
-      # Composes the Streamer's three background threads (Listener, Dispatcher,
-      # Heartbeat) with the shared Registry and dispatch_queue. One Instance
-      # per Puma worker. Owns the lifecycle of all three threads and the
-      # dedicated PG::Connection for LISTEN.
+      # Composes the Streamer's background threads (Listener, Dispatcher,
+      # Heartbeat, and the PeerCloseWatcher unless streams_peer_close_interval
+      # is nil) with the shared Registry and dispatch_queue. One Instance per
+      # Puma worker. Owns the lifecycle of those threads and the dedicated
+      # PG::Connection for LISTEN.
       #
       # Lifecycle:
       #   Instance.new(...)  — allocates wiring, does NOT start threads
-      #   #start             — spawns listener/dispatcher/heartbeat in order
+      #   #start             — spawns listener/dispatcher/heartbeat/watcher in order
       #   #register(conn)    — enqueues a ConnectMessage into the dispatch queue
       #   #shutdown!         — sends shutdown sentinel to every connection and
       #                        stops all threads in reverse order
@@ -121,7 +122,10 @@ module Pgbus
         end
 
         # Graceful shutdown for Puma worker restart. Order matters:
-        #   1. Heartbeat first (stop writing comments to connections we're
+        #   0. PeerCloseWatcher first (issue #519): stop probing and closing
+        #      sockets we are about to close ourselves. Its self-pipe wakes
+        #      the select, so this does not wait out its interval.
+        #   1. Heartbeat next (stop writing comments to connections we're
         #      about to close)
         #   2. Listener next (stop accepting new NOTIFYs)
         #   3. Dispatcher next (drain the queue; it's now finite because

@@ -23,8 +23,17 @@ module Pgbus
       # rack.hijack paths. Falcon's experimental streaming-body path
       # (FalconConnection) exposes no socket and keeps the heartbeat.
       #
+      # Half-close: a client that shuts down only its write side (SHUT_WR)
+      # reads as EOF and is reaped. EventSource, fetch streams and reverse
+      # proxies never half-close an SSE request, so EOF means the client left.
+      #
+      # The probe takes the connection's write mutex with try_lock: a TLS
+      # wrapper (Puma's MiniSSL) is not safe to read while IoWriter writes
+      # through it. A socket mid-write is skipped and probed on a later pass.
+      #
       # `interval` bounds how long a new connection waits to join the
-      # watched set; a close on a watched socket wakes the select at once.
+      # watched set; a close on a watched socket wakes the select at once,
+      # and #stop wakes it through a self-pipe.
       class PeerCloseWatcher
         # Stray bytes from a client are read and discarded in chunks of this.
         DRAIN_BYTES = 4096
@@ -36,11 +45,13 @@ module Pgbus
           @logger = logger
           @running = false
           @thread = nil
+          @wake_reader, @wake_writer = IO.pipe
         end
 
         def start
           return if @running
 
+          @wake_reader, @wake_writer = IO.pipe if @wake_reader.closed?
           @running = true
           @thread = Thread.new { run_loop }
           self
@@ -55,28 +66,52 @@ module Pgbus
           return unless @running
 
           @running = false
+          wake
           @thread&.join(@interval + 1)
           @thread = nil
+          @wake_reader.close
+          @wake_writer.close
           self
         end
 
         # One wait-and-probe pass, at most `interval` long. Public for tests.
         def tick
           by_socket = watched_sockets
-          if by_socket.empty?
-            sleep @interval
-            return
+          ready, = IO.select([@wake_reader, *by_socket.keys], nil, nil, @interval)
+          Array(ready).each do |socket|
+            socket.equal?(@wake_reader) ? drain_wake : probe(by_socket[socket])
           end
-
-          ready, = IO.select(by_socket.keys, nil, nil, @interval)
-          Array(ready).each { |socket| reap(by_socket[socket]) if peer_closed?(by_socket[socket]) }
-        rescue IOError, Errno::EBADF
+        rescue IOError, Errno::EBADF => e
           # A socket was closed under the select (shutdown, a dispatcher
           # write that failed). The next pass rebuilds the set without it.
-          nil
+          @logger.debug { "[Pgbus::Streamer::PeerCloseWatcher] select interrupted: #{e.class}: #{e.message}" }
         end
 
         private
+
+        def wake
+          @wake_writer.write_nonblock(".", exception: false)
+        rescue IOError
+          nil
+        end
+
+        def drain_wake
+          @wake_reader.read_nonblock(64, exception: false)
+        end
+
+        # One socket's probe never ends the pass for the others.
+        def probe(connection)
+          return unless connection.mutex.try_lock
+
+          closed = begin
+            peer_closed?(connection)
+          ensure
+            connection.mutex.unlock
+          end
+          reap(connection) if closed
+        rescue StandardError => e
+          @logger.error { "[Pgbus::Streamer::PeerCloseWatcher] probe of #{connection.id} raised: #{e.class}: #{e.message}" }
+        end
 
         def run_loop
           while @running
@@ -118,8 +153,17 @@ module Pgbus
           # A socket wrapper that raises instead of honouring exception:
           # false (EAGAIN is a SystemCallError, so this rescue comes first).
           false
-        rescue IOError, SystemCallError
+        rescue IOError, SystemCallError, *tls_errors
           true
+        end
+
+        # A TLS socket whose client vanished without close_notify raises its
+        # library's SSL error ("unexpected eof while reading") on read.
+        def tls_errors
+          errors = []
+          errors << ::OpenSSL::SSL::SSLError if defined?(::OpenSSL::SSL::SSLError)
+          errors << ::Puma::MiniSSL::SSLError if defined?(::Puma::MiniSSL::SSLError)
+          errors
         end
 
         def reap(connection)

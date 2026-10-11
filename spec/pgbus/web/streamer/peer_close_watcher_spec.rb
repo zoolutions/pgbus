@@ -3,6 +3,7 @@
 require "spec_helper"
 require "socket"
 require "protocol/http/body/writable"
+require "openssl"
 
 RSpec.describe Pgbus::Web::Streamer::PeerCloseWatcher do
   subject(:watcher) do
@@ -115,11 +116,66 @@ RSpec.describe Pgbus::Web::Streamer::PeerCloseWatcher do
       expect(disconnects).to be_empty
     end
 
-    it "survives a socket closed by another thread mid-select" do
+    it "survives a socket closed by another thread while it waits in select" do
+      slow = described_class.new(registry: registry, dispatch_queue: dispatch_queue, interval: 5, logger: logger)
       connection, = build_connection("a")
-      connection.io.close
+      closer = Thread.new do
+        sleep 0.2
+        connection.io.close
+      end
+
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      expect { slow.tick }.not_to raise_error
+      expect(Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).to be < 2
+    ensure
+      closer&.join
+    end
+
+    it "treats a TLS socket's abrupt-EOF error as a close (OpenSSL)" do
+      connection, = build_connection("a")
+      allow(connection.io).to receive(:read_nonblock).and_raise(OpenSSL::SSL::SSLError, "unexpected eof while reading")
+      pairs.last.last.write("x")
+
+      watcher.tick
+
+      expect(disconnects).to eq(["a"])
+    end
+
+    it "treats Puma's MiniSSL error as a close" do
+      stub_const("Puma::MiniSSL::SSLError", Class.new(StandardError))
+      connection, = build_connection("a")
+      allow(connection.io).to receive(:read_nonblock).and_raise(Puma::MiniSSL::SSLError, "eof")
+      pairs.last.last.write("x")
+
+      watcher.tick
+
+      expect(disconnects).to eq(["a"])
+    end
+
+    it "keeps probing the other ready sockets when one probe raises" do
+      broken, = build_connection("broken")
+      allow(broken.io).to receive(:read_nonblock).and_raise(ArgumentError, "boom")
+      pairs.last.last.write("x")
+      _, client = build_connection("gone")
+      client.close
 
       expect { watcher.tick }.not_to raise_error
+
+      expect(disconnects).to eq(["gone"])
+      expect(broken).not_to be_dead
+    end
+
+    it "skips a socket whose connection is mid-write and probes it on a later pass" do
+      connection, client = build_connection("a")
+      client.close
+      connection.mutex.lock
+
+      watcher.tick
+      expect(disconnects).to be_empty
+
+      connection.mutex.unlock
+      watcher.tick
+      expect(disconnects).to eq(["a"])
     end
   end
 
@@ -135,6 +191,30 @@ RSpec.describe Pgbus::Web::Streamer::PeerCloseWatcher do
       expect(connection).to be_dead
     ensure
       watcher.stop
+    end
+
+    it "stops promptly even with a long interval" do
+      slow = described_class.new(registry: registry, dispatch_queue: dispatch_queue, interval: 30, logger: logger)
+      build_connection("a")
+      slow.start
+      sleep 0.1
+
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      slow.stop
+
+      expect(Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).to be < 1
+      expect(slow.threads).to be_empty
+    end
+
+    it "stops promptly when nothing is watched" do
+      slow = described_class.new(registry: registry, dispatch_queue: dispatch_queue, interval: 30, logger: logger)
+      slow.start
+      sleep 0.1
+
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      slow.stop
+
+      expect(Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).to be < 1
     end
 
     it "reports its thread while running and none after stop" do

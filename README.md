@@ -1807,7 +1807,7 @@ Pgbus.configure do |c|
 end
 ```
 
-Membership work runs on the dispatcher thread (which already releases AR connections each pass); the heartbeat posts a batched touch per tick. A closed tab leaves at once: a watcher thread notices the client's close on the socket (`streams_peer_close_interval`, Puma and Falcon's hijack path) instead of waiting for the next heartbeat write to fail. Falcon's experimental streaming-body path still leaves on the heartbeat. Presence failures are logged and swallowed so a presence-table hiccup can't knock a live SSE connection out of the registry.
+Membership work runs on the dispatcher thread (which already releases AR connections each pass); the heartbeat posts a batched touch per tick. A closed tab leaves at once (within `streams_peer_close_interval` for a connection that just opened): a watcher thread notices the client's close on the socket (Puma and Falcon's hijack path) instead of waiting for the next heartbeat write to fail. Falcon's experimental streaming-body path still leaves on the heartbeat. Presence failures are logged and swallowed so a presence-table hiccup can't knock a live SSE connection out of the registry.
 
 #### Seats: one row per tab (experimental)
 
