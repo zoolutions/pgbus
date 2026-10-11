@@ -1,0 +1,63 @@
+AGENTS.md
+  s_4d54ea71052150::t_e58c68acd01bcc 52-53,200-201
+spec/pgbus/web/frontends_controller_spec.rb
+  s_4d54ea71052150::t_cf7c6906e636b9 27,29-39
+scripts/build_frontend.js
+  s_4d54ea71052150::t_0982ea05c6a04a 60
+  s_4d54ea71052150::t_31c05cfb0aac05 11-12,28-29,31,37,39-44,46,53,62-66,70
+  s_4d54ea71052150::t_dda19caa182e88 1-10,13-27,30,32-36,38,45,47-52,54-59,61,67-69,71-81
+spec/system/frontend_assets_spec.rb
+  s_4d54ea71052150::t_c143bc4385a97c 1-36
+Rakefile
+  s_4d54ea71052150::t_d342c64bd7cdd7 206-207,210
+  s_4d54ea71052150::t_8b0bef27ef5a53 208,211,213
+  s_4d54ea71052150::t_b0205761ef70a3 209
+  s_4d54ea71052150::t_08739d2f07b400 199
+  s_4d54ea71052150::t_53612fd1be687d 190-198,200-205,212,214-215
+README.md
+  s_4d54ea71052150::t_0c610c203dd074 1408-1409
+lighthouserc.dashboard.json
+  s_4d54ea71052150::t_e58c68acd01bcc 56
+lib/pgbus/engine.rb
+  s_4d54ea71052150::t_c6314dfe523618 142-148,151-155,165
+app/controllers/pgbus/frontends_controller.rb
+  s_4d54ea71052150::t_53d93f2396f2f5 16-18,20-22,26-27,47-48,53-57,62-70
+spec/pgbus/engine_spec.rb
+  s_4d54ea71052150::t_08739d2f07b400 237
+  s_4d54ea71052150::t_c6314dfe523618 244,249
+  s_4d54ea71052150::t_273eae6309dce5 221-236,238-243,245-248,250-252
+spec/pgbus/web/vendored_assets_spec.rb
+  s_4d54ea71052150::t_b0205761ef70a3 44
+package.json
+  s_4d54ea71052150::t_08c62653d9e910 7-8
+.claude/rules/dashboard.md
+  s_4d54ea71052150::t_e58c68acd01bcc 31-32
+CHANGELOG.md
+  s_4d54ea71052150::t_29718c26b56bd7 39-40
+spec/pgbus/web/lighthouse_config_spec.rb
+  s_4d54ea71052150::t_6edb545a8cf9d4 55-58
+config/routes.rb
+  s_4d54ea71052150::t_53d93f2396f2f5 102
+spec/requests/pgbus/frontends_controller_spec.rb
+  s_4d54ea71052150::t_cf7c6906e636b9 23-27,31-33,36-74
+.github/workflows/main.yml
+  s_4d54ea71052150::t_e58c68acd01bcc 46-47
+app/frontend/pgbus/modules/charts.js
+  s_4d54ea71052150::t_1cce783f8e0b29 3-4,75-84,87,98-99,102,113,135
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "ee6d88d79086bbb9130eee74ed1261cf0267de14",
+  "prompts": {},
+  "sessions": {
+    "s_4d54ea71052150": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e06ff31a-cbf6-4970-a25a-20a9c9288bd4",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
