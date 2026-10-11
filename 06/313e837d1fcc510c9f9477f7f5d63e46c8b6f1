@@ -1,0 +1,20 @@
+docs/spec/config_reference_spec.rb
+  s_d3e93cb53d111d::t_0e28e5e9d59a58 16-21,23-24
+  s_d3e93cb53d111d::t_5bee86e02aac56 25-28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "06313e837d1fcc510c9f9477f7f5d63e46c8b6f1",
+  "prompts": {},
+  "sessions": {
+    "s_d3e93cb53d111d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "65e8b049-9f95-48ca-b2ae-a43d6f4f34bb",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
