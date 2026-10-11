@@ -198,7 +198,8 @@ The long form, with the token rules and how to read a violation, is `.claude/rul
    `spec/system/accessibility_spec.rb` (axe, light + dark) stay green. No `except:`, no accepted debt:
    a red page is fixed.
 4. **Build + lint.** `bundle exec rake frontend:css` after any new Tailwind class, `bundle exec rake frontend:js`
-   after any JS edit (the browser only loads the committed `.min.js`), `bun run lint:herb`.
+   after any JS edit (the dashboard and the stream element load only the committed `.min.js`; ApexCharts
+   is served as vendored, `vendor/apexcharts.js`), `bun run lint:herb`.
    Every timestamp, age and duration goes through the `TimeFormat` helpers (`pgbus_time`,
    `pgbus_timestamp`, `pgbus_absolute_time`, `pgbus_duration` for seconds, `pgbus_ms_duration` for
    milliseconds; table in `.claude/rules/dashboard.md`); the time cop and

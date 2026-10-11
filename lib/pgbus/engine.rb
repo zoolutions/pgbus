@@ -141,11 +141,11 @@ module Pgbus
 
     # Make the <pgbus-stream-source> element available to the host app's
     # asset pipeline (Propshaft or Sprockets). The importmap pin points at
-    # the minified build (rake frontend:js), whose sourceMappingURL the
-    # pipeline rewrites to the digested .min.js.map. The readable source
-    # stays precompiled so `javascript_include_tag
-    # "pgbus/stream_source_element"` keeps working. When importmap-rails is
-    # loaded, auto-pin it so host apps get it without manual configuration.
+    # the minified build (rake frontend:js). Propshaft rewrites its
+    # sourceMappingURL to the digested .min.js.map; Sprockets serves the
+    # comment as written. The readable ES module source stays precompiled for
+    # apps that pin or bundle it themselves. When importmap-rails is loaded,
+    # auto-pin it so host apps get it without manual configuration.
     initializer "pgbus.streams.assets" do |app|
       if Pgbus.configuration.streams_enabled && app.config.respond_to?(:assets)
         app.config.assets.precompile += %w[

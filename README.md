@@ -1405,7 +1405,7 @@ Swap `turbo_stream_from` for `pgbus_stream_from` in your view:
 <%= pgbus_stream_from @order %>
 ```
 
-The helper imports the `<pgbus-stream-source>` element as `pgbus/stream_source_element`. With importmap-rails, pgbus pins it for you to a minified build (`pgbus/stream_source_element.min.js`, about 5 KB) whose linked sourcemap carries the readable source, so devtools shows the original file. Propshaft rewrites the `sourceMappingURL` to the digested map; Sprockets serves the comment as written, so there the browser may not find the map (the element works either way). Without importmap, `javascript_include_tag "pgbus/stream_source_element"` still serves the readable source. Neither needs bun or Node in your app: the minified files ship in the gem.
+The helper imports the `<pgbus-stream-source>` element as `pgbus/stream_source_element`. With importmap-rails, pgbus pins it for you to a minified build (`pgbus/stream_source_element.min.js`, about 5 KB) whose linked sourcemap carries the readable source, so devtools shows the original file. Propshaft rewrites the `sourceMappingURL` to the digested map; Sprockets serves the comment as written, so there the browser may not find the map (the element works either way). The element is an ES module that imports `@hotwired/turbo-rails` by its bare name, so it needs an importmap or your app's JavaScript bundler; a plain `javascript_include_tag` cannot run it. The readable source stays in the asset path for apps that pin or bundle it themselves. Neither needs bun or Node in your app: the minified files ship in the gem.
 
 Everything else stays the same. The model concern keeps working unchanged:
 

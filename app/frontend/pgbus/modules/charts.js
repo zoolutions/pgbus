@@ -75,10 +75,16 @@ function points(series, key) {
 // vendor/apexcharts.js is a UMD bundle: run as a module it defines the global.
 // Memoized, so the theme-toggle redraws reuse the one download. Every caller
 // awaits the same promise, and its callbacks run in call order, so a redraw
-// can't overtake the first render.
+// can't overtake the first render. A failed import clears the memo, so the
+// next draw (a theme toggle) retries instead of awaiting the same rejection.
 let apexCharts = null;
 function loadApexCharts() {
-  apexCharts ||= import("apexcharts").then(() => globalThis.ApexCharts);
+  apexCharts ||= import("apexcharts")
+    .then(() => globalThis.ApexCharts)
+    .catch((error) => {
+      apexCharts = null;
+      throw error;
+    });
   return apexCharts;
 }
 

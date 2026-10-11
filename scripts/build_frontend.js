@@ -14,6 +14,14 @@ import { basename, dirname, join } from "node:path";
 
 const root = join(import.meta.dir, "..");
 
+// The output is only byte-stable on one bun, and frontend:js_check diffs it in
+// CI: refuse any other version, whichever entry point (rake or bun run) ran us.
+const pinned = (await Bun.file(join(root, ".bun-version")).text()).trim();
+if (Bun.version !== pinned) {
+  console.error(`build_frontend.js needs bun ${pinned} (.bun-version); this is bun ${Bun.version}`);
+  process.exit(1);
+}
+
 // source → the sourceMappingURL the output links. The dashboard serves a
 // module's map at /pgbus/frontend/modules/<version>/<id>.map (FrontendsController);
 // the stream element's map sits beside it in the host's asset pipeline.
