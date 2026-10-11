@@ -1,0 +1,35 @@
+spec/system/frontend_assets_spec.rb
+  s_4d54ea71052150::t_a89d02a325b5d6 35-37
+scripts/build_frontend.js
+  s_4d54ea71052150::t_a89d02a325b5d6 69-71
+spec/pgbus/web/vendored_assets_spec.rb
+  s_4d54ea71052150::t_a89d02a325b5d6 80,90,92
+spec/requests/pgbus/frontends_controller_spec.rb
+  s_4d54ea71052150::t_a89d02a325b5d6 57
+app/frontend/pgbus/modules/charts.min.js.map
+  ai_agent 1
+app/frontend/pgbus/application.min.js.map
+  ai_agent 1
+app/frontend/pgbus/vendor/turbo.min.js.map
+  ai_agent 1
+README.md
+  s_4d54ea71052150::t_a89d02a325b5d6 1408
+app/assets/javascripts/pgbus/stream_source_element.min.js.map
+  ai_agent 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "1ac98b5582c69573fac1b61efefe75a2890811e5",
+  "prompts": {},
+  "sessions": {
+    "s_4d54ea71052150": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e06ff31a-cbf6-4970-a25a-20a9c9288bd4",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
