@@ -95,8 +95,8 @@ module Pgbus
 
         def reset_schema_cache!
           @schema_mutex.synchronize do
-            @seats_supported = nil
             @probed_at = nil
+            @seats_supported = nil
           end
         end
 
@@ -158,10 +158,13 @@ module Pgbus
 
         private
 
+        # Reads each ivar once: a concurrent reset_schema_cache! may nil them.
         def schema_answer_fresh?
-          return false if @seats_supported.nil?
+          supported = @seats_supported
+          probed_at = @probed_at
+          return false if supported.nil? || probed_at.nil?
 
-          @seats_supported || monotonic_now - @probed_at < SCHEMA_RECHECK_SECONDS
+          supported || monotonic_now - probed_at < SCHEMA_RECHECK_SECONDS
         end
 
         def expire_stream_seats(stream_name, connection_ids, ttl)

@@ -531,6 +531,14 @@ RSpec.describe Pgbus::Streams::Presence do
       expect(described_class.seats_supported?).to be(false)
     end
 
+    it "treats a half-reset cache (answer set, probe time cleared) as stale instead of raising" do
+      allow(raw_connection).to receive(:exec_params).and_return([{ "present" => "1" }])
+      described_class.instance_variable_set(:@seats_supported, false)
+      described_class.instance_variable_set(:@probed_at, nil)
+
+      expect(described_class.seats_supported?).to be(true)
+    end
+
     it "probes again once a false answer is older than the recheck window (table migrated while running)" do
       allow(raw_connection).to receive(:exec_params).and_return([], [{ "present" => "1" }])
       clock = 100.0
