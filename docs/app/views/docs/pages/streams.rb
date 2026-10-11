@@ -391,10 +391,12 @@ class Views::Docs::Pages::Streams < DocsUI::Page
           or a `Regexp`, mirroring `streams_durable_patterns`) automatically
           join a member when an SSE connection opens, leave when it closes, and
           refresh `last_seen_at` on every keepalive heartbeat tick — no explicit
-          `join`/`leave`/sweeper calls required. A closed tab leaves at once (within
-          `streams_peer_close_interval` for a connection that just opened): the
-          streamer notices the client's close on the socket instead of waiting for
-          the next heartbeat write.
+          `join`/`leave`/sweeper calls required. A closed tab leaves within
+          milliseconds once its socket is watched: the streamer notices the
+          client's close on the socket instead of waiting for the next heartbeat
+          write. A newly opened connection joins the watched set within
+          `streams_peer_close_interval` (1 s by default); `nil` turns the watcher
+          off and leaves the heartbeat to notice.
         MD
         DocsUI::Code(<<~RUBY, filename: "config/initializers/pgbus.rb")
           Pgbus.configure do |c|

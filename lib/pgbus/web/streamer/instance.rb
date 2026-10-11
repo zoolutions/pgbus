@@ -122,9 +122,8 @@ module Pgbus
         end
 
         # Graceful shutdown for Puma worker restart. Order matters:
-        #   0. PeerCloseWatcher first (issue #519): stop probing and closing
-        #      sockets we are about to close ourselves. Its self-pipe wakes
-        #      the select, so this does not wait out its interval.
+        #   0. Peer-close watcher first (issue #519): stop reaping sockets
+        #      we're about to close ourselves; #stop wakes its select at once
         #   1. Heartbeat next (stop writing comments to connections we're
         #      about to close)
         #   2. Listener next (stop accepting new NOTIFYs)

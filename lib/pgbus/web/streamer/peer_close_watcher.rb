@@ -38,6 +38,10 @@ module Pgbus
         # Stray bytes from a client are read and discarded in chunks of this.
         DRAIN_BYTES = 4096
 
+        # How long #stop waits for the thread. It is woken at once, so this
+        # only bounds a reap stuck closing a socket (see Heartbeat#stop).
+        STOP_JOIN_SECONDS = 5
+
         def initialize(registry:, dispatch_queue:, interval: 1.0, logger: Pgbus.logger)
           @registry = registry
           @queue = dispatch_queue
@@ -67,7 +71,7 @@ module Pgbus
 
           @running = false
           wake
-          @thread&.join(@interval + 1)
+          @thread&.join(STOP_JOIN_SECONDS)
           @thread = nil
           @wake_reader.close
           @wake_writer.close
