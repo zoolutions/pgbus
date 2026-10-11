@@ -401,6 +401,12 @@ module Pgbus
             @stream_counter.increment_connections(stream)
             @registry.register(connection)
             presence_join(connection, stream)
+            # Step 6: announce the connection id only now (issue #521). A
+            # client that writes keyed by it right after pgbus:connected
+            # (Presence#set_state) must find the registered connection and
+            # its presence row. A failed write marks the connection dead;
+            # the heartbeat sweep unregisters it as for any write.
+            connection.write_connected
           end
 
           record_stat(

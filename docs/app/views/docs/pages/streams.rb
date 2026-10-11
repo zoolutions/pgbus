@@ -176,12 +176,15 @@ class Views::Docs::Pages::Streams < DocsUI::Page
           Pgbus.stream(room).broadcast(html, exclude: connection_id)
         RUBY
         md <<~'MD'
-          The connection id comes from the server. Right after the SSE handshake
-          opens, pgbus sends a `pgbus:connected` frame carrying a server-minted
-          connection id; `<pgbus-stream-source>` captures it onto its
-          `connection-id` attribute and re-dispatches it as a `pgbus:connected`
-          event (also present in `pgbus:open`'s detail). The page reads that id
-          and sends it back as the `X-Pgbus-Connection` header on the action
+          The connection id comes from the server. Once the streamer has
+          registered the connection (after the connect replay, and after its
+          presence seat has joined on a presence stream), pgbus sends a
+          `pgbus:connected` frame carrying a server-minted connection id;
+          `<pgbus-stream-source>` captures it onto its `connection-id`
+          attribute and re-dispatches it as a `pgbus:connected` event. A write
+          keyed by that id right after the event, such as
+          `presence.set_state(connection_id:)`, finds the connection's row. The
+          page reads that id and sends it back as the `X-Pgbus-Connection` header on the action
           request that triggers the broadcast — the server then excludes it:
         MD
         DocsUI::Code(<<~JS, filename: "app/javascript/controllers/stream_controller.js", lexer: :javascript)

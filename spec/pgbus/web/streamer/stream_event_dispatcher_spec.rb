@@ -47,8 +47,8 @@ RSpec.describe Pgbus::Web::Streamer::StreamEventDispatcher do
   # Connection's write path.
   let(:conn_class) do
     Class.new do
-      attr_accessor :last_msg_id_sent, :presence_member
-      attr_reader :id, :stream_name, :enqueued, :context, :enqueue_deadlines
+      attr_accessor :last_msg_id_sent, :presence_member, :on_connected
+      attr_reader :id, :stream_name, :enqueued, :context, :enqueue_deadlines, :connected_writes
 
       def initialize(id:, stream_name:, last_msg_id_sent: 0, context: nil)
         @id = id
@@ -62,6 +62,15 @@ RSpec.describe Pgbus::Web::Streamer::StreamEventDispatcher do
         @enqueue_deadlines = []
         @dead = false
         @presence_member = nil
+        @connected_writes = 0
+      end
+
+      # The pgbus:connected frame (issue #521): counted, and on_connected
+      # lets a test look at the dispatcher's state at the moment it is sent.
+      def write_connected
+        @connected_writes += 1
+        on_connected&.call
+        :ok
       end
 
       def enqueue(envelopes, deadline_ms: nil)
@@ -427,6 +436,26 @@ RSpec.describe Pgbus::Web::Streamer::StreamEventDispatcher do
       expect(dispatcher.instance_variable_get(:@full_to_logical)).to be_empty
       expect(listener).to have_received(:remove_listening).with("chat")
       expect(connection.dead?).to be true
+    end
+
+    it "writes the pgbus:connected frame once the connection is registered (issue #521)" do
+      allow(client).to receive(:read_after).and_return([build_envelope(1248)])
+      registered_at_write = nil
+      connection.on_connected = -> { registered_at_write = registry.connections_for("chat").include?(connection) }
+
+      dispatcher.send(:handle, described_class::ConnectMessage.new(connection: connection))
+
+      expect(connection.connected_writes).to eq(1)
+      expect(registered_at_write).to be(true)
+    end
+
+    it "writes no pgbus:connected frame to a connection that died during replay (issue #521)" do
+      allow(client).to receive(:read_after).and_return([])
+      connection.mark_dead!
+
+      dispatcher.send(:handle, described_class::ConnectMessage.new(connection: connection))
+
+      expect(connection.connected_writes).to eq(0)
     end
 
     it "removes the in-flight buffer entry after register" do
@@ -818,6 +847,16 @@ RSpec.describe Pgbus::Web::Streamer::StreamEventDispatcher do
     before do
       allow(client).to receive(:read_after).and_return([])
       allow(Pgbus::Streams::Presence).to receive(:expire_seats!).and_return([])
+    end
+
+    it "writes the pgbus:connected frame after the presence join (issue #521)" do
+      conn = build_conn(id: "c1", stream_name: "room", context: { member_id: "7" })
+      joined_at_write = nil
+      conn.on_connected = -> { joined_at_write = presence.joined.dup }
+
+      dispatcher.send(:handle, described_class::ConnectMessage.new(connection: conn))
+
+      expect(joined_at_write).to eq([{ member_id: "7", metadata: {} }])
     end
 
     it "auto-joins on connect when the stream has presence and a member is derivable" do
