@@ -24,10 +24,15 @@ module Pgbus
       # (FalconConnection) exposes no socket and keeps the heartbeat.
       #
       # `interval` bounds how long a new connection waits to join the
-      # watched set; a close on a watched socket wakes the select at once.
+      # watched set; a close on a watched socket wakes the select at once,
+      # and so does #stop (a self-pipe in the same select).
       class PeerCloseWatcher
         # Stray bytes from a client are read and discarded in chunks of this.
         DRAIN_BYTES = 4096
+
+        # How long #stop waits for the thread. It is woken at once, so this
+        # only bounds a reap stuck closing a socket (see Heartbeat#stop).
+        STOP_JOIN_SECONDS = 5
 
         def initialize(registry:, dispatch_queue:, interval: 1.0, logger: Pgbus.logger)
           @registry = registry
@@ -36,12 +41,15 @@ module Pgbus
           @logger = logger
           @running = false
           @thread = nil
+          @wake_reader = nil
+          @wake_writer = nil
         end
 
         def start
           return if @running
 
           @running = true
+          @wake_reader, @wake_writer = IO.pipe
           @thread = Thread.new { run_loop }
           self
         end
@@ -55,21 +63,28 @@ module Pgbus
           return unless @running
 
           @running = false
-          @thread&.join(@interval + 1)
+          @wake_writer.write_nonblock(".", exception: false)
+          @thread&.join(STOP_JOIN_SECONDS)
           @thread = nil
+          close_wake_pipe
           self
         end
 
         # One wait-and-probe pass, at most `interval` long. Public for tests.
         def tick
           by_socket = watched_sockets
-          if by_socket.empty?
+          watched = by_socket.keys
+          watched << @wake_reader if @wake_reader
+          if watched.empty?
             sleep @interval
             return
           end
 
-          ready, = IO.select(by_socket.keys, nil, nil, @interval)
-          Array(ready).each { |socket| reap(by_socket[socket]) if peer_closed?(by_socket[socket]) }
+          ready, = IO.select(watched, nil, nil, @interval)
+          Array(ready).each do |socket|
+            connection = by_socket[socket]
+            reap(connection) if connection && peer_closed?(connection)
+          end
         rescue IOError, Errno::EBADF
           # A socket was closed under the select (shutdown, a dispatcher
           # write that failed). The next pass rebuilds the set without it.
@@ -118,8 +133,22 @@ module Pgbus
           # A socket wrapper that raises instead of honouring exception:
           # false (EAGAIN is a SystemCallError, so this rescue comes first).
           false
-        rescue IOError, SystemCallError
+        rescue *peer_gone_errors
           true
+        end
+
+        # A TLS socket reports an abrupt EOF as an SSL error, not an IOError:
+        # OpenSSL::SSL::SSLError (OpenSSL 3) or Puma::MiniSSL::SSLError.
+        # Resolved per call, since either library may load after this file.
+        def peer_gone_errors
+          [IOError, SystemCallError,
+           (OpenSSL::SSL::SSLError if defined?(OpenSSL::SSL::SSLError)),
+           (Puma::MiniSSL::SSLError if defined?(Puma::MiniSSL::SSLError))].compact
+        end
+
+        def close_wake_pipe
+          [@wake_reader, @wake_writer].each { |io| io&.close unless io&.closed? }
+          @wake_reader = @wake_writer = nil
         end
 
         def reap(connection)

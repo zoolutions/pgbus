@@ -11,13 +11,15 @@ require_relative "../../support/sse_test_client"
 RSpec.describe "Streams: a closed connection leaves its presence seat promptly", :integration do
   before(:all) do
     @saved = %i[listen_notify streams_presence_patterns streams_heartbeat_interval streams_signed_name_secret
-                streams_listen_health_check_ms streams_write_deadline_ms streams_presence_ttl].to_h do |key|
+                streams_listen_health_check_ms streams_write_deadline_ms streams_presence_ttl
+                streams_peer_close_interval].to_h do |key|
       [key, Pgbus.configuration.public_send(key)]
     end
     Pgbus.configuration.listen_notify = true
     Pgbus.configuration.streams_signed_name_secret = "a" * 64
     Pgbus.configuration.streams_listen_health_check_ms = 100
     Pgbus.configuration.streams_heartbeat_interval = 30
+    Pgbus.configuration.streams_peer_close_interval = 1.0
     Pgbus.configuration.streams_write_deadline_ms = 5_000
     Pgbus.configuration.streams_presence_patterns = [/./]
     Pgbus.configuration.streams_presence_ttl = 120

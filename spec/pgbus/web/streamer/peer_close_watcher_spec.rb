@@ -2,6 +2,7 @@
 
 require "spec_helper"
 require "socket"
+require "openssl"
 require "protocol/http/body/writable"
 
 RSpec.describe Pgbus::Web::Streamer::PeerCloseWatcher do
@@ -94,6 +95,16 @@ RSpec.describe Pgbus::Web::Streamer::PeerCloseWatcher do
       expect(disconnects).to eq(["a"])
     end
 
+    it "treats a TLS error on the probe as closed" do
+      connection, = build_connection("a")
+      allow(connection.io).to receive(:read_nonblock).and_raise(OpenSSL::SSL::SSLError, "unexpected eof while reading")
+      pairs.last.last.write("x")
+
+      watcher.tick
+
+      expect(disconnects).to eq(["a"])
+    end
+
     it "keeps a connection whose socket wrapper raises would-block instead of returning it" do
       connection, = build_connection("a")
       allow(connection.io).to receive(:read_nonblock).and_raise(IO::EAGAINWaitReadable)
@@ -117,9 +128,13 @@ RSpec.describe Pgbus::Web::Streamer::PeerCloseWatcher do
 
     it "survives a socket closed by another thread mid-select" do
       connection, = build_connection("a")
-      connection.io.close
+      allow(IO).to receive(:select).and_wrap_original do |select, *args|
+        connection.io.close
+        select.call(*args)
+      end
 
       expect { watcher.tick }.not_to raise_error
+      expect(IO).to have_received(:select)
     end
   end
 
@@ -135,6 +150,30 @@ RSpec.describe Pgbus::Web::Streamer::PeerCloseWatcher do
       expect(connection).to be_dead
     ensure
       watcher.stop
+    end
+
+    it "stops at once instead of waiting out a long interval" do
+      slow = described_class.new(registry: registry, dispatch_queue: dispatch_queue, interval: 30, logger: logger)
+      build_connection("a")
+      slow.start
+      sleep 0.05
+
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      slow.stop
+
+      expect(Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).to be < 1
+      expect(slow.threads).to be_empty
+    end
+
+    it "stops at once with nothing to watch" do
+      slow = described_class.new(registry: registry, dispatch_queue: dispatch_queue, interval: 30, logger: logger)
+      slow.start
+      sleep 0.05
+
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      slow.stop
+
+      expect(Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).to be < 1
     end
 
     it "reports its thread while running and none after stop" do

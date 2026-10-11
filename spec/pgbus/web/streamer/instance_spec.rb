@@ -300,16 +300,20 @@ RSpec.describe Pgbus::Web::Streamer::Instance do
     end
 
     it "posts a disconnect as soon as a registered client closes its socket (issue #519)" do
+      # A 30 s heartbeat cannot be the one that notices the close within 1 s.
+      config.streams_heartbeat_interval = 30
+      config.streams_peer_close_interval = 0.05
       streamer.start
       fake_pg.push_timeout
       conn, reader = build_sse_connection
       streamer.register(conn)
       deadline = Time.now + 2
       sleep 0.01 until streamer.registry.connections_for("chat").include?(conn) || Time.now > deadline
+      expect(streamer.registry.connections_for("chat")).to include(conn)
 
       reader.close
 
-      deadline = Time.now + 3
+      deadline = Time.now + 1
       sleep 0.01 until !streamer.registry.connections_for("chat").include?(conn) || Time.now > deadline
       expect(streamer.registry.connections_for("chat")).not_to include(conn)
     end
