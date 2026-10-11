@@ -399,9 +399,23 @@ class Views::Docs::Pages::Streams < DocsUI::Page
           end
         RUBY
         md <<~'MD'
-          Identity comes from the connection's authorize-hook context (the
-          value your `StreamApp` `authorize:` callable returns). The built-in
-          extractor handles the common shapes without any configuration:
+          Identity comes from the connection's authorize-hook context: the
+          value `config.streams_authorize` returns for the engine's stream
+          endpoint (or your own `StreamApp` `authorize:` callable, if you mount
+          one). Without a hook every connection is anonymous and nobody joins.
+        MD
+        DocsUI::Code(<<~RUBY, filename: "config/initializers/pgbus.rb")
+          Pgbus.configure do |c|
+            # Same contract as StreamApp.new(authorize:): falsy → 403, true →
+            # no context, anything else becomes the connection context.
+            c.streams_authorize = ->(env, _stream_name) {
+              User.find_by(id: env["rack.session"]&.dig("user_id"))
+            }
+          end
+        RUBY
+        md <<~'MD'
+          The built-in extractor handles the common shapes without any
+          configuration:
         MD
         DocsUI::Table(
           [ "Context shape", "Extracted member" ],

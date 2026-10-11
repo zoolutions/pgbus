@@ -57,6 +57,36 @@ RSpec.describe Pgbus::Engine do
     end
   end
 
+  describe "the mounted stream endpoint (issue #522)" do
+    let(:stream_app) do
+      route = described_class.routes.routes.find { |r| r.name == "streams" }
+      route.app.app
+    end
+
+    around do |example|
+      saved_secret = Pgbus.configuration.streams_signed_name_secret
+      Pgbus.configuration.streams_signed_name_secret = "a" * 64
+      example.run
+    ensure
+      Pgbus.configuration.streams_signed_name_secret = saved_secret
+      Pgbus.configuration.streams_authorize = nil
+    end
+
+    it "mounts a StreamApp with no authorize: of its own" do
+      expect(stream_app).to be_a(Pgbus::Web::StreamApp)
+      expect(stream_app.instance_variable_get(:@authorize)).to be_nil
+    end
+
+    it "answers 403 through config.streams_authorize" do
+      Pgbus.configuration.streams_authorize = ->(_env, _stream_name) { false }
+      env = Rack::MockRequest.env_for("/#{Pgbus::Streams::SignedName.sign("chat")}")
+
+      status, = stream_app.call(env)
+
+      expect(status).to eq(403)
+    end
+  end
+
   describe ".warn_if_legacy_yaml_config" do
     let(:tmpdir) { Dir.mktmpdir }
     let(:logger) { instance_spy(Logger) }

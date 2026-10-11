@@ -1617,15 +1617,17 @@ Pgbus::Streams.filters.register(:workspace_member) do |user, stream_name|
 end
 ```
 
-The authorize hook on `Pgbus::Web::StreamApp` doubles as a context provider — return any non-boolean value (typically a `User` model) and pgbus will pass it to the filter predicate when evaluating broadcasts:
+The authorize hook doubles as a context provider — return any non-boolean value (typically a `User` model) and pgbus will pass it to the filter predicate when evaluating broadcasts. The engine's stream endpoint reads it from `config.streams_authorize`, so no custom mount is needed:
 
 ```ruby
-Pgbus::Web::StreamApp.new(authorize: ->(env, _stream_name) {
-  user = User.find_by(id: env["rack.session"][:user_id])
-  return false unless user
-  user  # ← context attached to the connection
-})
+Pgbus.configure do |c|
+  c.streams_authorize = ->(env, _stream_name) {
+    User.find_by(id: env["rack.session"]&.dig("user_id"))  # nil/false → 403; the user becomes the context
+  }
+end
 ```
+
+The hook gets the Rack env, not a controller (the stream endpoint is a bare Rack app), so read the session (`env["rack.session"]`) or a signed cookie from it. A falsy return answers 403, `true` authorizes with no context. An app that mounts its own `Pgbus::Web::StreamApp.new(authorize: …)` keeps that hook; `streams_authorize` is only the engine mount's.
 
 Then label broadcasts with the filter you want to apply:
 
@@ -1795,7 +1797,7 @@ Pgbus.configure do |c|
 end
 ```
 
-Identity comes from the connection's authorize-hook context (the value your `StreamApp` `authorize:` callable returns). The built-in extractor handles the common shapes without any configuration: a `Hash` with `:member_id` (or `:id`) and optional `:metadata`, or any object responding to `#id` (e.g. a `User` model). For anything else, provide a custom extractor — a `->(context) { { id:, metadata: } }` callable returning `nil` for a context with no derivable identity (anonymous connections are simply skipped, not an error):
+Identity comes from the connection's authorize-hook context (the value `config.streams_authorize`, or your own `StreamApp` `authorize:` callable, returns). Without a hook every connection is anonymous and nobody joins. The built-in extractor handles the common shapes without any configuration: a `Hash` with `:member_id` (or `:id`) and optional `:metadata`, or any object responding to `#id` (e.g. a `User` model). For anything else, provide a custom extractor — a `->(context) { { id:, metadata: } }` callable returning `nil` for a context with no derivable identity (anonymous connections are simply skipped, not an error):
 
 ```ruby
 Pgbus.configure do |c|

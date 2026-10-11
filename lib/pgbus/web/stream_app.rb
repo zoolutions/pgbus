@@ -16,7 +16,8 @@ module Pgbus
     # Call flow (happy path, Puma 6.1+ hijack):
     #   1. Parse the signed name from PATH_INFO
     #   2. Verify it via Pgbus::Streams::SignedName (raises → 404)
-    #   3. Run the authorize hook (raises → 403)
+    #   3. Run the authorize hook: authorize:, else config.streams_authorize
+    #      (falsy → 403)
     #   4. Parse the cursor from ?since= or Last-Event-ID
     #   5. Check streams_max_connections per worker (over → 503)
     #   6. Check rack.hijack? (missing → 501)
@@ -38,11 +39,15 @@ module Pgbus
       TEST_MODE_RETRY_MS = 86_400_000
       private_constant :PATH_PREFIX
 
+      # Used when neither authorize: nor config.streams_authorize is set.
+      ALLOW_ALL = ->(_env, _stream_name) { true }
+      private_constant :ALLOW_ALL
+
       def initialize(streamer: nil, config: nil, logger: nil, authorize: nil)
         @streamer_override = streamer
         @config_override   = config
         @logger_override   = logger
-        @authorize         = authorize || ->(_env, _stream_name) { true }
+        @authorize         = authorize
       end
 
       def call(env)
@@ -55,7 +60,7 @@ module Pgbus
         stream_name = verify!(signed_name)
         return not_found("invalid signed stream name") if stream_name.nil?
 
-        authorize_result = @authorize.call(env, stream_name)
+        authorize_result = authorize_hook.call(env, stream_name)
         return forbidden unless authorize_result
 
         # If authorize returned a non-boolean value (e.g. a User model),
@@ -191,6 +196,13 @@ module Pgbus
         io.write(Pgbus::Streams::Envelope.retry_directive(2_000))
         io.write(Pgbus::Streams::Envelope.comment("pgbus stream open since_id=#{since_id} stream=#{stream_name}"))
         io.write(Pgbus::Streams::Envelope.connected(id: connection_id))
+      end
+
+      # An explicit authorize: wins; otherwise config.streams_authorize, read
+      # per request so the engine's mount (built when routes load) sees a hook
+      # set in an initializer that runs later (issue #522).
+      def authorize_hook
+        @authorize || config.streams_authorize || ALLOW_ALL
       end
 
       def streamer
