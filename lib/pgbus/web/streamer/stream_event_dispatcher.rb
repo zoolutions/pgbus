@@ -441,6 +441,10 @@ module Pgbus
           @stream_counter.decrement_connections(stream) if removed
           presence_leave(connection, stream)
           cleanup_stream_if_unused(stream)
+          # A second DisconnectMessage for the same connection (heartbeat,
+          # peer-close watcher, a failed pgbus:connected write) is a no-op
+          # and must not count as another disconnect.
+          return unless removed
 
           record_stat(
             stream_name: stream,

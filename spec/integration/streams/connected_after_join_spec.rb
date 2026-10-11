@@ -11,9 +11,10 @@ require_relative "../../support/sse_test_client"
 # handled the ConnectMessage, so a write keyed by the connection id right
 # after the event (Presence#set_state) found no row.
 #
-# The member extractor sleeps to make the window deterministic: the join
-# runs on the dispatcher thread, so a frame written before the join is
-# visible to the client long before the row exists.
+# The member extractor blocks the join on a gate the example opens. While
+# the join is held, no pgbus:connected frame may reach the client; a frame
+# written before the join (the old ordering) fails that check however the
+# example is scheduled.
 RSpec.describe "Streams: pgbus:connected after the presence join", :integration do
   before(:all) do
     config = Pgbus.configuration
@@ -24,8 +25,10 @@ RSpec.describe "Streams: pgbus:connected after the presence join", :integration 
       streams_heartbeat_interval: config.streams_heartbeat_interval,
       streams_write_deadline_ms: config.streams_write_deadline_ms,
       streams_presence_patterns: config.streams_presence_patterns,
-      streams_presence_member: config.streams_presence_member
+      streams_presence_member: config.streams_presence_member,
+      streams_falcon_streaming_body: config.streams_falcon_streaming_body
     }
+    gates = @gates = {}
     config.listen_notify = true
     config.streams_signed_name_secret = "a" * 64
     config.streams_listen_health_check_ms = 100
@@ -33,7 +36,8 @@ RSpec.describe "Streams: pgbus:connected after the presence join", :integration 
     config.streams_write_deadline_ms = 5_000
     config.streams_presence_patterns = [/\Ajoined_/]
     config.streams_presence_member = lambda { |context|
-      sleep 0.4
+      gates[:join_entered]&.set
+      gates[:join_released]&.wait(5)
       { id: context[:member_id], metadata: {} }
     }
     Pgbus.reset_client!
@@ -44,7 +48,11 @@ RSpec.describe "Streams: pgbus:connected after the presence join", :integration 
     Pgbus.reset_client!
   end
 
-  before { Pgbus::Streams::Presence.reset_schema_cache! }
+  before do
+    Pgbus::Streams::Presence.reset_schema_cache!
+    @gates[:join_entered] = Concurrent::Event.new
+    @gates[:join_released] = Concurrent::Event.new
+  end
 
   let(:stream_name) { "joined_#{SecureRandom.hex(4)}" }
 
@@ -82,6 +90,10 @@ RSpec.describe "Streams: pgbus:connected after the presence join", :integration 
       url = "#{@booted_harness.url("/#{Pgbus::Streams::SignedName.sign(stream_name)}")}?since=0&seat=tab-1"
       client = SseTestSupport::SseTestClient.connect(url: url, timeout: 5)
 
+      expect(@gates[:join_entered].wait(5)).to be(true)
+      expect(client.wait_for_connection_id(timeout: 0.3)).to be_nil
+      @gates[:join_released].set
+
       connection_id = client.wait_for_connection_id(timeout: 5)
       expect(connection_id).not_to be_nil
 
@@ -109,10 +121,11 @@ RSpec.describe "Streams: pgbus:connected after the presence join", :integration 
     let(:harness) { SseTestSupport::FalconTestHarness.boot(rack_app: stream_app) }
 
     around do |example|
+      previous = Pgbus.configuration.streams_falcon_streaming_body
       Pgbus.configuration.streams_falcon_streaming_body = true
       example.run
     ensure
-      Pgbus.configuration.streams_falcon_streaming_body = false
+      Pgbus.configuration.streams_falcon_streaming_body = previous
     end
 
     it_behaves_like "a connection whose presence row exists at pgbus:connected"

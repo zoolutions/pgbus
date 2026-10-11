@@ -458,6 +458,19 @@ RSpec.describe Pgbus::Web::Streamer::StreamEventDispatcher do
       expect(connection.connected_writes).to eq(0)
     end
 
+    it "writes no pgbus:connected frame when a replay write kills the connection (issue #521)" do
+      allow(client).to receive(:read_after).and_return([build_envelope(1248)])
+      connection.define_singleton_method(:enqueue) do |envelopes, **|
+        mark_dead! unless envelopes.empty?
+        []
+      end
+
+      dispatcher.send(:handle, described_class::ConnectMessage.new(connection: connection))
+
+      expect(connection.connected_writes).to eq(0)
+      expect(registry.connections_for("chat")).to be_empty
+    end
+
     it "removes the in-flight buffer entry after register" do
       allow(client).to receive(:read_after).and_return([])
       dispatcher.send(:handle, described_class::ConnectMessage.new(connection: connection))
@@ -1139,6 +1152,17 @@ RSpec.describe Pgbus::Web::Streamer::StreamEventDispatcher do
         expect(Pgbus::StreamStat).to have_received(:record!).with(
           hash_including(stream_name: "chat", event_type: "disconnect", fanout: nil)
         )
+      end
+
+      it "records no second disconnect for a connection already unregistered" do
+        c = build_conn(id: "a", stream_name: "chat")
+        registry.register(c)
+        allow(Pgbus::StreamStat).to receive(:record!)
+
+        2.times { dispatcher.send(:handle, described_class::DisconnectMessage.new(connection: c)) }
+
+        expect(Pgbus::StreamStat).to have_received(:record!)
+          .with(hash_including(event_type: "disconnect")).once
       end
 
       it "does not propagate StreamStat.record! errors to the dispatcher" do
