@@ -1651,7 +1651,7 @@ An actor who just triggered a change already applied it via the HTTP response of
 Pgbus.stream(room).broadcast(html, exclude: connection_id)
 ```
 
-Every server-minted SSE connection exposes its id to the page: right after the open handshake, pgbus sends a `pgbus:connected` frame carrying the connection id, and `<pgbus-stream-source>` captures it onto its `connection-id` attribute and re-dispatches it as a `pgbus:connected` event (also present in `pgbus:open`'s detail). The page reads that id and sends it back as the `X-Pgbus-Connection` header on the action request that triggers the broadcast:
+Every server-minted SSE connection exposes its id to the page: once the streamer has registered the connection (after the connect replay, and after its presence seat has joined on a presence stream), pgbus sends a `pgbus:connected` frame carrying the connection id, and `<pgbus-stream-source>` captures it onto its `connection-id` attribute and re-dispatches it as a `pgbus:connected` event. A write keyed by the connection id right after the event, such as `presence.set_state(connection_id:)`, finds the connection's row. The page reads that id and sends it back as the `X-Pgbus-Connection` header on the action request that triggers the broadcast:
 
 ```js
 document.addEventListener("pgbus:connected", (event) => {

@@ -283,6 +283,28 @@ RSpec.describe Pgbus::Web::Streamer::Connection do
     end
   end
 
+  describe "#write_connected (issue #521)" do
+    it "writes the pgbus:connected frame carrying the connection id" do
+      expect(conn.write_connected).to eq(:ok)
+      expect(writer.writes.last[:bytes]).to eq(Pgbus::Streams::Envelope.connected(id: "c1"))
+    end
+
+    it "does not touch last_msg_id_sent" do
+      conn.write_connected
+      expect(conn.last_msg_id_sent).to eq(1247)
+    end
+
+    it "marks the connection dead if the writer reports closed" do
+      failing_writer = writer.class.new(result: :closed)
+      c = described_class.new(
+        id: "c3", stream_name: stream, io: io, since_id: 0,
+        writer: failing_writer, write_deadline_ms: 100
+      )
+      expect(c.write_connected).to eq(:closed)
+      expect(c.dead?).to be true
+    end
+  end
+
   describe "#write_sentinel" do
     it "delegates to the writer with the connection's deadline" do
       result = conn.write_sentinel("sentinel bytes")

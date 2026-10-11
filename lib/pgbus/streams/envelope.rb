@@ -49,8 +49,9 @@ module Pgbus
       end
 
       # Emits a `pgbus:connected` frame carrying the server-minted
-      # connection id as JSON. Sent once, right after the open handshake,
-      # so the page can read its own connection id and send it back as
+      # connection id as JSON. Sent once by the streamer's Dispatcher, after
+      # the connection is registered and its presence seat joined (issue
+      # #521), so the page can read its own connection id and send it back as
       # `X-Pgbus-Connection` on action requests (actor-echo suppression,
       # issue #165). Deliberately omits an `id:` line: this is connection
       # metadata, not a broadcast, and giving it a cursor id would corrupt

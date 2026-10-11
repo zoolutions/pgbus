@@ -47,8 +47,8 @@ RSpec.describe Pgbus::Web::Streamer::StreamEventDispatcher do
   # Connection's write path.
   let(:conn_class) do
     Class.new do
-      attr_accessor :last_msg_id_sent, :presence_member
-      attr_reader :id, :stream_name, :enqueued, :context, :enqueue_deadlines
+      attr_accessor :last_msg_id_sent, :presence_member, :on_connected
+      attr_reader :id, :stream_name, :enqueued, :context, :enqueue_deadlines, :connected_writes
 
       def initialize(id:, stream_name:, last_msg_id_sent: 0, context: nil)
         @id = id
@@ -62,6 +62,15 @@ RSpec.describe Pgbus::Web::Streamer::StreamEventDispatcher do
         @enqueue_deadlines = []
         @dead = false
         @presence_member = nil
+        @connected_writes = 0
+      end
+
+      # The pgbus:connected frame (issue #521): counted, and on_connected
+      # lets a test look at the dispatcher's state at the moment it is sent.
+      def write_connected
+        @connected_writes += 1
+        on_connected&.call
+        :ok
       end
 
       def enqueue(envelopes, deadline_ms: nil)
@@ -427,6 +436,39 @@ RSpec.describe Pgbus::Web::Streamer::StreamEventDispatcher do
       expect(dispatcher.instance_variable_get(:@full_to_logical)).to be_empty
       expect(listener).to have_received(:remove_listening).with("chat")
       expect(connection.dead?).to be true
+    end
+
+    it "writes the pgbus:connected frame once the connection is registered (issue #521)" do
+      allow(client).to receive(:read_after).and_return([build_envelope(1248)])
+      registered_at_write = nil
+      connection.on_connected = -> { registered_at_write = registry.connections_for("chat").include?(connection) }
+
+      dispatcher.send(:handle, described_class::ConnectMessage.new(connection: connection))
+
+      expect(connection.connected_writes).to eq(1)
+      expect(registered_at_write).to be(true)
+    end
+
+    it "writes no pgbus:connected frame to a connection that died during replay (issue #521)" do
+      allow(client).to receive(:read_after).and_return([])
+      connection.mark_dead!
+
+      dispatcher.send(:handle, described_class::ConnectMessage.new(connection: connection))
+
+      expect(connection.connected_writes).to eq(0)
+    end
+
+    it "writes no pgbus:connected frame when a replay write kills the connection (issue #521)" do
+      allow(client).to receive(:read_after).and_return([build_envelope(1248)])
+      connection.define_singleton_method(:enqueue) do |envelopes, **|
+        mark_dead! unless envelopes.empty?
+        []
+      end
+
+      dispatcher.send(:handle, described_class::ConnectMessage.new(connection: connection))
+
+      expect(connection.connected_writes).to eq(0)
+      expect(registry.connections_for("chat")).to be_empty
     end
 
     it "removes the in-flight buffer entry after register" do
@@ -820,6 +862,16 @@ RSpec.describe Pgbus::Web::Streamer::StreamEventDispatcher do
       allow(Pgbus::Streams::Presence).to receive(:expire_seats!).and_return([])
     end
 
+    it "writes the pgbus:connected frame after the presence join (issue #521)" do
+      conn = build_conn(id: "c1", stream_name: "room", context: { member_id: "7" })
+      joined_at_write = nil
+      conn.on_connected = -> { joined_at_write = presence.joined.dup }
+
+      dispatcher.send(:handle, described_class::ConnectMessage.new(connection: conn))
+
+      expect(joined_at_write).to eq([{ member_id: "7", metadata: {} }])
+    end
+
     it "auto-joins on connect when the stream has presence and a member is derivable" do
       conn = build_conn(id: "c1", stream_name: "room", context: { member_id: "7", metadata: { name: "Ann" } })
       dispatcher.send(:handle, described_class::ConnectMessage.new(connection: conn))
@@ -850,6 +902,35 @@ RSpec.describe Pgbus::Web::Streamer::StreamEventDispatcher do
       dispatcher.send(:handle, described_class::DisconnectMessage.new(connection: conn))
 
       expect(presence.left).to eq(["7"])
+    end
+
+    # Issue #521: the socket closes between the last replay frame and the
+    # pgbus:connected write. The connection must not linger registered with
+    # its presence row until the next heartbeat.
+    context "when the pgbus:connected write fails" do
+      let(:conn) { build_conn(id: "c1", stream_name: "room", context: { member_id: "7" }) }
+
+      before do
+        allow(client).to receive(:read_after).and_return([build_envelope(1)])
+        conn.on_connected = -> { conn.mark_dead! }
+      end
+
+      it "unregisters the connection and leaves its presence seat at once" do
+        dispatcher.send(:handle, described_class::ConnectMessage.new(connection: conn))
+
+        expect(conn.enqueued.map(&:msg_id)).to eq([1])
+        expect(registry.connections_for("room")).to be_empty
+        expect(presence.joined).to eq([{ member_id: "7", metadata: {} }])
+        expect(presence.left).to eq(["7"])
+      end
+
+      it "leaves only once when a later disconnect arrives (heartbeat or peer-close watcher)" do
+        dispatcher.send(:handle, described_class::ConnectMessage.new(connection: conn))
+        dispatcher.send(:handle, described_class::DisconnectMessage.new(connection: conn))
+
+        expect(presence.left).to eq(["7"])
+        expect(dispatcher.instance_variable_get(:@full_to_logical)).to be_empty
+      end
     end
 
     it "does NOT leave a connection that never joined presence" do
@@ -1071,6 +1152,17 @@ RSpec.describe Pgbus::Web::Streamer::StreamEventDispatcher do
         expect(Pgbus::StreamStat).to have_received(:record!).with(
           hash_including(stream_name: "chat", event_type: "disconnect", fanout: nil)
         )
+      end
+
+      it "records no second disconnect for a connection already unregistered" do
+        c = build_conn(id: "a", stream_name: "chat")
+        registry.register(c)
+        allow(Pgbus::StreamStat).to receive(:record!)
+
+        2.times { dispatcher.send(:handle, described_class::DisconnectMessage.new(connection: c)) }
+
+        expect(Pgbus::StreamStat).to have_received(:record!)
+          .with(hash_including(event_type: "disconnect")).once
       end
 
       it "does not propagate StreamStat.record! errors to the dispatcher" do
