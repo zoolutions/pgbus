@@ -1,0 +1,32 @@
+lib/pgbus/web/data_source.rb
+  s_540e3f35d90225::t_c97b214b03a6de 13
+lib/pgbus/web/process_activity.rb
+  s_540e3f35d90225::t_7f4ad4c19709d7 1-90
+lib/pgbus/web/data_source/process_list.rb
+  s_540e3f35d90225::t_a27b5703570cc0 1-61
+spec/pgbus/web/data_source_process_list_spec.rb
+  s_540e3f35d90225::t_7e76e978c6a8ad 1-91
+lib/pgbus/web/process_state.rb
+  s_540e3f35d90225::t_3990923ecca0bc 1-187
+spec/pgbus/web/process_activity_spec.rb
+  s_540e3f35d90225::t_00be9675e04b19 1-124
+spec/pgbus/web/process_state_spec.rb
+  s_540e3f35d90225::t_dd8eb424ac24d3 4-31,34-36,38-40,42-47,49,51-53,55-62,64-67,69-71,73,75-77,79-83,85-89,91-95,97-107,109-111,113-114,116-131,133-169,171-192,195-196,198-199,202-206,209-210,212-216,218-219,221-223,226-227,230-234,236-240,243-244,246,248-249,251-253,256-261,265-270,273-275,278-289
+  s_540e3f35d90225::t_6eff45975518e7 115,132
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "be70e4af88ae381a9c8675418824b4d469ed7381",
+  "prompts": {},
+  "sessions": {
+    "s_540e3f35d90225": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2c199a61-e66f-4ee7-882c-a60330f340ab",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}

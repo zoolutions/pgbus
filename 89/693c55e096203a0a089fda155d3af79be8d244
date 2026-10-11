@@ -1,0 +1,26 @@
+spec/pgbus/web/data_source_process_list_spec.rb
+  s_540e3f35d90225::t_20e6f26318b271 52-58
+spec/pgbus/web/process_activity_spec.rb
+  s_540e3f35d90225::t_20e6f26318b271 78-81,123-124
+  s_540e3f35d90225::t_f156fe4dd291f3 52-56
+spec/pgbus/web/process_state_spec.rb
+  s_540e3f35d90225::t_20e6f26318b271 282
+lib/pgbus/web/process_activity.rb
+  s_540e3f35d90225::t_f156fe4dd291f3 36-43
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "89693c55e096203a0a089fda155d3af79be8d244",
+  "prompts": {},
+  "sessions": {
+    "s_540e3f35d90225": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2c199a61-e66f-4ee7-882c-a60330f340ab",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}

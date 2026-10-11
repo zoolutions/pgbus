@@ -1,0 +1,62 @@
+spec/pgbus/web/dark_mode_contrast_spec.rb
+  s_0e6d613f560fed::t_4c3ea11ce5df67 125
+  s_0e6d613f560fed::t_1cca4033491b1f 130-133
+  s_0e6d613f560fed::t_6a22ed933320bd 17-20,65-70,123-124,126-129,173-175,188-189
+lib/pgbus/web/data_source.rb
+  s_0e6d613f560fed::t_441630459e89a8 728-732
+app/controllers/pgbus/insights_controller.rb
+  s_0e6d613f560fed::t_441630459e89a8 10-11,21-36
+app/frontend/pgbus/modules/charts.js
+  s_0e6d613f560fed::t_bf31f2bd1c836f 132
+  s_0e6d613f560fed::t_6251be30c1e5e8 2-5,7-10,12-13,15-25,29-31,33-78,80-81,83-88,90-92,95-97,99-120,123-131,133-134,139
+app/views/pgbus/insights/_status_table.html.erb
+  s_0e6d613f560fed::t_ba6a710222ecb2 1-19
+spec/support/pgbus/stub_data_source/sample_data.rb
+  s_0e6d613f560fed::t_441630459e89a8 104
+app/views/pgbus/insights/_latency_table.html.erb
+  s_0e6d613f560fed::t_ba6a710222ecb2 1-20
+app/helpers/pgbus/insights_helper.rb
+  s_0e6d613f560fed::t_bf31f2bd1c836f 34
+  s_0e6d613f560fed::t_48de9476045494 1-33,35-39
+app/frontend/pgbus/style.css
+  s_0e6d613f560fed::t_4c3ea11ce5df67 2
+app/views/pgbus/insights/_chart_card.html.erb
+  s_0e6d613f560fed::t_ba6a710222ecb2 1-21
+config/locales/en.yml
+  s_0e6d613f560fed::t_bf31f2bd1c836f 424-429,435,440,442,462-465,494-507
+lib/pgbus/web/insights_charts.rb
+  s_0e6d613f560fed::t_390980e1698b18 1-73
+spec/support/pgbus/stub_data_source.rb
+  s_0e6d613f560fed::t_441630459e89a8 25,54,317-325
+spec/pgbus/web/insights_charts_spec.rb
+  s_0e6d613f560fed::t_20d83b51185f66 1-70
+spec/system/insights_charts_spec.rb
+  s_0e6d613f560fed::t_058f4366f842bc 1-98
+spec/requests/pgbus/insights_controller_spec.rb
+  s_0e6d613f560fed::t_127271b474430c 7-10,12,20,28,30-39,43-54
+  s_0e6d613f560fed::t_f8437569751213 29
+  s_0e6d613f560fed::t_7923a71312d555 40
+spec/pgbus/helpers/dashboard_helper_spec.rb
+  s_0e6d613f560fed::t_4c3ea11ce5df67 64-67,69-74
+app/views/pgbus/insights/_throughput_table.html.erb
+  s_0e6d613f560fed::t_ba6a710222ecb2 1-18
+app/views/pgbus/insights/show.html.erb
+  s_0e6d613f560fed::t_48de9476045494 82-87,93-95,273-277,282,284-285
+  s_0e6d613f560fed::t_4c3ea11ce5df67 67,281
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "eb5bcf8d3d25b6239964217c5fc6dca7ea309309",
+  "prompts": {},
+  "sessions": {
+    "s_0e6d613f560fed": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "aa2a0c60-2e9f-428e-bb15-9bb101988d9e",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}

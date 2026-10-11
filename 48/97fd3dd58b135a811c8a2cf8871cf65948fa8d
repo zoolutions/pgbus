@@ -1,0 +1,39 @@
+lib/pgbus/streams/presence.rb
+  s_e3e9a4e18e7ce7::t_361289b7ec163b 68-71,74,78-79,81,84,91,97-100,155-158,161-166,301-302,347,357-369
+README.md
+  s_e3e9a4e18e7ce7::t_c0e334f5f8ccc2 1840
+spec/integration/streams/presence_seats_spec.rb
+  s_e3e9a4e18e7ce7::t_d64eab71d0e6f9 92-100
+spec/pgbus/streams/presence_settings_spec.rb
+  s_e3e9a4e18e7ce7::t_47fe54a7fb8eb1 42-54
+spec/pgbus/streams/presence_spec.rb
+  s_e3e9a4e18e7ce7::t_3c7d05b692736b 558
+  s_e3e9a4e18e7ce7::t_bfe4c0f7d62e1d 4
+  s_e3e9a4e18e7ce7::t_47fe54a7fb8eb1 281-290,423-429,533-557,559-567
+docs/app/views/docs/pages/streams.rb
+  s_e3e9a4e18e7ce7::t_c0e334f5f8ccc2 467
+CHANGELOG.md
+  s_e3e9a4e18e7ce7::t_c0e334f5f8ccc2 5
+spec/pgbus/web/streamer/presence_tracker_spec.rb
+  s_e3e9a4e18e7ce7::t_47fe54a7fb8eb1 107-118
+lib/pgbus/web/streamer/presence_tracker.rb
+  s_e3e9a4e18e7ce7::t_361289b7ec163b 47-49
+lib/pgbus/configuration/presence_settings.rb
+  s_e3e9a4e18e7ce7::t_361289b7ec163b 67-79,81-84
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "4897fd3dd58b135a811c8a2cf8871cf65948fa8d",
+  "prompts": {},
+  "sessions": {
+    "s_e3e9a4e18e7ce7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7c91d7d3-95a8-4bc4-be6b-f0c4bf3c7749",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}

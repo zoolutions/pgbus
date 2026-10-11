@@ -1,0 +1,93 @@
+lib/pgbus/configuration.rb
+  s_e3e9a4e18e7ce7::t_2ea99550727ff5 7-8,1098
+lib/generators/pgbus/add_presence_generator.rb
+  s_e3e9a4e18e7ce7::t_ec91bfbea90fe7 36-37
+spec/pgbus/generators/migration_detector_spec.rb
+  s_e3e9a4e18e7ce7::t_d8db99df1e688b 183-201,494
+lib/pgbus/web/streamer/instance.rb
+  s_e3e9a4e18e7ce7::t_24acaedcdb7ee1 77-78
+README.md
+  s_e3e9a4e18e7ce7::t_3433a83c3a4758 1809-1841
+docs/app/views/docs/pages/cli_generators.rb
+  s_e3e9a4e18e7ce7::t_3433a83c3a4758 177
+lib/generators/pgbus/templates/add_presence.rb.erb
+  s_e3e9a4e18e7ce7::t_ec91bfbea90fe7 7-13,18-19,23-24,26-40,44-49
+lib/generators/pgbus/add_presence_seats_generator.rb
+  s_e3e9a4e18e7ce7::t_ec91bfbea90fe7 1-45
+spec/pgbus/web/streamer/heartbeat_spec.rb
+  s_e3e9a4e18e7ce7::t_24acaedcdb7ee1 139-151
+lib/pgbus/web/streamer/falcon_connection.rb
+  s_e3e9a4e18e7ce7::t_e852da0c06e303 16-17,28,42
+lib/pgbus/generators/migration_detector.rb
+  s_e3e9a4e18e7ce7::t_ec91bfbea90fe7 76,98,187-189,191-194
+lib/pgbus/web/streamer/connection.rb
+  s_e3e9a4e18e7ce7::t_e852da0c06e303 17-18,36,55
+lib/pgbus/web/stream_app.rb
+  s_e3e9a4e18e7ce7::t_e852da0c06e303 34-36,70-71,77,79,122-127,146-147,154,173-174
+spec/integration/streams/presence_seats_spec.rb
+  s_e3e9a4e18e7ce7::t_9700b61d848880 30,54,65,87,89,96
+  s_e3e9a4e18e7ce7::t_cb01cb5b06cabd 1-29,31-53,55-64,66-86,88,90-95,97-98
+spec/pgbus/web/streamer/presence_tracker_spec.rb
+  s_e3e9a4e18e7ce7::t_9700b61d848880 15,30-35,115-116,125-126,137
+  s_e3e9a4e18e7ce7::t_3b6a1337085aef 1-14,16-29,36-114,117-124,127-136,138-175
+spec/generators/pgbus/add_presence_seats_generator_spec.rb
+  s_e3e9a4e18e7ce7::t_8532800dcc3d05 1-58
+lib/pgbus/web/streamer/stream_event_dispatcher.rb
+  s_e3e9a4e18e7ce7::t_aa7e9a79c758f1 108,440-442,444,636,638,642
+lib/generators/pgbus/templates/add_presence_seats.rb.erb
+  s_e3e9a4e18e7ce7::t_ec91bfbea90fe7 1-38
+spec/pgbus/streams/presence_settings_spec.rb
+  s_e3e9a4e18e7ce7::t_54e44ecc0c385c 1-3,5-91
+  s_e3e9a4e18e7ce7::t_8397e30ff025af 4
+docs/app/views/docs/pages/streams.rb
+  s_e3e9a4e18e7ce7::t_3433a83c3a4758 430-469
+spec/pgbus/web/stream_app_spec.rb
+  s_e3e9a4e18e7ce7::t_927f88f8db1125 238-257,393-397
+spec/generators/pgbus/add_presence_generator_spec.rb
+  s_e3e9a4e18e7ce7::t_8532800dcc3d05 46,48-60,63-64
+lib/pgbus/streams/presence.rb
+  s_e3e9a4e18e7ce7::t_e685f2614ca278 109-110,303,330,390
+  s_e3e9a4e18e7ce7::t_17f0c6246f916f 133-140,155-159,223,247
+  s_e3e9a4e18e7ce7::t_8c0923a0a734f4 38-60,63,65-108,111-132,141-154,160-198,203-207,213-216,218-222,236-244,261-268,273-286,288-289,293-295,298,322,327,329,331,337,341,343,345-358,364-365,368,371-379,381-389,391-394
+spec/pgbus/web/streamer/stream_event_dispatcher_spec.rb
+  s_e3e9a4e18e7ce7::t_bb1174ecada514 807-809,818-821,872-875
+lib/pgbus/configuration/presence_settings.rb
+  s_e3e9a4e18e7ce7::t_2ea99550727ff5 1-82
+app/assets/javascripts/pgbus/stream_source_element.js
+  s_e3e9a4e18e7ce7::t_926a2740bd6cf1 18-20,53-60,72-83,105-110,380-382,385-386
+spec/integration/streams/auto_presence_spec.rb
+  s_e3e9a4e18e7ce7::t_3d580677101a09 26,35-36,47,88,91,138-154,157-159,161-170,173-181
+  s_e3e9a4e18e7ce7::t_9700b61d848880 155-156,171-172
+  s_e3e9a4e18e7ce7::t_483058274dc134 160
+spec/pgbus/streams/presence_spec.rb
+  s_e3e9a4e18e7ce7::t_9700b61d848880 407,421-422,431-432,459-460,474
+  s_e3e9a4e18e7ce7::t_cf3f8009f9ffcc 412-420,423-430,433-458,461-463
+spec/integration_helper.rb
+  s_e3e9a4e18e7ce7::t_bd0cd1520ed5ba 42-60
+lib/pgbus/web/streamer/heartbeat.rb
+  s_e3e9a4e18e7ce7::t_24acaedcdb7ee1 29-33,40,130-131,133
+CHANGELOG.md
+  s_e3e9a4e18e7ce7::t_3433a83c3a4758 5-6
+docs/app/models/config_reference.rb
+  s_e3e9a4e18e7ce7::t_3433a83c3a4758 140-141
+lib/pgbus/web/streamer/presence_tracker.rb
+  s_e3e9a4e18e7ce7::t_f78b9440d68c2d 1-57,59-80,82-85,87-102,104-129
+  s_e3e9a4e18e7ce7::t_e685f2614ca278 58,81,86
+  s_e3e9a4e18e7ce7::t_d399d3e65ae61e 103
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "568fbad4edf19457f0ae9ccfdf665d095dd6f076",
+  "prompts": {},
+  "sessions": {
+    "s_e3e9a4e18e7ce7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7c91d7d3-95a8-4bc4-be6b-f0c4bf3c7749",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}

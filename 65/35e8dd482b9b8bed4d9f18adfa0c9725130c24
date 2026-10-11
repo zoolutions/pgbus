@@ -1,0 +1,21 @@
+spec/pgbus/outbox/poller_spec.rb
+  s_540e3f35d90225::t_14c0c4559e61a7 129-134
+lib/pgbus/outbox/poller.rb
+  s_540e3f35d90225::t_14c0c4559e61a7 142
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "6535e8dd482b9b8bed4d9f18adfa0c9725130c24",
+  "prompts": {},
+  "sessions": {
+    "s_540e3f35d90225": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2c199a61-e66f-4ee7-882c-a60330f340ab",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}

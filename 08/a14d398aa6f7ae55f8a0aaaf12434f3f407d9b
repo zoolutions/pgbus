@@ -1,0 +1,29 @@
+lib/pgbus/web/health_app.rb
+  s_0e6d613f560fed::t_2728f6e2d4c963 109-111,113-116
+spec/pgbus/web/health_app_spec.rb
+  s_0e6d613f560fed::t_9375ee40ba81d9 32,224-233
+app/views/pgbus/insights/_chart_card.html.erb
+  s_0e6d613f560fed::t_2728f6e2d4c963 11
+lib/pgbus/web/data_source/dashboard_signals.rb
+  s_0e6d613f560fed::t_2728f6e2d4c963 29-31,125
+spec/pgbus/web/data_source_dashboard_signals_spec.rb
+  s_0e6d613f560fed::t_2728f6e2d4c963 74
+CHANGELOG.md
+  ai_agent 55
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "08a14d398aa6f7ae55f8a0aaaf12434f3f407d9b",
+  "prompts": {},
+  "sessions": {
+    "s_0e6d613f560fed": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "aa2a0c60-2e9f-428e-bb15-9bb101988d9e",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
