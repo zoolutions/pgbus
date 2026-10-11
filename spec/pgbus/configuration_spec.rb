@@ -2230,6 +2230,10 @@ RSpec.describe Pgbus::Configuration do
       expect(config.streams_retention).to eq({})
     end
 
+    it "watches for a closed SSE client every second (issue #519)" do
+      expect(config.streams_peer_close_interval).to eq(1.0)
+    end
+
     it "has a 15 second heartbeat interval" do
       expect(config.streams_heartbeat_interval).to eq(15)
     end
@@ -2308,6 +2312,14 @@ RSpec.describe Pgbus::Configuration do
     it "rejects non-positive streams_max_connections" do
       config.streams_max_connections = 0
       expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /streams_max_connections/)
+    end
+
+    it "rejects a non-positive streams_peer_close_interval and accepts nil" do
+      config.streams_peer_close_interval = 0
+      expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /streams_peer_close_interval/)
+
+      config.streams_peer_close_interval = nil
+      expect { config.validate! }.not_to raise_error
     end
 
     it "rejects non-positive streams_heartbeat_interval" do

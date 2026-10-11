@@ -217,7 +217,7 @@ module Pgbus
 
     # Streams (turbo-rails replacement, SSE-based)
     attr_accessor :streams_enabled, :streams_path, :streams_signed_name_secret,
-                  :streams_default_retention, :streams_retention, :streams_heartbeat_interval,
+                  :streams_default_retention, :streams_retention, :streams_heartbeat_interval, :streams_peer_close_interval,
                   :streams_max_connections, :streams_idle_timeout, :streams_listen_health_check_ms,
                   :streams_write_deadline_ms, :streams_falcon_streaming_body,
                   :streams_stats_enabled, :streams_test_mode,
@@ -461,6 +461,10 @@ module Pgbus
       @streams_default_retention = 5 * 60 # 5 minutes
       @streams_retention = {}
       @streams_heartbeat_interval = 15
+      # Seconds a new SSE connection waits to join the peer-close watch; a
+      # client that closes a watched socket is noticed at once (issue #519).
+      # nil turns the watcher off and leaves disconnects to the heartbeat.
+      @streams_peer_close_interval = 1.0
       @streams_max_connections = 2_000
       @streams_idle_timeout = 3_600 # 1 hour
       # 250ms — this value plays two roles: (1) the TCP keepalive
@@ -1026,6 +1030,11 @@ module Pgbus
 
       unless streams_heartbeat_interval.is_a?(Numeric) && streams_heartbeat_interval.positive?
         raise Pgbus::ConfigurationError, "streams_heartbeat_interval must be a positive number"
+      end
+
+      unless streams_peer_close_interval.nil? ||
+             (streams_peer_close_interval.is_a?(Numeric) && streams_peer_close_interval.positive?)
+        raise Pgbus::ConfigurationError, "streams_peer_close_interval must be nil or a positive number"
       end
 
       unless streams_idle_timeout.is_a?(Numeric) && streams_idle_timeout.positive?

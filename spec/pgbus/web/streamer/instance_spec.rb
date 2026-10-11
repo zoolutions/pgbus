@@ -296,6 +296,34 @@ RSpec.describe Pgbus::Web::Streamer::Instance do
       expect(streamer.listener).to be_a(Pgbus::Web::Streamer::Listener)
       expect(streamer.dispatcher).to be_a(Pgbus::Web::Streamer::StreamEventDispatcher)
       expect(streamer.heartbeat).to be_a(Pgbus::Web::Streamer::Heartbeat)
+      expect(streamer.peer_close_watcher.threads.size).to eq(1)
+    end
+
+    it "posts a disconnect as soon as a registered client closes its socket (issue #519)" do
+      # A 30 s heartbeat cannot be the one that notices the close within 1 s.
+      config.streams_heartbeat_interval = 30
+      config.streams_peer_close_interval = 0.05
+      streamer.start
+      fake_pg.push_timeout
+      conn, reader = build_sse_connection
+      streamer.register(conn)
+      deadline = Time.now + 2
+      sleep 0.01 until streamer.registry.connections_for("chat").include?(conn) || Time.now > deadline
+      expect(streamer.registry.connections_for("chat")).to include(conn)
+
+      reader.close
+
+      deadline = Time.now + 1
+      sleep 0.01 until !streamer.registry.connections_for("chat").include?(conn) || Time.now > deadline
+      expect(streamer.registry.connections_for("chat")).not_to include(conn)
+    end
+
+    it "does not start the peer-close watcher when streams_peer_close_interval is nil" do
+      config.streams_peer_close_interval = nil
+      streamer.start
+      fake_pg.push_timeout
+
+      expect(streamer.peer_close_watcher).to be_nil
     end
 
     it "is idempotent — calling start twice does not spawn duplicate threads" do
