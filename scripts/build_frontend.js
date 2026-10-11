@@ -66,7 +66,9 @@ async function build({ source, mapUrl }) {
     map.mappings = ";".repeat(banner.split("\n").length) + map.mappings;
   }
 
-  map.sources = [basename(source)];
+  // src/ keeps the original's URL apart from the module's own: the dashboard
+  // serves application.js minified, and devtools must not conflate the two.
+  map.sources = [`src/${basename(source)}`];
   map.sourcesContent = [sourceText];
   delete map.debugId;
 

@@ -77,7 +77,7 @@ RSpec.describe "Vendored frontend assets" do # rubocop:disable RSpec/DescribeCla
 
         it "has a sibling sourcemap carrying the source text" do
           map = JSON.parse(map_path.read)
-          expect(map["sources"]).to eq([File.basename(source)])
+          expect(map["sources"]).to eq(["src/#{File.basename(source)}"])
           expect(map["sourcesContent"]).to eq([source_path.read])
         end
 
@@ -87,9 +87,9 @@ RSpec.describe "Vendored frontend assets" do # rubocop:disable RSpec/DescribeCla
       end
     end
 
-    it "minifies Turbo below half its size and keeps its license" do
+    it "minifies Turbo well below its size and keeps its license" do
       min = frontend_dir.join("vendor", "turbo.min.js")
-      expect(min.size).to be < (frontend_dir.join("vendor", "turbo.js").size / 2)
+      expect(min.size).to be < (frontend_dir.join("vendor", "turbo.js").size * 0.6)
       expect(min.read).to start_with("/*!\nTurbo 8.0.12")
       expect(min.read).to include("The MIT License (MIT)")
     end

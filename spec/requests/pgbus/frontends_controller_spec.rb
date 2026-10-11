@@ -54,7 +54,7 @@ RSpec.describe "Pgbus::FrontendsController", type: :request do
     it "serves a nested module's sourcemap" do
       get "/pgbus/frontend/modules/#{version}/charts.map"
       expect(response).to have_http_status(:ok)
-      expect(JSON.parse(response.body)["sources"]).to eq(["charts.js"])
+      expect(JSON.parse(response.body)["sources"]).to eq(["src/charts.js"])
     end
 
     it "returns 404 for the sourcemap of a module that has none" do

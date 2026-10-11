@@ -32,5 +32,8 @@ RSpec.describe "Dashboard frontend assets", type: :system do
     expect(page).to have_css(".apexcharts-canvas", count: 3)
     expect(page).to have_current_path("/pgbus/insights")
     expect(fetched_scripts.grep(/apexcharts/).size).to eq(1)
+    # The Insights document arrives as a fetch only under Turbo Drive; a full
+    # reload would reset the resource timeline instead.
+    expect(fetched_scripts).to include(a_string_matching(%r{/pgbus/insights\z}))
   end
 end
