@@ -891,6 +891,35 @@ RSpec.describe Pgbus::Web::Streamer::StreamEventDispatcher do
       expect(presence.left).to eq(["7"])
     end
 
+    # Issue #521: the socket closes between the last replay frame and the
+    # pgbus:connected write. The connection must not linger registered with
+    # its presence row until the next heartbeat.
+    context "when the pgbus:connected write fails" do
+      let(:conn) { build_conn(id: "c1", stream_name: "room", context: { member_id: "7" }) }
+
+      before do
+        allow(client).to receive(:read_after).and_return([build_envelope(1)])
+        conn.on_connected = -> { conn.mark_dead! }
+      end
+
+      it "unregisters the connection and leaves its presence seat at once" do
+        dispatcher.send(:handle, described_class::ConnectMessage.new(connection: conn))
+
+        expect(conn.enqueued.map(&:msg_id)).to eq([1])
+        expect(registry.connections_for("room")).to be_empty
+        expect(presence.joined).to eq([{ member_id: "7", metadata: {} }])
+        expect(presence.left).to eq(["7"])
+      end
+
+      it "leaves only once when a later disconnect arrives (heartbeat or peer-close watcher)" do
+        dispatcher.send(:handle, described_class::ConnectMessage.new(connection: conn))
+        dispatcher.send(:handle, described_class::DisconnectMessage.new(connection: conn))
+
+        expect(presence.left).to eq(["7"])
+        expect(dispatcher.instance_variable_get(:@full_to_logical)).to be_empty
+      end
+    end
+
     it "does NOT leave a connection that never joined presence" do
       conn = build_conn(id: "c1", stream_name: "chat")
       registry.register(conn)

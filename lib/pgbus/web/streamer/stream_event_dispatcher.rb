@@ -404,9 +404,13 @@ module Pgbus
             # Step 6: announce the connection id only now (issue #521). A
             # client that writes keyed by it right after pgbus:connected
             # (Presence#set_state) must find the registered connection and
-            # its presence row. A failed write marks the connection dead;
-            # the heartbeat sweep unregisters it as for any write.
+            # its presence row. If that write finds the socket gone, run the
+            # disconnect now rather than leave the connection registered,
+            # and its seat on the roster, until the next heartbeat. A later
+            # DisconnectMessage for it (heartbeat, peer-close watcher) is a
+            # no-op: unregister reports false and the seat has already left.
             connection.write_connected
+            handle_disconnect(DisconnectMessage.new(connection: connection)) if connection.dead?
           end
 
           record_stat(
@@ -415,10 +419,12 @@ module Pgbus
             started_at: started_at
           )
         rescue StandardError => e
-          # Same leak path for exceptions in steps 1-4. Mark dead and
+          # Same leak path for exceptions in steps 1-6. Mark dead and
           # scrub state so a transient failure on a single connect
           # doesn't permanently bloat @full_to_logical or leave a
-          # dangling LISTEN on the PG connection.
+          # dangling LISTEN on the PG connection. A connection already
+          # registered in step 5 is dead now, so the heartbeat sweep
+          # unregisters it (and leaves its seat) like any dead connection.
           remove_in_flight(stream, connection)
           @scanned_cursor.delete(connection)
           cleanup_stream_if_unused(stream)

@@ -104,4 +104,17 @@ RSpec.describe "Streams: pgbus:connected after the presence join", :integration 
 
     it_behaves_like "a connection whose presence row exists at pgbus:connected"
   end
+
+  context "with Falcon (streams_falcon_streaming_body)" do
+    let(:harness) { SseTestSupport::FalconTestHarness.boot(rack_app: stream_app) }
+
+    around do |example|
+      Pgbus.configuration.streams_falcon_streaming_body = true
+      example.run
+    ensure
+      Pgbus.configuration.streams_falcon_streaming_body = false
+    end
+
+    it_behaves_like "a connection whose presence row exists at pgbus:connected"
+  end
 end
