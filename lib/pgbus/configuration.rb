@@ -4,6 +4,8 @@ require "logger"
 
 module Pgbus
   class Configuration
+    include PresenceSettings
+
     # Connection settings
     attr_accessor :database_url, :connection_params, :pool_size, :pool_timeout
 
@@ -1092,6 +1094,8 @@ module Pgbus
       if !streams_presence_member.nil? && !streams_presence_member.respond_to?(:call)
         raise Pgbus::ConfigurationError, "streams_presence_member must respond to #call (a Proc/lambda) or be nil"
       end
+
+      validate_presence_settings!
 
       return if streams_orphan_threshold.nil?
       return if streams_orphan_threshold.is_a?(Numeric) && streams_orphan_threshold.positive?

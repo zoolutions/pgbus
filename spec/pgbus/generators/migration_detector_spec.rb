@@ -180,6 +180,25 @@ RSpec.describe Pgbus::Generators::MigrationDetector do
 
         expect(detector.missing_migrations).not_to include(:add_presence)
       end
+
+      it "does not queue add_presence_seats with add_presence (the template carries the seat columns)" do
+        expect(detector.missing_migrations).not_to include(:add_presence_seats)
+      end
+
+      it "queues add_presence_seats when the table lacks connection_id (issue #515)" do
+        add_table("pgbus_presence_members")
+        stub_columns("pgbus_presence_members", %w[stream_name member_id metadata joined_at last_seen_at])
+
+        expect(detector.missing_migrations).to include(:add_presence_seats)
+      end
+
+      it "does not queue add_presence_seats when the seat columns exist" do
+        add_table("pgbus_presence_members")
+        stub_columns("pgbus_presence_members",
+                     %w[stream_name member_id metadata joined_at last_seen_at connection_id seat state])
+
+        expect(detector.missing_migrations).not_to include(:add_presence_seats)
+      end
     end
 
     context "with queue states detection" do
@@ -472,7 +491,7 @@ RSpec.describe Pgbus::Generators::MigrationDetector do
         add_job_stats_queue_index add_stream_stats add_presence
         add_queue_states add_outbox add_recurring add_failed_events_index
         add_processed_event_completion add_batch_executions add_batch_callback_jobs
-        add_stream_queues tune_autovacuum tune_fillfactor
+        add_stream_queues tune_autovacuum tune_fillfactor add_presence_seats
       ]
 
       keys.each do |key|

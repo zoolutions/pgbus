@@ -74,7 +74,8 @@ module Pgbus
             dispatch_queue: @dispatch_queue,
             interval: @config.streams_heartbeat_interval,
             idle_timeout: @config.streams_idle_timeout,
-            logger: @logger
+            logger: @logger,
+            presence_expiry: Array(@config.streams_presence_patterns).any?
           )
           @started = false
           @shutdown_mutex = Mutex.new

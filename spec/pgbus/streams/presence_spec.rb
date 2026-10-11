@@ -19,6 +19,9 @@ RSpec.describe Pgbus::Streams::Presence do
     allow(Pgbus.configuration).to receive(:connects_to).and_return(nil)
     stub_const("ActiveRecord::Base", Class.new)
     allow(ActiveRecord::Base).to receive(:connection).and_return(ar_connection)
+    # The member-keyed specs below describe a table without the seat columns
+    # (pre-#515 schema); the seat specs flip this to true.
+    allow(described_class).to receive(:seats_supported?).and_return(false)
   end
 
   describe "#join" do
@@ -273,6 +276,241 @@ RSpec.describe Pgbus::Streams::Presence do
     it "returns 0 when nothing to sweep" do
       allow(raw_connection).to receive(:exec_params).and_return([])
       expect(presence.sweep!(older_than: Time.now)).to eq(0)
+    end
+  end
+
+  describe "seats (issue #515)" do
+    before { allow(described_class).to receive(:seats_supported?).and_return(true) }
+
+    let(:seat_row) do
+      {
+        "member_id" => "7",
+        "connection_id" => "c1",
+        "seat" => "s1",
+        "state" => '{"selected":3}',
+        "metadata" => '{"name":"Alice"}',
+        "joined_at" => "2026-04-09T00:00:00Z",
+        "last_seen_at" => "2026-04-09T00:00:00Z"
+      }
+    end
+
+    describe "#seats?" do
+      it "reports the schema probe" do
+        expect(presence.seats?).to be(true)
+      end
+    end
+
+    describe "#join with connection_id:" do
+      before { allow(raw_connection).to receive(:exec_params).and_return([seat_row]) }
+
+      it "upserts one row per connection, keyed by (stream_name, connection_id)" do
+        presence.join(member_id: 7, connection_id: "c1", seat: "s1", metadata: { name: "Alice" })
+
+        expect(raw_connection).to have_received(:exec_params).with(
+          a_string_matching(/ON CONFLICT \(stream_name, connection_id\) WHERE connection_id IS NOT NULL/),
+          ["room:42", "7", '{"name":"Alice"}', "c1", "s1"]
+        )
+      end
+
+      it "returns the record with its connection, seat and parsed state" do
+        result = presence.join(member_id: 7, connection_id: "c1", seat: "s1")
+
+        expect(result).to include("id" => "7", "connection_id" => "c1", "seat" => "s1",
+                                  "state" => { "selected" => 3 }, "metadata" => { "name" => "Alice" })
+      end
+    end
+
+    describe "#join without connection_id:" do
+      before { allow(raw_connection).to receive(:exec_params).and_return([seat_row.merge("connection_id" => nil)]) }
+
+      it "upserts the member-keyed row through the partial index" do
+        presence.join(member_id: 7)
+
+        expect(raw_connection).to have_received(:exec_params).with(
+          a_string_matching(/ON CONFLICT \(stream_name, member_id\) WHERE connection_id IS NULL/),
+          ["room:42", "7", "{}"]
+        )
+      end
+    end
+
+    describe "#leave" do
+      it "deletes only the given connection's row" do
+        allow(raw_connection).to receive(:exec_params).and_return([seat_row])
+
+        result = presence.leave(connection_id: "c1")
+
+        expect(result["connection_id"]).to eq("c1")
+        expect(raw_connection).to have_received(:exec_params).with(
+          a_string_matching(/DELETE FROM pgbus_presence_members.*connection_id = \$2/m), ["room:42", "c1"]
+        )
+      end
+
+      it "keeps member-keyed leave on the member-keyed row" do
+        allow(raw_connection).to receive(:exec_params).and_return([])
+
+        presence.leave(member_id: "7")
+
+        expect(raw_connection).to have_received(:exec_params).with(
+          a_string_matching(/member_id = \$2 AND connection_id IS NULL/), ["room:42", "7"]
+        )
+      end
+
+      it "requires exactly one of member_id: or connection_id:" do
+        expect { presence.leave }.to raise_error(ArgumentError, /member_id: or connection_id:/)
+        expect { presence.leave(member_id: "7", connection_id: "c1") }.to raise_error(ArgumentError)
+      end
+    end
+
+    describe "#touch with connection_id:" do
+      it "refreshes every given connection in one statement and returns the ids it touched" do
+        allow(raw_connection).to receive(:exec_params).and_return([{ "connection_id" => "c1" }])
+
+        expect(presence.touch(connection_id: %w[c1 c2])).to eq(["c1"])
+        expect(raw_connection).to have_received(:exec_params).with(
+          a_string_matching(/connection_id = ANY\(\$2::text\[\]\).*RETURNING connection_id/m),
+          ["room:42", %({"c1","c2"})]
+        )
+      end
+
+      it "accepts a single id" do
+        allow(raw_connection).to receive(:exec_params).and_return([{ "connection_id" => "c1" }])
+
+        expect(presence.touch(connection_id: "c1")).to eq(["c1"])
+      end
+    end
+
+    describe "#set_state" do
+      it "merges the state into the connection's row and returns the record" do
+        allow(raw_connection).to receive(:exec_params).and_return([seat_row])
+
+        result = presence.set_state(connection_id: "c1", state: { selected: 3 })
+
+        expect(result["state"]).to eq({ "selected" => 3 })
+        expect(raw_connection).to have_received(:exec_params).with(
+          a_string_matching(/SET state = state \|\| \$3::jsonb/), ["room:42", "c1", '{"selected":3}']
+        )
+      end
+
+      it "returns nil when the connection has no row" do
+        allow(raw_connection).to receive(:exec_params).and_return([])
+
+        expect(presence.set_state(connection_id: "gone", state: {})).to be_nil
+      end
+    end
+
+    describe "#members" do
+      it "returns one record per seat with its connection, seat and state" do
+        allow(raw_connection).to receive(:exec_params).and_return([seat_row, seat_row.merge("connection_id" => "c2")])
+
+        result = presence.members
+
+        expect(result.map { |row| row["connection_id"] }).to eq(%w[c1 c2])
+        expect(result.first).to include("id" => "7", "seat" => "s1", "state" => { "selected" => 3 })
+      end
+    end
+
+    describe "change hook (streams_presence_on_change)" do
+      before { allow(Pgbus.configuration).to receive(:notify_presence_change) }
+
+      it "reports a seat join once" do
+        allow(raw_connection).to receive(:exec_params).and_return([seat_row])
+
+        presence.join(member_id: 7, connection_id: "c1", seat: "s1")
+
+        expect(Pgbus.configuration).to have_received(:notify_presence_change).once
+                                                                             .with("room:42", { type: :join, connection_id: "c1",
+                                                                                                seat: "s1", member_id: "7" })
+      end
+
+      it "reports a seat leave once" do
+        allow(raw_connection).to receive(:exec_params).and_return([seat_row])
+
+        presence.leave(connection_id: "c1")
+
+        expect(Pgbus.configuration).to have_received(:notify_presence_change).once
+                                                                             .with("room:42", { type: :leave, connection_id: "c1",
+                                                                                                seat: "s1", member_id: "7" })
+      end
+
+      it "does not report a leave for a connection that had no row" do
+        allow(raw_connection).to receive(:exec_params).and_return([])
+
+        presence.leave(connection_id: "gone")
+
+        expect(Pgbus.configuration).not_to have_received(:notify_presence_change)
+      end
+
+      it "does not report member-keyed joins and leaves" do
+        allow(raw_connection).to receive(:exec_params).and_return([seat_row.merge("connection_id" => nil)])
+
+        presence.join(member_id: 7)
+        presence.leave(member_id: 7)
+
+        expect(Pgbus.configuration).not_to have_received(:notify_presence_change)
+      end
+
+      it "reports each expired seat as a leave" do
+        allow(raw_connection).to receive(:exec_params)
+          .and_return([{ "stream_name" => "room:1", "connection_id" => "c1" }], [seat_row])
+
+        described_class.expire_seats!(ttl_for: ->(_) { 30 }, min_ttl: 30)
+
+        expect(Pgbus.configuration).to have_received(:notify_presence_change).once
+                                                                             .with("room:1", { type: :leave, connection_id: "c1",
+                                                                                               seat: "s1", member_id: "7" })
+      end
+    end
+
+    describe ".expire_seats!" do
+      it "deletes seat rows past their stream's ttl and returns them with the stream name" do
+        candidates = [
+          { "stream_name" => "room:1", "connection_id" => "c1" },
+          { "stream_name" => "room:2", "connection_id" => "c2" }
+        ]
+        allow(raw_connection).to receive(:exec_params).and_return(candidates, [seat_row.merge("stream_name" => "room:1")], [])
+
+        expired = described_class.expire_seats!(ttl_for: ->(name) { name == "room:1" ? 30 : 90 }, min_ttl: 30)
+
+        expect(expired.map { |row| row["stream_name"] }).to eq(["room:1"])
+        expect(expired.first).to include("connection_id" => "c1", "seat" => "s1", "id" => "7")
+        expect(raw_connection).to have_received(:exec_params).with(
+          a_string_matching(/connection_id IS NOT NULL AND last_seen_at < NOW\(\) - make_interval\(secs => \$1\)/), [30]
+        )
+        expect(raw_connection).to have_received(:exec_params).with(
+          a_string_matching(/DELETE FROM pgbus_presence_members.*RETURNING/m), ["room:1", %({"c1"}), 30]
+        )
+        expect(raw_connection).to have_received(:exec_params).with(anything, ["room:2", %({"c2"}), 90])
+      end
+
+      it "returns [] without a query when the schema has no seats" do
+        allow(described_class).to receive(:seats_supported?).and_return(false)
+        allow(raw_connection).to receive(:exec_params)
+
+        expect(described_class.expire_seats!(ttl_for: ->(_) { 30 }, min_ttl: 30)).to eq([])
+        expect(raw_connection).not_to have_received(:exec_params)
+      end
+    end
+  end
+
+  describe ".seats_supported?" do
+    before do
+      allow(described_class).to receive(:seats_supported?).and_call_original
+      described_class.reset_schema_cache!
+    end
+
+    after { described_class.reset_schema_cache! }
+
+    it "is true when pgbus_presence_members has the connection_id column, and memoized" do
+      allow(raw_connection).to receive(:exec_params).and_return([{ "present" => "1" }])
+
+      2.times { expect(described_class.seats_supported?).to be(true) }
+      expect(raw_connection).to have_received(:exec_params).once
+    end
+
+    it "is false on the pre-seat schema" do
+      allow(raw_connection).to receive(:exec_params).and_return([])
+
+      expect(described_class.seats_supported?).to be(false)
     end
   end
 

@@ -33,7 +33,8 @@ module Pgbus
         say "  2. Use in your code:"
         say "       Pgbus.stream(@room).presence.join(member_id: current_user.id.to_s)"
         say "       Pgbus.stream(@room).presence.members"
-        say "  3. Run a periodic sweeper to expire idle members:"
+        say "  3. Connection-driven presence (streams_presence_patterns) expires silent"
+        say "     seats on its own. Rows you join by member_id need a periodic sweeper:"
         say "       Pgbus.stream(@room).presence.sweep!(older_than: 60.seconds.ago)"
         say ""
       end

@@ -427,6 +427,46 @@ class Views::Docs::Pages::Streams < DocsUI::Page
           plain "Membership work runs on the dispatcher thread and presence failures are logged and swallowed — a presence-table hiccup can never knock a live SSE connection out of the registry."
         end
       end
+
+      DocsUI::Section("Seats: one row per tab (experimental)", description: "Two tabs of one user are two rows; closing one keeps the user present.") do
+        md <<~'MD'
+          On a table migrated with seats (`rails generate pgbus:add_presence_seats`,
+          queued by `pgbus:update`; fresh `pgbus:add_presence` tables already have
+          them), connection-driven presence keeps one row per SSE connection.
+          Each row carries the connection id, the tab's `seat` and a `state` jsonb.
+          The `presence` attribute makes `<pgbus-stream-source>` mint one seat per
+          document (kept across Turbo Drive visits and reconnects, readable as
+          `element.pgbusSeat`) and send it as `?seat=`:
+        MD
+        DocsUI::Code(<<~ERB, lexer: :erb)
+          <%= pgbus_stream_from @room, presence: true %>
+        ERB
+        DocsUI::Code(<<~RUBY)
+          presence = Pgbus.stream(@room).presence
+          presence.set_state(connection_id: conn_id, state: { selected: 3 }) # that tab's row only
+          presence.members
+          # => [{ "id" => "7", "connection_id" => "a1b2…", "seat" => "5a94…",
+          #       "state" => { "selected" => 3 }, "metadata" => {...}, … }, …]
+        RUBY
+        md <<~'MD'
+          `members` and `count` return one entry per seat; group by `"id"` for one
+          per member. Rows written by `join(member_id:)` keep their own
+          one-row-per-member key. The heartbeat touches live seats and expires
+          silent ones after their stream's ttl (rows of a crashed process
+          included), and every join, leave and expiry reaches a hook:
+        MD
+        DocsUI::Code(<<~RUBY, filename: "config/initializers/pgbus.rb")
+          Pgbus.configure do |c|
+            c.streams_presence_ttl = { /^doc:/ => 5.minutes, default: 60 } # or one number
+            c.streams_presence_on_change = ->(stream_name, change) {
+              # { type: :join | :leave, connection_id:, seat:, member_id: } — an expiry is a :leave
+            }
+          end
+        RUBY
+        DocsUI::Callout(:note) do
+          plain "A raising hook is logged, not propagated. Probe for support with Pgbus::Streams::Presence.seats_supported? (the table) and Presence#join accepting connection_id: (the gem)."
+        end
+      end
     end
   end
 
