@@ -289,6 +289,27 @@ RSpec.configure do |config|
   # Bootstrap tables that may not exist in the CI database
   bootstrap_integration_tables(ActiveRecord::Base.connection)
 
+  # Pgbus.reset_client! only drops the memoized client (a forked child must
+  # not close the parent's sockets), so every reset in the suite left a job
+  # pool and a streams pool open until GC. Hundreds of examples pushed
+  # pg_stat_activity close to max_connections and starved specs that read
+  # live headroom (streams_pool_autoscale_spec). In the rspec process itself
+  # the old client is closed; forked children keep the drop-only behaviour.
+  Pgbus.singleton_class.prepend(Module.new do
+    root_pid = Process.pid
+    define_method(:reset_client!) do
+      previous = @client
+      super()
+      return unless previous && Process.pid == root_pid
+
+      begin
+        previous.close
+      rescue StandardError => e
+        warn "[integration_helper] closing the previous Pgbus client failed: #{e.class}: #{e.message}"
+      end
+    end
+  end)
+
   # Purge all integration queues BEFORE each test so no stale messages leak
   config.before do
     Pgbus.reset_client!

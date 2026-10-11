@@ -289,8 +289,10 @@ module Pgbus
     # Do NOT call close — the parent's @pgmq_mutex is in undefined
     # state post-fork and attempting to acquire it can deadlock.
     # The next call to Pgbus.client will lazily create a fresh one.
+    # Cached streams hold the client they were built with, so they go too.
     def reset_client!
       @client = nil
+      @stream_cache = nil
     end
 
     def logger
