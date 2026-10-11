@@ -320,6 +320,15 @@ RSpec.describe Pgbus::Web::StreamApp do
       expect(streamer.registered.first.context).to eq(member_id: "mine")
     end
 
+    it "fails closed with a 500 when the hook is not callable (eager_validation off)" do
+      Pgbus.configuration.streams_authorize = "nope"
+
+      status, = app.call(get_env("/pgbus/streams/#{signed("chat")}"))
+
+      expect(status).to eq(500)
+      expect(streamer.registered).to be_empty
+    end
+
     it "authorizes without a context when neither is set" do
       app.call(hijacked_env)
 

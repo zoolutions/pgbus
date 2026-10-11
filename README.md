@@ -1621,13 +1621,21 @@ The authorize hook doubles as a context provider — return any non-boolean valu
 
 ```ruby
 Pgbus.configure do |c|
-  c.streams_authorize = ->(env, _stream_name) {
-    User.find_by(id: env["rack.session"]&.dig("user_id"))  # nil/false → 403; the user becomes the context
+  c.streams_authorize = ->(env, stream_name) {
+    user = User.find_by(id: env["rack.session"]&.dig("user_id"))
+    next unless user
+
+    # Check THIS user against THIS stream: here "room:42" names a room.
+    room_id = stream_name.delete_prefix("room:") if stream_name.start_with?("room:")
+    room = Room.find_by(id: room_id) if room_id
+    user if room&.member?(user)  # nil → 403; the user becomes the context
   }
 end
 ```
 
-The hook gets the Rack env, not a controller (the stream endpoint is a bare Rack app), so read the session (`env["rack.session"]`) or a signed cookie from it. A falsy return answers 403, `true` authorizes with no context. An app that mounts its own `Pgbus::Web::StreamApp.new(authorize: …)` keeps that hook; `streams_authorize` is only the engine mount's.
+Authorize per stream here. The signed stream name proves pgbus minted it, not that this user may read it: a user removed from a room keeps a working signed name until `streams_signed_name_secret` rotates, so a hook that only checks "logged in" lets them keep listening.
+
+The hook gets the Rack env, not a controller (the stream endpoint is a bare Rack app), so read the session (`env["rack.session"]`) or a signed cookie from it. A falsy return answers 403, `true` authorizes with no context. An app that mounts its own `Pgbus::Web::StreamApp.new(authorize: …)` keeps that hook; `streams_authorize` is only the engine mount's. `validate!` rejects a non-callable value at boot; with `eager_validation = false` it is not checked there, and every stream request then fails closed with a 500.
 
 Then label broadcasts with the filter you want to apply:
 
