@@ -1,0 +1,32 @@
+lib/pgbus/web/streamer/peer_close_watcher.rb
+  s_3e21f559b0ae6d::t_18d6c6127b1f53 74
+  s_94414b56e1d609::t_4e706e46d44982 41-44
+spec/pgbus/web/streamer/instance_spec.rb
+  s_3e21f559b0ae6d::t_b467c008b0a179 316
+lib/pgbus/web/streamer/instance.rb
+  s_94414b56e1d609::t_4e706e46d44982 125-126
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "a26896a41fd2d98f202f43c51a90f72f2d0f7b53",
+  "prompts": {},
+  "sessions": {
+    "s_3e21f559b0ae6d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f363c29e-c9cb-4446-bf3f-d04d38769294",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    },
+    "s_94414b56e1d609": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "13345024-3458-4bcb-ab5c-a78d84f81871",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
