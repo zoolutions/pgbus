@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "pg"
 require "pgbus/streams/presence"
 
 RSpec.describe Pgbus::Streams::Presence do
@@ -277,6 +278,16 @@ RSpec.describe Pgbus::Streams::Presence do
       allow(raw_connection).to receive(:exec_params).and_return([])
       expect(presence.sweep!(older_than: Time.now)).to eq(0)
     end
+
+    it "only sweeps member-keyed rows on a seat table (seats expire through the heartbeat)" do
+      allow(described_class).to receive(:seats_supported?).and_return(true)
+      allow(raw_connection).to receive(:exec_params).and_return([])
+
+      presence.sweep!(older_than: Time.now)
+
+      expect(raw_connection).to have_received(:exec_params)
+        .with(a_string_matching(/last_seen_at < \$2 AND connection_id IS NULL/), anything)
+    end
   end
 
   describe "seats (issue #515)" do
@@ -409,6 +420,13 @@ RSpec.describe Pgbus::Streams::Presence do
       end
     end
 
+    describe "#set_state with a non-Hash" do
+      it "raises ArgumentError instead of writing a non-mergeable state" do
+        expect { presence.set_state(connection_id: "c1", state: nil) }.to raise_error(ArgumentError, /Hash/)
+        expect { presence.set_state(connection_id: "c1", state: [1]) }.to raise_error(ArgumentError, /Hash/)
+      end
+    end
+
     describe "change hook (streams_presence_on_change)" do
       before { allow(Pgbus.configuration).to receive(:notify_presence_change) }
 
@@ -511,6 +529,42 @@ RSpec.describe Pgbus::Streams::Presence do
       allow(raw_connection).to receive(:exec_params).and_return([])
 
       expect(described_class.seats_supported?).to be(false)
+    end
+
+    it "probes again once a false answer is older than the recheck window (table migrated while running)" do
+      allow(raw_connection).to receive(:exec_params).and_return([], [{ "present" => "1" }])
+      clock = 100.0
+      allow(described_class).to receive(:monotonic_now) { clock }
+
+      expect(described_class.seats_supported?).to be(false)
+      clock += described_class::SCHEMA_RECHECK_SECONDS + 1
+      expect(described_class.seats_supported?).to be(true)
+    end
+  end
+
+  describe "member-keyed join after the table was migrated under a running process" do
+    before do
+      allow(described_class).to receive(:seats_supported?).and_call_original
+      described_class.reset_schema_cache!
+    end
+
+    after { described_class.reset_schema_cache! }
+
+    it "re-probes the schema and retries with the partial-index conflict target" do
+      calls = []
+      allow(raw_connection).to receive(:exec_params) do |sql, _params|
+        calls << sql
+        if sql.include?("information_schema")
+          calls.one? { |sent| sent.include?("information_schema") } ? [] : [{ "present" => "1" }]
+        elsif sql.include?("ON CONFLICT (stream_name, member_id)\n")
+          raise PG::InvalidColumnReference, "there is no unique or exclusion constraint matching the ON CONFLICT specification"
+        else
+          [{ "member_id" => "7", "metadata" => "{}", "joined_at" => "t", "last_seen_at" => "t" }]
+        end
+      end
+
+      expect(presence.join(member_id: 7)["id"]).to eq("7")
+      expect(calls.last).to include("ON CONFLICT (stream_name, member_id) WHERE connection_id IS NULL")
     end
   end
 

@@ -104,6 +104,18 @@ RSpec.describe Pgbus::Web::Streamer::PresenceTracker do
       expect(presence.calls.last).to eq([:leave, { member_id: "7" }])
     end
 
+    it "keeps a touch queued behind the disconnect from re-joining the seat" do
+      conn = build_conn
+      tracker.join(conn)
+      tracker.leave(conn)
+      presence.live = []
+      presence.calls.clear
+
+      tracker.touch([conn])
+
+      expect(presence.calls).to be_empty
+    end
+
     it "does nothing for a connection that never joined" do
       tracker.leave(build_conn)
       expect(presence.calls).to be_empty

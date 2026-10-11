@@ -44,6 +44,9 @@ module Pgbus
           member_id = presence_member_of(connection)
           return unless member_id
 
+          # Cleared first: a heartbeat touch already queued behind this
+          # disconnect must not re-join the seat it removes.
+          connection.presence_member = nil if connection.respond_to?(:presence_member=)
           presence = @presence_provider.call(stream)
           if seats?(presence)
             presence.leave(connection_id: connection.id)

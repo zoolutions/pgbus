@@ -65,30 +65,39 @@ module Pgbus
       RECORD_COLUMNS = "member_id, metadata, joined_at, last_seen_at"
       SEAT_RECORD_COLUMNS = "member_id, metadata, joined_at, last_seen_at, connection_id, seat, state"
 
+      # How long a "no seats" answer is trusted before the schema is probed
+      # again, so a table migrated under a running process is picked up.
+      SCHEMA_RECHECK_SECONDS = 30
+
       @schema_mutex = Mutex.new
       @seats_supported = nil
+      @probed_at = nil
 
       class << self
         # True when pgbus_presence_members has the seat columns (the
-        # add_presence_seats migration ran). Memoized per process: a table
-        # migrated while the process runs is picked up on the next boot.
+        # add_presence_seats migration ran). A true answer is kept for the
+        # life of the process; a false one for SCHEMA_RECHECK_SECONDS.
         def seats_supported?
-          return @seats_supported unless @seats_supported.nil?
+          return @seats_supported if schema_answer_fresh?
 
           @schema_mutex.synchronize do
-            next @seats_supported unless @seats_supported.nil?
+            next @seats_supported if schema_answer_fresh?
 
             rows = connection.exec_params(<<~SQL, [])
               SELECT 1 AS present FROM information_schema.columns
               WHERE table_name = 'pgbus_presence_members' AND column_name = 'connection_id'
                 AND table_schema = ANY (current_schemas(false))
             SQL
+            @probed_at = monotonic_now
             @seats_supported = !rows.to_a.empty?
           end
         end
 
         def reset_schema_cache!
-          @schema_mutex.synchronize { @seats_supported = nil }
+          @schema_mutex.synchronize do
+            @seats_supported = nil
+            @probed_at = nil
+          end
         end
 
         # Deletes every seat row (connection_id IS NOT NULL) that has not
@@ -143,7 +152,17 @@ module Pgbus
           "{#{values.map { |v| %("#{v.to_s.gsub(/["\\]/) { |c| "\\#{c}" }}") }.join(",")}}"
         end
 
+        def monotonic_now
+          ::Process.clock_gettime(::Process::CLOCK_MONOTONIC)
+        end
+
         private
+
+        def schema_answer_fresh?
+          return false if @seats_supported.nil?
+
+          @seats_supported || monotonic_now - @probed_at < SCHEMA_RECHECK_SECONDS
+        end
 
         def expire_stream_seats(stream_name, connection_ids, ttl)
           rows = connection.exec_params(<<~SQL, [stream_name, text_array(connection_ids), ttl])
@@ -279,6 +298,8 @@ module Pgbus
       # connection has no row on this stream. Does not broadcast: the
       # caller renders whatever its viewers should see.
       def set_state(connection_id:, state:)
+        raise ArgumentError, "set_state takes a Hash (got #{state.class})" unless state.is_a?(Hash)
+
         rows = connection.exec_params(<<~SQL, [@stream.name, connection_id.to_s, JSON.generate(state)])
           UPDATE pgbus_presence_members
           SET state = state || $3::jsonb, last_seen_at = NOW()
@@ -323,7 +344,7 @@ module Pgbus
       def sweep!(older_than:)
         rows = connection.exec_params(<<~SQL, [@stream.name, older_than])
           DELETE FROM pgbus_presence_members
-          WHERE stream_name = $1 AND last_seen_at < $2
+          WHERE stream_name = $1 AND last_seen_at < $2#{" AND connection_id IS NULL" if seats?}
           RETURNING #{RECORD_COLUMNS}
         SQL
         rows = rows.to_a
@@ -333,7 +354,19 @@ module Pgbus
 
       private
 
-      def upsert_member(member_id, metadata)
+      # A process that last probed the pre-seat schema sends the old conflict
+      # target, which Postgres rejects once add_presence_seats has replaced
+      # the unique index with a partial one. Re-probe and retry once.
+      def upsert_member(member_id, metadata, retried: false)
+        upsert_member_once(member_id, metadata)
+      rescue PG::InvalidColumnReference
+        raise if retried
+
+        self.class.reset_schema_cache!
+        upsert_member(member_id, metadata, retried: true)
+      end
+
+      def upsert_member_once(member_id, metadata)
         conflict = seats? ? "(stream_name, member_id) WHERE connection_id IS NULL" : "(stream_name, member_id)"
         rows = connection.exec_params(<<~SQL, [@stream.name, member_id, JSON.generate(metadata)])
           INSERT INTO pgbus_presence_members (stream_name, member_id, metadata, joined_at, last_seen_at)

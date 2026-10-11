@@ -64,10 +64,24 @@ module Pgbus
 
         ttl = streams_presence_ttl
         values = ttl.is_a?(Hash) ? ttl.values : [ttl]
-        return if values.all? { |v| v.is_a?(Numeric) && v.to_i.positive? }
+        unless values.all? { |v| v.is_a?(Numeric) && v.to_i.positive? }
+          raise Pgbus::ConfigurationError,
+                "streams_presence_ttl must be a positive number of seconds or a Hash of pattern => seconds"
+        end
 
-        raise Pgbus::ConfigurationError,
-              "streams_presence_ttl must be a positive number of seconds or a Hash of pattern => seconds"
+        warn_presence_ttl_below_heartbeat
+      end
+
+      # A ttl at or below the heartbeat interval lets another process expire
+      # live seats between touches, so every tick reports a leave and a join.
+      def warn_presence_ttl_below_heartbeat
+        heartbeat = streams_heartbeat_interval
+        return unless heartbeat.is_a?(Numeric) && presence_min_ttl <= heartbeat
+
+        Pgbus.logger.warn do
+          "[Pgbus] streams_presence_ttl (#{presence_min_ttl}s) should exceed streams_heartbeat_interval " \
+            "(#{heartbeat}s), or live presence seats are expired and re-joined every tick"
+        end
       end
 
       def pattern_matches?(pattern, stream_name)

@@ -464,7 +464,7 @@ class Views::Docs::Pages::Streams < DocsUI::Page
           end
         RUBY
         DocsUI::Callout(:note) do
-          plain "A raising hook is logged, not propagated. Probe for support with Pgbus::Streams::Presence.seats_supported? (the table) and Presence#join accepting connection_id: (the gem)."
+          plain "Keep each ttl above streams_heartbeat_interval (pgbus warns at boot otherwise). On a seat table sweep! only expires member-keyed rows. A raising hook is logged, not propagated. Probe for support with Pgbus::Streams::Presence.seats_supported? (the table) and Presence#join accepting connection_id: (the gem)."
         end
       end
     end

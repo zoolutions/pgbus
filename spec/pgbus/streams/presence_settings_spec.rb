@@ -39,6 +39,19 @@ RSpec.describe Pgbus::Configuration do
       expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /streams_presence_ttl/)
     end
 
+    it "warns when a ttl does not outlast the heartbeat interval (live seats would churn)" do
+      logger = instance_double(Logger, warn: nil)
+      allow(Pgbus).to receive(:logger).and_return(logger)
+      config.streams_heartbeat_interval = 15
+      config.streams_presence_ttl = { "lobby" => 10, default: 60 }
+
+      config.validate!
+
+      expect(logger).to have_received(:warn) do |&block|
+        expect(block.call).to include("streams_presence_ttl", "streams_heartbeat_interval")
+      end
+    end
+
     it "rejects a value that is neither a number nor a Hash" do
       config.streams_presence_ttl = "60"
       expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /streams_presence_ttl/)

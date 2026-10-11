@@ -1837,7 +1837,7 @@ Pgbus.configure do |c|
 end
 ```
 
-A raising hook is logged, not propagated. Library authors can probe for seat support with `Pgbus::Streams::Presence.instance_method(:join).parameters.include?([:key, :connection_id])` (the gem) and `Pgbus::Streams::Presence.seats_supported?` (the table).
+Keep each ttl above `streams_heartbeat_interval` (pgbus warns at boot otherwise): a shorter one expires live seats between touches. On a seat table `sweep!` only expires member-keyed rows; seats expire through the heartbeat. A process that probed the table before the migration re-checks within 30 seconds (and at once if a member-keyed `join` hits the new index). A raising hook is logged, not propagated. Library authors can probe for seat support with `Pgbus::Streams::Presence.instance_method(:join).parameters.include?([:key, :connection_id])` (the gem) and `Pgbus::Streams::Presence.seats_supported?` (the table).
 
 ### Stream stats (opt-in)
 

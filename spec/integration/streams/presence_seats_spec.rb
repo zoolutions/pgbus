@@ -89,6 +89,15 @@ RSpec.describe "Streams: presence seats", :integration do
     expect(presence.members.map { |member| member["connection_id"] }).to contain_exactly("fresh", nil)
   end
 
+  it "recovers a member-keyed join on a process that probed the table before the migration" do
+    klass = Pgbus::Streams::Presence
+    klass.instance_variable_set(:@seats_supported, false)
+    klass.instance_variable_set(:@probed_at, klass.monotonic_now)
+
+    expect(presence.join(member_id: "7")["id"]).to eq("7")
+    expect(presence.seats?).to be(true)
+  end
+
   it "reports joins and leaves through the change hook" do
     presence.join(member_id: "7", connection_id: "c1", seat: "s1")
     presence.leave(connection_id: "c1")
