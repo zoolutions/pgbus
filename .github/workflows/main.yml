@@ -43,6 +43,8 @@ jobs:
           bun-version-file: ".bun-version"
       - name: Install JS dependencies
         run: bun install --frozen-lockfile
+      - name: Minified JS is in sync (drift guard)
+        run: bundle exec rake frontend:js_check
       - name: RuboCop
         # Lint the gem's own source explicitly rather than a bare `rubocop` that
         # auto-discovers the tree. The docs site (docs/) is a self-contained

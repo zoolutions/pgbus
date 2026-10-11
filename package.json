@@ -4,7 +4,8 @@
     "bun": ">=1.4.0"
   },
   "scripts": {
-    "lint:herb": "herb-lint app/views/"
+    "lint:herb": "herb-lint app/views/",
+    "build:js": "bun run scripts/build_frontend.js"
   },
   "devDependencies": {
     "@herb-tools/linter": "^0.9.5",

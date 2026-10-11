@@ -49,6 +49,8 @@ bundle exec rake bench:integration        # Real DB benchmarks (requires PGBUS_D
 bundle exec rake bench:streams            # SSE streaming benchmarks (requires PGBUS_DATABASE_URL)
 bundle exec rake bench:worker_profile     # Real Worker: jobs/s + where a job's time goes (requires PGBUS_DATABASE_URL)
 bundle exec rake frontend:css             # Rebuild app/frontend/pgbus/style.css after adding a Tailwind class to a view
+bundle exec rake frontend:js              # Rebuild the committed .min.js + .min.js.map after editing app/frontend/pgbus/**/*.js or the stream element
+bundle exec rake frontend:js_check        # CI drift guard: fails when a committed .min.js is stale
 bundle exec rake dummy:server            # Dashboard on http://localhost:3003/pgbus with stub sample data (no database)
 bundle exec rspec spec/system/accessibility_spec.rb  # axe WCAG 2.1 AA (+ 2.2 target size) gate, every dashboard page, light + dark
 bin/lighthouse [-i N] [--pages /pgbus,…]  # Lighthouse scores per page, against a running dummy:server
@@ -195,7 +197,9 @@ The long form, with the token rules and how to read a violation, is `.claude/rul
 3. **Contrast.** `spec/pgbus/web/dark_mode_contrast_spec.rb` (static) and
    `spec/system/accessibility_spec.rb` (axe, light + dark) stay green. No `except:`, no accepted debt:
    a red page is fixed.
-4. **Build + lint.** `bundle exec rake frontend:css` after any new Tailwind class, `bun run lint:herb`.
+4. **Build + lint.** `bundle exec rake frontend:css` after any new Tailwind class, `bundle exec rake frontend:js`
+   after any JS edit (the dashboard and the stream element load only the committed `.min.js`; ApexCharts
+   is served as vendored, `vendor/apexcharts.js`), `bun run lint:herb`.
    Every timestamp, age and duration goes through the `TimeFormat` helpers (`pgbus_time`,
    `pgbus_timestamp`, `pgbus_absolute_time`, `pgbus_duration` for seconds, `pgbus_ms_duration` for
    milliseconds; table in `.claude/rules/dashboard.md`); the time cop and
