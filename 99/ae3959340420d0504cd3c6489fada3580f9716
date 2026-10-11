@@ -1,0 +1,11 @@
+app/assets/javascripts/pgbus/stream_source_element.min.js
+  ai_agent 1,3,5
+app/assets/javascripts/pgbus/stream_source_element.min.js.map
+  ai_agent 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "99ae3959340420d0504cd3c6489fada3580f9716",
+  "prompts": {}
+}
