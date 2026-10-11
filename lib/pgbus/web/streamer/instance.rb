@@ -21,7 +21,7 @@ module Pgbus
       # defaults from the configuration.
       class Instance
         attr_reader :registry, :listener, :dispatcher, :heartbeat, :dispatch_queue, :stream_counter, :pump,
-                    :autoscaler
+                    :autoscaler, :peer_close_watcher
 
         def initialize(
           client: Pgbus.client,
@@ -77,6 +77,7 @@ module Pgbus
             logger: @logger,
             presence_expiry: Array(@config.streams_presence_patterns).any?
           )
+          @peer_close_watcher = build_peer_close_watcher
           @started = false
           @shutdown_mutex = Mutex.new
         end
@@ -91,6 +92,7 @@ module Pgbus
           @listener.start
           @dispatcher.start
           @heartbeat.start
+          @peer_close_watcher&.start
           self
         end
 
@@ -150,6 +152,7 @@ module Pgbus
 
             @started = false
             threads = component_threads
+            safely { @peer_close_watcher&.stop }
             safely { @heartbeat.stop }
             safely { @listener.stop }
             safely { @dispatcher.stop }
@@ -242,6 +245,7 @@ module Pgbus
         def component_threads
           {
             "heartbeat" => @heartbeat.threads,
+            "peer_close_watcher" => @peer_close_watcher ? @peer_close_watcher.threads : [],
             "listener" => @listener.threads,
             "dispatcher" => @dispatcher.threads,
             "pump" => @pump ? @pump.threads : []
@@ -274,6 +278,15 @@ module Pgbus
             interval: @config.streams_pool_autoscale_interval,
             application_name_prefix: @config.streams_application_name
           )
+        end
+
+        # Notices a closed SSE client at once instead of on the next
+        # heartbeat write (issue #519). nil interval: heartbeat only.
+        def build_peer_close_watcher
+          interval = @config.streams_peer_close_interval
+          return nil unless interval
+
+          PeerCloseWatcher.new(registry: @registry, dispatch_queue: @dispatch_queue, interval: interval, logger: @logger)
         end
 
         def build_pump
