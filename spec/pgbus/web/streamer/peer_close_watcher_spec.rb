@@ -116,17 +116,23 @@ RSpec.describe Pgbus::Web::Streamer::PeerCloseWatcher do
       expect(disconnects).to be_empty
     end
 
+    # macOS interrupts the select with an IOError; Linux keeps waiting out
+    # the interval. Either way the pass ends quietly and the next one
+    # rebuilds the set without the closed socket.
     it "survives a socket closed by another thread while it waits in select" do
-      slow = described_class.new(registry: registry, dispatch_queue: dispatch_queue, interval: 5, logger: logger)
       connection, = build_connection("a")
       closer = Thread.new do
-        sleep 0.2
+        sleep 0.02
         connection.io.close
       end
 
-      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-      expect { slow.tick }.not_to raise_error
-      expect(Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).to be < 2
+      expect { watcher.tick }.not_to raise_error
+      closer.join
+
+      _, client = build_connection("b")
+      client.close
+      watcher.tick
+      expect(disconnects).to eq(["b"])
     ensure
       closer&.join
     end
