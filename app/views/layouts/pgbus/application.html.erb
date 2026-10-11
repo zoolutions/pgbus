@@ -86,7 +86,6 @@
   <%# Importmap for ES modules — keys are internal symbols, values are app-controlled paths, no user input %>
   <% importmaps = Pgbus::FrontendsController.js_modules.keys.index_with { |mod| frontend_module_path(mod, format: :js, locale: nil) } %>
   <%= tag.script({ imports: importmaps }.to_json.html_safe, type: "importmap", nonce: content_security_policy_nonce) %> <%# herb:disable erb-no-unsafe-raw %>
-  <%= tag.script("", src: frontend_static_path(:apexcharts, format: :js, locale: nil), nonce: content_security_policy_nonce) %>
 
   <script type="module" nonce="<%= content_security_policy_nonce %>">
     import "application";

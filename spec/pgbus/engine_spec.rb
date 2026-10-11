@@ -218,6 +218,38 @@ RSpec.describe Pgbus::Engine do
     end
   end
 
+  describe "pgbus.streams.assets initializer" do
+    let(:assets) { Struct.new(:precompile).new([]) }
+    let(:app) { double("app", config: double("config", assets: assets)) }
+
+    it "precompiles the minified element, its sourcemap and the readable source" do
+      initializer_block("pgbus.streams.assets").call(app)
+
+      expect(assets.precompile).to contain_exactly(
+        "pgbus/stream_source_element.min.js",
+        "pgbus/stream_source_element.min.js.map",
+        "pgbus/stream_source_element.js"
+      )
+    end
+  end
+
+  describe "pgbus.streams.importmap initializer" do
+    let(:importmap) { spy("importmap") }
+
+    before do
+      stub_const("Importmap::Map", Class.new)
+      allow(Rails).to receive(:application).and_return(double("app", importmap: importmap))
+    end
+
+    # The app has booted, so on_load(:after_initialize) runs the hook at once.
+    it "pins pgbus/stream_source_element to the minified file" do
+      initializer_block("pgbus.streams.importmap").call
+
+      expect(importmap).to have_received(:pin)
+        .with("pgbus/stream_source_element", to: "pgbus/stream_source_element.min.js")
+    end
+  end
+
   describe "pgbus.integrations.appsignal initializer" do
     subject(:block) { initializer_block("pgbus.integrations.appsignal") }
 

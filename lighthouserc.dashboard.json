@@ -53,7 +53,7 @@
         "heading-order": "error",
         "label-content-name-mismatch": "error",
         "errors-in-console": "error",
-        "unminified-javascript": "warn",
+        "unminified-javascript": "error",
         "unused-javascript": "warn",
         "render-blocking-resources": ["warn", { "maxLength": 0 }]
       }

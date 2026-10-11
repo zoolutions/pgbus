@@ -139,14 +139,20 @@ module Pgbus
       app.middleware.use Pgbus::Streams::WatermarkCacheMiddleware if Pgbus.configuration.streams_enabled
     end
 
-    # Make stream_source_element.js available to the host app's asset
-    # pipeline (Propshaft or Sprockets) so it can be included via
-    # `javascript_include_tag "pgbus/stream_source_element"` or pinned
-    # in importmap. When importmap-rails is loaded, auto-pin it so
-    # host apps get it without manual configuration.
+    # Make the <pgbus-stream-source> element available to the host app's
+    # asset pipeline (Propshaft or Sprockets). The importmap pin points at
+    # the minified build (rake frontend:js), whose sourceMappingURL the
+    # pipeline rewrites to the digested .min.js.map. The readable source
+    # stays precompiled so `javascript_include_tag
+    # "pgbus/stream_source_element"` keeps working. When importmap-rails is
+    # loaded, auto-pin it so host apps get it without manual configuration.
     initializer "pgbus.streams.assets" do |app|
       if Pgbus.configuration.streams_enabled && app.config.respond_to?(:assets)
-        app.config.assets.precompile += %w[pgbus/stream_source_element.js]
+        app.config.assets.precompile += %w[
+          pgbus/stream_source_element.min.js
+          pgbus/stream_source_element.min.js.map
+          pgbus/stream_source_element.js
+        ]
       end
     end
 
@@ -156,7 +162,7 @@ module Pgbus
           next unless Rails.application.respond_to?(:importmap)
 
           Rails.application.importmap.pin(
-            "pgbus/stream_source_element", to: "pgbus/stream_source_element.js"
+            "pgbus/stream_source_element", to: "pgbus/stream_source_element.min.js"
           )
         end
       end

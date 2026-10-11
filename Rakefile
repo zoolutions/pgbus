@@ -187,6 +187,32 @@ namespace :frontend do
        "-i app/frontend/pgbus/tailwind.css " \
        "-o app/frontend/pgbus/style.css --minify")
   end
+
+  # The minified JavaScript (<name>.min.js + .min.js.map beside each source) is a
+  # committed build artifact too: the dashboard and the host's importmap only
+  # ever load the .min.js, so editing a source changes nothing until you run
+  # this. scripts/build_frontend.js lists the sources; CI runs js_check.
+  desc "Minify the dashboard JS and the stream element into committed .min.js files"
+  task :js do
+    wanted = File.read(".bun-version").strip
+    found = `bun --version 2>/dev/null`.strip
+    abort "frontend:js needs bun #{wanted} (.bun-version); found #{found.empty? ? "none" : found}" if found != wanted
+
+    sh("bun run scripts/build_frontend.js")
+  end
+
+  desc "Fail when a committed .min.js is stale (CI drift guard)"
+  task js_check: :js do
+    # status, not diff, so an output never added to git is stale too. Only the
+    # work-tree column counts: a freshly rebuilt, staged output is in sync.
+    changed = IO.popen(["git", "status", "--porcelain", "--",
+                        "app/assets/javascripts/pgbus/*.min.js*", "app/frontend/pgbus/*.min.js*"], &:read)
+                .lines.reject { |line| line[1] == " " }.join
+    next if changed.empty?
+
+    puts changed
+    abort "Minified JS is stale — run `bundle exec rake frontend:js` and commit the result"
+  end
 end
 
 namespace :dummy do

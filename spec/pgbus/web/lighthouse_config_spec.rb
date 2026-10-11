@@ -52,8 +52,10 @@ RSpec.describe "Lighthouse dashboard config" do # rubocop:disable RSpec/Describe
     )
   end
 
-  it "keeps the JavaScript-weight audits non-blocking" do
-    expect(assertions.values_at("unminified-javascript", "unused-javascript")).to all(eq("warn"))
+  # Every module is served minified since #517; ApexCharts on Insights still
+  # leaves unused JavaScript, so that audit only warns.
+  it "fails on unminified JavaScript and only warns on unused JavaScript" do
+    expect(assertions.values_at("unminified-javascript", "unused-javascript")).to eq(%w[error warn])
   end
 
   it "points every URL at the dummy server's mounted engine" do

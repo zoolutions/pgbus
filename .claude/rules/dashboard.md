@@ -28,7 +28,8 @@ the same PR; nothing is skipped, tagged out or excused.
    server, the axe gate, Lighthouse and the PR screenshots show the same rows.
    `spec/system/sample_data_spec.rb` fails if a list goes empty.
 3. **Static guard + axe gate** green.
-4. `bundle exec rake frontend:css` after any new Tailwind class (`compiled_css_coverage_spec` fails
+4. `bundle exec rake frontend:js` after any JS edit (the dashboard serves only the committed `.min.js`;
+   CI's `frontend:js_check` fails on a stale one). `bundle exec rake frontend:css` after any new Tailwind class (`compiled_css_coverage_spec` fails
    otherwise), `bun run lint:herb`.
 5. **New page:** add its URL to `lighthouserc.dashboard.json`. The route-coverage example in the
    accessibility spec fails when an HTML GET route has no audited URL, and a URL that does not

@@ -1,6 +1,7 @@
 // Charts module for the Pgbus Insights page.
 // Loaded only on the insights page via an inline <script type="module">, which
-// passes it the series the page embeds. The page renders each chart's caption,
+// passes it the series the page embeds. ApexCharts is fetched here, on first
+// draw, so no other dashboard page downloads it (issue #517). The page renders each chart's caption,
 // data table and empty state; this module only draws into the containers that
 // exist, and redraws them when <html class="dark"> toggles.
 
@@ -71,9 +72,19 @@ function points(series, key) {
   return series.map((p) => ({ x: new Date(p.time).getTime(), y: p[key] }));
 }
 
+// vendor/apexcharts.js is a UMD bundle: run as a module it defines the global.
+// Memoized, so the theme-toggle redraws reuse the one download. Every caller
+// awaits the same promise, and its callbacks run in call order, so a redraw
+// can't overtake the first render.
+let apexCharts = null;
+function loadApexCharts() {
+  apexCharts ||= import("apexcharts").then(() => globalThis.ApexCharts);
+  return apexCharts;
+}
+
 const charts = {};
 
-function draw(id, options) {
+function draw(ApexCharts, id, options) {
   if (charts[id]) charts[id].destroy();
   delete charts[id];
 
@@ -84,10 +95,11 @@ function draw(id, options) {
   charts[id].render();
 }
 
-export function renderCharts(data, i18n) {
+export async function renderCharts(data, i18n) {
+  const ApexCharts = await loadApexCharts();
   const colors = palette(document.documentElement.classList.contains("dark"));
 
-  draw("throughput-chart", {
+  draw(ApexCharts, "throughput-chart", {
     ...baseOptions("throughput-chart", "area", colors),
     series: [{ name: i18n.seriesName, data: points(data.throughput || [], "count") }],
     stroke: { curve: "smooth", width: 2 },
@@ -98,7 +110,7 @@ export function renderCharts(data, i18n) {
   });
 
   const statuses = Object.keys(data.status_counts || {});
-  draw("status-chart", {
+  draw(ApexCharts, "status-chart", {
     ...baseOptions("status-chart", "donut", colors),
     series: statuses.map((s) => data.status_counts[s]),
     labels: statuses.map((s) => (i18n.statuses && i18n.statuses[s]) || s),
@@ -120,7 +132,7 @@ export function renderCharts(data, i18n) {
     },
   });
 
-  draw("latency-chart", {
+  draw(ApexCharts, "latency-chart", {
     ...baseOptions("latency-chart", "line", colors),
     series: [
       { name: i18n.latencyAvg, data: points(data.latency_trend || [], "avg_ms") },

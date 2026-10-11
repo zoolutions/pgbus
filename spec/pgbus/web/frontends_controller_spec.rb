@@ -24,9 +24,19 @@ RSpec.describe Pgbus::FrontendsController do
   end
 
   describe ".js_modules" do
-    it "includes application and turbo modules" do
+    it "includes application, turbo, charts and apexcharts modules" do
       modules = described_class.js_modules
-      expect(modules).to include(:application, :turbo, :charts)
+      expect(modules).to include(:application, :turbo, :charts, :apexcharts)
+    end
+
+    it "serves every module but the already-minified apexcharts as .min.js" do
+      described_class.js_modules.except(:apexcharts).each do |name, path|
+        expect(path.to_s).to end_with(".min.js"), "JS module #{name} is not minified: #{path}"
+      end
+    end
+
+    it "keys modules by name, never a sourcemap or an unminified sibling" do
+      expect(described_class.js_modules.keys.map(&:to_s)).to all(match(/\A[a-z_]+\z/))
     end
 
     it "references only files that exist" do
