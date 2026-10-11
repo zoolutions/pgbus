@@ -65,11 +65,12 @@ RSpec.describe Pgbus::Engine do
 
     around do |example|
       saved_secret = Pgbus.configuration.streams_signed_name_secret
+      saved_authorize = Pgbus.configuration.streams_authorize
       Pgbus.configuration.streams_signed_name_secret = "a" * 64
       example.run
     ensure
       Pgbus.configuration.streams_signed_name_secret = saved_secret
-      Pgbus.configuration.streams_authorize = nil
+      Pgbus.configuration.streams_authorize = saved_authorize
     end
 
     it "mounts a StreamApp with no authorize: of its own" do

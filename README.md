@@ -1633,9 +1633,9 @@ Pgbus.configure do |c|
 end
 ```
 
-Authorize per stream here. The signed stream name proves pgbus minted it, not that this user may read it: a user removed from a room keeps a working signed name until `streams_signed_name_secret` rotates, so a hook that only checks "logged in" lets them keep listening.
+Authorize per stream here. The signed stream name proves pgbus minted it, not that this user may read it: a user removed from a room keeps a working signed name until the signing key rotates (`Turbo.signed_stream_verifier_key` when turbo-rails is loaded, `streams_signed_name_secret` otherwise), so a hook that only checks "logged in" lets them keep listening. Rotating the key only refuses new connections: an SSE connection already open stays open until it closes or its worker restarts.
 
-The hook gets the Rack env, not a controller (the stream endpoint is a bare Rack app), so read the session (`env["rack.session"]`) or a signed cookie from it. A falsy return answers 403, `true` authorizes with no context. An app that mounts its own `Pgbus::Web::StreamApp.new(authorize: …)` keeps that hook; `streams_authorize` is only the engine mount's. `validate!` rejects a non-callable value at boot; with `eager_validation = false` it is not checked there, and every stream request then fails closed with a 500.
+The hook gets the Rack env, not a controller (the stream endpoint is a bare Rack app), so read the session (`env["rack.session"]`) or a signed cookie from it. A falsy return answers 403, `true` authorizes with no context. An explicit `Pgbus::Web::StreamApp.new(authorize: …)` wins; every `StreamApp` built without one, the engine's mount included, uses `streams_authorize`. `validate!` rejects a non-callable value at boot; with `eager_validation = false` it is not checked there, and every stream request then fails closed with a 500.
 
 Then label broadcasts with the filter you want to apply:
 

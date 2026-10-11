@@ -411,6 +411,7 @@ class Views::Docs::Pages::Streams < DocsUI::Page
             c.streams_authorize = ->(env, stream_name) {
               user = User.find_by(id: env["rack.session"]&.dig("user_id"))
               next unless user
+              next user if stream_name == "lobby" # every signed-in user
 
               # Check THIS user against THIS stream: "room:42" names a room.
               room_id = stream_name.delete_prefix("room:") if stream_name.start_with?("room:")
@@ -422,8 +423,11 @@ class Views::Docs::Pages::Streams < DocsUI::Page
         md <<~'MD'
           Authorize per stream in this hook. The signed stream name proves
           pgbus minted it, not that this user may read it: a user removed from
-          a room keeps a working signed name until `streams_signed_name_secret`
-          rotates. A non-callable value fails `validate!` at boot; with
+          a room keeps a working signed name until the signing key rotates
+          (`Turbo.signed_stream_verifier_key` when turbo-rails is loaded,
+          `streams_signed_name_secret` otherwise). Rotation only refuses new
+          connections: an open SSE connection stays until it closes or its
+          worker restarts. A non-callable value fails `validate!` at boot; with
           `eager_validation = false` it is not checked there, and every stream
           request fails closed with a 500.
 
