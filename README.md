@@ -1443,6 +1443,7 @@ Pgbus.configure do |c|
     "presence_room" => 30                          # 30 seconds for presence
   }
   c.streams_heartbeat_interval     = 15            # seconds
+  c.streams_peer_close_interval    = 1.0           # notice a closed client at once; nil = heartbeat only
   c.streams_max_connections        = 2_000         # per web-server process (Puma worker or Falcon process)
   c.streams_idle_timeout           = 3_600         # close idle connections after 1h
   c.streams_listen_health_check_ms = 250           # PG LISTEN keepalive + ensure_listening ack budget
@@ -1806,7 +1807,7 @@ Pgbus.configure do |c|
 end
 ```
 
-Membership work runs on the dispatcher thread (which already releases AR connections each pass); the heartbeat posts a batched touch per tick. Presence failures are logged and swallowed so a presence-table hiccup can't knock a live SSE connection out of the registry.
+Membership work runs on the dispatcher thread (which already releases AR connections each pass); the heartbeat posts a batched touch per tick. A closed tab leaves at once (within `streams_peer_close_interval` for a connection that just opened): a watcher thread notices the client's close on the socket (Puma and Falcon's hijack path) instead of waiting for the next heartbeat write to fail. Falcon's experimental streaming-body path still leaves on the heartbeat. Presence failures are logged and swallowed so a presence-table hiccup can't knock a live SSE connection out of the registry.
 
 #### Seats: one row per tab (experimental)
 

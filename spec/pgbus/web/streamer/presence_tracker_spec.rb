@@ -114,6 +114,15 @@ RSpec.describe Pgbus::Web::Streamer::PresenceTracker do
       expect(presence.calls.last).to eq([:leave, { member_id: "7" }])
     end
 
+    it "leaves once when two disconnects race (the peer-close watcher and the heartbeat, issue #519)" do
+      conn = build_conn
+      tracker.join(conn)
+      tracker.leave(conn)
+      tracker.leave(conn)
+
+      expect(presence.calls.count { |(call, _)| call == :leave }).to eq(1)
+    end
+
     it "keeps a touch queued behind the disconnect from re-joining the seat" do
       conn = build_conn
       tracker.join(conn)
