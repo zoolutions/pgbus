@@ -1,0 +1,19 @@
+spec/pgbus/engine_spec.rb
+  s_4d54ea71052150::t_b456829162e46e 244-246,251-252
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "5a33d7b8f46548120471b912fe8a532cf87efd17",
+  "prompts": {},
+  "sessions": {
+    "s_4d54ea71052150": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e06ff31a-cbf6-4970-a25a-20a9c9288bd4",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
