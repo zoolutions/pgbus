@@ -1443,6 +1443,7 @@ Pgbus.configure do |c|
     "presence_room" => 30                          # 30 seconds for presence
   }
   c.streams_heartbeat_interval     = 15            # seconds
+  c.streams_peer_close_interval    = 1.0           # notice a closed client at once; nil = heartbeat only
   c.streams_max_connections        = 2_000         # per web-server process (Puma worker or Falcon process)
   c.streams_idle_timeout           = 3_600         # close idle connections after 1h
   c.streams_listen_health_check_ms = 250           # PG LISTEN keepalive + ensure_listening ack budget
@@ -1660,7 +1661,7 @@ An actor who just triggered a change already applied it via the HTTP response of
 Pgbus.stream(room).broadcast(html, exclude: connection_id)
 ```
 
-Every server-minted SSE connection exposes its id to the page: right after the open handshake, pgbus sends a `pgbus:connected` frame carrying the connection id, and `<pgbus-stream-source>` captures it onto its `connection-id` attribute and re-dispatches it as a `pgbus:connected` event (also present in `pgbus:open`'s detail). The page reads that id and sends it back as the `X-Pgbus-Connection` header on the action request that triggers the broadcast:
+Every server-minted SSE connection exposes its id to the page: once the streamer has registered the connection (after the connect replay, and after its presence seat has joined on a presence stream), pgbus sends a `pgbus:connected` frame carrying the connection id, and `<pgbus-stream-source>` captures it onto its `connection-id` attribute and re-dispatches it as a `pgbus:connected` event. A write keyed by the connection id right after the event, such as `presence.set_state(connection_id:)`, finds the connection's row. The page reads that id and sends it back as the `X-Pgbus-Connection` header on the action request that triggers the broadcast:
 
 ```js
 document.addEventListener("pgbus:connected", (event) => {
@@ -1816,7 +1817,7 @@ Pgbus.configure do |c|
 end
 ```
 
-Membership work runs on the dispatcher thread (which already releases AR connections each pass); the heartbeat posts a batched touch per tick. Presence failures are logged and swallowed so a presence-table hiccup can't knock a live SSE connection out of the registry.
+Membership work runs on the dispatcher thread (which already releases AR connections each pass); the heartbeat posts a batched touch per tick. A closed tab leaves at once (within `streams_peer_close_interval` for a connection that just opened): a watcher thread notices the client's close on the socket (Puma and Falcon's hijack path) instead of waiting for the next heartbeat write to fail. Falcon's experimental streaming-body path still leaves on the heartbeat. Presence failures are logged and swallowed so a presence-table hiccup can't knock a live SSE connection out of the registry.
 
 #### Seats: one row per tab (experimental)
 

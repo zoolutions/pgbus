@@ -88,18 +88,19 @@ module Pgbus
         end
 
         def write_comment(text)
-          bytes = Pgbus::Streams::Envelope.comment(text)
-          result = @writer.write(self, bytes, deadline_ms: @write_deadline_ms)
-          if result == :ok
-            @last_write_at = monotonic
-          else
-            mark_dead!
-          end
-          result
+          write_frame(Pgbus::Streams::Envelope.comment(text))
         end
 
         def write_sentinel(bytes)
           @writer.write(self, bytes, deadline_ms: @write_deadline_ms)
+        end
+
+        # The pgbus:connected frame carrying this connection's id. Written by
+        # the Dispatcher once the connection is registered and its presence
+        # seat joined (issue #521), so a client that acts on the id right
+        # after the event finds its row.
+        def write_connected
+          write_frame(Pgbus::Streams::Envelope.connected(id: @id))
         end
 
         def idle_for
@@ -141,6 +142,16 @@ module Pgbus
         end
 
         private
+
+        def write_frame(bytes)
+          result = @writer.write(self, bytes, deadline_ms: @write_deadline_ms)
+          if result == :ok
+            @last_write_at = monotonic
+          else
+            mark_dead!
+          end
+          result
+        end
 
         # The SSE event name for a frame: the envelope's typed event when
         # present, else the default turbo-stream. Plain ReadAfter::Envelopes

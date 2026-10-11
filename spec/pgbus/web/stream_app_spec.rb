@@ -208,13 +208,15 @@ RSpec.describe Pgbus::Web::StreamApp do
       expect(drained).to include("stream=chat")
     end
 
-    it "writes a pgbus:connected frame carrying the registered connection's id (issue #165)" do
+    # The dispatcher writes pgbus:connected once the connection is
+    # registered and its presence seat joined (issue #521), so StreamApp
+    # must not announce it at hijack time.
+    it "leaves the pgbus:connected frame to the dispatcher (issue #521)" do
       env, = hijacked_env
       app.call(env)
-      drained = drain_until(reader_io, "pgbus:connected")
-      connection_id = streamer.registered.first.id
-      expect(drained).to include("event: pgbus:connected")
-      expect(drained).to include(%(data: {"connectionId":"#{connection_id}"}))
+      drained = drain_until(reader_io, "pgbus:connected", timeout: 0.3)
+      expect(drained).to include("pgbus stream open")
+      expect(drained).not_to include("pgbus:connected")
     end
 
     it "registers a Connection with the streamer" do
@@ -495,16 +497,18 @@ RSpec.describe Pgbus::Web::StreamApp do
       body&.close
     end
 
-    it "writes a pgbus:connected frame carrying the FalconConnection's id (issue #165)" do
+    it "leaves the pgbus:connected frame to the dispatcher (issue #521)" do
       env = get_env("/#{signed("chat")}")
       _, _, body = app.call(env)
 
-      # retry directive, opening comment, then the connected frame
+      # Drain everything StreamApp queued: retry directive and opening comment only.
+      body.close_write
       frames = +""
-      3.times { frames << body.read.to_s }
-      connection_id = streamer.registered.first.id
-      expect(frames).to include("event: pgbus:connected")
-      expect(frames).to include(%(data: {"connectionId":"#{connection_id}"}))
+      while (chunk = body.read)
+        frames << chunk
+      end
+      expect(frames).to include("pgbus stream open")
+      expect(frames).not_to include("pgbus:connected")
     ensure
       body&.close
     end

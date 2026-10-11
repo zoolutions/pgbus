@@ -3,14 +3,15 @@
 module Pgbus
   module Web
     module Streamer
-      # Composes the Streamer's three background threads (Listener, Dispatcher,
-      # Heartbeat) with the shared Registry and dispatch_queue. One Instance
-      # per Puma worker. Owns the lifecycle of all three threads and the
-      # dedicated PG::Connection for LISTEN.
+      # Composes the Streamer's background threads (Listener, Dispatcher,
+      # Heartbeat, and the PeerCloseWatcher unless streams_peer_close_interval
+      # is nil) with the shared Registry and dispatch_queue. One Instance per
+      # Puma worker. Owns the lifecycle of those threads and the dedicated
+      # PG::Connection for LISTEN.
       #
       # Lifecycle:
       #   Instance.new(...)  — allocates wiring, does NOT start threads
-      #   #start             — spawns listener/dispatcher/heartbeat in order
+      #   #start             — spawns listener/dispatcher/heartbeat/watcher in order
       #   #register(conn)    — enqueues a ConnectMessage into the dispatch queue
       #   #shutdown!         — sends shutdown sentinel to every connection and
       #                        stops all threads in reverse order
@@ -21,7 +22,7 @@ module Pgbus
       # defaults from the configuration.
       class Instance
         attr_reader :registry, :listener, :dispatcher, :heartbeat, :dispatch_queue, :stream_counter, :pump,
-                    :autoscaler
+                    :autoscaler, :peer_close_watcher
 
         def initialize(
           client: Pgbus.client,
@@ -77,6 +78,7 @@ module Pgbus
             logger: @logger,
             presence_expiry: Array(@config.streams_presence_patterns).any?
           )
+          @peer_close_watcher = build_peer_close_watcher
           @started = false
           @shutdown_mutex = Mutex.new
         end
@@ -91,6 +93,7 @@ module Pgbus
           @listener.start
           @dispatcher.start
           @heartbeat.start
+          @peer_close_watcher&.start
           self
         end
 
@@ -119,7 +122,9 @@ module Pgbus
         end
 
         # Graceful shutdown for Puma worker restart. Order matters:
-        #   1. Heartbeat first (stop writing comments to connections we're
+        #   0. Peer-close watcher first (issue #519): stop reaping sockets
+        #      we're about to close ourselves; #stop wakes its select at once
+        #   1. Heartbeat next (stop writing comments to connections we're
         #      about to close)
         #   2. Listener next (stop accepting new NOTIFYs)
         #   3. Dispatcher next (drain the queue; it's now finite because
@@ -150,6 +155,7 @@ module Pgbus
 
             @started = false
             threads = component_threads
+            safely { @peer_close_watcher&.stop }
             safely { @heartbeat.stop }
             safely { @listener.stop }
             safely { @dispatcher.stop }
@@ -242,6 +248,7 @@ module Pgbus
         def component_threads
           {
             "heartbeat" => @heartbeat.threads,
+            "peer_close_watcher" => @peer_close_watcher ? @peer_close_watcher.threads : [],
             "listener" => @listener.threads,
             "dispatcher" => @dispatcher.threads,
             "pump" => @pump ? @pump.threads : []
@@ -274,6 +281,15 @@ module Pgbus
             interval: @config.streams_pool_autoscale_interval,
             application_name_prefix: @config.streams_application_name
           )
+        end
+
+        # Notices a closed SSE client at once instead of on the next
+        # heartbeat write (issue #519). nil interval: heartbeat only.
+        def build_peer_close_watcher
+          interval = @config.streams_peer_close_interval
+          return nil unless interval
+
+          PeerCloseWatcher.new(registry: @registry, dispatch_queue: @dispatch_queue, interval: interval, logger: @logger)
         end
 
         def build_pump

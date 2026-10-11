@@ -74,14 +74,12 @@ module Pgbus
         end
 
         def write_comment(text)
-          bytes = Pgbus::Streams::Envelope.comment(text)
-          result = write_to_body(bytes)
-          if result == :ok
-            @last_write_at = monotonic
-          else
-            mark_dead!
-          end
-          result
+          write_frame(Pgbus::Streams::Envelope.comment(text))
+        end
+
+        # See Connection#write_connected (issue #521).
+        def write_connected
+          write_frame(Pgbus::Streams::Envelope.connected(id: @id))
         end
 
         def write_sentinel(bytes)
@@ -118,6 +116,16 @@ module Pgbus
         def sse_event_for(envelope)
           event = envelope.respond_to?(:event) ? envelope.event : nil
           event && !event.to_s.empty? ? event.to_s : Pgbus::Streams::DEFAULT_SSE_EVENT
+        end
+
+        def write_frame(bytes)
+          result = write_to_body(bytes)
+          if result == :ok
+            @last_write_at = monotonic
+          else
+            mark_dead!
+          end
+          result
         end
 
         def write_to_body(bytes)

@@ -125,6 +125,7 @@ module ConfigReference
       { name: "streams_default_retention", type: "Numeric", default: "300", desc: "Default stream retention in seconds." },
       { name: "streams_retention", type: "Hash", default: "{}", desc: "Per-stream retention overrides." },
       { name: "streams_heartbeat_interval", type: "Numeric", default: "15", desc: "SSE heartbeat interval (seconds)." },
+      { name: "streams_peer_close_interval", type: "Numeric, nil", default: "1.0", desc: "How long a new SSE connection waits to join the peer-close watch (seconds). A client that closes a watched socket is disconnected at once, so its presence seat leaves without waiting for a heartbeat. nil turns the watcher off." },
       { name: "streams_max_connections", type: "Integer", default: "2000", desc: "Max SSE connections per web-server process." },
       { name: "streams_idle_timeout", type: "Numeric", default: "3600", desc: "Close idle SSE connections after N seconds." },
       { name: "streams_pool_size", type: "Integer", default: "5", desc: "Dedicated DB pool for durable-stream publish + replay, isolated from the job pool so a saturated worker pool can't delay broadcasts. Ignored on the shared-ActiveRecord connection path." },

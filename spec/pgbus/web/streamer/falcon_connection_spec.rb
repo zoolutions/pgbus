@@ -103,6 +103,19 @@ RSpec.describe Pgbus::Web::Streamer::FalconConnection do
     end
   end
 
+  describe "#write_connected (issue #521)" do
+    it "writes the pgbus:connected frame carrying the connection id" do
+      expect(conn.write_connected).to eq(:ok)
+      expect(body.read).to eq(Pgbus::Streams::Envelope.connected(id: "fc1"))
+    end
+
+    it "marks dead when body is closed" do
+      body.close
+      expect(conn.write_connected).to eq(:closed)
+      expect(conn).to be_dead
+    end
+  end
+
   describe "#write_sentinel" do
     it "writes raw bytes to the body" do
       conn.write_sentinel("sentinel data")

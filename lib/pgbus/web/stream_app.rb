@@ -23,7 +23,9 @@ module Pgbus
     #   6. Check rack.hijack? (missing → 501)
     #   7. Hijack, write the HTTP response line + SSE headers + opening
     #      comment directly to the socket
-    #   8. Build a Connection, hand to Streamer.current.register(...)
+    #   8. Build a Connection, hand to Streamer.current.register(...). The
+    #      Dispatcher writes the pgbus:connected frame once the connection
+    #      is registered and its presence seat joined (issue #521)
     #   9. Return [-1, {}, []] (Puma's async protocol)
     #
     # On errors, returns a normal [status, headers, body] response so
@@ -139,7 +141,7 @@ module Pgbus
         io = hijack_result || env["rack.hijack_io"]
 
         connection_id = SecureRandom.hex(8)
-        write_headers(io, stream_name: stream_name, since_id: since_id, connection_id: connection_id)
+        write_headers(io, stream_name: stream_name, since_id: since_id)
 
         connection = Pgbus::Web::Streamer::Connection.new(
           id: connection_id,
@@ -167,7 +169,6 @@ module Pgbus
         body.write(Pgbus::Streams::Envelope.comment(
                      "pgbus stream open since_id=#{since_id} stream=#{stream_name}"
                    ))
-        body.write(Pgbus::Streams::Envelope.connected(id: connection_id))
 
         connection = Pgbus::Web::Streamer::FalconConnection.new(
           id: connection_id,
@@ -191,11 +192,10 @@ module Pgbus
         }
       end
 
-      def write_headers(io, stream_name:, since_id:, connection_id:)
+      def write_headers(io, stream_name:, since_id:)
         io.write(Pgbus::Streams::Envelope.http_response_headers)
         io.write(Pgbus::Streams::Envelope.retry_directive(2_000))
         io.write(Pgbus::Streams::Envelope.comment("pgbus stream open since_id=#{since_id} stream=#{stream_name}"))
-        io.write(Pgbus::Streams::Envelope.connected(id: connection_id))
       end
 
       # An explicit authorize: wins; otherwise config.streams_authorize, read
