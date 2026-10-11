@@ -26,13 +26,18 @@ module Pgbus
       # the Connection's own mutex, so concurrent dispatcher + heartbeat
       # writes are safe.
       class Heartbeat
-        def initialize(registry:, dispatch_queue:, interval:, idle_timeout:, logger: Pgbus.logger, clock: nil)
+        # presence_expiry: true (streams_presence_patterns is set) posts the
+        # presence touch every tick, even with no presence connection here,
+        # so the dispatcher can expire seats left by other processes.
+        def initialize(registry:, dispatch_queue:, interval:, idle_timeout:, logger: Pgbus.logger, clock: nil,
+                       presence_expiry: false)
           @registry = registry
           @queue = dispatch_queue
           @interval = interval
           @idle_timeout = idle_timeout
           @logger = logger
           @clock = clock || -> { ::Process.clock_gettime(::Process::CLOCK_MONOTONIC) }
+          @presence_expiry = presence_expiry
           @running = false
           @thread = nil
           @wake = ConditionVariable.new
@@ -122,9 +127,10 @@ module Pgbus
         # Posts one batched touch per tick so the dispatcher (which owns AR
         # connection release) refreshes last_seen_at for live presence
         # members, keeping them out of the sweeper. No message when no
-        # connection has presence — avoids waking the dispatcher for nothing.
+        # connection has presence and seat expiry is off — avoids waking the
+        # dispatcher for nothing.
         def enqueue_presence_touch(connections)
-          return if connections.empty?
+          return if connections.empty? && !@presence_expiry
 
           @queue << StreamEventDispatcher::PresenceTouchMessage.new(connections: connections)
         end

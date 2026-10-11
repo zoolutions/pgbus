@@ -39,6 +39,25 @@ def bootstrap_integration_tables(conn)
     SQL
   end
 
+  # Seats (issue #515), mirroring the add_presence_seats migration. Applied
+  # separately from the CREATE so a database created before seats upgrades.
+  unless conn.column_exists?("pgbus_presence_members", "connection_id")
+    conn.execute(<<~SQL)
+      ALTER TABLE pgbus_presence_members ADD COLUMN connection_id VARCHAR;
+      ALTER TABLE pgbus_presence_members ADD COLUMN seat VARCHAR;
+      ALTER TABLE pgbus_presence_members ADD COLUMN state JSONB NOT NULL DEFAULT '{}';
+      DROP INDEX IF EXISTS idx_pgbus_presence_members_pk;
+      CREATE UNIQUE INDEX idx_pgbus_presence_members_member_key
+        ON pgbus_presence_members (stream_name, member_id) WHERE connection_id IS NULL;
+      CREATE UNIQUE INDEX idx_pgbus_presence_members_connection_key
+        ON pgbus_presence_members (stream_name, connection_id) WHERE connection_id IS NOT NULL;
+      CREATE INDEX idx_pgbus_presence_members_member
+        ON pgbus_presence_members (stream_name, member_id);
+      CREATE INDEX idx_pgbus_presence_members_seat_expiry
+        ON pgbus_presence_members (last_seen_at) WHERE connection_id IS NOT NULL;
+    SQL
+  end
+
   unless conn.table_exists?("pgbus_failed_events")
     conn.execute(<<~SQL)
       CREATE TABLE pgbus_failed_events (

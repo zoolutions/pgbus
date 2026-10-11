@@ -174,6 +174,7 @@ class Views::Docs::Pages::CliGenerators < DocsUI::Page
           [ [ :code, "pgbus:add_recurring" ], [ :md, "Recurring-task tables + a starter `recurring.yml`." ] ],
           [ [ :code, "pgbus:add_outbox" ], "The transactional-outbox table." ],
           [ [ :code, "pgbus:add_presence" ], "The stream-presence table." ],
+          [ [ :code, "pgbus:add_presence_seats" ], "Per-connection presence seats (connection_id, seat, state) on an existing presence table. Included in fresh pgbus:add_presence." ],
           [ [ :code, "pgbus:add_queue_states" ], "The queue pause/resume + circuit-breaker state table." ],
           [ [ :code, "pgbus:add_uniqueness_keys" ], "The job-uniqueness lock table." ],
           [ [ :code, "pgbus:add_batch_executions" ], "Batch execution-row tracking (self-healing completion). Included in fresh pgbus:install." ],

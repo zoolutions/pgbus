@@ -14,10 +14,15 @@ module Pgbus
       # the client-side leg of the replay-race fix (§6.5 of the design doc).
       class Connection
         attr_reader :id, :stream_name, :io, :mutex, :context
+        # The client's per-tab presence seat (?seat=), or nil (issue #515).
+        attr_reader :seat
         # The presence member id this connection auto-joined as, or nil for
         # non-presence streams / anonymous connections. Set by the
         # Dispatcher on connect; read on disconnect and heartbeat touch.
         attr_accessor :presence_member
+        # True when presence_member joined as a seat row, false when as a
+        # member-keyed row (table not yet migrated). Leave follows the join.
+        attr_accessor :presence_seat
 
         # last_msg_id_sent is the ONE field whose writer can cross threads: with
         # streams_writer_threads > 0 (issue #321) the OutboundPump worker thread
@@ -31,7 +36,7 @@ module Pgbus
           @last_msg_id_sent.get
         end
 
-        def initialize(id:, stream_name:, io:, since_id:, writer:, write_deadline_ms:, context: nil)
+        def initialize(id:, stream_name:, io:, since_id:, writer:, write_deadline_ms:, context: nil, seat: nil)
           @id = id
           @stream_name = stream_name
           @io = io
@@ -50,6 +55,7 @@ module Pgbus
           # registry when evaluating visible_to predicates. Defaults to
           # nil for tests that don't need audience filtering.
           @context = context
+          @seat = seat
         end
 
         # deadline_ms defaults to the connection's own write deadline so every

@@ -804,7 +804,9 @@ RSpec.describe Pgbus::Web::Streamer::StreamEventDispatcher do
         Pgbus::Configuration,
         streams_stats_enabled: false,
         streams_fanout_write_deadline_ms: 250,
-        streams_write_deadline_ms: 5_000
+        streams_write_deadline_ms: 5_000,
+        streams_presence_patterns: ["room"],
+        presence_min_ttl: 60
       ).tap do |c|
         allow(c).to receive(:stream_presence?) { |name| name == "room" }
         allow(c).to receive(:presence_member_for) do |ctx|
@@ -813,7 +815,10 @@ RSpec.describe Pgbus::Web::Streamer::StreamEventDispatcher do
       end
     end
 
-    before { allow(client).to receive(:read_after).and_return([]) }
+    before do
+      allow(client).to receive(:read_after).and_return([])
+      allow(Pgbus::Streams::Presence).to receive(:expire_seats!).and_return([])
+    end
 
     it "auto-joins on connect when the stream has presence and a member is derivable" do
       conn = build_conn(id: "c1", stream_name: "room", context: { member_id: "7", metadata: { name: "Ann" } })
@@ -862,6 +867,12 @@ RSpec.describe Pgbus::Web::Streamer::StreamEventDispatcher do
       dispatcher.send(:handle, described_class::PresenceTouchMessage.new(connections: [conn]))
 
       expect(presence.touched).to eq(["7"])
+    end
+
+    it "expires silent seats on a PresenceTouchMessage, even with no live presence connections" do
+      dispatcher.send(:handle, described_class::PresenceTouchMessage.new(connections: []))
+
+      expect(Pgbus::Streams::Presence).to have_received(:expire_seats!).with(ttl_for: anything, min_ttl: 60)
     end
 
     it "ignores a touch for a connection without a presence member" do

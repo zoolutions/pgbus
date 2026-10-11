@@ -73,6 +73,7 @@ module Pgbus
         add_stream_stats: "pgbus:add_stream_stats",
         add_stream_queues: "pgbus:add_stream_queues",
         add_presence: "pgbus:add_presence",
+        add_presence_seats: "pgbus:add_presence_seats",
         add_queue_states: "pgbus:add_queue_states",
         add_outbox: "pgbus:add_outbox",
         add_recurring: "pgbus:add_recurring",
@@ -94,6 +95,7 @@ module Pgbus
         add_stream_stats: "stream stats table (opt-in real-time Insights)",
         add_stream_queues: "stream queue registry (per-stream retention, orphan sweep, wildcard-worker safety)",
         add_presence: "presence members table (Turbo Streams presence)",
+        add_presence_seats: "presence seats (one row per SSE connection, per-seat state)",
         add_queue_states: "queue states table (pause/resume)",
         add_outbox: "outbox entries table (transactional outbox)",
         add_recurring: "recurring tasks + executions tables",
@@ -182,8 +184,14 @@ module Pgbus
         table_exists?("pgbus_stream_queues") ? [] : [:add_stream_queues]
       end
 
+      # The add_presence template already carries the seat columns, so a
+      # missing table needs only that; an existing table without
+      # connection_id predates seats (issue #515).
       def presence_migrations
-        table_exists?("pgbus_presence_members") ? [] : [:add_presence]
+        return [:add_presence] unless table_exists?("pgbus_presence_members")
+        return [] if column_names("pgbus_presence_members").include?("connection_id")
+
+        [:add_presence_seats]
       end
 
       def queue_states_migrations
