@@ -200,9 +200,14 @@ module Pgbus
 
       # An explicit authorize: wins; otherwise config.streams_authorize, read
       # per request so the engine's mount (built when routes load) sees a hook
-      # set in an initializer that runs later (issue #522).
+      # set in an initializer that runs later (issue #522). Only nil means
+      # "unset": any other non-callable (false included) must reach #call and
+      # fail closed with a 500, never fall through to ALLOW_ALL.
       def authorize_hook
-        @authorize || config.streams_authorize || ALLOW_ALL
+        return @authorize unless @authorize.nil?
+
+        hook = config.streams_authorize
+        hook.nil? ? ALLOW_ALL : hook
       end
 
       def streamer
