@@ -1,0 +1,31 @@
+lib/pgbus/engine.rb
+  s_4d54ea71052150::t_7b8458c4116e03 144-148
+app/frontend/pgbus/modules/charts.js
+  s_4d54ea71052150::t_7b8458c4116e03 78-79,82-87
+README.md
+  s_4d54ea71052150::t_7b8458c4116e03 1408
+AGENTS.md
+  s_4d54ea71052150::t_7b8458c4116e03 201-202
+scripts/build_frontend.js
+  s_4d54ea71052150::t_7b8458c4116e03 17-24
+app/frontend/pgbus/modules/charts.min.js
+  ai_agent 1
+app/frontend/pgbus/modules/charts.min.js.map
+  ai_agent 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "399e72867bb777e705ea16a4d770443517cc120d",
+  "prompts": {},
+  "sessions": {
+    "s_4d54ea71052150": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e06ff31a-cbf6-4970-a25a-20a9c9288bd4",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}

@@ -1,0 +1,19 @@
+spec/integration/streams/connected_after_join_spec.rb
+  s_3e21f559b0ae6d::t_f538cdb8a51e46 1-95,97-101,103-107
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "e4a23d2c1447a27a9a378b4db987534ea8df90ff",
+  "prompts": {},
+  "sessions": {
+    "s_3e21f559b0ae6d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f363c29e-c9cb-4446-bf3f-d04d38769294",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
