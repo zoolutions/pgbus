@@ -13,7 +13,12 @@ module Pgbus
       # is fiber-safe under Falcon's scheduler.
       class FalconConnection
         attr_reader :id, :stream_name, :io, :mutex, :context
+        # The client's per-tab presence seat (?seat=), or nil (issue #515).
+        attr_reader :seat
         attr_accessor :presence_member
+        # True when presence_member joined as a seat row, false when as a
+        # member-keyed row (table not yet migrated). Leave follows the join.
+        attr_accessor :presence_seat
 
         # last_msg_id_sent mirrors Connection's cross-thread cursor (issue #321):
         # a Concurrent::AtomicReference so the OutboundPump worker's advance and
@@ -23,7 +28,7 @@ module Pgbus
           @last_msg_id_sent.get
         end
 
-        def initialize(id:, stream_name:, body:, since_id:, write_deadline_ms:, context: nil)
+        def initialize(id:, stream_name:, body:, since_id:, write_deadline_ms:, context: nil, seat: nil)
           @id = id
           @stream_name = stream_name
           @body = body
@@ -37,6 +42,7 @@ module Pgbus
           @created_at = monotonic
           @last_write_at = @created_at
           @context = context
+          @seat = seat
         end
 
         # deadline_ms is accepted for duck-type parity with Connection#enqueue

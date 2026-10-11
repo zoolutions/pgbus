@@ -43,13 +43,27 @@ RSpec.describe Pgbus::Generators::AddPresenceGenerator do
       end
     end
 
-    it "adds the unique composite primary-key index and the sweep index" do
+    it "declares the seat columns (issue #515)" do
       generate_migration(described_class, basename: basename) do |_path, content|
-        expect(content).to include("%i[stream_name member_id]")
-        expect(content).to include("unique: true")
-        expect(content).to include('name: "idx_pgbus_presence_members_pk"')
+        expect(content).to include("t.string :connection_id")
+        expect(content).to include("t.string :seat")
+        expect(content).to include("t.jsonb :state, null: false, default: {}")
+      end
+    end
+
+    it "keys member rows and connection rows with partial unique indexes, plus the sweep indexes" do
+      generate_migration(described_class, basename: basename) do |_path, content|
+        expect(content).to match(
+          /unique: true,\s+where: "connection_id IS NULL",\s+name: "idx_pgbus_presence_members_member_key"/
+        )
+        expect(content).to match(
+          /unique: true,\s+where: "connection_id IS NOT NULL",\s+name: "idx_pgbus_presence_members_connection_key"/
+        )
+        expect(content).to include('name: "idx_pgbus_presence_members_member"')
         expect(content).to include("%i[stream_name last_seen_at]")
         expect(content).to include('name: "idx_pgbus_presence_members_sweep"')
+        expect(content).to include('name: "idx_pgbus_presence_members_seat_expiry"')
+        expect(content).not_to include("idx_pgbus_presence_members_pk")
       end
     end
   end

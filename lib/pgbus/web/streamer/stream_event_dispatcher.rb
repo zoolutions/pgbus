@@ -105,6 +105,7 @@ module Pgbus
           # process-wide setting. Falls back to the global config
           # for production call sites that don't specify one.
           @config = config || Pgbus.configuration
+          @presence = PresenceTracker.new(config: @config, presence_provider: @presence_provider, logger: @logger)
           # Two write deadlines (issue #315 item 3). Fanout writes run serially
           # on this single thread, so a slow client stalls the connections
           # queued behind it — the short fanout deadline bounds that stall.
@@ -436,19 +437,11 @@ module Pgbus
           )
         end
 
-        # Touches (refreshes last_seen_at for) the presence members on the
-        # given connections. Posted by the Heartbeat each tick so idle but
-        # still-connected members don't get swept. Connections without a
-        # presence member (non-presence streams, anonymous) are skipped.
+        # Touches the presence rows of the given connections and expires
+        # silent seats. Posted by the Heartbeat each tick so idle but
+        # still-connected members don't get swept (see PresenceTracker).
         def handle_presence_touch(msg)
-          msg.connections.each do |connection|
-            member_id = presence_member_of(connection)
-            next unless member_id
-
-            @presence_provider.call(connection.stream_name).touch(member_id: member_id)
-          rescue StandardError => e
-            @logger.error { "[Pgbus::Streamer::StreamEventDispatcher] presence touch failed: #{e.class}: #{e.message}" }
-          end
+          @presence.touch(msg.connections)
         end
 
         # If this stream has no remaining subscribers (registered or
@@ -640,35 +633,13 @@ module Pgbus
           connection.respond_to?(:id) && connection.id.to_s == exclude.to_s
         end
 
-        # Connection-driven presence (issue #169). Auto-joins a member when
-        # the stream is configured for presence and the connection's
-        # authorize-context yields a member id. Stores the member id on the
-        # connection so handle_disconnect/handle_presence_touch can act on
-        # it. Failures are logged and swallowed: a presence DB hiccup must
-        # not knock a live SSE connection out of the registry.
+        # Connection-driven presence (issues #169, #515): see PresenceTracker.
         def presence_join(connection, stream)
-          return unless @config&.stream_presence?(stream)
-
-          member = @config.presence_member_for(connection.context)
-          return unless member
-
-          @presence_provider.call(stream).join(member_id: member[:id], metadata: member[:metadata] || {})
-          connection.presence_member = member[:id] if connection.respond_to?(:presence_member=)
-        rescue StandardError => e
-          @logger.error { "[Pgbus::Streamer::StreamEventDispatcher] presence join failed: #{e.class}: #{e.message}" }
+          @presence.join(connection, stream)
         end
 
         def presence_leave(connection, stream)
-          member_id = presence_member_of(connection)
-          return unless member_id
-
-          @presence_provider.call(stream).leave(member_id: member_id)
-        rescue StandardError => e
-          @logger.error { "[Pgbus::Streamer::StreamEventDispatcher] presence leave failed: #{e.class}: #{e.message}" }
-        end
-
-        def presence_member_of(connection)
-          connection.respond_to?(:presence_member) ? connection.presence_member : nil
+          @presence.leave(connection, stream)
         end
 
         def monotonic_ms

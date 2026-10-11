@@ -31,6 +31,9 @@ module Pgbus
     # full request lifecycle.
     class StreamApp
       PATH_PREFIX = "/pgbus/streams"
+      # The client's per-tab presence seat (?seat=, issue #515): an opaque id
+      # minted by <pgbus-stream-source presence>. Anything else is dropped.
+      SEAT_FORMAT = /\A[A-Za-z0-9_-]{1,64}\z/
       # EventSource reconnect delay handed to the streams_test_mode stub (24h).
       TEST_MODE_RETRY_MS = 86_400_000
       private_constant :PATH_PREFIX
@@ -64,14 +67,16 @@ module Pgbus
         cursor = parse_cursor(env, request)
         return bad_request("invalid cursor: #{cursor}") if cursor.is_a?(String)
 
+        seat = parse_seat(request)
+
         return test_mode_stub if config.streams_test_mode
 
         return over_capacity if streamer.registry.size >= config.streams_max_connections
 
         if config.streams_falcon_streaming_body
-          streaming_body_response(stream_name: stream_name, since_id: cursor, context: context)
+          streaming_body_response(stream_name: stream_name, since_id: cursor, context: context, seat: seat)
         elsif env["rack.hijack?"]
-          hijack_and_register(env, stream_name: stream_name, since_id: cursor, context: context)
+          hijack_and_register(env, stream_name: stream_name, since_id: cursor, context: context, seat: seat)
         else
           unsupported_server
         end
@@ -114,7 +119,12 @@ module Pgbus
         e.message
       end
 
-      def hijack_and_register(env, stream_name:, since_id:, context: nil)
+      def parse_seat(request)
+        seat = request.params["seat"]
+        seat if seat.is_a?(String) && seat.ascii_only? && SEAT_FORMAT.match?(seat)
+      end
+
+      def hijack_and_register(env, stream_name:, since_id:, context: nil, seat: nil)
         # Rack hijack is a one-time transition per the Rack spec. Call
         # once, use the return value, and fall back to the side-effect
         # `rack.hijack_io` variable only if the return was nil (some
@@ -133,14 +143,15 @@ module Pgbus
           since_id: since_id,
           writer: Pgbus::Web::Streamer::IoWriter,
           write_deadline_ms: config.streams_write_deadline_ms,
-          context: context
+          context: context,
+          seat: seat
         )
         streamer.register(connection)
 
         [-1, {}, []]
       end
 
-      def streaming_body_response(stream_name:, since_id:, context: nil)
+      def streaming_body_response(stream_name:, since_id:, context: nil, seat: nil)
         require "protocol/http/body/writable" unless defined?(::Protocol::HTTP::Body::Writable)
         require_relative "streamer/falcon_connection" unless defined?(Pgbus::Web::Streamer::FalconConnection)
 
@@ -159,7 +170,8 @@ module Pgbus
           body: body,
           since_id: since_id,
           write_deadline_ms: config.streams_write_deadline_ms,
-          context: context
+          context: context,
+          seat: seat
         )
         streamer.register(connection)
 

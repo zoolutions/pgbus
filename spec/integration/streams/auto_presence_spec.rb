@@ -23,6 +23,7 @@ RSpec.describe "Streams: connection-driven presence", :integration do
     @saved_signed_name_secret = Pgbus.configuration.streams_signed_name_secret
     @saved_listen_health_check_ms = Pgbus.configuration.streams_listen_health_check_ms
     @saved_write_deadline_ms = Pgbus.configuration.streams_write_deadline_ms
+    @saved_presence_ttl = Pgbus.configuration.streams_presence_ttl
     Pgbus.configuration.listen_notify = true
     Pgbus.configuration.streams_signed_name_secret = "a" * 64
     Pgbus.configuration.streams_listen_health_check_ms = 100
@@ -31,6 +32,8 @@ RSpec.describe "Streams: connection-driven presence", :integration do
     Pgbus.configuration.streams_write_deadline_ms = 5_000
     # Every stream in this file is a presence stream.
     Pgbus.configuration.streams_presence_patterns = [/./]
+    # Seats expire after 1s of silence; live ones are touched every 0.3s.
+    Pgbus.configuration.streams_presence_ttl = 1
     Pgbus.reset_client!
   end
 
@@ -41,6 +44,7 @@ RSpec.describe "Streams: connection-driven presence", :integration do
     Pgbus.configuration.streams_signed_name_secret = @saved_signed_name_secret
     Pgbus.configuration.streams_listen_health_check_ms = @saved_listen_health_check_ms
     Pgbus.configuration.streams_write_deadline_ms = @saved_write_deadline_ms
+    Pgbus.configuration.streams_presence_ttl = @saved_presence_ttl
     Pgbus.reset_client!
   end
 
@@ -81,10 +85,10 @@ RSpec.describe "Streams: connection-driven presence", :integration do
     Pgbus::Streams::SignedName.sign(name)
   end
 
-  def connect_sse_client
+  def connect_sse_client(seat: nil)
     @harness_started = harness
     SseTestSupport::SseTestClient.connect(
-      url: "#{@harness_started.url("/#{signed(stream_name)}")}?since=0",
+      url: "#{@harness_started.url("/#{signed(stream_name)}")}?since=0#{"&seat=#{seat}" if seat}",
       timeout: 5
     )
   end
@@ -131,4 +135,48 @@ RSpec.describe "Streams: connection-driven presence", :integration do
     client.close
   end
   # rubocop:enable Style/CollectionQuerying
+
+  context "with seats (issue #515)" do
+    let(:changes) { Queue.new }
+
+    before do
+      Pgbus::Streams::Presence.reset_schema_cache!
+      Pgbus.configuration.streams_presence_on_change = ->(stream, change) { changes << [stream, change] }
+    end
+
+    after { Pgbus.configuration.streams_presence_on_change = nil }
+
+    it "keeps one row per tab: closing one tab keeps the member present" do
+      presence = Pgbus.stream(stream_name).presence
+      tab1 = connect_sse_client(seat: "tab-1")
+      tab2 = connect_sse_client(seat: "tab-2")
+
+      expect(wait_until { presence.count == 2 }).to be(true)
+      expect(presence.members.map { |member| member["seat"] }).to contain_exactly("tab-1", "tab-2")
+      expect(presence.members.map { |member| member["id"] }.uniq).to eq(["user-42"])
+
+      tab1.close
+
+      expect(wait_until(timeout: 8) { presence.count == 1 }).to be(true) # rubocop:disable Style/CollectionQuerying
+      expect(presence.members.first["seat"]).to eq("tab-2")
+
+      tab2.close
+    end
+
+    it "expires a seat left behind by a dead process and reports it as a leave" do
+      presence = Pgbus.stream(stream_name).presence
+      presence.join(member_id: "ghost", connection_id: "dead-conn", seat: "old-tab")
+      client = connect_sse_client(seat: "tab-1")
+
+      expect(wait_until(timeout: 5) { presence.members.none? { |member| member["connection_id"] == "dead-conn" } }).to be(true)
+      expect(presence.members.map { |member| member["seat"] }).to eq(["tab-1"])
+
+      reported = []
+      reported << changes.pop until changes.empty?
+      expect(reported).to include([stream_name, { type: :leave, connection_id: "dead-conn", seat: "old-tab", member_id: "ghost" }])
+      expect(reported).to include([stream_name, include(type: :join, seat: "tab-1", member_id: "user-42")])
+
+      client.close
+    end
+  end
 end

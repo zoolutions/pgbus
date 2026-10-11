@@ -13,14 +13,19 @@ require "pgbus"
 #      someone documents it (or marks it internal on purpose).
 RSpec.describe "Configuration reference drift", type: :model do
   # Public `foo=` writers on a fresh Configuration, minus private/internal ones.
+  # Settings split into Pgbus::Configuration::* mixins (e.g. PresenceSettings)
+  # count too: public_methods(false) does not see included modules.
+  let(:config_mixins) do
+    Pgbus::Configuration.included_modules.select { |m| m.name&.start_with?("Pgbus::Configuration::") }
+  end
+
   let(:real_accessors) do
-    Pgbus::Configuration.new
-                        .public_methods(false)
-                        .grep(/=$/)
-                        .map { |m| m.to_s.chomp("=") }
-                        .reject { |m| m.start_with?("_") }
-                        .sort
-                        .uniq
+    (Pgbus::Configuration.new.public_methods(false) + config_mixins.flat_map { |m| m.public_instance_methods(false) })
+      .grep(/=$/)
+      .map { |m| m.to_s.chomp("=") }
+      .reject { |m| m.start_with?("_") }
+      .sort
+      .uniq
   end
 
   let(:documented) { ConfigReference.documented_names.sort }

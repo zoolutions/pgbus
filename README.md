@@ -1808,6 +1808,39 @@ end
 
 Membership work runs on the dispatcher thread (which already releases AR connections each pass); the heartbeat posts a batched touch per tick. Presence failures are logged and swallowed so a presence-table hiccup can't knock a live SSE connection out of the registry.
 
+#### Seats: one row per tab (experimental)
+
+On a table migrated with seats (`rails generate pgbus:add_presence_seats`, which `pgbus:update` queues for you; fresh `pgbus:add_presence` tables already have them), connection-driven presence keeps **one row per SSE connection** instead of one per member. Two tabs of one user are two rows; closing one tab leaves the user present. Each row carries the connection id, the tab's `seat` and a `state` jsonb:
+
+```erb
+<%= pgbus_stream_from @room, presence: true %>  <%# sends ?seat=<per-tab id> %>
+```
+
+The `presence` attribute makes `<pgbus-stream-source>` mint one seat per document (shared by every presence element on the page, kept across Turbo Drive visits and reconnects, readable as `element.pgbusSeat`) and send it as `?seat=`.
+
+```ruby
+presence = Pgbus.stream(@room).presence
+presence.set_state(connection_id: conn_id, state: { selected: 3 })  # merges into that tab's row only
+presence.members
+# => [{ "id" => "7", "connection_id" => "a1b2…", "seat" => "5a94…", "state" => { "selected" => 3 },
+#       "metadata" => {...}, "joined_at" => ..., "last_seen_at" => ... }, …]
+```
+
+`members` and `count` return one entry per stored row: one per seat, plus any row written by `join(member_id:)` (no `connection_id:`), which keeps its own one-row-per-member key and behaves exactly as before. Group by `"id"` for one entry per member.
+
+The heartbeat touches live seats every tick and expires silent ones after their stream's ttl, including rows left behind by a crashed process. Every seat join, leave and expiry is reported to a hook (member-keyed `join`, `leave` and `sweep!` are not):
+
+```ruby
+Pgbus.configure do |c|
+  c.streams_presence_ttl = { /^doc:/ => 5.minutes, default: 60 }  # or one number for every stream
+  c.streams_presence_on_change = ->(stream_name, change) {
+    # change: { type: :join | :leave, connection_id:, seat:, member_id: }  (an expiry is a :leave)
+  }
+end
+```
+
+Keep each ttl above `streams_heartbeat_interval` (pgbus warns at boot otherwise): a shorter one expires live seats between touches. On a seat table `sweep!` only expires member-keyed rows; seats expire through the heartbeat. A process that probed the table before the migration re-checks within 30 seconds (and at once if a member-keyed `join` outside a transaction hits the new index). A raising hook is logged, not propagated. Library authors can probe for seat support with `Pgbus::Streams::Presence.instance_method(:join).parameters.include?([:key, :connection_id])` (the gem) and `Pgbus::Streams::Presence.seats_supported?` (the table).
+
 ### Stream stats (opt-in)
 
 Pgbus can record one row in `pgbus_stream_stats` per broadcast, connect, and disconnect so the `/pgbus/insights` dashboard shows stream throughput alongside job throughput. This is **disabled by default** because stream event volume can dwarf job volume in chat-style apps — enable it deliberately when you want the observability.

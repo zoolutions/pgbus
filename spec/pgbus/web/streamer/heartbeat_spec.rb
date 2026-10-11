@@ -136,6 +136,19 @@ RSpec.describe Pgbus::Web::Streamer::Heartbeat do
         expect(msgs).not_to(include(be_a(Pgbus::Web::Streamer::StreamEventDispatcher::PresenceTouchMessage)))
       end
 
+      it "posts an empty PresenceTouchMessage when presence streams are configured (seat expiry, issue #515)" do
+        sweeping = described_class.new(registry: registry, dispatch_queue: dispatch_queue, interval: 15,
+                                       idle_timeout: 60, logger: logger, clock: clock, presence_expiry: true)
+        registry.register(build_conn(id: "a", stream_name: "chat"))
+
+        sweeping.tick
+
+        msgs = []
+        msgs << dispatch_queue.pop(true) until dispatch_queue.empty?
+        touch = msgs.find { |m| m.is_a?(Pgbus::Web::Streamer::StreamEventDispatcher::PresenceTouchMessage) }
+        expect(touch.connections).to eq([])
+      end
+
       it "does not include dead presence connections in the touch" do
         dead_presence = build_conn(id: "a", stream_name: "room", presence_member: "7")
         dead_presence.mark_dead!

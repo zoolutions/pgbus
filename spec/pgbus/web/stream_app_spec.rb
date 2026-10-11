@@ -235,6 +235,32 @@ RSpec.describe Pgbus::Web::StreamApp do
       app.call(env)
       expect(streamer.registered.first.last_msg_id_sent).to eq(200)
     end
+
+    it "stores the client's ?seat= on the connection (issue #515)" do
+      env, = hijacked_env(query: "since=1&seat=9b2f-tab_1")
+      app.call(env)
+      expect(streamer.registered.first.seat).to eq("9b2f-tab_1")
+    end
+
+    it "leaves the seat nil when none is sent" do
+      env, = hijacked_env
+      app.call(env)
+      expect(streamer.registered.first.seat).to be_nil
+    end
+
+    it "drops a seat that is too long or carries unexpected characters" do
+      env, = hijacked_env(query: "seat=#{"a" * 65}")
+      app.call(env)
+      env2, = hijacked_env(query: "seat=%3Cscript%3E")
+      app.call(env2)
+      expect(streamer.registered.map(&:seat)).to eq([nil, nil])
+    end
+
+    it "drops a seat that decodes to invalid UTF-8 instead of raising" do
+      env, = hijacked_env(query: "seat=%FF%FE")
+      app.call(env)
+      expect(streamer.registered.map(&:seat)).to eq([nil])
+    end
   end
 
   describe "test mode (streams_test_mode)" do
@@ -366,6 +392,15 @@ RSpec.describe Pgbus::Web::StreamApp do
       _, _, body = app.call(env)
 
       expect(streamer.registered.first.last_msg_id_sent).to eq(999)
+    ensure
+      body&.close
+    end
+
+    it "stores the client's ?seat= on the FalconConnection (issue #515)" do
+      env = get_env("/#{signed("chat")}", "QUERY_STRING" => "seat=tab-1")
+      _, _, body = app.call(env)
+
+      expect(streamer.registered.first.seat).to eq("tab-1")
     ensure
       body&.close
     end
