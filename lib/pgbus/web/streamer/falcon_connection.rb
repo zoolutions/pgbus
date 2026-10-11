@@ -16,6 +16,9 @@ module Pgbus
         # The client's per-tab presence seat (?seat=), or nil (issue #515).
         attr_reader :seat
         attr_accessor :presence_member
+        # True when presence_member joined as a seat row, false when as a
+        # member-keyed row (table not yet migrated). Leave follows the join.
+        attr_accessor :presence_seat
 
         # last_msg_id_sent mirrors Connection's cross-thread cursor (issue #321):
         # a Concurrent::AtomicReference so the OutboundPump worker's advance and

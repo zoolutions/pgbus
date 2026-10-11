@@ -14,7 +14,12 @@ module Pgbus
       # The heartbeat posts a PresenceTouchMessage each tick; #touch refreshes
       # the live seats, re-joins any whose row was expired while the
       # connection stayed open, and expires silent seats across all streams
-      # (rows of crashed processes included) at most every min_ttl / 2.
+      # (rows of crashed processes included) at most every min_ttl / 2 after
+      # a successful sweep.
+      #
+      # Each connection remembers whether it joined as a seat or as a
+      # member-keyed row, so a table migrated while it is open still has
+      # its row removed on leave (and converted to a seat on the next touch).
       #
       # Every failure is logged and swallowed: a presence DB hiccup must not
       # knock a live SSE connection out of the registry.
@@ -34,8 +39,11 @@ module Pgbus
           member = @config.presence_member_for(connection.context)
           return unless member
 
-          join_member(@presence_provider.call(stream), connection, member)
+          presence = @presence_provider.call(stream)
+          seat = seats?(presence)
+          join_member(presence, connection, member, seat)
           connection.presence_member = member[:id] if connection.respond_to?(:presence_member=)
+          connection.presence_seat = seat if connection.respond_to?(:presence_seat=)
         rescue StandardError => e
           log_failure("join", e)
         end
@@ -48,7 +56,7 @@ module Pgbus
           # disconnect must not re-join the seat it removes.
           connection.presence_member = nil if connection.respond_to?(:presence_member=)
           presence = @presence_provider.call(stream)
-          if seats?(presence)
+          if joined_as_seat?(connection, presence)
             presence.leave(connection_id: connection.id)
           else
             presence.leave(member_id: member_id)
@@ -68,9 +76,9 @@ module Pgbus
 
         private
 
-        def join_member(presence, connection, member)
+        def join_member(presence, connection, member, seat)
           metadata = member[:metadata] || {}
-          if seats?(presence)
+          if seat
             presence.join(member_id: member[:id], metadata: metadata,
                           connection_id: connection.id, seat: seat_of(connection))
           else
@@ -86,7 +94,14 @@ module Pgbus
           end
 
           live = presence.touch(connection_id: conns.map(&:id))
-          conns.reject { |conn| live.include?(conn.id) }.each { |conn| join(conn, stream) }
+          conns.reject { |conn| live.include?(conn.id) }.each { |conn| rejoin_as_seat(presence, conn, stream) }
+        end
+
+        # A connection that joined as a member-keyed row before the table
+        # was migrated drops that row before it takes a seat.
+        def rejoin_as_seat(presence, connection, stream)
+          presence.leave(member_id: presence_member_of(connection)) unless joined_as_seat?(connection, presence)
+          join(connection, stream)
         end
 
         def sweep_if_due
@@ -95,8 +110,8 @@ module Pgbus
           at = now
           return if @last_sweep_at && at - @last_sweep_at < @config.presence_min_ttl / 2.0
 
-          @last_sweep_at = at
           @sweeper.call
+          @last_sweep_at = at
         rescue StandardError => e
           log_failure("expiry", e)
         end
@@ -109,6 +124,14 @@ module Pgbus
 
         def seats?(presence)
           presence.respond_to?(:seats?) && presence.seats?
+        end
+
+        # The mode recorded at join; a connection without the accessor
+        # follows the table's current schema.
+        def joined_as_seat?(connection, presence)
+          return connection.presence_seat if connection.respond_to?(:presence_seat)
+
+          seats?(presence)
         end
 
         def seat_of(connection)

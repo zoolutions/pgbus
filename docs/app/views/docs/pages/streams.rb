@@ -449,11 +449,12 @@ class Views::Docs::Pages::Streams < DocsUI::Page
           #       "state" => { "selected" => 3 }, "metadata" => {...}, … }, …]
         RUBY
         md <<~'MD'
-          `members` and `count` return one entry per seat; group by `"id"` for one
-          per member. Rows written by `join(member_id:)` keep their own
-          one-row-per-member key. The heartbeat touches live seats and expires
-          silent ones after their stream's ttl (rows of a crashed process
-          included), and every join, leave and expiry reaches a hook:
+          `members` and `count` return one entry per stored row: one per seat,
+          plus any row written by `join(member_id:)`, which keeps its own
+          one-row-per-member key. Group by `"id"` for one entry per member. The
+          heartbeat touches live seats and expires silent ones after their
+          stream's ttl (rows of a crashed process included), and every seat
+          join, leave and expiry reaches a hook (member-keyed calls do not):
         MD
         DocsUI::Code(<<~RUBY, filename: "config/initializers/pgbus.rb")
           Pgbus.configure do |c|

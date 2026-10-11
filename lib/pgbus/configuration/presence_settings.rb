@@ -26,18 +26,18 @@ module Pgbus
       # String or Regexp); the first match wins.
       def presence_ttl_for(stream_name)
         ttl = streams_presence_ttl
-        return ttl.to_i unless ttl.is_a?(Hash)
+        return presence_seconds(ttl) unless ttl.is_a?(Hash)
 
         match = ttl.find { |pattern, _| pattern_matches?(pattern, stream_name) }
-        (match ? match.last : ttl.fetch(:default, DEFAULT_PRESENCE_TTL)).to_i
+        presence_seconds(match ? match.last : ttl.fetch(:default, DEFAULT_PRESENCE_TTL))
       end
 
       # The smallest ttl configured: the expiry scan's candidate cutoff.
       def presence_min_ttl
         ttl = streams_presence_ttl
-        return ttl.to_i unless ttl.is_a?(Hash)
+        return presence_seconds(ttl) unless ttl.is_a?(Hash)
 
-        [*ttl.values, ttl.fetch(:default, DEFAULT_PRESENCE_TTL)].map(&:to_i).min
+        [*ttl.values, ttl.fetch(:default, DEFAULT_PRESENCE_TTL)].map { |v| presence_seconds(v) }.min
       end
 
       # Reports one join, leave or expiry to streams_presence_on_change.
@@ -64,7 +64,7 @@ module Pgbus
 
         ttl = streams_presence_ttl
         values = ttl.is_a?(Hash) ? ttl.values : [ttl]
-        unless values.all? { |v| v.is_a?(Numeric) && v.to_i.positive? }
+        unless values.all? { |v| v.is_a?(Numeric) && v.to_f.positive? }
           raise Pgbus::ConfigurationError,
                 "streams_presence_ttl must be a positive number of seconds or a Hash of pattern => seconds"
         end
@@ -82,6 +82,13 @@ module Pgbus
           "[Pgbus] streams_presence_ttl (#{presence_min_ttl}s) should exceed streams_heartbeat_interval " \
             "(#{heartbeat}s), or live presence seats are expired and re-joined every tick"
         end
+      end
+
+      # Seconds as an Integer when whole, a Float otherwise (a Duration
+      # becomes plain seconds), so fractional ttls are not truncated.
+      def presence_seconds(value)
+        seconds = value.to_f
+        seconds == seconds.floor ? seconds.to_i : seconds
       end
 
       def pattern_matches?(pattern, stream_name)

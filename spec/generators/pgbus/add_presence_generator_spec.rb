@@ -53,10 +53,12 @@ RSpec.describe Pgbus::Generators::AddPresenceGenerator do
 
     it "keys member rows and connection rows with partial unique indexes, plus the sweep indexes" do
       generate_migration(described_class, basename: basename) do |_path, content|
-        expect(content).to include('name: "idx_pgbus_presence_members_member_key"')
-        expect(content).to include('where: "connection_id IS NULL"')
-        expect(content).to include('name: "idx_pgbus_presence_members_connection_key"')
-        expect(content).to include('where: "connection_id IS NOT NULL"')
+        expect(content).to match(
+          /unique: true,\s+where: "connection_id IS NULL",\s+name: "idx_pgbus_presence_members_member_key"/
+        )
+        expect(content).to match(
+          /unique: true,\s+where: "connection_id IS NOT NULL",\s+name: "idx_pgbus_presence_members_connection_key"/
+        )
         expect(content).to include('name: "idx_pgbus_presence_members_member"')
         expect(content).to include("%i[stream_name last_seen_at]")
         expect(content).to include('name: "idx_pgbus_presence_members_sweep"')

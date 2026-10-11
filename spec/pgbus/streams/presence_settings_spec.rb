@@ -29,6 +29,15 @@ RSpec.describe Pgbus::Configuration do
       expect(config.presence_min_ttl).to eq(30)
     end
 
+    it "keeps fractional seconds instead of truncating them" do
+      config.streams_presence_ttl = { "lobby" => 0.5, default: 90.5 }
+
+      expect(config.presence_ttl_for("lobby")).to eq(0.5)
+      expect(config.presence_ttl_for("room:1")).to eq(90.5)
+      expect(config.presence_min_ttl).to eq(0.5)
+      expect { config.validate! }.not_to raise_error
+    end
+
     it "falls back to 60 seconds when the map has no :default" do
       config.streams_presence_ttl = { "lobby" => 30 }
       expect(config.presence_ttl_for("room:1")).to eq(60)

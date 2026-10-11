@@ -255,6 +255,12 @@ RSpec.describe Pgbus::Web::StreamApp do
       app.call(env2)
       expect(streamer.registered.map(&:seat)).to eq([nil, nil])
     end
+
+    it "drops a seat that decodes to invalid UTF-8 instead of raising" do
+      env, = hijacked_env(query: "seat=%FF%FE")
+      app.call(env)
+      expect(streamer.registered.map(&:seat)).to eq([nil])
+    end
   end
 
   describe "test mode (streams_test_mode)" do

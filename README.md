@@ -1824,9 +1824,9 @@ presence.members
 #       "metadata" => {...}, "joined_at" => ..., "last_seen_at" => ... }, …]
 ```
 
-`members` and `count` return one entry per seat; group by `"id"` for one per member. Rows written by `join(member_id:)` (no `connection_id:`) keep their own one-row-per-member key and behave exactly as before.
+`members` and `count` return one entry per stored row: one per seat, plus any row written by `join(member_id:)` (no `connection_id:`), which keeps its own one-row-per-member key and behaves exactly as before. Group by `"id"` for one entry per member.
 
-The heartbeat touches live seats every tick and expires silent ones after their stream's ttl, including rows left behind by a crashed process. Every join, leave and expiry is reported to a hook:
+The heartbeat touches live seats every tick and expires silent ones after their stream's ttl, including rows left behind by a crashed process. Every seat join, leave and expiry is reported to a hook (member-keyed `join`, `leave` and `sweep!` are not):
 
 ```ruby
 Pgbus.configure do |c|

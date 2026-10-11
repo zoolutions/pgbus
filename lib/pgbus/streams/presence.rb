@@ -93,6 +93,17 @@ module Pgbus
           end
         end
 
+        # seats_supported?, but a cached "no seats" is probed again first.
+        # For the destructive member-keyed statements: on a table migrated
+        # under this process their SQL without `connection_id IS NULL`
+        # succeeds silently and deletes seat rows.
+        def seats_supported_now?
+          return true if seats_supported?
+
+          reset_schema_cache!
+          seats_supported?
+        end
+
         def reset_schema_cache!
           @schema_mutex.synchronize do
             @probed_at = nil
@@ -227,6 +238,11 @@ module Pgbus
         self.class.seats_supported?
       end
 
+      # True when the table carries seats, re-probing a cached "no".
+      def seats_now?
+        self.class.seats_supported_now?
+      end
+
       # Adds (or refreshes) a member on this stream. Idempotent: calling
       # join twice with the same member_id updates last_seen_at and
       # metadata without creating a duplicate row. Yields the member
@@ -286,13 +302,15 @@ module Pgbus
       # it found — a missing id means the row was expired while the
       # connection was still alive, and the caller can re-join it.
       def touch(member_id: nil, connection_id: nil)
+        raise ArgumentError, "touch takes exactly one of member_id: or connection_id:" unless member_id.nil? ^ connection_id.nil?
+
         return touch_seats(Array(connection_id)) if connection_id
 
         member_id = member_id.to_s
         connection.exec_params(<<~SQL, [@stream.name, member_id])
           UPDATE pgbus_presence_members
           SET last_seen_at = NOW()
-          WHERE stream_name = $1 AND member_id = $2#{" AND connection_id IS NULL" if seats?}
+          WHERE stream_name = $1 AND member_id = $2#{" AND connection_id IS NULL" if seats_now?}
         SQL
       end
 
@@ -347,7 +365,7 @@ module Pgbus
       def sweep!(older_than:)
         rows = connection.exec_params(<<~SQL, [@stream.name, older_than])
           DELETE FROM pgbus_presence_members
-          WHERE stream_name = $1 AND last_seen_at < $2#{" AND connection_id IS NULL" if seats?}
+          WHERE stream_name = $1 AND last_seen_at < $2#{" AND connection_id IS NULL" if seats_now?}
           RETURNING #{RECORD_COLUMNS}
         SQL
         rows = rows.to_a
@@ -397,7 +415,7 @@ module Pgbus
       def delete_member(member_id)
         rows = connection.exec_params(<<~SQL, [@stream.name, member_id])
           DELETE FROM pgbus_presence_members
-          WHERE stream_name = $1 AND member_id = $2#{" AND connection_id IS NULL" if seats?}
+          WHERE stream_name = $1 AND member_id = $2#{" AND connection_id IS NULL" if seats_now?}
           RETURNING #{RECORD_COLUMNS}
         SQL
         row = rows.first

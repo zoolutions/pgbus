@@ -48,7 +48,7 @@ RSpec.describe Pgbus::Web::Streamer::PresenceTracker do
   end
 
   let(:conn_class) do
-    Struct.new(:id, :stream_name, :context, :seat, :presence_member, keyword_init: true)
+    Struct.new(:id, :stream_name, :context, :seat, :presence_member, :presence_seat, keyword_init: true)
   end
 
   def build_conn(id: "c1", stream: "room", member: "7", seat: "s1")
@@ -104,6 +104,16 @@ RSpec.describe Pgbus::Web::Streamer::PresenceTracker do
       expect(presence.calls.last).to eq([:leave, { member_id: "7" }])
     end
 
+    it "removes the member-keyed row of a connection that joined before the table was migrated" do
+      presence.seats = false
+      conn = build_conn
+      tracker.join(conn)
+      presence.seats = true
+      tracker.leave(conn)
+
+      expect(presence.calls.last).to eq([:leave, { member_id: "7" }])
+    end
+
     it "keeps a touch queued behind the disconnect from re-joining the seat" do
       conn = build_conn
       tracker.join(conn)
@@ -144,6 +154,23 @@ RSpec.describe Pgbus::Web::Streamer::PresenceTracker do
       expect(presence.calls.last).to eq([:join, { member_id: "8", metadata: { n: 1 }, connection_id: "c2", seat: "s1" }])
     end
 
+    it "moves a connection that joined member-keyed onto a seat once the table is migrated" do
+      presence.seats = false
+      conn = build_conn.tap { |c| tracker.join(c) }
+      presence.seats = true
+      presence.live = []
+      presence.calls.clear
+
+      tracker.touch([conn])
+
+      expect(presence.calls).to eq([
+                                     [:touch, { connection_id: ["c1"] }],
+                                     [:leave, { member_id: "7" }],
+                                     [:join, { member_id: "7", metadata: { n: 1 }, connection_id: "c1", seat: "s1" }]
+                                   ])
+      expect(conn.presence_seat).to be(true)
+    end
+
     it "touches member-keyed on a table without seats" do
       presence.seats = false
       a = build_conn.tap { |conn| tracker.join(conn) }
@@ -168,6 +195,17 @@ RSpec.describe Pgbus::Web::Streamer::PresenceTracker do
 
       allow(tracker).to receive(:now).and_return(now + 31)
       tracker.touch([])
+      expect(sweeper).to have_received(:call).twice
+    end
+
+    it "retries a failed sweep on the next touch" do
+      calls = 0
+      allow(sweeper).to receive(:call) { (calls += 1) == 1 ? raise("db down") : [] }
+
+      tracker.touch([])
+      tracker.touch([])
+      tracker.touch([])
+
       expect(sweeper).to have_received(:call).twice
     end
 

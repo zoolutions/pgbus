@@ -121,7 +121,7 @@ module Pgbus
 
       def parse_seat(request)
         seat = request.params["seat"]
-        seat if seat.is_a?(String) && SEAT_FORMAT.match?(seat)
+        seat if seat.is_a?(String) && seat.ascii_only? && SEAT_FORMAT.match?(seat)
       end
 
       def hijack_and_register(env, stream_name:, since_id:, context: nil, seat: nil)

@@ -14,9 +14,10 @@ RSpec.describe "Streams: presence seats", :integration do
     Pgbus.configuration.streams_presence_on_change = ->(stream, change) { changes << [stream, change] }
   end
 
+  # cleanup_tables (integration_helper) empties pgbus_presence_members
+  # before every example.
   after do
     Pgbus.configuration.streams_presence_on_change = nil
-    ActiveRecord::Base.connection.execute("DELETE FROM pgbus_presence_members")
   end
 
   it "detects the seat schema" do

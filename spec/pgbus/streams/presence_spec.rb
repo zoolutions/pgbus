@@ -147,6 +147,11 @@ RSpec.describe Pgbus::Streams::Presence do
         ["room:42", "42"]
       )
     end
+
+    it "takes exactly one of member_id: or connection_id:" do
+      expect { presence.touch }.to raise_error(ArgumentError, /exactly one/)
+      expect { presence.touch(member_id: "7", connection_id: "c1") }.to raise_error(ArgumentError, /exactly one/)
+    end
   end
 
   describe "#members" do
@@ -277,6 +282,16 @@ RSpec.describe Pgbus::Streams::Presence do
     it "returns 0 when nothing to sweep" do
       allow(raw_connection).to receive(:exec_params).and_return([])
       expect(presence.sweep!(older_than: Time.now)).to eq(0)
+    end
+
+    it "re-probes a cached no-seats answer so a table migrated under the process keeps its seat rows" do
+      allow(described_class).to receive(:seats_supported?).and_return(false, true)
+      allow(raw_connection).to receive(:exec_params).and_return([])
+
+      presence.sweep!(older_than: Time.now)
+
+      expect(raw_connection).to have_received(:exec_params)
+        .with(a_string_matching(/connection_id IS NULL/), anything)
     end
 
     it "only sweeps member-keyed rows on a seat table (seats expire through the heartbeat)" do

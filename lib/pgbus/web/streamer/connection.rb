@@ -20,6 +20,9 @@ module Pgbus
         # non-presence streams / anonymous connections. Set by the
         # Dispatcher on connect; read on disconnect and heartbeat touch.
         attr_accessor :presence_member
+        # True when presence_member joined as a seat row, false when as a
+        # member-keyed row (table not yet migrated). Leave follows the join.
+        attr_accessor :presence_seat
 
         # last_msg_id_sent is the ONE field whose writer can cross threads: with
         # streams_writer_threads > 0 (issue #321) the OutboundPump worker thread
