@@ -51,6 +51,19 @@ RSpec.describe Pgbus do
     end
   end
 
+  describe ".reset_client!" do
+    it "drops cached streams so none keeps using the discarded client" do
+      described_class.instance_variable_set(:@client, instance_double(Pgbus::Client))
+      cached = described_class.stream("chat")
+
+      described_class.reset_client!
+
+      expect(described_class.stream("chat")).not_to be(cached)
+    ensure
+      described_class.reset_client!
+    end
+  end
+
   describe ".stream_name_budget (issue #334)" do
     it "returns the max stream-name length: pgmq budget minus the queue prefix" do
       # A stream name becomes the physical queue `#{queue_prefix}_<name>`, so the
