@@ -241,12 +241,15 @@ RSpec.describe Pgbus::Engine do
       allow(Rails).to receive(:application).and_return(double("app", importmap: importmap))
     end
 
-    # The app has booted, so on_load(:after_initialize) runs the hook at once.
+    # The app has booted, so on_load(:after_initialize) runs the hook at once —
+    # once per earlier run_load_hooks(:after_initialize) call, and the AppSignal
+    # examples below make more of those, so the count depends on example order.
     it "pins pgbus/stream_source_element to the minified file" do
       initializer_block("pgbus.streams.importmap").call
 
       expect(importmap).to have_received(:pin)
-        .with("pgbus/stream_source_element", to: "pgbus/stream_source_element.min.js")
+        .with("pgbus/stream_source_element", to: "pgbus/stream_source_element.min.js").at_least(:once)
+      expect(importmap).not_to have_received(:pin).with("pgbus/stream_source_element", to: "pgbus/stream_source_element.js")
     end
   end
 
