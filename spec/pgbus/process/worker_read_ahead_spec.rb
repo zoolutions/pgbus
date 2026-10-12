@@ -230,6 +230,27 @@ RSpec.describe Pgbus::Process::Worker, "#claim_and_execute with read-ahead (issu
       runner&.kill
     end
 
+    it "returns the buffer when draining starts between the loop's state checks" do
+      runner = run_until_buffered
+      flipped = false
+      allow(worker.lifecycle).to receive(:can_process?).and_wrap_original do |original|
+        result = original.call
+        if result && !flipped
+          flipped = true
+          worker.lifecycle.transition_to(:draining)
+        end
+        result
+      end
+
+      expect(runner.join(2)).to eq(runner)
+      [1, 2, 3].each do |id|
+        expect(mock_client).to have_received(:set_visibility_timeout).with("default", id, vt: 0, prefixed: true)
+      end
+      expect(worker.stats).to include(in_flight: 0, buffered: 0)
+    ensure
+      runner&.kill
+    end
+
     it "hands the buffer back when the worker is paused" do
       runner = run_until_buffered
 

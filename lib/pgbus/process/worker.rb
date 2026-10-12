@@ -210,6 +210,11 @@ module Pgbus
           @wake_signal.wait(timeout: config.polling_interval) if @lifecycle.draining? || @lifecycle.paused?
         end
 
+        # The lifecycle can change on another thread between the
+        # return_claims check and the breaks above, so a loop that exits with
+        # the state it never returned claims for would strand them until their
+        # visibility timeout. Nothing buffered outlives the loop.
+        return_claims
         shutdown
       end
 
