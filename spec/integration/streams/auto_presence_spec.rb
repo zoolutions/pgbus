@@ -136,6 +136,28 @@ RSpec.describe "Streams: connection-driven presence", :integration do
   end
   # rubocop:enable Style/CollectionQuerying
 
+  context "with config.streams_authorize instead of an authorize: hook (issue #522)" do
+    let(:stream_app) do
+      Pgbus::Web::StreamApp.new(streamer: streamer, config: Pgbus.configuration, logger: Logger.new(IO::NULL))
+    end
+
+    before do
+      Pgbus.configuration.streams_authorize = ->(_env, _stream) { { member_id: "user-7", metadata: { name: "Eve" } } }
+    end
+
+    after { Pgbus.configuration.streams_authorize = nil }
+
+    it "joins the member the configured hook returns" do
+      presence = Pgbus.stream(stream_name).presence
+      client = connect_sse_client
+
+      expect(wait_until { presence.count == 1 }).to be(true) # rubocop:disable Style/CollectionQuerying
+      expect(presence.members.first).to include("id" => "user-7", "metadata" => { "name" => "Eve" })
+
+      client.close
+    end
+  end
+
   context "with seats (issue #515)" do
     let(:changes) { Queue.new }
 

@@ -1618,15 +1618,25 @@ Pgbus::Streams.filters.register(:workspace_member) do |user, stream_name|
 end
 ```
 
-The authorize hook on `Pgbus::Web::StreamApp` doubles as a context provider — return any non-boolean value (typically a `User` model) and pgbus will pass it to the filter predicate when evaluating broadcasts:
+The authorize hook doubles as a context provider — return any non-boolean value (typically a `User` model) and pgbus will pass it to the filter predicate when evaluating broadcasts. The engine's stream endpoint reads it from `config.streams_authorize`, so no custom mount is needed:
 
 ```ruby
-Pgbus::Web::StreamApp.new(authorize: ->(env, _stream_name) {
-  user = User.find_by(id: env["rack.session"][:user_id])
-  return false unless user
-  user  # ← context attached to the connection
-})
+Pgbus.configure do |c|
+  c.streams_authorize = ->(env, stream_name) {
+    user = User.find_by(id: env["rack.session"]&.dig("user_id"))
+    next unless user
+
+    # Check THIS user against THIS stream: here "room:42" names a room.
+    room_id = stream_name.delete_prefix("room:") if stream_name.start_with?("room:")
+    room = Room.find_by(id: room_id) if room_id
+    user if room&.member?(user)  # nil → 403; the user becomes the context
+  }
+end
 ```
+
+Authorize per stream here. The signed stream name proves pgbus minted it, not that this user may read it: a user removed from a room keeps a working signed name until the signing key rotates (`Turbo.signed_stream_verifier_key` when turbo-rails is loaded, `streams_signed_name_secret` otherwise), so a hook that only checks "logged in" lets them keep listening. Rotating the key only refuses new connections: an SSE connection already open stays open until it closes or its worker restarts.
+
+The hook gets the Rack env, not a controller (the stream endpoint is a bare Rack app), so read the session (`env["rack.session"]`) or a signed cookie from it. A falsy return answers 403, `true` authorizes with no context. An explicit `Pgbus::Web::StreamApp.new(authorize: …)` wins; every `StreamApp` built without one, the engine's mount included, uses `streams_authorize`. `validate!` rejects a non-callable value at boot; with `eager_validation = false` it is not checked there, and every stream request then fails closed with a 500.
 
 Then label broadcasts with the filter you want to apply:
 
@@ -1796,7 +1806,7 @@ Pgbus.configure do |c|
 end
 ```
 
-Identity comes from the connection's authorize-hook context (the value your `StreamApp` `authorize:` callable returns). The built-in extractor handles the common shapes without any configuration: a `Hash` with `:member_id` (or `:id`) and optional `:metadata`, or any object responding to `#id` (e.g. a `User` model). For anything else, provide a custom extractor — a `->(context) { { id:, metadata: } }` callable returning `nil` for a context with no derivable identity (anonymous connections are simply skipped, not an error):
+Identity comes from the connection's authorize-hook context (the value `config.streams_authorize`, or your own `StreamApp` `authorize:` callable, returns). Without a hook every connection is anonymous and nobody joins. The built-in extractor handles the common shapes without any configuration: a `Hash` with `:member_id` (or `:id`) and optional `:metadata`, or any object responding to `#id` (e.g. a `User` model). For anything else, provide a custom extractor — a `->(context) { { id:, metadata: } }` callable returning `nil` for a context with no derivable identity (anonymous connections are simply skipped, not an error):
 
 ```ruby
 Pgbus.configure do |c|

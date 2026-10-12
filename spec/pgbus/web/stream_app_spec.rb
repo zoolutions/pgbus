@@ -265,6 +265,96 @@ RSpec.describe Pgbus::Web::StreamApp do
     end
   end
 
+  # The engine mounts StreamApp.new with no authorize:, so the hook comes
+  # from config.streams_authorize (issue #522).
+  describe "config.streams_authorize (issue #522)" do
+    let(:sockets)   { UNIXSocket.pair }
+    let(:writer_io) { sockets[0] }
+
+    def hijacked_env
+      get_env(
+        "/pgbus/streams/#{signed("chat")}",
+        "rack.hijack?" => true,
+        "rack.hijack" => -> { writer_io },
+        "rack.hijack_io" => writer_io
+      )
+    end
+
+    after do
+      Pgbus.configuration.streams_authorize = nil
+      sockets.each { |io| io.close unless io.closed? }
+    end
+
+    it "passes the hook's return value through as the connection context" do
+      seen = []
+      Pgbus.configuration.streams_authorize = lambda { |env, stream_name|
+        seen << [env["PATH_INFO"], stream_name]
+        { member_id: "user-42" }
+      }
+
+      app.call(hijacked_env)
+
+      expect(streamer.registered.first.context).to eq(member_id: "user-42")
+      expect(seen).to eq([["/pgbus/streams/#{signed("chat")}", "chat"]])
+    end
+
+    it "answers 403 when the hook returns a falsy value" do
+      Pgbus.configuration.streams_authorize = ->(_env, _stream_name) {}
+
+      status, _, body = app.call(get_env("/pgbus/streams/#{signed("chat")}"))
+
+      expect(status).to eq(403)
+      expect(body.first).to include("forbidden")
+      expect(streamer.registered).to be_empty
+    end
+
+    it "lets an explicit authorize: win over the configured hook" do
+      Pgbus.configuration.streams_authorize = ->(_env, _stream_name) { false }
+      own = described_class.new(
+        streamer: streamer,
+        config: Pgbus.configuration,
+        logger: Logger.new(IO::NULL),
+        authorize: ->(_env, _stream_name) { { member_id: "mine" } }
+      )
+
+      own.call(hijacked_env)
+
+      expect(streamer.registered.first.context).to eq(member_id: "mine")
+    end
+
+    it "fails closed with a 500 when the hook is not callable (eager_validation off)" do
+      saved = Pgbus.configuration.eager_validation
+      Pgbus.configuration.eager_validation = false
+      Pgbus.configure { |c| c.streams_authorize = "nope" }
+
+      status, = app.call(get_env("/pgbus/streams/#{signed("chat")}"))
+
+      expect(status).to eq(500)
+      expect(streamer.registered).to be_empty
+    ensure
+      Pgbus.configuration.eager_validation = saved
+    end
+
+    it "fails closed with a 500 when the hook is false instead of authorizing everyone" do
+      saved = Pgbus.configuration.eager_validation
+      Pgbus.configuration.eager_validation = false
+      Pgbus.configure { |c| c.streams_authorize = false }
+
+      status, = app.call(get_env("/pgbus/streams/#{signed("chat")}"))
+
+      expect(status).to eq(500)
+      expect(streamer.registered).to be_empty
+    ensure
+      Pgbus.configuration.eager_validation = saved
+    end
+
+    it "authorizes without a context when neither is set" do
+      app.call(hijacked_env)
+
+      expect(streamer.registered.first.context).to be_nil
+    end
+  end
+
   describe "test mode (streams_test_mode)" do
     before { Pgbus.configuration.streams_test_mode = true }
     after { Pgbus.configuration.streams_test_mode = false }

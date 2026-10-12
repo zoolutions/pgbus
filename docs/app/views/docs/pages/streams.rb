@@ -407,9 +407,40 @@ class Views::Docs::Pages::Streams < DocsUI::Page
           end
         RUBY
         md <<~'MD'
-          Identity comes from the connection's authorize-hook context (the
-          value your `StreamApp` `authorize:` callable returns). The built-in
-          extractor handles the common shapes without any configuration:
+          Identity comes from the connection's authorize-hook context: the
+          value `config.streams_authorize` returns for the engine's stream
+          endpoint (or your own `StreamApp` `authorize:` callable, if you mount
+          one). Without a hook every connection is anonymous and nobody joins.
+        MD
+        DocsUI::Code(<<~RUBY, filename: "config/initializers/pgbus.rb")
+          Pgbus.configure do |c|
+            # Same contract as StreamApp.new(authorize:): falsy → 403, true →
+            # no context, anything else becomes the connection context.
+            c.streams_authorize = ->(env, stream_name) {
+              user = User.find_by(id: env["rack.session"]&.dig("user_id"))
+              next unless user
+              next user if stream_name == "lobby" # every signed-in user
+
+              # Check THIS user against THIS stream: "room:42" names a room.
+              room_id = stream_name.delete_prefix("room:") if stream_name.start_with?("room:")
+              room = Room.find_by(id: room_id) if room_id
+              user if room&.member?(user)
+            }
+          end
+        RUBY
+        md <<~'MD'
+          Authorize per stream in this hook. The signed stream name proves
+          pgbus minted it, not that this user may read it: a user removed from
+          a room keeps a working signed name until the signing key rotates
+          (`Turbo.signed_stream_verifier_key` when turbo-rails is loaded,
+          `streams_signed_name_secret` otherwise). Rotation only refuses new
+          connections: an open SSE connection stays until it closes or its
+          worker restarts. A non-callable value fails `validate!` at boot; with
+          `eager_validation = false` it is not checked there, and every stream
+          request fails closed with a 500.
+
+          The built-in extractor handles the common shapes without any
+          configuration:
         MD
         DocsUI::Table(
           [ "Context shape", "Extracted member" ],

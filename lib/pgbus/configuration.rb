@@ -5,6 +5,7 @@ require "logger"
 module Pgbus
   class Configuration
     include PresenceSettings
+    include StreamAuthorization
 
     # Connection settings
     attr_accessor :database_url, :connection_params, :pool_size, :pool_timeout
@@ -1105,6 +1106,7 @@ module Pgbus
       end
 
       validate_presence_settings!
+      validate_stream_authorization!
 
       return if streams_orphan_threshold.nil?
       return if streams_orphan_threshold.is_a?(Numeric) && streams_orphan_threshold.positive?
