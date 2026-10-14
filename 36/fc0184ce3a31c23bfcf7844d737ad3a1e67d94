@@ -1,0 +1,39 @@
+lib/pgbus/web/streamer/peer_close_watcher.rb
+  s_94414b56e1d609::t_01d4260a2454a6 1-183
+spec/pgbus/web/streamer/instance_spec.rb
+  s_94414b56e1d609::t_01d4260a2454a6 299-326
+README.md
+  s_94414b56e1d609::t_01d4260a2454a6 1446,1810
+spec/integration/streams/presence_prompt_leave_spec.rb
+  s_94414b56e1d609::t_01d4260a2454a6 1-131
+spec/pgbus/web/streamer/peer_close_watcher_spec.rb
+  s_94414b56e1d609::t_01d4260a2454a6 1-235
+docs/app/models/config_reference.rb
+  s_94414b56e1d609::t_01d4260a2454a6 128
+lib/pgbus/web/streamer/instance.rb
+  s_94414b56e1d609::t_01d4260a2454a6 6-10,14,25,81,96,125-127,158,251,286-292
+spec/pgbus/configuration_spec.rb
+  s_94414b56e1d609::t_01d4260a2454a6 2233-2236,2317-2322
+spec/pgbus/web/streamer/presence_tracker_spec.rb
+  s_94414b56e1d609::t_01d4260a2454a6 117-125
+lib/pgbus/configuration.rb
+  s_94414b56e1d609::t_01d4260a2454a6 220,464-467,1035-1037
+docs/app/views/docs/pages/streams.rb
+  s_94414b56e1d609::t_01d4260a2454a6 397-402
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "36fc0184ce3a31c23bfcf7844d737ad3a1e67d94",
+  "prompts": {},
+  "sessions": {
+    "s_94414b56e1d609": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "13345024-3458-4bcb-ab5c-a78d84f81871",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
