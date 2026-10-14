@@ -18,7 +18,7 @@ end
 group :test do
   gem "conformance-kit", "~> 0.1", require: false # concurrency conformance gates (zoolutions/phlex-reactive#363)
   gem "rspec", "~> 3.0"
-  gem "rspec-rails", "~> 7.0"
+  gem "rspec-rails", ">= 7.0", "< 9"
 
   # System tests
   gem "capybara", require: false
@@ -28,7 +28,7 @@ group :test do
   # fresh CI bundle grabs the newest client, which speaks a newer protocol than
   # the pinned driver and every browser launch dies with
   # "timeout: expected float, got undefined". Bump BOTH together.
-  gem "playwright-ruby-client", "~> 1.58.0", require: false
+  gem "playwright-ruby-client", "~> 1.64.0", require: false
   gem "puma"
   gem "sqlite3"
 
