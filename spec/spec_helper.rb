@@ -26,6 +26,7 @@ end
 
 require "active_record"
 require "pgbus"
+require "conformance_kit/rspec"
 require "globalid"
 
 # GlobalID requires an app name to parse/create GIDs
