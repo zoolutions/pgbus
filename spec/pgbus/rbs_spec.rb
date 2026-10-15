@@ -68,4 +68,14 @@ RSpec.describe "the RBS signatures in sig/" do # rubocop:disable RSpec/DescribeC
       expect(self.class.declared(environment, constant, kind)).to eq(methods)
     end
   end
+
+  # The typed surface is for the apps that install the gem.
+  it "ships with the gem" do
+    root = File.expand_path("../..", __dir__)
+    signatures = Dir.glob("sig/**/*.rbs", base: root)
+    packaged = Gem::Specification.load(File.join(root, "pgbus.gemspec")).files
+
+    expect(signatures).not_to be_empty
+    expect(packaged).to include(*signatures)
+  end
 end
