@@ -57,8 +57,9 @@ module Pgbus
   def self.stream_key: (*untyped parts, **untyped) -> String
   def self.stream_key!: (String key) -> String
   def self.stream_name_budget: () -> Integer
-  def self.publish: (String routing_key, untyped payload, ?headers: Hash[String, untyped]?, ?delay: Numeric) -> untyped
-  def self.publish_later: (String routing_key, untyped payload, delay: Numeric, ?headers: Hash[String, untyped]?) -> untyped
+  # delay: seconds, as a Numeric or an ActiveSupport::Duration (1.hour).
+  def self.publish: (String routing_key, untyped payload, ?headers: Hash[String, untyped]?, ?delay: Numeric | _ToI) -> untyped
+  def self.publish_later: (String routing_key, untyped payload, delay: Numeric | _ToI, ?headers: Hash[String, untyped]?) -> untyped
   def self.reset!: () -> void
   def self.reset_client!: () -> void
   def self.stopping: () -> bool
