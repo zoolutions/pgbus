@@ -1328,15 +1328,17 @@ module Pgbus
       validate_processes!(options[:processes]) unless options[:processes].nil?
 
       normalized_name = name.to_s
-      @workers ||= []
+      existing = @workers || []
 
-      if @workers.any? { |c| capsule_name(c) == normalized_name }
+      if existing.any? { |c| capsule_name(c) == normalized_name }
         raise Pgbus::ConfigurationError, "capsule #{name.inspect} is already defined"
       end
 
       validate_no_queue_overlap!(queues)
 
-      @workers << { name: normalized_name, queues: queues, threads: threads, **options }
+      # A new list rather than <<: after finalize! @workers is frozen, and a
+      # writer keeps working (a later Pgbus.configure finalizes again).
+      @workers = [*existing, { name: normalized_name, queues: queues, threads: threads, **options }]
     end
 
     # Look up a capsule by its name. Accepts symbol or string. Returns the

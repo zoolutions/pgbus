@@ -99,6 +99,14 @@ RSpec.describe Pgbus::Configuration do
       expect(config.logger).not_to be_frozen
     end
 
+    it "still adds a capsule after finalize" do
+      config.finalize!
+
+      config.capsule :late, queues: %w[late], threads: 1
+
+      expect(config.capsule_named(:late)).to include(queues: %w[late], threads: 1)
+    end
+
     it "keeps setters working" do
       config.finalize!
 
