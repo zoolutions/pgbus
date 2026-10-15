@@ -83,6 +83,6 @@ group :development do
   # the repo-root one inherits conformance-kit's config (plugin:
   # rubocop-thread_safety). Both must resolve here or `rake lint` cannot start;
   # their cops still never run on this app.
-  gem "conformance-kit", "~> 0.3", require: false
+  gem "conformance-kit", "~> 0.4", require: false
   gem "rubocop-thread_safety", ">= 0.8", require: false
 end
