@@ -12,13 +12,30 @@ module Pgbus
 
     # True when +value+ is plain data all the way down: the LEAVES, and Arrays,
     # Sets, Ranges and default-less Hashes of them. A Proc, a Logger or any
-    # other object anywhere inside makes it false.
-    def data?(value)
+    # other object anywhere inside makes it false, and so does a collection
+    # that contains itself (+path+ holds the collections being walked), so
+    # finalizing leaves it as it is instead of recursing without end.
+    def data?(value, path = {}.compare_by_identity)
       case value
-      when Array, Set then value.all? { |item| data?(item) }
-      when Hash then value.default_proc.nil? && data?(value.default) && value.all? { |k, v| data?(k) && data?(v) }
-      when Range then data?(value.begin) && data?(value.end)
+      when Array, Set, Hash, Range
+        return false if path.key?(value)
+
+        path[value] = true
+        begin
+          collection_data?(value, path)
+        ensure
+          path.delete(value)
+        end
       else LEAVES.any? { |leaf| value.is_a?(leaf) }
+      end
+    end
+
+    def collection_data?(value, path)
+      case value
+      when Array, Set then value.all? { |item| data?(item, path) }
+      when Hash
+        value.default_proc.nil? && data?(value.default, path) && value.all? { |k, v| data?(k, path) && data?(v, path) }
+      else data?(value.begin, path) && data?(value.end, path)
       end
     end
 

@@ -175,6 +175,17 @@ RSpec.describe Pgbus::Configuration do
     end
   end
 
+  describe "a self-referential setting" do
+    it "finalizes without raising and keeps the value as it is" do
+      looped = [+"orders"]
+      looped << looped
+      Pgbus.configuration.instance_variable_set(:@streams_durable_patterns, looped)
+
+      expect { Pgbus.configuration.finalize! }.not_to raise_error
+      expect(Pgbus.configuration.streams_durable_patterns).to equal(looped)
+    end
+  end
+
   describe "Pgbus.configure" do
     # Without Rails, or once the app has booted. During a Rails boot the
     # engine finalizes instead (spec/pgbus/engine_spec.rb).

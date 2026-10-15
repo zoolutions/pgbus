@@ -21,6 +21,23 @@ RSpec.describe Pgbus::Shareable do
     it "rejects other objects" do
       expect(described_class.data?([Logger.new(IO::NULL)])).to be(false)
     end
+
+    # A collection that contains itself is left as it is, like any other
+    # non-data value, instead of recursing until SystemStackError at boot.
+    it "rejects a collection that contains itself" do
+      looped = [+"x"]
+      looped << looped
+      keyed = {}
+      keyed[:self] = keyed
+
+      expect([described_class.data?(looped), described_class.data?(keyed)]).to eq([false, false])
+    end
+
+    it "accepts the same value twice in one collection" do
+      shared = [+"x"]
+
+      expect(described_class.data?([shared, shared])).to be(true)
+    end
   end
 
   describe ".freeze_copy" do
