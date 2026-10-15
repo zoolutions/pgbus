@@ -12,8 +12,11 @@ and `conformance-audit --strict`.
 ## Threads per process
 
 Every thread has one owner that starts it once and a `stop`/`shutdown` that
-joins it. The inline `# rubocop:disable ThreadSafety/NewThread` next to each
-`Thread.new` names both.
+ends it. Those joins are bounded: a thread stuck in a slow call is left to
+finish it and exit on its own (the streamer logs any that outlive its budget),
+and the process heartbeat's timer is shut down without waiting for a beat in
+flight. The inline `# rubocop:disable ThreadSafety/NewThread` next to each
+`Thread.new` names the owner and how it stops the thread.
 
 | Process | Thread | Owner, and how it stops |
 |---|---|---|
@@ -21,10 +24,10 @@ joins it. The inline `# rubocop:disable ThreadSafety/NewThread` next to each
 | | execution pool: N pool threads (`:threads`) or one Async reactor thread (`:async`) | `ExecutionPools::ThreadPool` / `AsyncPool`; `shutdown` + `wait_for_termination`, `kill` as the last resort |
 | | `pgbus-visibility-heartbeat` | `VisibilityHeartbeat`, started by the first tracked job; `Worker#shutdown` calls `stop` |
 | | notify listener (fork scope) or wake pipe watcher (supervisor scope) | `Process::NotifyListener` / `Process::WakePipe`; `stop` joins it |
-| | process heartbeat (`Concurrent::TimerTask`) | `Process::Heartbeat`; `stop` |
+| | process heartbeat (`Concurrent::TimerTask`) | `Process::Heartbeat`; `stop` shuts the timer down (a beat in flight finishes on its own) |
 | Supervisor | the notify hub's one listener (supervisor scope: one LISTEN connection per host, forks are woken over pipes) | `Process::NotifyHub`; `stop` joins it |
 | | health server accept loop | `Web::HealthServer`; `stop` joins it, then kills it if it hangs |
-| Web (streams) | LISTEN thread, dispatcher, heartbeat, peer-close watcher, outbound pump writers | `Web::Streamer::Instance`, built once per process under `Streamer`'s lock; `shutdown!` stops and joins them |
+| Web (streams) | LISTEN thread, dispatcher, heartbeat, peer-close watcher, outbound pump writers | `Web::Streamer::Instance`, built once per process under `Streamer`'s lock; `shutdown!` stops them and joins each within a budget, logging any still running past it |
 | | hub client reader (Puma cluster mode) | `Web::Streamer::HubClient`; ends with its socket |
 | Puma master | hub accept / fanout / status loops, one reader and writer per worker | `Web::Streamer::MasterHub`; `stop` joins them |
 
