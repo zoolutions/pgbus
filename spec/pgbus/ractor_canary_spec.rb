@@ -89,6 +89,16 @@ RSpec.describe "pgbus inside a non-main Ractor" do # rubocop:disable RSpec/Descr
 
     it_behaves_like "runs inside a non-main Ractor",
                     inputs: ["pgbus_chat", %({"html":"<turbo-stream>hi</turbo-stream>","exclude":"conn-1","event":"chat"})]
+
+    # The shared example compares the main thread's answer with the Ractor's,
+    # and shareability is the same on both, so it cannot catch a seam value
+    # that stops being shareable. Pinned here, from unfrozen Strings as a
+    # NOTIFY hands them over.
+    it "hands shareable values across the seam" do
+      payload = +%({"html":"<turbo-stream>hi</turbo-stream>","exclude":"conn-1","event":"chat"})
+
+      expect(subject_call.call(+"pgbus_chat", payload).first(2)).to eq([true, true])
+    end
   end
 
   # Blocked today: Streams::Key.stream_key checks the queue-name budget against

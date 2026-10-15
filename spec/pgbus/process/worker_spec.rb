@@ -322,6 +322,8 @@ RSpec.describe Pgbus::Process::Worker do
     end
 
     it "does not kill a pool whose jobs finish within the grace" do
+      allow(pool).to receive(:wait_for_termination).and_return(true)
+
       worker.immediate_shutdown
 
       expect(pool).not_to have_received(:kill)
