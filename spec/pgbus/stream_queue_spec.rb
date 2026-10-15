@@ -32,15 +32,19 @@ RSpec.describe Pgbus::StreamQueue do
     end
 
     # A cold load's snapshot can predate a concurrent record! or reset_cache!.
-    # The load is held mid-query while the other call runs to its end (or
-    # blocks on the memo's lock), so publishing that snapshot afterwards
-    # would lose the other call's change every run.
+    # The load is held mid-query while the other call runs, so publishing
+    # that snapshot afterwards would lose the other call's change every run.
+    # The database has the recorded name by the next load.
     context "when a cold load is in flight" do
       let(:loading) { Queue.new }
       let(:release) { Queue.new }
 
       before do
+        loads = 0
         allow(described_class).to receive(:load_names) do
+          loads += 1
+          next Set["pgbus_chat_1", "pgbus_chat_2"] unless loads == 1
+
           loading << true
           release.pop
           Set["pgbus_chat_1"]
@@ -67,6 +71,22 @@ RSpec.describe Pgbus::StreamQueue do
 
         expect(described_class.instance_variable_get(:@all_names)).to be_nil
       end
+    end
+
+    # record! takes a connection before the memo's lock; a load holding the
+    # lock while it waits for a connection would invert that order and could
+    # deadlock on an exhausted pool.
+    it "runs the load without holding the memo's lock" do
+      lock = described_class.instance_variable_get(:@names_lock)
+      held_during_load = nil
+      allow(described_class).to receive(:load_names) do
+        held_during_load = lock.owned?
+        Set["pgbus_chat_1"]
+      end
+
+      described_class.all_names
+
+      expect(held_during_load).to be(false)
     end
   end
 

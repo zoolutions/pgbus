@@ -30,11 +30,14 @@ module Pgbus
     # unsynchronized check-and-set could WARN more than once per process.
     @record_failure_mutex = Mutex.new
 
-    # Guards the @all_names memo (issue #527). The memo is a frozen Set,
+    # Guards the @all_names memo and its generation (issue #527). The memo is a frozen Set,
     # replaced whole (record! publishes a copy with the new name), so a
     # caller iterating the set it got can never see it change underneath:
     # record! runs on broadcast threads while the dispatcher iterates it.
     @names_lock = Mutex.new
+    # Bumped by every record! and reset_cache! (under @names_lock): a cold
+    # load publishes its snapshot only if no such change happened while it ran.
+    @names_generation = 0
 
     class << self
       # Inserts the physical queue name. Idempotent and cheap to call on
@@ -67,7 +70,10 @@ module Pgbus
         # already-registered stream until the next reset_cache!. Leaving it
         # nil lets the next all_names call do a real load, which already
         # includes this row since the insert above has committed.
-        @names_lock.synchronize { @all_names = (@all_names | [queue_name]).freeze if @all_names }
+        @names_lock.synchronize do
+          @names_generation += 1
+          @all_names = (@all_names | [queue_name]).freeze if @all_names
+        end
         true
       rescue ActiveRecord::ActiveRecordError => e
         Pgbus.logger.debug { "[Pgbus] Failed to record stream queue #{queue_name}: #{e.message}" }
@@ -82,12 +88,21 @@ module Pgbus
       # not one per queue. Callers that need freshness (a long-lived process
       # picking up newly-created streams) call `reset_cache!` at the top of
       # their loop.
-      # A cold load runs under the lock: its snapshot could otherwise predate
-      # a record! (which skips a nil memo) or a reset_cache! that finished
-      # while it ran, and publishing it would lose that change. Concurrent
-      # first callers wait for the one query instead of each running theirs.
+      # A cold load runs outside the lock (record! takes a connection before
+      # the lock, so a load holding the lock while it waits for a connection
+      # could deadlock an exhausted pool) and is published only when no
+      # record! or reset_cache! ran meanwhile: its snapshot could predate
+      # them, and publishing it would lose their change. Otherwise the caller
+      # gets the snapshot and the memo stays empty, so the next call reloads.
       def all_names
-        @names_lock.synchronize { @all_names ||= load_names.freeze }
+        cached, generation = @names_lock.synchronize { [@all_names, @names_generation] }
+        return cached if cached
+
+        loaded = load_names.freeze
+        @names_lock.synchronize do
+          @all_names ||= loaded if @names_generation == generation
+          @all_names || loaded
+        end
       end
 
       # Registry ∪ fingerprint-matched names. Use this for classification
@@ -138,7 +153,10 @@ module Pgbus
       # wildcard resolution so freshly-created streams are picked up without
       # a process restart.
       def reset_cache!
-        @names_lock.synchronize { @all_names = nil }
+        @names_lock.synchronize do
+          @names_generation += 1
+          @all_names = nil
+        end
       end
 
       # Memoized like StreamStat: a successful probe sticks; a transient
