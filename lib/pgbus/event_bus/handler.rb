@@ -4,6 +4,19 @@ module Pgbus
   module EventBus
     class Handler
       class << self
+        # One DedupCache per handler class, built when the class is defined
+        # (this class body, and #inherited for every subclass), never by a
+        # lazy `||=` that two first deliveries could each win (issue #527).
+        attr_reader :dedup_cache
+
+        def inherited(subclass)
+          super
+          subclass.instance_variable_set(:@dedup_cache, DedupCache.new)
+        end
+
+        # Class-body macro: `idempotent!` runs while the handler class loads,
+        # and #idempotent? only reads the flag afterwards.
+        # rubocop:disable ThreadSafety/ClassInstanceVariable
         def idempotent!
           @idempotent = true
         end
@@ -11,10 +24,7 @@ module Pgbus
         def idempotent?
           @idempotent == true
         end
-
-        def dedup_cache
-          @dedup_cache ||= DedupCache.new
-        end
+        # rubocop:enable ThreadSafety/ClassInstanceVariable
 
         # How long a pending claim may stay silent before its holder counts as
         # dead. ClaimBeat refreshes a live claim from the visibility heartbeat,
@@ -33,6 +43,8 @@ module Pgbus
           Pgbus.configuration.effective_visibility_heartbeat_interval * 2
         end
       end
+
+      @dedup_cache = DedupCache.new
 
       # Outcome of the two-phase claim. `age` is how long the losing delivery
       # found the existing claim to have been silent, in seconds (nil unless

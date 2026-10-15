@@ -7,6 +7,8 @@ require_relative "../../../lib/pgbus/web/authentication"
 
 RSpec.describe Pgbus::Web::Authentication do
   let(:controller_class) do
+    # A spec double: built per example and driven from the example's thread.
+    # rubocop:disable-next ThreadSafety/ClassInstanceVariable
     Class.new do
       # Simulate before_action
       def self.before_action(method_name)
@@ -49,6 +51,15 @@ RSpec.describe Pgbus::Web::Authentication do
         allow(Pgbus.logger).to receive(:warn).and_yield
         controller.send(:authenticate_pgbus!)
         controller.send(:authenticate_pgbus!)
+        expect(Pgbus.logger).to have_received(:warn).once
+      end
+
+      it "logs the warning once when the first requests arrive at once", :first_call_race do
+        allow(Pgbus.logger).to receive(:warn).and_yield
+        hold_first_call(controller, :default_base_controller?)
+
+        race { controller.send(:authenticate_pgbus!) }
+
         expect(Pgbus.logger).to have_received(:warn).once
       end
     end

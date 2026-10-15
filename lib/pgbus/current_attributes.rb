@@ -20,6 +20,8 @@ module Pgbus
   module CurrentAttributes
     METADATA_KEY = "pgbus_current"
 
+    # The names already warned about, so each missing class is logged once.
+    # Built at load; Concurrent::Map#compute_if_absent is atomic.
     @missing_warned = Concurrent::Map.new
 
     class << self
@@ -115,7 +117,7 @@ module Pgbus
       def resolve_class(name)
         name.constantize
       rescue NameError
-        @missing_warned.compute_if_absent(name) do
+        @missing_warned.compute_if_absent(name) do # rubocop:disable ThreadSafety/ClassInstanceVariable -- see @missing_warned
           Pgbus.logger.warn { "[Pgbus] current_attributes: #{name} is not defined — skipping" }
           true
         end

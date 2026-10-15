@@ -17,8 +17,8 @@ module Pgbus
       # 0.1s polling interval.
       CACHE_TTL = 5
 
-      @cache = {}
       @cache_mutex = Mutex.new
+      @cache = {} # rubocop:disable ThreadSafety/MutableClassInstanceVariable -- only read or written under @cache_mutex
 
       # Check if this worker should yield to a higher-priority worker.
       # Returns true if a higher-priority healthy worker exists for
