@@ -135,13 +135,16 @@ RSpec.describe Pgbus::Client do
           expect(mock_pgmq).not_to have_received(:wait_for_notify)
         end
 
+        # Bounded handshake: a wait_for_notify that raises before it blocks
+        # fails the example (through join) instead of hanging the suite.
         it "does not hold the PGMQ mutex while it waits" do
           waiter = Thread.new { client.wait_for_notify("default", timeout: 5) }
-          waiting.pop
+          reached = waiting.pop(timeout: 5) || waiter.join(0)
           locked = client.instance_variable_get(:@pgmq_mutex).locked?
           release << true
           waiter.join
 
+          expect(reached).to be(true), "wait_for_notify never reached the blocking wait"
           expect(locked).to be(false)
         end
       end

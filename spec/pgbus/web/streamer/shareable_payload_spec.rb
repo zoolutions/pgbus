@@ -17,6 +17,12 @@ RSpec.describe "the streamer's dispatch payloads" do # rubocop:disable RSpec/Des
   end
 
   describe "Listener::WakeMessage" do
+    # Bounded, and nil fails: Ractor.shareable?(nil) is true, so a missing
+    # message must not pass for a shareable one.
+    def wake_message
+      dispatch_queue.pop(timeout: 5).tap { |message| expect(message).not_to be_nil, "no WakeMessage was enqueued" }
+    end
+
     let(:listener) do
       Pgbus::Web::Streamer::Listener.new(
         pg_connection: double("PG::Connection"), dispatch_queue: dispatch_queue,
@@ -27,13 +33,13 @@ RSpec.describe "the streamer's dispatch payloads" do # rubocop:disable RSpec/Des
     it "is shareable for an ephemeral wake" do
       listener.send(:handle_notify, +"pgmq.q_chat.INSERT", ephemeral_json)
 
-      expect(Ractor.shareable?(dispatch_queue.pop)).to be(true)
+      expect(Ractor.shareable?(wake_message)).to be(true)
     end
 
     it "is shareable for a durable wake" do
       listener.send(:handle_notify, +"pgmq.q_chat.INSERT")
 
-      expect(Ractor.shareable?(dispatch_queue.pop)).to be(true)
+      expect(Ractor.shareable?(wake_message)).to be(true)
     end
 
     it "is shareable when the master hub relays it" do
@@ -41,7 +47,7 @@ RSpec.describe "the streamer's dispatch payloads" do # rubocop:disable RSpec/Des
 
       client.send(:handle_frame, { "t" => "wake", "q" => +"chat", "p" => ephemeral_json })
 
-      expect(Ractor.shareable?(dispatch_queue.pop)).to be(true)
+      expect(Ractor.shareable?(wake_message)).to be(true)
     end
   end
 
