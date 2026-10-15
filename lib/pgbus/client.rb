@@ -934,14 +934,24 @@ module Pgbus
     # the shared-AR path serializes every PGMQ call, so holding it across a
     # blocking wait stalled the whole client (issue #527). The shared-AR path
     # therefore needs worker_notify_database_url (or a base database_url).
+    # A connection found dead before it was used (STALE_CONNECTION_PATTERNS)
+    # is replaced and the wait starts again, as with_stale_connection_retry
+    # did for the pooled wait; a connection lost mid-wait is not retried.
     def wait_for_notify(queue_name, timeout: nil, &)
       channel = "pgmq.q_#{config.queue_name(queue_name)}.INSERT"
-      conn = DedicatedConnection.connect(config.worker_notify_connection_options)
+      attempts = 0
       begin
-        conn.exec("LISTEN #{conn.quote_ident(channel)}")
-        conn.wait_for_notify(timeout, &)
-      ensure
-        DedicatedConnection.close_quietly(conn)
+        listen_on_dedicated_connection(channel, timeout, &)
+      rescue StandardError => e
+        attempts += 1
+        raise unless attempts <= STALE_RETRY_ATTEMPTS && stale_pg_error?(e)
+
+        sleep STALE_RETRY_DELAYS[[attempts - 1, STALE_RETRY_DELAYS.size - 1].min]
+        Pgbus.logger.warn do
+          "[Pgbus::Client] Retrying wait_for_notify after a stale connection " \
+            "(attempt #{attempts}/#{STALE_RETRY_ATTEMPTS}): #{e.message}"
+        end
+        retry
       end
     end
 
@@ -2086,6 +2096,22 @@ module Pgbus
         end
         retry
       end
+    end
+
+    def listen_on_dedicated_connection(channel, timeout, &)
+      conn = DedicatedConnection.connect(config.worker_notify_connection_options)
+      begin
+        conn.exec("LISTEN #{conn.quote_ident(channel)}")
+        conn.wait_for_notify(timeout, &)
+      ensure
+        DedicatedConnection.close_quietly(conn)
+      end
+    end
+
+    # A raw PG::Error (the dedicated connection is not wrapped by pgmq-ruby)
+    # whose message says the connection was dead before it was used.
+    def stale_pg_error?(error)
+      defined?(::PG::Error) && error.is_a?(::PG::Error) && stale_connection_error?(error)
     end
 
     def stale_connection_error?(error)

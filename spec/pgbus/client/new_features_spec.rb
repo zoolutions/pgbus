@@ -73,6 +73,38 @@ RSpec.describe Pgbus::Client do
         expect(yielded).to eq(["ch", 42, "payload"])
       end
 
+      # The retry the pooled wait had (with_stale_connection_retry): a
+      # connection found dead before it was used is replaced and the wait
+      # starts again. A connection lost mid-wait is not retried, as before.
+      context "when the dedicated connection is stale" do
+        let(:stale_conn) do
+          double("PG::Connection", exec: nil, close: nil).tap do |conn|
+            allow(conn).to receive(:quote_ident) { |name| %("#{name}") }
+            allow(conn).to receive(:wait_for_notify).and_raise(PG::ConnectionBad, "no connection to the server")
+          end
+        end
+
+        before do
+          require "pg"
+          allow(Pgbus::DedicatedConnection).to receive(:connect).and_return(stale_conn, listen_conn)
+          allow(client).to receive(:sleep)
+        end
+
+        it "waits again on a fresh connection" do
+          expect(client.wait_for_notify("default", timeout: 5)).to eq("pgmq.q_pgbus_test_default.INSERT")
+          expect(Pgbus::DedicatedConnection).to have_received(:connect).twice
+          expect(stale_conn).to have_received(:close)
+        end
+
+        it "does not retry a connection lost mid-wait" do
+          allow(stale_conn).to receive(:wait_for_notify)
+            .and_raise(PG::ConnectionBad, "server closed the connection unexpectedly")
+
+          expect { client.wait_for_notify("default", timeout: 5) }.to raise_error(PG::ConnectionBad)
+          expect(Pgbus::DedicatedConnection).to have_received(:connect).once
+        end
+      end
+
       it "closes the dedicated connection, also when the wait raises" do
         allow(listen_conn).to receive(:wait_for_notify).and_raise(IOError, "gone")
 
