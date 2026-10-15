@@ -1,0 +1,24 @@
+module Pgbus
+  module Streams
+    # A handle on one logical stream: Pgbus.stream(name).broadcast(html).
+    class Stream
+      def self.name_from: (untyped streamables) -> String
+      def self.validate_name_length!: (String name, untyped streamables) -> void
+
+      def initialize: (untyped streamables, ?client: Pgbus::Client, ?durable: bool) -> void
+      def name: () -> String
+      def durable?: () -> bool
+
+      # The msg_id when sent at once; nil when deferred to after_commit, or
+      # when coalesced.
+      def broadcast: (String payload, ?visible_to: Symbol?, ?durable: bool?, ?exclude: String?, ?event: String?,
+                      ?coalesce: (bool | Integer)?, ?target: String?) -> Integer?
+      def broadcast_render: (target: String, ?action: Symbol, ?renderable: untyped, ?visible_to: Symbol?, ?durable: bool?,
+                             ?exclude: String?, ?event: String?, ?coalesce: (bool | Integer)?) ?{ () -> String } -> Integer?
+      def current_msg_id: () -> Integer
+      def read_after: (after_id: Integer, ?limit: Integer) -> Array[untyped]
+      def ensure!: () -> self
+      def presence: () -> untyped
+    end
+  end
+end

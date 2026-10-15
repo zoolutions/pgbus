@@ -74,4 +74,8 @@ group :development, :test do
   # Loaded at the top of spec/spec_helper.rb before "pgbus" so lib files
   # are instrumented before they load.
   gem "simplecov", require: false
+
+  # sig/ (the typed public surface): `rbs -I sig validate` in the lint job and
+  # spec/pgbus/rbs_spec.rb, which checks the signatures cover the code (#527).
+  gem "rbs", require: false
 end

@@ -450,6 +450,7 @@ DEPENDENCIES
   rails-i18n (~> 7.0)
   railties (~> 7.1.0)
   rake (~> 13.0)
+  rbs
   rspec (~> 3.0)
   rspec-rails (>= 7.0, < 9)
   rubocop (~> 1.21)

@@ -1,0 +1,78 @@
+# The PGMQ client (Pgbus.client). Generated from reflection, untyped; always go
+# through it rather than PGMQ directly. spec/pgbus/rbs_spec.rb fails when a
+# public method is missing here.
+module Pgbus
+  class Client
+    def archive_batch: (untyped queue_name, untyped msg_ids, ?prefixed: untyped) -> untyped
+    def archive_message: (untyped queue_name, untyped msg_id, ?prefixed: untyped) -> untyped
+    def bind_topic: (untyped pattern, untyped queue_name) -> untyped
+    def close: () -> untyped
+    def config: () -> untyped
+    def configured_queues: () -> untyped
+    def connection_health: () -> untyped
+    def convert_archive_partitioned: (untyped queue_name, ?partition_interval: untyped, ?retention_interval: untyped, ?leading_partition: untyped) -> untyped
+    def create_fifo_index: (untyped queue_name) -> untyped
+    def create_fifo_indexes_all: () -> untyped
+    def dead_letter_physical_name: (untyped queue_name) -> untyped
+    def delete_batch: (untyped queue_name, untyped msg_ids, ?prefixed: untyped) -> untyped
+    def delete_message: (untyped queue_name, untyped msg_id, ?prefixed: untyped) -> untyped
+    def drop_queue: (untyped queue_name, ?prefixed: untyped) -> untyped
+    def ensure_all_queues: () -> untyped
+    def ensure_dead_letter_queue: (untyped name) -> untyped
+    def ensure_fair_index: (untyped queue_name) -> untyped
+    def ensure_queue: (untyped name) -> untyped
+    def ensure_stream_queue: (untyped stream_name) -> untyped
+    def in_recovery?: () -> bool
+    def list_notify_insert_throttles: () -> untyped
+    def list_queues: () -> untyped
+    def message_archived?: (untyped queue_name, msg_id: untyped) -> bool
+    def message_exists?: (untyped queue_name, ?msg_id: untyped, ?uniqueness_key: untyped) -> bool
+    def message_in_queue?: (untyped queue_name, msg_id: untyped) -> bool
+    def message_with_job_id?: (untyped queue_name, job_id: untyped) -> bool
+    def metrics: (?untyped queue_name) -> untyped
+    def move_to_dead_letter: (untyped queue_name, untyped message, ?headers: untyped) -> untyped
+    def notify_enabled?: (untyped queue_name) -> bool
+    def notify_stream: (untyped stream_name, untyped payload) -> untyped
+    def oldest_claimable_ages: (?untyped queue_name) -> untyped
+    def pgmq: () -> untyped
+    def pgmq_installed?: () -> bool
+    def pgmq_schema_version: () -> untyped
+    def physical_queue_names: (untyped logical_name) -> untyped
+    def ping: () -> untyped
+    def pool_stats: () -> untyped
+    def publish_to_topic: (untyped routing_key, untyped payload, ?headers: untyped, ?delay: untyped) -> untyped
+    def purge_archive: (untyped queue_name, older_than: untyped, ?batch_size: untyped) -> untyped
+    def purge_queue: (untyped queue_name, ?prefixed: untyped) -> untyped
+    def read_after: (untyped stream_name, after_id: untyped, ?limit: untyped) -> untyped
+    def read_batch: (untyped queue_name, qty: untyped, ?vt: untyped) -> untyped
+    def read_batch_fair: (untyped queue_name, qty: untyped, ?vt: untyped) -> untyped
+    def read_batch_prioritized: (untyped queue_name, qty: untyped, ?vt: untyped) -> untyped
+    def read_batch_prioritized_fair: (untyped queue_name, qty: untyped, ?vt: untyped) -> untyped
+    def read_grouped: (untyped queue_name, qty: untyped, ?vt: untyped) -> untyped
+    def read_grouped_head: (untyped queue_name, qty: untyped, ?vt: untyped) -> untyped
+    def read_grouped_rr: (untyped queue_name, qty: untyped, ?vt: untyped) -> untyped
+    def read_message: (untyped queue_name, ?vt: untyped) -> untyped
+    def read_multi: (untyped queue_names, qty: untyped, ?vt: untyped, ?limit: untyped) -> untyped
+    def read_with_poll: (untyped queue_name, qty: untyped, ?vt: untyped, ?max_poll_seconds: untyped, ?poll_interval_ms: untyped) -> untyped
+    def reload: () -> untyped
+    def resize_streams_pool: (untyped new_size) -> untyped
+    def send_batch: (untyped queue_name, untyped payloads, ?headers: untyped, ?delay: untyped, ?priority: untyped) -> untyped
+    def send_message: (untyped queue_name, untyped payload, ?headers: untyped, ?delay: untyped, ?priority: untyped) -> untyped
+    def send_stream_message: (untyped stream_name, untyped payload, ?headers: untyped, ?delay: untyped) -> untyped
+    def set_visibility_timeout: (untyped queue_name, untyped msg_id, vt: untyped, ?prefixed: untyped) -> untyped
+    def shared_connection?: () -> bool
+    def stream_current_msg_id: (untyped stream_name) -> untyped
+    def stream_oldest_msg_id: (untyped stream_name) -> untyped
+    def streams_pool_stats: () -> untyped
+    def streams_swap_stats: () -> untyped
+    def synchronizing?: () -> bool
+    def target_queue: (untyped queue_name, ?untyped priority) -> untyped
+    def transaction: () ?{ (*untyped) -> untyped } -> untyped
+    def uniqueness_keys_present: (untyped lock_keys) -> untyped
+    def update_notify_insert: (untyped queue_name, throttle_interval_ms: untyped) -> untyped
+    def verify_connection!: () -> untyped
+    def wait_for_notify: (untyped queue_name, ?timeout: untyped) ?{ (*untyped) -> untyped } -> untyped
+    def self.load_pgmq_gem!: () -> untyped
+    def self.pgmq_install_mutex: () -> untyped
+  end
+end

@@ -1,4 +1,67 @@
+# The public surface of pgbus (issue #527). `bundle exec rbs validate` checks
+# these files; spec/pgbus/rbs_spec.rb checks they cover the public methods.
 module Pgbus
   VERSION: String
-  # See the writing guide of rbs: https://github.com/ruby/rbs#guides
+  DEAD_LETTER_SUFFIX: String
+  DATABASE_TASK_PREFIXES: Array[String]
+
+  class Error < StandardError
+  end
+
+  class ConfigurationError < Error
+  end
+
+  class SerializationError < Error
+  end
+
+  class QueueNotFoundError < Error
+  end
+
+  class DeadLetterError < Error
+  end
+
+  class ConcurrencyLimitExceeded < Error
+  end
+
+  class JobNotUnique < Error
+  end
+
+  class SchemaNotReady < Error
+  end
+
+  class ReadTimeoutError < Error
+  end
+
+  class EnqueueError < Error
+  end
+
+  class CurrentAttributesError < Error
+  end
+
+  class ExecutionPoolError < Error
+  end
+
+  class ConnectionCircuitOpenError < Error
+  end
+
+  def self.configuration: () -> Configuration
+  def self.configure: () { (Configuration) -> void } -> Configuration
+  def self.finalize!: () -> Configuration
+  def self.client: () -> Client
+  def self.stream: (untyped streamables, ?durable: bool?) -> Streams::Stream
+  def self.stream_key: (*untyped parts, **untyped) -> String
+  def self.stream_key!: (String key) -> String
+  def self.stream_name_budget: () -> Integer
+  def self.publish: (String routing_key, untyped payload, ?headers: Hash[String, untyped]?, ?delay: Numeric) -> untyped
+  def self.publish_later: (String routing_key, untyped payload, delay: Numeric, ?headers: Hash[String, untyped]?) -> untyped
+  def self.reset!: () -> void
+  def self.reset_client!: () -> void
+  def self.stopping: () -> bool
+  def self.stopping=: (boolish value) -> bool
+  def self.logger: () -> untyped
+  def self.logger=: (untyped value) -> untyped
+  def self.database_task?: () -> bool
+  def self.loader: () -> untyped
+  def self.models_loader: () -> untyped
+  def self.teardown_models_loader!: () -> void
 end

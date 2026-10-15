@@ -1,0 +1,313 @@
+# The configuration (Pgbus.configure yields it). Generated from reflection:
+# the setting readers carry the type of their default, the rest are untyped.
+# spec/pgbus/rbs_spec.rb fails when a public method is missing here.
+module Pgbus
+  class Configuration
+    def allowed_global_id_models: () -> untyped
+    def allowed_global_id_models=: (untyped) -> untyped
+    def appsignal_enabled: () -> bool
+    def appsignal_enabled=: (untyped) -> untyped
+    def appsignal_probe_enabled: () -> bool
+    def appsignal_probe_enabled=: (untyped) -> untyped
+    def archive_retention: () -> Integer
+    def archive_retention=: (untyped value) -> untyped
+    def base_controller_class: () -> String
+    def base_controller_class=: (untyped) -> untyped
+    def batch_retention: () -> Integer
+    def batch_retention=: (untyped value) -> untyped
+    def batch_stall_threshold: () -> Integer
+    def batch_stall_threshold=: (untyped value) -> untyped
+    def batch_sweep_interval: () -> Integer
+    def batch_sweep_interval=: (untyped value) -> untyped
+    def capsule: (untyped name, queues: untyped, threads: untyped, **untyped options) -> untyped
+    def capsule_named: (untyped name) -> untyped
+    def circuit_breaker_enabled: () -> bool
+    def circuit_breaker_enabled=: (untyped) -> untyped
+    def connection_guc_mode: () -> Symbol
+    def connection_guc_mode=: (untyped mode) -> untyped
+    def connection_options: () -> untyped
+    def connection_params: () -> untyped
+    def connection_params=: (untyped) -> untyped
+    def connects_to: () -> untyped
+    def connects_to=: (untyped) -> untyped
+    def current_attributes: () -> untyped
+    def current_attributes=: (untyped value) -> untyped
+    def dashboard_filter_parameters: () -> untyped
+    def dashboard_filter_parameters=: (untyped value) -> untyped
+    def dashboard_filter_sensitive: () -> untyped
+    def dashboard_filter_sensitive=: (untyped value) -> untyped
+    def database_url: () -> untyped
+    def database_url=: (untyped) -> untyped
+    def dead_letter_queue_name: (untyped name) -> untyped
+    def default_priority: () -> Integer
+    def default_priority=: (untyped) -> untyped
+    def default_queue: () -> String
+    def default_queue=: (untyped) -> untyped
+    def dispatch_interval: () -> Float
+    def dispatch_interval=: (untyped) -> untyped
+    def doctor_on_boot: () -> untyped
+    def doctor_on_boot=: (untyped mode) -> untyped
+    def drain_timeout: () -> Integer
+    def drain_timeout=: (untyped) -> untyped
+    def eager_validation: () -> bool
+    def eager_validation=: (untyped) -> untyped
+    def effective_visibility_heartbeat_interval: () -> untyped
+    def error_reporters: () -> Array[untyped]
+    def error_reporters=: (untyped) -> untyped
+    def event_consumers: () -> untyped
+    def event_consumers=: (untyped value) -> untyped
+    def event_fair_share: () -> untyped
+    def event_fair_share=: (untyped callable) -> untyped
+    def execution_mode: () -> Symbol
+    def execution_mode=: (untyped) -> untyped
+    def execution_mode_for: (untyped worker_config) -> untyped
+    def fair_share: () -> untyped
+    def fair_share=: (untyped callable) -> untyped
+    def finalize!: () -> untyped
+    def finalized?: () -> bool
+    def group_mode: () -> untyped
+    def group_mode=: (untyped mode) -> untyped
+    def health_bind: () -> String
+    def health_bind=: (untyped) -> untyped
+    def health_port: () -> untyped
+    def health_port=: (untyped) -> untyped
+    def idempotency_ttl: () -> Integer
+    def idempotency_ttl=: (untyped value) -> untyped
+    def immediate_shutdown_grace: () -> Integer
+    def immediate_shutdown_grace=: (untyped) -> untyped
+    def insights_default_minutes: () -> Integer
+    def insights_default_minutes=: (untyped) -> untyped
+    def listen_notify: () -> bool
+    def listen_notify=: (untyped) -> untyped
+    def log_format: () -> Symbol
+    def log_format=: (untyped format) -> untyped
+    def logger: () -> untyped
+    def logger=: (untyped) -> untyped
+    def max_jobs_per_worker: () -> untyped
+    def max_jobs_per_worker=: (untyped) -> untyped
+    def max_memory_mb: () -> untyped
+    def max_memory_mb=: (untyped) -> untyped
+    def max_retries: () -> Integer
+    def max_retries=: (untyped) -> untyped
+    def max_worker_lifetime: () -> untyped
+    def max_worker_lifetime=: (untyped) -> untyped
+    def metrics_backend: () -> untyped
+    def metrics_backend=: (untyped) -> untyped
+    def metrics_enabled: () -> bool
+    def metrics_enabled=: (untyped) -> untyped
+    def notify_presence_change: (untyped stream_name, untyped change) -> untyped
+    def outbox_batch_size: () -> Integer
+    def outbox_batch_size=: (untyped) -> untyped
+    def outbox_enabled: () -> bool
+    def outbox_enabled=: (untyped) -> untyped
+    def outbox_poll_interval: () -> Float
+    def outbox_poll_interval=: (untyped) -> untyped
+    def outbox_retention: () -> Integer
+    def outbox_retention=: (untyped value) -> untyped
+    def pgmq_schema_mode: () -> Symbol
+    def pgmq_schema_mode=: (untyped mode) -> untyped
+    def polling_interval: () -> Float
+    def polling_interval=: (untyped) -> untyped
+    def pool_size: () -> untyped
+    def pool_size=: (untyped) -> untyped
+    def pool_timeout: () -> Integer
+    def pool_timeout=: (untyped) -> untyped
+    def prefetch_limit: () -> untyped
+    def prefetch_limit=: (untyped) -> untyped
+    def presence_member_for: (untyped context) -> untyped
+    def presence_min_ttl: () -> untyped
+    def presence_ttl_for: (untyped stream_name) -> untyped
+    def priority_levels: () -> untyped
+    def priority_levels=: (untyped) -> untyped
+    def priority_queue_name: (untyped name, untyped priority) -> untyped
+    def priority_queue_names: (untyped name) -> untyped
+    def processes_for: (untyped entry) -> untyped
+    def queue_name: (untyped name) -> untyped
+    def queue_prefix: () -> String
+    def queue_prefix=: (untyped) -> untyped
+    def read_ahead: () -> Integer
+    def read_ahead=: (untyped value) -> untyped
+    def read_ahead_for: (untyped entry) -> untyped
+    def read_timeout: () -> Integer
+    def read_timeout=: (untyped) -> untyped
+    def recurring_enabled: () -> bool
+    def recurring_enabled=: (untyped) -> untyped
+    def recurring_execution_retention: () -> Integer
+    def recurring_execution_retention=: (untyped value) -> untyped
+    def recurring_schedule_interval: () -> Float
+    def recurring_schedule_interval=: (untyped) -> untyped
+    def recurring_tasks: () -> untyped
+    def recurring_tasks=: (untyped) -> untyped
+    def recurring_tasks_file: () -> untyped
+    def recurring_tasks_file=: (untyped) -> untyped
+    def recurring_tasks_files: () -> untyped
+    def recurring_tasks_files=: (untyped) -> untyped
+    def recycle_limit_for: (untyped entry, untyped key) -> untyped
+    def require_primary: () -> bool
+    def require_primary=: (untyped) -> untyped
+    def resolved_pool_size: () -> untyped
+    def retry_backoff: () -> Integer
+    def retry_backoff=: (untyped) -> untyped
+    def retry_backoff_jitter: () -> Float
+    def retry_backoff_jitter=: (untyped) -> untyped
+    def retry_backoff_max: () -> Integer
+    def retry_backoff_max=: (untyped) -> untyped
+    def return_to_app_url: () -> untyped
+    def return_to_app_url=: (untyped) -> untyped
+    def role_enabled?: (untyped role) -> bool
+    def roles: () -> untyped
+    def roles=: (untyped value) -> untyped
+    def shutdown_timeout: () -> Integer
+    def shutdown_timeout=: (untyped) -> untyped
+    def skip_recurring: () -> untyped
+    def skip_recurring=: (untyped value) -> untyped
+    def stall_threshold: () -> Integer
+    def stall_threshold=: (untyped) -> untyped
+    def stats_enabled: () -> bool
+    def stats_enabled=: (untyped) -> untyped
+    def stats_flush_interval: () -> Integer
+    def stats_flush_interval=: (untyped) -> untyped
+    def stats_flush_size: () -> Integer
+    def stats_flush_size=: (untyped) -> untyped
+    def stats_retention: () -> Integer
+    def stats_retention=: (untyped value) -> untyped
+    def statsd_host: () -> String
+    def statsd_host=: (untyped) -> untyped
+    def statsd_port: () -> Integer
+    def statsd_port=: (untyped) -> untyped
+    def stream_durable?: (untyped name) -> bool
+    def stream_presence?: (untyped name) -> bool
+    def streams_application_name: () -> String
+    def streams_application_name=: (untyped) -> untyped
+    def streams_authorize: () -> untyped
+    def streams_authorize=: (untyped) -> untyped
+    def streams_broadcast_queue: () -> untyped
+    def streams_broadcast_queue=: (untyped) -> untyped
+    def streams_connection_options: () -> untyped
+    def streams_database_url: () -> untyped
+    def streams_database_url=: (untyped) -> untyped
+    def streams_default_broadcast_mode: () -> Symbol
+    def streams_default_broadcast_mode=: (untyped mode) -> untyped
+    def streams_default_retention: () -> Integer
+    def streams_default_retention=: (untyped) -> untyped
+    def streams_dispatch_queue_limit: () -> Integer
+    def streams_dispatch_queue_limit=: (untyped) -> untyped
+    def streams_durable_patterns: () -> Array[untyped]
+    def streams_durable_patterns=: (untyped) -> untyped
+    def streams_enabled: () -> bool
+    def streams_enabled=: (untyped) -> untyped
+    def streams_falcon_streaming_body: () -> bool
+    def streams_falcon_streaming_body=: (untyped) -> untyped
+    def streams_fanout_write_deadline_ms: () -> Integer
+    def streams_fanout_write_deadline_ms=: (untyped) -> untyped
+    def streams_heartbeat_interval: () -> Integer
+    def streams_heartbeat_interval=: (untyped) -> untyped
+    def streams_host: () -> untyped
+    def streams_host=: (untyped) -> untyped
+    def streams_idle_timeout: () -> Integer
+    def streams_idle_timeout=: (untyped) -> untyped
+    def streams_listen_health_check_ms: () -> Integer
+    def streams_listen_health_check_ms=: (untyped) -> untyped
+    def streams_listen_scope: () -> Symbol
+    def streams_listen_scope=: (untyped scope) -> untyped
+    def streams_max_connections: () -> Integer
+    def streams_max_connections=: (untyped) -> untyped
+    def streams_orphan_sweep_interval: () -> Integer
+    def streams_orphan_sweep_interval=: (untyped) -> untyped
+    def streams_orphan_threshold: () -> Integer
+    def streams_orphan_threshold=: (untyped) -> untyped
+    def streams_path: () -> untyped
+    def streams_path=: (untyped) -> untyped
+    def streams_peer_close_interval: () -> Float
+    def streams_peer_close_interval=: (untyped) -> untyped
+    def streams_pool_autoscale: () -> bool
+    def streams_pool_autoscale=: (untyped) -> untyped
+    def streams_pool_autoscale_interval: () -> Float
+    def streams_pool_autoscale_interval=: (untyped) -> untyped
+    def streams_pool_connection_options: () -> untyped
+    def streams_pool_database_url: () -> untyped
+    def streams_pool_database_url=: (untyped) -> untyped
+    def streams_pool_host: () -> untyped
+    def streams_pool_host=: (untyped) -> untyped
+    def streams_pool_max: () -> untyped
+    def streams_pool_max=: (untyped) -> untyped
+    def streams_pool_port: () -> untyped
+    def streams_pool_port=: (untyped) -> untyped
+    def streams_pool_size: () -> Integer
+    def streams_pool_size=: (untyped) -> untyped
+    def streams_pool_timeout: () -> Integer
+    def streams_pool_timeout=: (untyped) -> untyped
+    def streams_port: () -> untyped
+    def streams_port=: (untyped) -> untyped
+    def streams_presence_member: () -> untyped
+    def streams_presence_member=: (untyped) -> untyped
+    def streams_presence_on_change: () -> untyped
+    def streams_presence_on_change=: (untyped) -> untyped
+    def streams_presence_patterns: () -> Array[untyped]
+    def streams_presence_patterns=: (untyped) -> untyped
+    def streams_presence_ttl: () -> untyped
+    def streams_presence_ttl=: (untyped) -> untyped
+    def streams_retention: () -> Hash[untyped, untyped]
+    def streams_retention=: (untyped) -> untyped
+    def streams_signed_name_secret: () -> untyped
+    def streams_signed_name_secret=: (untyped) -> untyped
+    def streams_stats_enabled: () -> bool
+    def streams_stats_enabled=: (untyped) -> untyped
+    def streams_test_mode: () -> bool
+    def streams_test_mode=: (untyped) -> untyped
+    def streams_write_deadline_ms: () -> Integer
+    def streams_write_deadline_ms=: (untyped) -> untyped
+    def streams_writer_buffer_limit: () -> Integer
+    def streams_writer_buffer_limit=: (untyped) -> untyped
+    def streams_writer_threads: () -> Integer
+    def streams_writer_threads=: (untyped) -> untyped
+    def validate!: () -> untyped
+    def validate_capsule_processes!: () -> untyped
+    def validate_fair_share!: () -> untyped
+    def validate_job_path_gaps!: () -> untyped
+    def validate_metrics_backend!: () -> untyped
+    def validate_processes!: (untyped value) -> untyped
+    def validate_read_ahead!: () -> untyped
+    def validate_shutdown_timeout!: () -> untyped
+    def validate_streams!: () -> untyped
+    def validate_streams_autoscale!: () -> untyped
+    def validate_visibility_heartbeat!: () -> untyped
+    def visibility_heartbeat: () -> bool
+    def visibility_heartbeat=: (untyped) -> untyped
+    def visibility_heartbeat_interval: () -> untyped
+    def visibility_heartbeat_interval=: (untyped value) -> untyped
+    def visibility_timeout: () -> Integer
+    def visibility_timeout=: (untyped value) -> untyped
+    def warn_read_ahead_without_heartbeat: (untyped settings) -> untyped
+    def web_auth: () -> untyped
+    def web_auth=: (untyped) -> untyped
+    def web_data_source: () -> untyped
+    def web_data_source=: (untyped) -> untyped
+    def web_filter_parameters: () -> untyped
+    def web_filter_parameters=: (untyped) -> untyped
+    def web_filter_sensitive: () -> bool
+    def web_filter_sensitive=: (untyped) -> untyped
+    def web_live_updates: () -> bool
+    def web_live_updates=: (untyped) -> untyped
+    def web_per_page: () -> Integer
+    def web_per_page=: (untyped) -> untyped
+    def web_refresh_interval: () -> Integer
+    def web_refresh_interval=: (untyped) -> untyped
+    def worker_notify_connection_options: () -> untyped
+    def worker_notify_database_url: () -> untyped
+    def worker_notify_database_url=: (untyped) -> untyped
+    def worker_notify_host: () -> untyped
+    def worker_notify_host=: (untyped) -> untyped
+    def worker_notify_port: () -> untyped
+    def worker_notify_port=: (untyped) -> untyped
+    def worker_notify_scope: () -> Symbol
+    def worker_notify_scope=: (untyped scope) -> untyped
+    def worker_notify_wakeup: () -> untyped
+    def worker_notify_wakeup=: (untyped) -> untyped
+    def worker_notify_wakeup?: () -> bool
+    def workers: () -> Array[untyped]
+    def workers=: (untyped value) -> untyped
+    def zombie_detection: () -> bool
+    def zombie_detection=: (untyped) -> untyped
+  end
+end

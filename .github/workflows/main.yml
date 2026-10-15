@@ -55,6 +55,10 @@ jobs:
         # crashes on gems absent from the gem's bundle (rubocop-rake, docs_kit).
         # docs/ lints itself in the Docs site workflow.
         run: bundle exec rubocop app benchmarks config gemfiles lib spec Gemfile Rakefile pgbus.gemspec
+      - name: RBS signatures
+        # The typed public surface in sig/ (issue #527); spec/pgbus/rbs_spec.rb
+        # checks it covers the code. Without -I sig, rbs validates nothing.
+        run: bundle exec rbs -I sig validate
       - name: Herb (HTML+ERB linter)
         run: bun run lint:herb
       - name: Verify gem builds

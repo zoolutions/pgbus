@@ -1,0 +1,17 @@
+module Pgbus
+  # Streams: broadcasting rendered updates over PGMQ (Pgbus.stream).
+  module Streams
+    DEFAULT_SSE_EVENT: String
+
+    class StreamNameTooLong < ArgumentError
+    end
+
+    class PayloadTooLarge < Pgbus::Error
+    end
+
+    def self.filters: () -> untyped
+    def self.coalescer: () -> untyped
+    def self.reset_filters!: () -> untyped
+    def self.reset_coalescer!: () -> untyped
+  end
+end
