@@ -79,7 +79,8 @@ module Pgbus
         # life of the process; a false one for SCHEMA_RECHECK_SECONDS.
         #
         # The answer is read and written under @schema_mutex only (issue
-        # #527); the probe itself runs at most once per SCHEMA_RECHECK_SECONDS.
+        # #527). A successful probe is kept as above; a probe that raises is
+        # not, so the next call probes again.
         def seats_supported?
           @schema_mutex.synchronize do
             next @seats_supported if schema_answer_fresh?(@seats_supported, @probed_at)
