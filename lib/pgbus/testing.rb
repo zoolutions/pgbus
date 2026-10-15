@@ -99,7 +99,10 @@ module Pgbus
       ensure
         if block
           Thread.current[MODE_KEY] = old
-          sync_streams_test_mode!(old || :disabled)
+          # The mode in effect again: the outer block's, else the
+          # process-wide one (not :disabled, which would let the streamer
+          # into a fake-mode test's later SSE requests).
+          sync_streams_test_mode!(old || default_mode)
         end
       end
 

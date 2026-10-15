@@ -103,6 +103,19 @@ RSpec.describe Pgbus::Testing do
       end
       expect(Pgbus.configuration.streams_test_mode).to be false
     end
+
+    # After the block the mode falls back to the process-wide one, not to
+    # :disabled: a fake-mode test that runs a `disabled! do ... end` block
+    # must keep the streamer out of its SSE requests afterwards.
+    it "restores the stream test mode of the process-wide mode after a scoped block" do
+      described_class.fake!
+      described_class.disabled! { nil }
+
+      expect(described_class.mode).to eq(:fake)
+      expect(Pgbus.configuration.streams_test_mode).to be true
+    ensure
+      described_class.disabled!
+    end
   end
 
   describe ".store" do
