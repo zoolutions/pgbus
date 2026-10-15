@@ -87,9 +87,12 @@ Nothing in pgbus runs in a non-main Ractor today, and nothing has to: jobs are
 ActiveRecord-bound, and the loops are IO-bound and release the GVL. What is in
 place:
 
-- **Finalized at boot.** `Pgbus.finalize!` (the engine's `after_initialize`)
-  freezes every plain-data setting into a Ractor-shareable value. Callables and
-  the logger stay on the main Ractor.
+- **Finalized at boot.** `Pgbus.finalize!` freezes every plain-data setting
+  into a Ractor-shareable value, with no app code calling it: the engine's
+  `after_initialize` runs it in a Rails app, the end of each `Pgbus.configure`
+  without Rails, and `pgbus start` again after its flags. Callables, the logger
+  and anything else that cannot be made shareable stay as they are, on the main
+  Ractor; they never make finalizing raise.
 - **A shareable seam.** The values the LISTEN thread hands the dispatcher, and
   the frames the dispatcher hands a connection (`WakeMessage`,
   `StreamEnvelope`, `ReadAfter::Envelope`), are `Ractor.shareable?`, so a
