@@ -132,8 +132,11 @@ module Pgbus
     # Event bus
     attr_reader :idempotency_ttl
 
-    # Logging
-    attr_accessor :logger
+    # Logging. Unset means Rails.logger when Rails has one at the time of the
+    # read, else a $stdout Logger. Resolved on every read rather than when the
+    # configuration is built, because Pgbus builds it when the gem loads,
+    # which in a Rails app is before Rails.logger exists.
+    attr_writer :logger
     attr_reader :log_format # rubocop:disable Style/AccessorGrouping
 
     # Error reporting — array of callable objects invoked on caught exceptions.
@@ -327,7 +330,8 @@ module Pgbus
       @idempotency_ttl = 7 * 24 * 3600 # 7 days
       @allowed_global_id_models = nil # nil = allow all (for backwards compat)
 
-      @logger = (defined?(Rails) && Rails.respond_to?(:logger) && Rails.logger) || Logger.new($stdout)
+      @logger = nil
+      @stdout_logger = Logger.new($stdout)
       @log_format = :text
       @error_reporters = []
 
@@ -619,6 +623,10 @@ module Pgbus
       ExecutionPools.normalize_mode(mode)
     end
 
+    def logger
+      @logger || rails_logger || @stdout_logger
+    end
+
     VALID_LOG_FORMATS = %i[text json].freeze
 
     def log_format=(format)
@@ -633,7 +641,7 @@ module Pgbus
       # pgbus-installed formatter. A user who set a custom logger with a custom
       # formatter keeps it — log_format only records the intended format for
       # pgbus's own defaults, it must not silently clobber their formatting.
-      old_formatter = @logger&.formatter
+      old_formatter = logger&.formatter
       return unless pgbus_installable_formatter?(old_formatter)
 
       new_formatter = case format
@@ -649,7 +657,7 @@ module Pgbus
       # formatter. Re-extend the new formatter with the same module when the old
       # one carried it, so tagging keeps working (issue #334).
       preserve_tagged_logging(old_formatter, new_formatter)
-      @logger.formatter = new_formatter
+      logger.formatter = new_formatter
     end
 
     VALID_BROADCAST_MODES = %i[ephemeral durable].freeze
@@ -1629,6 +1637,10 @@ module Pgbus
       else
         base
       end
+    end
+
+    def rails_logger
+      ::Rails.logger if defined?(::Rails) && ::Rails.respond_to?(:logger)
     end
 
     # When the logger's previous formatter was extended with

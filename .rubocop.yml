@@ -167,6 +167,7 @@ ThreadSafety/NewThread:
     - spec/integration/streams_pool_swap_spec.rb
     - spec/integration/streams/harness_smoke_spec.rb
     - spec/integration/thread_safety_spec.rb
+    - spec/pgbus/boot_memo_spec.rb
     - spec/pgbus/client_pool_trigger_spec.rb
     - spec/pgbus/client_spec.rb
     - spec/pgbus/client_swap_spec.rb

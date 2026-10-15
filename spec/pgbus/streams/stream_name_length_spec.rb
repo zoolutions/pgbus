@@ -61,7 +61,7 @@ RSpec.describe Pgbus::Streams::Stream do
   end
 
   describe "Pgbus::Streams::Stream#initialize" do
-    before { Pgbus.instance_variable_set(:@stream_cache, nil) }
+    before { Pgbus.instance_variable_set(:@stream_cache, Concurrent::Map.new) }
 
     it "raises StreamNameTooLong for a literal overflowing name" do
       long = "abc_#{"d" * budget}"
@@ -76,7 +76,7 @@ RSpec.describe Pgbus::Streams::Stream do
   end
 
   describe "Pgbus.stream caching interaction" do
-    before { Pgbus.instance_variable_set(:@stream_cache, nil) }
+    before { Pgbus.instance_variable_set(:@stream_cache, Concurrent::Map.new) }
 
     it "does not cache a Stream when construction raises on overflow" do
       long = "e" * (budget + 5)
