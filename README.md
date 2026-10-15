@@ -691,6 +691,8 @@ end
 
 **Not recommended for:** CPU-bound jobs (image processing, heavy computation). These block the single reactor thread and should use thread mode.
 
+Which state is fiber-local (broadcast options, the batch a job joins, the uniqueness key an enqueue holds) and what that means when work hops between fibers is in [docs/concurrency.md](docs/concurrency.md), with the threads each process runs and pgbus's Ractor readiness.
+
 ## Routing and ordering
 
 How messages flow between producers and the workers that handle them: priority sub-queues, consumer priority for active/standby workers, and single-active-consumer for strict ordering.

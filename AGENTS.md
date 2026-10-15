@@ -22,7 +22,7 @@ under `.claude/`.
 2. **NO hardcoded queue names** — use `config.queue_name()`
 3. **NO raw SQL in dashboard** — use `Web::DataSource`
 4. **NO `Marshal.load`** — JSON serialization only
-5. **NO unsynchronized shared state** — use Mutex or Concurrent primitives
+5. **NO unsynchronized shared state** — use Mutex or Concurrent primitives, built at load (never `@x ||=` on module state); a `ThreadSafety/*` disable only with the reason it is safe next to it. See `docs/concurrency.md`
 6. **NO swallowing errors** — log via `Pgbus.logger`, track in `pgbus_failed_events`
 7. **NO `Record` suffix on model classes** — see Model Naming below
 8. **NO hand-formatted time in the dashboard** — no raw `*_at`/`vt`/`*_age_sec` output, no `strftime`/`time_ago_in_words`: use `pgbus_time` / `pgbus_timestamp` / `pgbus_absolute_time` for moments, `pgbus_duration` for seconds and `pgbus_ms_duration` for milliseconds (`Pgbus::Web::TimeFormat`; full mapping in `.claude/rules/dashboard.md`). Enforced by `Pgbus/DashboardTimeFormatting` (Ruby) and `spec/pgbus/web/time_conventions_spec.rb` (ERB)
@@ -40,7 +40,9 @@ under `.claude/`.
 
 ```bash
 bundle exec rspec          # Run tests
-bundle exec rubocop        # Lint
+bundle exec rubocop        # Lint (includes conformance-kit's ThreadSafety cops)
+bundle exec rbs -I sig validate           # RBS signatures in sig/ (spec/pgbus/rbs_spec.rb checks they cover the code)
+bundle exec conformance-kit check         # The conformance gate on Ruby 4.0: doctor, bin/conformance-db, the Ractor canary, conformance-audit --strict
 bundle exec rake           # Both
 bundle exec rake bench     # Unit benchmarks (serialization, client, executor)
 bundle exec rake bench:one[client_bench]  # Single benchmark by name
