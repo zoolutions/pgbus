@@ -12,32 +12,47 @@ RSpec.describe Pgbus do
   after { described_class.reset! }
 
   # Holds the first racer inside `klass.new` until a second racer has asked
-  # for one too, so an unlocked `||=` builds two every run. Only the racing
-  # threads are held; anything built before the race is left alone.
+  # for one too (an unlocked `||=`: both build, every run) or every other
+  # racer has started and is blocked (the lock: they wait for the first).
+  # Only the racing threads are held; anything built before the race is left
+  # alone. No timeout decides the outcome.
   def hold_first_build(klass, built, &build)
-    count_lock = Mutex.new
-    count = 0
-    second = Queue.new
+    count = Concurrent::AtomicFixnum.new(0)
+    second = Concurrent::AtomicBoolean.new(false)
     allow(klass).to receive(:new).and_wrap_original do |original, *args, **kwargs|
       next original.call(*args, **kwargs) unless Thread.current[:pgbus_boot_memo_racer]
 
-      mine = count_lock.synchronize { count += 1 }
-      second.pop(timeout: 1) if mine == 1
-      second << true if mine == 2
+      case count.increment
+      when 1 then Thread.pass until second.true? || others_blocked?
+      when 2 then second.make_true
+      end
       (build ? build.call : original.call(*args, **kwargs)).tap { |object| built << object }
     end
   end
 
-  def race
-    start = Queue.new
-    racers = Array.new(threads) do
-      Thread.new do
+  def racers = (@racers ||= Concurrent::Array.new)
+  def started = (@started ||= Concurrent::Set.new)
+
+  def others_blocked?
+    (racers - [Thread.current]).all? { |racer| started.include?(racer) && racer.stop? }
+  end
+
+  def race(&)
+    go = Queue.new
+    threads.times do
+      racers << Thread.new do
         Thread.current[:pgbus_boot_memo_racer] = true
-        start.pop
+        go.pop
+        started << Thread.current
         yield
       end
     end
-    threads.times { start << true }
+    threads.times { go << true }
+    racers.each do |racer|
+      racer.join
+    rescue StandardError
+      nil # raised again by value below, once every racer is done
+    end
     racers.map(&:value)
   end
 

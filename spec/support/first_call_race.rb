@@ -34,6 +34,11 @@ module FirstCallRace
       end
     end
     threads.times { start << true }
+    racers.each do |racer|
+      racer.join
+    rescue StandardError
+      nil # raised again by value below, once every racer is done
+    end
     racers.map(&:value)
   end
 end
