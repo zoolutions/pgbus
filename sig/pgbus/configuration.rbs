@@ -1,5 +1,7 @@
 # The configuration (Pgbus.configure yields it). Generated from reflection:
-# the setting readers carry the type of their default, the rest are untyped.
+# the setting readers carry the type of their default, the rest are untyped;
+# the duration readers are Numeric? (an Integer, Float or Duration's seconds,
+# or nil where the setting is off).
 # spec/pgbus/rbs_spec.rb fails when a public method is missing here.
 module Pgbus
   class Configuration
@@ -10,15 +12,15 @@ module Pgbus
     def appsignal_enabled=: (untyped) -> untyped
     def appsignal_probe_enabled: () -> bool
     def appsignal_probe_enabled=: (untyped) -> untyped
-    def archive_retention: () -> Integer
+    def archive_retention: () -> Numeric?
     def archive_retention=: (untyped value) -> untyped
     def base_controller_class: () -> String
     def base_controller_class=: (untyped) -> untyped
-    def batch_retention: () -> Integer
+    def batch_retention: () -> Numeric?
     def batch_retention=: (untyped value) -> untyped
-    def batch_stall_threshold: () -> Integer
+    def batch_stall_threshold: () -> Numeric?
     def batch_stall_threshold=: (untyped value) -> untyped
-    def batch_sweep_interval: () -> Integer
+    def batch_sweep_interval: () -> Numeric?
     def batch_sweep_interval=: (untyped value) -> untyped
     def capsule: (untyped name, queues: untyped, threads: untyped, **untyped options) -> untyped
     def capsule_named: (untyped name) -> untyped
@@ -72,7 +74,7 @@ module Pgbus
     def health_bind=: (untyped) -> untyped
     def health_port: () -> untyped
     def health_port=: (untyped) -> untyped
-    def idempotency_ttl: () -> Integer
+    def idempotency_ttl: () -> Numeric?
     def idempotency_ttl=: (untyped value) -> untyped
     def immediate_shutdown_grace: () -> Integer
     def immediate_shutdown_grace=: (untyped) -> untyped
@@ -103,7 +105,7 @@ module Pgbus
     def outbox_enabled=: (untyped) -> untyped
     def outbox_poll_interval: () -> Float
     def outbox_poll_interval=: (untyped) -> untyped
-    def outbox_retention: () -> Integer
+    def outbox_retention: () -> Numeric?
     def outbox_retention=: (untyped value) -> untyped
     def pgmq_schema_mode: () -> Symbol
     def pgmq_schema_mode=: (untyped mode) -> untyped
@@ -133,7 +135,7 @@ module Pgbus
     def read_timeout=: (untyped) -> untyped
     def recurring_enabled: () -> bool
     def recurring_enabled=: (untyped) -> untyped
-    def recurring_execution_retention: () -> Integer
+    def recurring_execution_retention: () -> Numeric?
     def recurring_execution_retention=: (untyped value) -> untyped
     def recurring_schedule_interval: () -> Float
     def recurring_schedule_interval=: (untyped) -> untyped
@@ -170,7 +172,7 @@ module Pgbus
     def stats_flush_interval=: (untyped) -> untyped
     def stats_flush_size: () -> Integer
     def stats_flush_size=: (untyped) -> untyped
-    def stats_retention: () -> Integer
+    def stats_retention: () -> Numeric?
     def stats_retention=: (untyped value) -> untyped
     def statsd_host: () -> String
     def statsd_host=: (untyped) -> untyped
@@ -275,9 +277,9 @@ module Pgbus
     def validate_visibility_heartbeat!: () -> untyped
     def visibility_heartbeat: () -> bool
     def visibility_heartbeat=: (untyped) -> untyped
-    def visibility_heartbeat_interval: () -> untyped
+    def visibility_heartbeat_interval: () -> Numeric?
     def visibility_heartbeat_interval=: (untyped value) -> untyped
-    def visibility_timeout: () -> Integer
+    def visibility_timeout: () -> Numeric?
     def visibility_timeout=: (untyped value) -> untyped
     def warn_read_ahead_without_heartbeat: (untyped settings) -> untyped
     def web_auth: () -> untyped

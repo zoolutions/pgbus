@@ -44,6 +44,11 @@ module Pgbus
   class ConnectionCircuitOpenError < Error
   end
 
+  module Process
+    class ReplicaConnectionError < Error
+    end
+  end
+
   def self.configuration: () -> Configuration
   def self.configure: () { (Configuration) -> void } -> Configuration
   def self.finalize!: () -> Configuration

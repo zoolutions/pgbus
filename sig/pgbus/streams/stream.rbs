@@ -12,9 +12,9 @@ module Pgbus
       # The msg_id when sent at once; nil when deferred to after_commit, or
       # when coalesced.
       def broadcast: (String payload, ?visible_to: Symbol?, ?durable: bool?, ?exclude: String?, ?event: String?,
-                      ?coalesce: (bool | Integer)?, ?target: String?) -> Integer?
+                      ?coalesce: (bool | Numeric)?, ?target: String?) -> Integer?
       def broadcast_render: (target: String, ?action: Symbol, ?renderable: untyped, ?visible_to: Symbol?, ?durable: bool?,
-                             ?exclude: String?, ?event: String?, ?coalesce: (bool | Integer)?) ?{ () -> String } -> Integer?
+                             ?exclude: String?, ?event: String?, ?coalesce: (bool | Numeric)?) -> Integer?
       def current_msg_id: () -> Integer
       def read_after: (after_id: Integer, ?limit: Integer) -> Array[untyped]
       def ensure!: () -> self
