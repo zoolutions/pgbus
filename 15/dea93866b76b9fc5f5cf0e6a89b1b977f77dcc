@@ -1,0 +1,21 @@
+lib/pgbus/shareable.rb
+  s_4786a62cd35147::t_ec754fc0f2b903 1-44
+spec/pgbus/configuration_finalize_spec.rb
+  s_4786a62cd35147::t_737f1d8002e113 1-11,13-22,24-41,58-66,73,76-151
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "15dea93866b76b9fc5f5cf0e6a89b1b977f77dcc",
+  "prompts": {},
+  "sessions": {
+    "s_4786a62cd35147": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d1e58604-bb1b-456c-ace0-8fe7f151dae8",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
