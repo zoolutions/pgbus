@@ -37,7 +37,9 @@ module Pgbus
                      notify_retry_backoff: NOTIFY_RETRY_BASE_SECONDS,
                      started_at_monotonic: nil, wake_pipe: nil, read_ahead: nil,
                      recycle_limits: {}, capsule: nil, process: nil)
-        @queues = Array(queues)
+        # The worker's own list: eviction deletes from it, and the queues it is
+        # handed come from a configuration frozen by Pgbus.finalize! at boot.
+        @queues = Array(queues).dup
         @initial_queues = @queues.dup.freeze
         @wildcard = @queues.include?("*")
         @threads = threads
