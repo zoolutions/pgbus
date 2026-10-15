@@ -61,10 +61,13 @@ module Pgbus
 
       # Thread#kill only asks a thread to stop: wait for the killed jobs to
       # unwind, so the caller can reclaim what they held (ExecutionPools.terminate).
+      # The running jobs are listed after the kill: a job that started in
+      # between is killed too, and a job leaves the list only once it has
+      # unwound, so every one still unwinding is joined.
       def kill
-        running = @running.keys
         @pool.kill
-        running.each { |thread| thread.join(KILL_JOIN_TIMEOUT) }
+        unwinding = @running.keys
+        unwinding.each { |thread| thread.join(KILL_JOIN_TIMEOUT) }
       end
 
       def metadata

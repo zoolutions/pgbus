@@ -154,6 +154,50 @@ RSpec.describe Pgbus::ExecutionPools::ThreadPool do
       pool.kill
       expect { pool.post { nil } }.to raise_error(Concurrent::RejectedExecutionError)
     end
+
+    # A job that starts after kill has listed the running jobs, and before the
+    # executor kills its threads, must be joined too: the caller reclaims
+    # connections next (ExecutionPools.terminate). The late job is started
+    # inside the executor's kill and cannot finish unwinding until kill
+    # joins it, so a kill that does not join it never lets it go.
+    def start_a_job_inside_the_executors_kill(gate, joined)
+      late_posted = false
+      allow(pool.instance_variable_get(:@pool)).to receive(:kill).and_wrap_original do |original|
+        unless late_posted
+          late_posted = true
+          late = post_a_job_that_unwinds_through(gate)
+          allow(late).to receive(:join).and_wrap_original do |join, *args|
+            joined << late
+            gate << true
+            join.call(*args)
+          end
+        end
+        original.call
+      end
+    end
+
+    def post_a_job_that_unwinds_through(gate)
+      started = Queue.new
+      pool.post do
+        started << Thread.current
+        sleep
+      ensure
+        gate.pop
+      end
+      started.pop
+    end
+
+    it "joins a job that started while it was killing" do
+      gate = Queue.new
+      joined = []
+      start_a_job_inside_the_executors_kill(gate, joined)
+
+      pool.kill
+
+      expect(joined.size).to eq(1)
+    ensure
+      gate << true
+    end
   end
 
   describe "#metadata" do
