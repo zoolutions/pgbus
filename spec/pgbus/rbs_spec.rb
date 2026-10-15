@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require "spec_helper"
+require "rails_helper"
 require "rbs"
 require "active_job"
 require "active_job/queue_adapters/pgbus_adapter"
@@ -26,22 +26,32 @@ RSpec.describe "the RBS signatures in sig/" do # rubocop:disable RSpec/DescribeC
          .map(&:name).reject { |name| name == :initialize }.sort
   end
 
-  # Public instance methods defined by pgbus itself (not inherited from Object
-  # or added by ActiveSupport), wherever in the ancestry pgbus defines them.
-  def self.own_instance_methods(klass)
-    klass.public_instance_methods.select do |name|
-      klass.instance_method(name).owner.name.to_s.start_with?("Pgbus", "ActiveJob::QueueAdapters::Pgbus")
-    end.sort
+  # Defined in pgbus's own lib/: not inherited from Object, and not added by
+  # ActiveSupport or by Rails (isolate_namespace defines Pgbus.table_name_prefix).
+  def self.pgbus_defined?(method)
+    method.source_location&.first.to_s.start_with?(File.expand_path("../../lib", __dir__))
   end
 
+  # Public instance methods pgbus defines, wherever in the ancestry it does.
+  def self.own_instance_methods(klass)
+    klass.public_instance_methods.select { |name| pgbus_defined?(klass.instance_method(name)) }.sort
+  end
+
+  def self.own_singleton_methods(mod)
+    mod.singleton_methods(false).select { |name| pgbus_defined?(mod.method(name)) }.sort
+  end
+
+  # Pgbus::Streams.install_* live in files the engine loads on demand.
+  [Pgbus::Streams::TurboBroadcastable, Pgbus::Streams::TurboStreamOverride]
+
   {
-    "Pgbus" => -> { [Pgbus.singleton_methods(false).sort, :singleton] },
+    "Pgbus" => -> { [own_singleton_methods(Pgbus), :singleton] },
     "Pgbus::Configuration" => -> { [own_instance_methods(Pgbus::Configuration), :instance] },
     "Pgbus::Client" => -> { [own_instance_methods(Pgbus::Client), :instance] },
-    "Pgbus::Client (class methods)" => -> { [Pgbus::Client.singleton_methods(false).sort, :singleton] },
-    "Pgbus::Streams" => -> { [Pgbus::Streams.singleton_methods(false).sort, :singleton] },
+    "Pgbus::Client (class methods)" => -> { [own_singleton_methods(Pgbus::Client), :singleton] },
+    "Pgbus::Streams" => -> { [own_singleton_methods(Pgbus::Streams), :singleton] },
     "Pgbus::Streams::Stream" => -> { [own_instance_methods(Pgbus::Streams::Stream), :instance] },
-    "Pgbus::Streams::Stream (class methods)" => -> { [Pgbus::Streams::Stream.singleton_methods(false).sort, :singleton] },
+    "Pgbus::Streams::Stream (class methods)" => -> { [own_singleton_methods(Pgbus::Streams::Stream), :singleton] },
     "Pgbus::ActiveJob::Adapter" => -> { [own_instance_methods(Pgbus::ActiveJob::Adapter), :instance] },
     "ActiveJob::QueueAdapters::PgbusAdapter" => -> { [own_instance_methods(ActiveJob::QueueAdapters::PgbusAdapter), :instance] },
     "Pgbus::Concurrency::ClassMethods" => -> { [Pgbus::Concurrency::ClassMethods.public_instance_methods(false).sort, :instance] },

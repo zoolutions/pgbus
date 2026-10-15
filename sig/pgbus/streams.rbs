@@ -13,5 +13,10 @@ module Pgbus
     def self.coalescer: () -> untyped
     def self.reset_filters!: () -> untyped
     def self.reset_coalescer!: () -> untyped
+
+    # The Turbo patches, installed by the engine when turbo-rails is loaded.
+    def self.install_turbo_broadcastable_patch!: () -> void
+    def self.install_turbo_stream_override!: () -> void
+    def self.install_broadcast_queue!: (String? queue_name) -> void
   end
 end
