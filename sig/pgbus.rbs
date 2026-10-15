@@ -54,7 +54,7 @@ module Pgbus
   def self.finalize!: () -> Configuration
   def self.client: () -> Client
   def self.stream: (untyped streamables, ?durable: bool?) -> Streams::Stream
-  def self.stream_key: (*untyped parts, **untyped) -> String
+  def self.stream_key: (*untyped parts, ?digest_bits: Integer) -> String
   def self.stream_key!: (String key) -> String
   def self.stream_name_budget: () -> Integer
   # delay: seconds, as a Numeric or an ActiveSupport::Duration (1.hour).
