@@ -197,7 +197,20 @@ module Pgbus
       # until a worker path consumes it. Checking the flag after the yield
       # lets a block opt out for itself via `c.eager_validation = false`.
       configuration.validate! if configuration.eager_validation
+      # Once booted, a later configure (an after_initialize block, a spec)
+      # leaves the new values shareable too.
+      configuration.finalize! if configuration.finalized?
       configuration
+    end
+
+    # The end of boot (the engine's after_initialize; call it yourself
+    # without Rails, after your last Pgbus.configure): validates the
+    # configuration (unless eager_validation is off) and freezes its plain-data settings into Ractor-shareable
+    # values (Configuration#finalize!). Callables and the logger stay as
+    # they are, on the main Ractor.
+    def finalize!
+      configuration.validate! if configuration.eager_validation
+      configuration.finalize!
     end
 
     # Built on first use, under @state_lock: two threads making the first

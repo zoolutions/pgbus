@@ -284,6 +284,24 @@ RSpec.describe Pgbus::Engine do
     end
   end
 
+  describe "pgbus.finalize initializer" do
+    after { restore_baseline_config }
+
+    # The app has booted, so on_load(:after_initialize) runs the hook at once.
+    it "finalizes the configuration after initialize" do
+      Pgbus.reset!
+
+      initializer_block("pgbus.finalize").call
+
+      expect(Pgbus.configuration).to be_finalized
+      expect(Ractor.shareable?(Pgbus.configuration.workers)).to be(true)
+    end
+
+    it "runs after the app's own initializer files" do
+      expect(described_class.initializers.find { |i| i.name == "pgbus.finalize" }.after).to eq(:load_config_initializers)
+    end
+  end
+
   describe "pgbus.integrations.appsignal initializer" do
     subject(:block) { initializer_block("pgbus.integrations.appsignal") }
 

@@ -577,6 +577,7 @@ module Pgbus
       @statsd_port = 8125
 
       @eager_validation = true
+      @finalized = false
     end
 
     def queue_name(name)
@@ -812,6 +813,36 @@ module Pgbus
       end
 
       @worker_notify_scope = coerced
+    end
+
+    # Settings finalize! never freezes: @error_reporters is a list of
+    # callables apps append to (`c.error_reporters << ...`), and
+    # @deprecation_warned is this object's own bookkeeping.
+    FINALIZE_SKIP = %i[@error_reporters @deprecation_warned @finalized].freeze
+    private_constant :FINALIZE_SKIP
+
+    # Replaces every plain-data setting (Strings, Symbols, numbers, booleans,
+    # nil, Regexps, classes, and Arrays/Hashes/Sets/Ranges of those) with a
+    # deep-frozen, Ractor-shareable copy, so each reader hands back a value
+    # any Ractor can read (issue #527). Settings that hold a callable or an
+    # object (the logger, error reporters, hooks, the web data source, a
+    # metrics backend) are left as they are: they stay main-Ractor-only.
+    # Writers keep working (a setter assigns a new value; Pgbus.configure
+    # finalizes again); only in-place mutation of a frozen collection raises.
+    # Called once at boot by Pgbus.finalize!.
+    def finalize!
+      instance_variables.each do |ivar|
+        next if FINALIZE_SKIP.include?(ivar)
+
+        value = instance_variable_get(ivar)
+        instance_variable_set(ivar, Shareable.freeze_copy(value)) if Shareable.data?(value)
+      end
+      @finalized = true
+      self
+    end
+
+    def finalized?
+      @finalized
     end
 
     def validate!
