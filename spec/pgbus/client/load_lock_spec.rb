@@ -6,6 +6,14 @@ require "spec_helper"
 # constant is visible to the whole process; the pgmq require lock is class
 # state built at load instead, like the install lock (issue #527).
 RSpec.describe Pgbus::Client do
+  # The lock is what these examples are about, not the load: the real
+  # `require "pgmq"` (and a global ::PGMQ) is left to the specs that need it,
+  # so the suite's state does not depend on which example runs first.
+  before do
+    stub_const("PGMQ", Module.new) unless defined?(PGMQ)
+    allow(described_class).to receive(:require).with("pgmq").and_return(false)
+  end
+
   it "keeps the pgmq require lock in class state built at load" do
     expect(described_class.instance_variable_get(:@pgmq_require_mutex)).to be_a(Thread::Mutex)
     expect(described_class.const_defined?(:PGMQ_REQUIRE_MUTEX, false)).to be(false)
