@@ -31,14 +31,23 @@ module Pgbus
       deep_freeze(value)
     end
 
+    # The copy freeze_copy makes where the engine has no Ractor: everything
+    # data? accepts, a Hash's default and a Range's endpoints included.
     def deep_freeze(value)
       case value
       when Array then value.map { |item| deep_freeze(item) }.freeze
       when Set then value.to_set { |item| deep_freeze(item) }.freeze
-      when Hash then value.to_h { |k, v| [deep_freeze(k), deep_freeze(v)] }.freeze
+      when Hash then deep_freeze_hash(value)
+      when Range then Range.new(deep_freeze(value.begin), deep_freeze(value.end), value.exclude_end?).freeze
       when String then value.frozen? ? value : value.dup.freeze
       else value
       end
+    end
+
+    def deep_freeze_hash(hash)
+      copy = hash.to_h { |k, v| [deep_freeze(k), deep_freeze(v)] }
+      copy.default = deep_freeze(hash.default)
+      copy.freeze
     end
   end
 end

@@ -36,16 +36,36 @@ RSpec.describe Pgbus::Shareable do
     end
   end
 
+  # The fallback where the engine has no Ractor (JRuby, TruffleRuby).
   describe ".deep_freeze" do
     it "freezes copies of nested collections and strings" do
       original = { +"key" => [+"value", Set[+"x"]] }
 
       frozen = described_class.deep_freeze(original)
+      nested = frozen.values.first
 
-      expect(frozen).to be_frozen
-      expect(frozen.keys.first).to be_frozen
-      expect(frozen.values.first).to all(be_frozen)
+      expect([frozen, frozen.keys.first, nested, nested.first, nested.last]).to all(be_frozen)
+      expect(nested.last.first).to be_frozen
       expect(original.values.first.first).not_to be_frozen
+    end
+
+    it "keeps a Hash's default, frozen" do
+      original = Hash.new(+"fallback").merge(+"key" => 1)
+
+      frozen = described_class.deep_freeze(original)
+
+      expect(frozen[:missing]).to eq("fallback")
+      expect(frozen.default).to be_frozen
+    end
+
+    it "freezes a Range's endpoints" do
+      original = (+"a")..(+"m")
+
+      frozen = described_class.deep_freeze(original)
+
+      expect(frozen).to eq(original)
+      expect([frozen, frozen.begin, frozen.end]).to all(be_frozen)
+      expect(original.begin).not_to be_frozen
     end
   end
 end
