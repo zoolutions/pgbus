@@ -920,10 +920,23 @@ module Pgbus
 
     # --- LISTEN/NOTIFY management (PGMQ v1.11.0+) ---
 
-    def wait_for_notify(queue_name, timeout: nil, &block)
-      full_name = config.queue_name(queue_name)
-      with_stale_connection_retry do
-        synchronized { @pgmq.wait_for_notify(full_name, timeout: timeout, &block) }
+    # Blocks until PGMQ's insert trigger notifies +queue_name+ or +timeout+
+    # seconds pass (nil waits indefinitely); returns the channel, or nil on a
+    # timeout, and yields (channel, pid, payload) like
+    # PG::Connection#wait_for_notify. The wait gets a dedicated connection of
+    # its own (worker_notify_connection_options), opened for it and closed
+    # after: never a pool connection, and never under @pgmq_mutex, which on
+    # the shared-AR path serializes every PGMQ call, so holding it across a
+    # blocking wait stalled the whole client (issue #527). The shared-AR path
+    # therefore needs worker_notify_database_url (or a base database_url).
+    def wait_for_notify(queue_name, timeout: nil, &)
+      channel = "pgmq.q_#{config.queue_name(queue_name)}.INSERT"
+      conn = DedicatedConnection.connect(config.worker_notify_connection_options)
+      begin
+        conn.exec("LISTEN #{conn.quote_ident(channel)}")
+        conn.wait_for_notify(timeout, &)
+      ensure
+        DedicatedConnection.close_quietly(conn)
       end
     end
 

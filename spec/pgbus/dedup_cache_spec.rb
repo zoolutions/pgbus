@@ -118,5 +118,40 @@ RSpec.describe Pgbus::DedupCache do
       threads.each(&:join)
       expect(big_cache.size).to be <= 1000
     end
+
+    # mark! used to check `key?` and the size, then insert: two threads could
+    # both pass the checks before either inserted (issue #527). The first
+    # racer is held right after its +check+ until the second has made its own,
+    # so the old check-then-act loses every run; under the lock the second
+    # never gets there while the first is inside.
+    def race_mark(target, keys, check:)
+      map = target.instance_variable_get(:@cache)
+      count_lock = Mutex.new
+      count = 0
+      second = Queue.new
+      allow(map).to receive(check).and_wrap_original do |original, *args|
+        present = original.call(*args)
+        mine = count_lock.synchronize { count += 1 }
+        second.pop(timeout: 1) if mine == 1
+        second << true if mine == 2
+        present
+      end
+      keys.map { |key| Thread.new { target.mark!(key) } }.each(&:join)
+    end
+
+    it "records a key marked by two threads at once once" do
+      race_mark(cache, %w[same:Handler same:Handler], check: :key?)
+
+      expect(cache.instance_variable_get(:@insertion_order)).to eq(%w[same:Handler])
+    end
+
+    it "stays within max_size when two threads add the last keys at once" do
+      small = described_class.new(max_size: 2, ttl: 10)
+      small.mark!("first:Handler")
+
+      race_mark(small, %w[second:Handler third:Handler], check: :size)
+
+      expect(small.size).to eq(2)
+    end
   end
 end

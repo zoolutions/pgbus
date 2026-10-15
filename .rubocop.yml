@@ -172,6 +172,7 @@ ThreadSafety/NewThread:
     - spec/pgbus/client_spec.rb
     - spec/pgbus/client_swap_spec.rb
     - spec/pgbus/client/connection_health_spec.rb
+    - spec/pgbus/client/new_features_spec.rb
     - spec/pgbus/client/resizable_pool_spec.rb
     - spec/pgbus/dedup_cache_spec.rb
     - spec/pgbus/execution_pools/async_pool_reactor_spec.rb
