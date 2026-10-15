@@ -198,6 +198,29 @@ RSpec.describe Pgbus::ExecutionPools::ThreadPool do
     ensure
       gate << true
     end
+
+    # A full KILL_JOIN_TIMEOUT per stuck job would hold a shutdown for
+    # capacity x KILL_JOIN_TIMEOUT. Both jobs stay stuck in their ensure, so
+    # the first join waits out the budget and the second has none left.
+    it "gives the killed jobs one join budget between them" do
+      stub_const("#{described_class}::KILL_JOIN_TIMEOUT", 0.05)
+      gate = Queue.new
+      budgets = []
+      2.times do
+        stuck = post_a_job_that_unwinds_through(gate)
+        allow(stuck).to receive(:join).and_wrap_original do |join, timeout|
+          budgets << timeout
+          join.call(timeout)
+        end
+      end
+
+      pool.kill
+
+      expect(budgets.size).to eq(2)
+      expect(budgets.sum).to be < 0.05 * 1.5 # one budget (plus clock rounding), not two
+    ensure
+      2.times { gate << true }
+    end
   end
 
   describe "#metadata" do

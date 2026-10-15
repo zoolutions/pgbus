@@ -5,8 +5,8 @@ require "concurrent"
 module Pgbus
   module ExecutionPools
     class ThreadPool
-      # How long #kill waits for each killed job to unwind (run its ensure
-      # blocks) before giving up on it.
+      # How long #kill waits, in all, for the killed jobs to unwind (run their
+      # ensure blocks) before giving up on those still running.
       KILL_JOIN_TIMEOUT = 1
 
       attr_reader :capacity
@@ -63,11 +63,13 @@ module Pgbus
       # unwind, so the caller can reclaim what they held (ExecutionPools.terminate).
       # The running jobs are listed after the kill: a job that started in
       # between is killed too, and a job leaves the list only once it has
-      # unwound, so every one still unwinding is joined.
+      # unwound, so every one still unwinding is joined. One budget for all
+      # of them: stuck jobs must not hold a shutdown for capacity x the timeout.
       def kill
         @pool.kill
         unwinding = @running.keys
-        unwinding.each { |thread| thread.join(KILL_JOIN_TIMEOUT) }
+        deadline = monotonic_now + KILL_JOIN_TIMEOUT
+        unwinding.each { |thread| thread.join([deadline - monotonic_now, 0].max) }
       end
 
       def metadata
@@ -76,6 +78,12 @@ module Pgbus
           capacity: @capacity,
           busy: @capacity - available_capacity
         }
+      end
+
+      private
+
+      def monotonic_now
+        ::Process.clock_gettime(::Process::CLOCK_MONOTONIC)
       end
     end
   end
