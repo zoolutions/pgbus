@@ -4,9 +4,11 @@ require "spec_helper"
 
 # The seam a future Ractor dispatcher would use (issue #527): every value
 # handed from the Listener (or the hub client) to the StreamEventDispatcher,
-# and from the dispatcher to Connection#enqueue, is Ractor-shareable, so it
-# could cross a Ractor::Port by reference. No behaviour changes; the Strings
-# inside are frozen where the values are built.
+# and every frame the dispatcher hands Connection#enqueue, is Ractor-shareable,
+# so it could cross a Ractor::Port by reference. The batch Array holding the
+# frames is the dispatcher's own (a connect replay keeps appending to its
+# buffer); a port would copy that shell and pass the frames by reference. No
+# behaviour changes; the Strings inside are frozen where the values are built.
 RSpec.describe "the streamer's dispatch payloads" do # rubocop:disable RSpec/DescribeClass
   let(:dispatch_queue) { Queue.new }
   let(:ephemeral_json) do
@@ -91,6 +93,7 @@ RSpec.describe "the streamer's dispatch payloads" do # rubocop:disable RSpec/Des
 
       dispatcher.send(:handle, dispatcher_class::WakeMessage.new(queue_name: +"chat"))
 
+      expect(enqueued).not_to be_empty
       expect(enqueued).to all(satisfy { |frame| Ractor.shareable?(frame) })
     end
   end
