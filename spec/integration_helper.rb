@@ -310,8 +310,11 @@ RSpec.configure do |config|
     end
   end)
 
-  # Purge all integration queues BEFORE each test so no stale messages leak
-  config.before do
+  # Purge all integration queues BEFORE each test so no stale messages leak.
+  # Only around :integration examples (every integration spec is tagged), so a
+  # run that loads every spec file, like the conformance gate's
+  # `rspec --tag ractor`, does not purge around unrelated examples.
+  config.before(:each, :integration) do
     Pgbus.reset_client!
     purge_integration_queues
     cleanup_tables
