@@ -71,8 +71,9 @@ def measure_peak_connections(mode:, capacity:, tasks:, monitor_conn:)
 
   # Monitor thread samples pg_stat_activity during the benchmark
   stop_monitoring = Concurrent::AtomicBoolean.new(false)
-  # The bench's own sampler thread: stop_monitoring ends it and it is
-  # joined before the results are read.
+  # The bench's own sampler thread: stop_monitoring ends it after its
+  # current sample, and it is joined (no timeout) before monitor_conn is
+  # used again or closed.
   monitor = Thread.new do # rubocop:disable ThreadSafety/NewThread
     while stop_monitoring.false?
       current = count_active_connections(monitor_conn)
@@ -95,7 +96,7 @@ def measure_peak_connections(mode:, capacity:, tasks:, monitor_conn:)
 
   done.wait(30)
   stop_monitoring.make_true
-  monitor.join(2)
+  monitor.join
 
   pool.shutdown
   pool.wait_for_termination(10)

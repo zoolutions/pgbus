@@ -51,7 +51,7 @@ BenchSupport.header("Frame path: wake construction, ephemeral fanout (10 connect
 
 BenchSupport.ips(time: 3, warmup: 1) do |x|
   x.report("WakeMessage from a NOTIFY") do
-    Dispatcher::WakeMessage.new(queue_name: CHANNEL[8..-8], payload: +EPHEMERAL)
+    Dispatcher::WakeMessage.new(queue_name: CHANNEL[7..-8], payload: +EPHEMERAL)
   end
 
   x.report("ephemeral wake -> 10 connections") do
@@ -66,7 +66,7 @@ end
 BenchSupport.header("allocations per 1000 frames")
 
 BenchSupport.allocations("WakeMessage from a NOTIFY") do
-  1_000.times { Dispatcher::WakeMessage.new(queue_name: CHANNEL[8..-8], payload: +EPHEMERAL) }
+  1_000.times { Dispatcher::WakeMessage.new(queue_name: CHANNEL[7..-8], payload: +EPHEMERAL) }
 end
 
 BenchSupport.allocations("ephemeral wake -> 10 connections") do
