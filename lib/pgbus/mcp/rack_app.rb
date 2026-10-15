@@ -37,7 +37,7 @@ module Pgbus
       # First mcp release with the transport's allowed_hosts / allowed_origins /
       # dns_rebinding_protection options. Older gems would raise ArgumentError
       # on the pass-through; fail with the fix spelled out instead.
-      MIN_MCP_VERSION = Gem::Version.new("0.23.0")
+      MIN_MCP_VERSION = Gem::Version.new("0.23.0").freeze
       # Only the JSON body string is frozen and reused. The outer response triple
       # and its headers hash MUST be built fresh per call (#unauthorized) so
       # downstream Rack middleware can mutate them — Rack::TempfileReaper assigns

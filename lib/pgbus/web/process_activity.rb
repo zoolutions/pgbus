@@ -11,7 +11,7 @@ module Pgbus
     # :uptime and :limit (lifetime), Strings for queue and topic lists.
     module ProcessActivity
       KIND_ORDER = %w[worker consumer dispatcher scheduler outbox_poller].freeze
-      RECYCLE_LIMITS = [%w[jobs max_jobs jobs_processed done], %w[memory max_memory_mb memory_mb used]].freeze
+      RECYCLE_LIMITS = [%w[jobs max_jobs jobs_processed done].freeze, %w[memory max_memory_mb memory_mb used].freeze].freeze
 
       module_function
 
