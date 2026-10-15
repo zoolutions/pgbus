@@ -20,9 +20,6 @@ module Pgbus
 
     attr_reader :pgmq, :config, :connection_health
 
-    PGMQ_REQUIRE_MUTEX = Mutex.new
-    private_constant :PGMQ_REQUIRE_MUTEX
-
     # Fixed advisory-lock key serializing pgmq schema installation across
     # processes (issue #397). "pgmqinst" in ASCII hex — arbitrary but stable;
     # it only has to be identical in every process that can install.
@@ -55,6 +52,11 @@ module Pgbus
     # (issue #397, forensics in getzazu/app#3413).
     @pgmq_install_mutex = Mutex.new
 
+    # Serializes the one-time `require "pgmq"` (see load_pgmq_gem!). Class
+    # state built at load, not a constant: a constant holding a Mutex is
+    # unreadable from a non-main Ractor (issue #527).
+    @pgmq_require_mutex = Mutex.new
+
     class << self
       attr_reader :pgmq_install_mutex
     end
@@ -82,7 +84,7 @@ module Pgbus
     # instead of the global Kernel#require, which — if stubbed before pgmq is
     # genuinely loaded — permanently prevents the real gem from ever loading.
     def self.load_pgmq_gem!
-      PGMQ_REQUIRE_MUTEX.synchronize do
+      @pgmq_require_mutex.synchronize do
         Object.const_set(:PGMQ, Module.new) unless defined?(::PGMQ)
         require "pgmq"
       end
