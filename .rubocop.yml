@@ -1,3 +1,9 @@
+# conformance-kit's Tier 1 gate: the rubocop-thread_safety cops
+# (zoolutions/phlex-reactive#363, #527). Fix first, no baseline: a ThreadSafety
+# disable is inline only, with the reason it is safe next to it.
+inherit_gem:
+  conformance-kit: config/rubocop.yml
+
 plugins:
   - rubocop-rspec
 

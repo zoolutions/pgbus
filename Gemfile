@@ -12,6 +12,7 @@ group :development do
   gem "i18n-tasks", "~> 1.0"
   gem "rubocop", "~> 1.21"
   gem "rubocop-rspec", "~> 3.0"
+  gem "rubocop-thread_safety", ">= 0.8", require: false # conformance-kit's config/rubocop.yml (Tier 1)
   gem "ruby-openai"
 end
 
