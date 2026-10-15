@@ -9,7 +9,16 @@ module Pgbus
     # The cursor is the highest msg_id the client has already seen. Replay returns
     # everything strictly greater, ordered by msg_id ASC, capped by `limit`.
     module ReadAfter
-      Envelope = Data.define(:msg_id, :enqueued_at, :payload, :source)
+      # Ractor-shareable like the streamer's other dispatch values (issue
+      # #527): the Strings are frozen in place, they are the read's own.
+      Envelope = Data.define(:msg_id, :enqueued_at, :payload, :source) do
+        def initialize(msg_id:, enqueued_at:, payload:, source:)
+          enqueued_at&.freeze
+          payload&.freeze
+          source&.freeze
+          super
+        end
+      end
 
       DEFAULT_LIMIT = 500
 
