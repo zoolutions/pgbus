@@ -71,6 +71,15 @@ module Pgbus
     # Eagerly initialize the store so concurrent access never races on creation.
     @store = EventStore.new
 
+    # The process-wide mode (`fake!` with no block). A module ivar under a lock
+    # built at load, not `Thread.main[]`: that reads the main thread's CURRENT
+    # fiber only, so a mode set inside a fiber (an Async task) or read while the
+    # main thread runs one was lost (issue #527). The block form stays
+    # `Thread.current[MODE_KEY]`, which is fiber-local on every Ruby: a `fake!`
+    # block inside one Async task must not leak to its siblings.
+    @mode_lock = Mutex.new
+    @default_mode = nil
+
     class << self
       def mode!(mode, &block)
         raise ArgumentError, "Unknown mode: #{mode}. Valid modes: #{MODES.join(", ")}" unless MODES.include?(mode)
@@ -78,7 +87,7 @@ module Pgbus
         # Record the mode BEFORE syncing streams: a StreamerLeakError raised
         # by the teardown must still leave the process in the requested mode.
         unless block
-          Thread.main[MODE_KEY] = mode
+          @mode_lock.synchronize { @default_mode = mode }
           sync_streams_test_mode!(mode)
           return
         end
@@ -95,7 +104,7 @@ module Pgbus
       end
 
       def mode
-        Thread.current[MODE_KEY] || Thread.main[MODE_KEY] || :disabled
+        Thread.current[MODE_KEY] || default_mode
       end
 
       def fake!(&) = mode!(:fake, &)
@@ -109,6 +118,10 @@ module Pgbus
       attr_reader :store
 
       private
+
+      def default_mode
+        @mode_lock.synchronize { @default_mode } || :disabled
+      end
 
       # When entering fake/inline mode, enable streams_test_mode to prevent
       # rack.hijack from spawning background threads that acquire DB

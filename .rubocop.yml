@@ -148,3 +148,54 @@ Lint/UnusedMethodArgument:
     # (minutes:, page:, per_page:) that controllers pass through, even where
     # the in-memory stub ignores them.
     - spec/support/pgbus/stub_data_source.rb
+
+# Specs and their harnesses start threads on purpose: to race the code under
+# test, to stand in for the listener/pump/heartbeat threads, or to boot a real
+# Puma/Falcon server. Listed file by file (never a directory), so a new spec
+# that starts a thread is a deliberate addition here.
+ThreadSafety/NewThread:
+  Exclude:
+    - spec/integration/concurrency_block_durability_spec.rb
+    - spec/integration/concurrency_spec.rb
+    - spec/integration/connection_failure_spec.rb
+    - spec/integration/fair_share_read_spec.rb
+    - spec/integration/job_uniqueness_spec.rb
+    - spec/integration/read_ahead_spec.rb
+    - spec/integration/recurring_scheduler_uniqueness_spec.rb
+    - spec/integration/streams_pool_autoscale_spec.rb
+    - spec/integration/streams_pool_publisher_autoscale_spec.rb
+    - spec/integration/streams_pool_swap_spec.rb
+    - spec/integration/streams/harness_smoke_spec.rb
+    - spec/integration/thread_safety_spec.rb
+    - spec/pgbus/client_pool_trigger_spec.rb
+    - spec/pgbus/client_spec.rb
+    - spec/pgbus/client_swap_spec.rb
+    - spec/pgbus/client/connection_health_spec.rb
+    - spec/pgbus/client/resizable_pool_spec.rb
+    - spec/pgbus/dedup_cache_spec.rb
+    - spec/pgbus/execution_pools/async_pool_reactor_spec.rb
+    - spec/pgbus/metrics/backends/prometheus_spec.rb
+    - spec/pgbus/process/consumer_read_ahead_spec.rb
+    - spec/pgbus/process/consumer_spec.rb
+    - spec/pgbus/process/memory_usage_spec.rb
+    - spec/pgbus/process/wake_signal_spec.rb
+    - spec/pgbus/process/worker_read_ahead_spec.rb
+    - spec/pgbus/process/worker_spec.rb
+    - spec/pgbus/streams/filters_spec.rb
+    - spec/pgbus/streams/pool_trigger_spec.rb
+    - spec/pgbus/streams/transaction_probe_spec.rb
+    - spec/pgbus/testing_mode_spec.rb
+    - spec/pgbus/web/streamer/connection_spec.rb
+    - spec/pgbus/web/streamer/hub_client_spec.rb
+    - spec/pgbus/web/streamer/hub_protocol_spec.rb
+    - spec/pgbus/web/streamer/instance_spec.rb
+    - spec/pgbus/web/streamer/io_writer_spec.rb
+    - spec/pgbus/web/streamer/listener_spec.rb
+    - spec/pgbus/web/streamer/master_hub_boot_spec.rb
+    - spec/pgbus/web/streamer/master_hub_spec.rb
+    - spec/pgbus/web/streamer/peer_close_watcher_spec.rb
+    - spec/pgbus/web/streamer/registry_spec.rb
+    - spec/pgbus/web/streamer/stream_counter_spec.rb
+    - spec/support/falcon_test_harness.rb
+    - spec/support/puma_test_harness.rb
+    - spec/support/sse_test_client.rb
