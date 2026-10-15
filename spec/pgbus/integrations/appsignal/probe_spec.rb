@@ -4,6 +4,8 @@ require "spec_helper"
 
 RSpec.describe "Pgbus::Integrations::Appsignal::Probe" do
   let(:appsignal_class) do
+    # A spec double: built per example and driven from the example's thread.
+    # rubocop:disable-next ThreadSafety/ClassAndModuleAttributes
     Class.new do
       class << self
         attr_accessor :gauges

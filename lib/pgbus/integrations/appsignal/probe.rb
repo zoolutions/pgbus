@@ -24,23 +24,31 @@ module Pgbus
         METRIC_PREFIX = "pgbus_"
         private_constant :METRIC_PREFIX
 
-        class << self
-          def install! # rubocop:disable Naming/PredicateMethod
-            return false if @installed
+        # Registered once at boot; @install_lock makes the check-then-register
+        # atomic so the probe is never registered twice (issue #527).
+        @install_lock = Mutex.new
+        @installed = false
 
-            ::Appsignal::Probes.register :pgbus, new_probe_instance
-            @installed = true
-            true
+        class << self
+          def install!
+            @install_lock.synchronize do
+              next false if @installed
+
+              ::Appsignal::Probes.register :pgbus, new_probe_instance
+              @installed = true
+            end
           end
 
           def installed?
-            @installed == true
+            @install_lock.synchronize { @installed }
           end
 
           def reset!
-            ::Appsignal::Probes.unregister(:pgbus) if defined?(::Appsignal::Probes) &&
-                                                      ::Appsignal::Probes.respond_to?(:unregister)
-            @installed = false
+            @install_lock.synchronize do
+              ::Appsignal::Probes.unregister(:pgbus) if defined?(::Appsignal::Probes) &&
+                                                        ::Appsignal::Probes.respond_to?(:unregister)
+              @installed = false
+            end
           end
 
           # Visible for testing — returns a fresh runnable probe.
