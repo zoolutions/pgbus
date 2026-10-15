@@ -22,7 +22,7 @@ under `.claude/`.
 2. **NO hardcoded queue names** — use `config.queue_name()`
 3. **NO raw SQL in dashboard** — use `Web::DataSource`
 4. **NO `Marshal.load`** — JSON serialization only
-5. **NO unsynchronized shared state** — use Mutex or Concurrent primitives, built at load (never `@x ||=` on module state); a `ThreadSafety/*` disable only with the reason it is safe next to it. See `docs/concurrency.md`
+5. **NO unsynchronized shared state** — use Mutex or Concurrent primitives, built at load (never an unguarded `@x ||=` on module state); a `ThreadSafety/*` disable only with the reason it is safe next to it. See `docs/concurrency.md`
 6. **NO swallowing errors** — log via `Pgbus.logger`, track in `pgbus_failed_events`
 7. **NO `Record` suffix on model classes** — see Model Naming below
 8. **NO hand-formatted time in the dashboard** — no raw `*_at`/`vt`/`*_age_sec` output, no `strftime`/`time_ago_in_words`: use `pgbus_time` / `pgbus_timestamp` / `pgbus_absolute_time` for moments, `pgbus_duration` for seconds and `pgbus_ms_duration` for milliseconds (`Pgbus::Web::TimeFormat`; full mapping in `.claude/rules/dashboard.md`). Enforced by `Pgbus/DashboardTimeFormatting` (Ruby) and `spec/pgbus/web/time_conventions_spec.rb` (ERB)

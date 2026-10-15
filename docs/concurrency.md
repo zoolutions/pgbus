@@ -12,11 +12,14 @@ and `conformance-audit --strict`.
 ## Threads per process
 
 Every thread has one owner that starts it once and a `stop`/`shutdown` that
-ends it. Those joins are bounded: a thread stuck in a slow call is left to
-finish it and exit on its own (the streamer logs any that outlive its budget),
-and the process heartbeat's timer is shut down without waiting for a beat in
-flight. The inline `# rubocop:disable ThreadSafety/NewThread` next to each
-`Thread.new` names the owner and how it stops the thread.
+ends it. Those joins are bounded, and what happens past the budget is the
+owner's: an immediate shutdown kills the pool's remaining jobs and the health
+server kills its accept loop, while the streamer and the notify listener leave
+a thread stuck in a slow call to exit on its own (the streamer logs any that
+outlive its budget). The process heartbeat's timer is shut down without
+waiting for a beat in flight. The inline `# rubocop:disable
+ThreadSafety/NewThread` next to each `Thread.new` names the owner and how it
+stops the thread.
 
 | Process | Thread | Owner, and how it stops |
 |---|---|---|
@@ -29,7 +32,7 @@ flight. The inline `# rubocop:disable ThreadSafety/NewThread` next to each
 | | health server accept loop | `Web::HealthServer`; `stop` joins it, then kills it if it hangs |
 | Web (streams) | LISTEN thread, dispatcher, heartbeat, peer-close watcher, outbound pump writers | `Web::Streamer::Instance`, built once per process under `Streamer`'s lock; `shutdown!` stops them and joins each within a budget, logging any still running past it |
 | | hub client reader (Puma cluster mode) | `Web::Streamer::HubClient`; ends with its socket |
-| Puma master | hub accept / fanout / status loops, one reader and writer per worker | `Web::Streamer::MasterHub`; `stop` joins them |
+| Puma master | hub accept / fanout / status loops, one reader and writer per worker | `Web::Streamer::MasterHub`; `stop` joins the three hub loops and closes the worker sockets, which ends their readers and writers |
 
 **Immediate shutdown (QUIT).** A worker or consumer stops taking work, gives the
 running jobs `config.immediate_shutdown_grace` seconds (default 2) to finish,
@@ -50,7 +53,9 @@ reaped, so none stays checked out by a dead job.
 - **Locks live in class or module instance variables, never in constants**: a
   constant holding a Mutex cannot be read from a non-main Ractor.
 - **Check-then-act is atomic**: installing the metrics and AppSignal
-  subscribers, `DedupCache#mark!`, the warn-once flags.
+  subscribers, `DedupCache#mark!`, the process-wide warn-once flags (the
+  dashboard's, the batch probes', `StreamQueue`'s). A `Configuration`'s own
+  deprecation warnings are deduped without a lock: at worst one is logged twice.
 - **Memos handed to other threads are frozen and replaced whole**, never
   mutated in place (`StreamQueue.all_names`), so a caller iterating one can
   never see it change.
