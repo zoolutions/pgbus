@@ -34,16 +34,19 @@ RSpec.describe "immediate shutdown" do # rubocop:disable RSpec/DescribeClass
     record_class.remove_connection
   end
 
-  # A job that checks out a connection the way `Model.connection` does and
-  # then blocks until `release` is fed.
+  # A job that checks out a connection the way `Model.connection` does
+  # (lease_connection since Rails 7.2, connection before) and then blocks
+  # until `release` is fed.
   def post_job(pool, release)
     pool.post do
-      ar_pool.lease_connection
+      ar_pool.respond_to?(:lease_connection) ? ar_pool.lease_connection : ar_pool.connection
       started << true
       release.pop
       finished << :done
     end
-    started.pop
+    # Bounded so a job that raised before starting fails the example instead
+    # of hanging the run.
+    raise "the job did not start" unless started.pop(timeout: 5)
   end
 
   shared_examples "an immediate shutdown" do
