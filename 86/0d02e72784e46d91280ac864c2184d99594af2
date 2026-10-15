@@ -1,0 +1,19 @@
+app/controllers/pgbus/frontends_controller.rb
+  s_4d54ea71052150::t_53d93f2396f2f5 20-22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "860d02e72784e46d91280ac864c2184d99594af2",
+  "prompts": {},
+  "sessions": {
+    "s_4d54ea71052150": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e06ff31a-cbf6-4970-a25a-20a9c9288bd4",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": null
+    }
+  }
+}
