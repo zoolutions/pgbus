@@ -32,8 +32,9 @@ require "pgbus/testing/rspec"
 require "pgbus/testing/minitest"
 Pgbus::MCP.load!
 
-# A model resolves its primary key on first use; until then Rails parks a
-# BasicObject sentinel in @primary_key, which conformance-kit 0.3.0's audit
-# cannot describe (it calls #class on the value and raises). Resolve each, as
-# the first query would, so the audit sees the key itself.
+# A model resolves its primary key on first use; until then Rails parks an
+# unfrozen BasicObject sentinel in @primary_key. Resolve each, as a booted
+# app's first query does, so the audit sees each model in that state: with
+# its key (a shareable String) there, rather than 15 `@primary_key` sentinels
+# to allowlist.
 [Pgbus::BusRecord, *Pgbus::BusRecord.descendants].each(&:primary_key)
