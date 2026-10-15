@@ -121,22 +121,41 @@ RSpec.describe Pgbus::DedupCache do
 
     # mark! used to check `key?` and the size, then insert: two threads could
     # both pass the checks before either inserted (issue #527). The first
-    # racer is held right after its +check+ until the second has made its own,
-    # so the old check-then-act loses every run; under the lock the second
-    # never gets there while the first is inside.
+    # racer is held right after its +check+ until the second has made its own
+    # (the old check-then-act: both get through every run) or is blocked on
+    # the lock (mark! now). A racer counts as blocked only once it has
+    # started, so one the scheduler has not run yet is waited for, not
+    # mistaken for blocked.
     def race_mark(target, keys, check:)
-      map = target.instance_variable_get(:@cache)
-      count_lock = Mutex.new
-      count = 0
-      second = Queue.new
-      allow(map).to receive(check).and_wrap_original do |original, *args|
+      racers = []
+      started = Concurrent::Set.new
+      second_checked = Concurrent::AtomicBoolean.new(false)
+      hold_first_check(target, check, racers, started, second_checked)
+
+      go = Queue.new
+      keys.each do |key|
+        racers << Thread.new do
+          go.pop
+          started << Thread.current
+          target.mark!(key)
+        end
+      end
+      keys.size.times { go << true }
+      racers.each(&:join)
+    end
+
+    def hold_first_check(target, check, racers, started, second_checked)
+      count = Concurrent::AtomicFixnum.new(0)
+      allow(target.instance_variable_get(:@cache)).to receive(check).and_wrap_original do |original, *args|
         present = original.call(*args)
-        mine = count_lock.synchronize { count += 1 }
-        second.pop(timeout: 1) if mine == 1
-        second << true if mine == 2
+        case count.increment
+        when 1
+          contender = (racers - [Thread.current]).first
+          Thread.pass until second_checked.true? || (started.include?(contender) && contender.stop?)
+        when 2 then second_checked.make_true
+        end
         present
       end
-      keys.map { |key| Thread.new { target.mark!(key) } }.each(&:join)
     end
 
     it "records a key marked by two threads at once once" do
