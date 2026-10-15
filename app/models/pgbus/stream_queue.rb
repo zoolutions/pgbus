@@ -82,14 +82,12 @@ module Pgbus
       # not one per queue. Callers that need freshness (a long-lived process
       # picking up newly-created streams) call `reset_cache!` at the top of
       # their loop.
-      # The load runs outside the lock (a duplicate load on a race is
-      # harmless); the first one published wins.
+      # A cold load runs under the lock: its snapshot could otherwise predate
+      # a record! (which skips a nil memo) or a reset_cache! that finished
+      # while it ran, and publishing it would lose that change. Concurrent
+      # first callers wait for the one query instead of each running theirs.
       def all_names
-        cached = @names_lock.synchronize { @all_names }
-        return cached if cached
-
-        loaded = load_names.freeze
-        @names_lock.synchronize { @all_names ||= loaded }
+        @names_lock.synchronize { @all_names ||= load_names.freeze }
       end
 
       # Registry ∪ fingerprint-matched names. Use this for classification

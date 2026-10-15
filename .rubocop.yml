@@ -183,6 +183,7 @@ ThreadSafety/NewThread:
     - spec/pgbus/process/wake_signal_spec.rb
     - spec/pgbus/process/worker_read_ahead_spec.rb
     - spec/pgbus/process/worker_spec.rb
+    - spec/pgbus/stream_queue_spec.rb
     - spec/pgbus/streams/filters_spec.rb
     - spec/pgbus/streams/pool_trigger_spec.rb
     - spec/pgbus/streams/transaction_probe_spec.rb

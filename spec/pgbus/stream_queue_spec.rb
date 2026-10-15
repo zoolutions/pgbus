@@ -30,6 +30,44 @@ RSpec.describe Pgbus::StreamQueue do
       expect(held).to eq(Set["pgbus_chat_1"])
       expect(described_class.all_names).to eq(Set["pgbus_chat_1", "pgbus_chat_2"])
     end
+
+    # A cold load's snapshot can predate a concurrent record! or reset_cache!.
+    # The load is held mid-query while the other call runs to its end (or
+    # blocks on the memo's lock), so publishing that snapshot afterwards
+    # would lose the other call's change every run.
+    context "when a cold load is in flight" do
+      let(:loading) { Queue.new }
+      let(:release) { Queue.new }
+
+      before do
+        allow(described_class).to receive(:load_names) do
+          loading << true
+          release.pop
+          Set["pgbus_chat_1"]
+        end
+      end
+
+      def during_cold_load(&other_call)
+        reader = Thread.new { described_class.all_names }
+        loading.pop
+        other = Thread.new(&other_call)
+        Thread.pass until other.stop?
+        release << true
+        [reader, other].each(&:join)
+      end
+
+      it "keeps a name record! adds meanwhile" do
+        during_cold_load { described_class.record!("pgbus_chat_2") }
+
+        expect(described_class.all_names).to include("pgbus_chat_2")
+      end
+
+      it "does not undo a reset_cache! made meanwhile" do
+        during_cold_load { described_class.reset_cache! }
+
+        expect(described_class.instance_variable_get(:@all_names)).to be_nil
+      end
+    end
   end
 
   describe ".record!" do
