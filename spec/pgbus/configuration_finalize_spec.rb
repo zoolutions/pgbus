@@ -53,6 +53,8 @@ RSpec.describe Pgbus::Configuration do
     config.streams_retention = { +"chat" => 60 }
     config.streams_presence_ttl = { /\Aroom:/ => 30, default: 60 }
     config.recurring_tasks = { +"cleanup" => { class: +"CleanupJob", schedule: +"every hour" } }
+    config.recurring_tasks_files = [+"config/recurring.yml", +"config/recurring_extra.yml"]
+    config.event_consumers = [{ topics: [+"orders.#"], threads: 2, read_ahead: 4 }]
     config.current_attributes = :auto
   end
 

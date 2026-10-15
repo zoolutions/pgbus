@@ -150,9 +150,10 @@ RSpec.describe Pgbus::CLI do
     end
 
     context "when the flags change the configuration" do
+      # As the app's boot leaves it: finalized, its collections frozen.
       around do |example|
         original = Pgbus.configuration
-        Pgbus.instance_variable_set(:@configuration, Pgbus::Configuration.new)
+        Pgbus.instance_variable_set(:@configuration, Pgbus::Configuration.new.finalize!)
         example.run
       ensure
         Pgbus.instance_variable_set(:@configuration, original)
@@ -160,15 +161,17 @@ RSpec.describe Pgbus::CLI do
 
       # The flags go through setters after the app's boot finalized the
       # configuration, so the supervisor would fork with open values.
-      it "finalizes the configuration before the supervisor boots" do
-        finalized_at_boot = nil
-        allow(supervisor).to receive(:run) { finalized_at_boot = Pgbus.configuration.finalized? }
+      it "finalizes the values they set before the supervisor boots" do
+        shareable_at_boot = nil
+        allow(supervisor).to receive(:run) do
+          config = Pgbus.configuration
+          shareable_at_boot = [config.workers, config.roles].map { |value| Ractor.shareable?(value) }
+        end
 
         described_class.start(["start", "--queues", "critical: 5", "--workers-only"])
 
-        expect(finalized_at_boot).to be(true)
-        expect(Ractor.shareable?(Pgbus.configuration.workers)).to be(true)
-        expect(Ractor.shareable?(Pgbus.configuration.roles)).to be(true)
+        expect(shareable_at_boot).to eq([true, true])
+        expect(Pgbus.configuration.workers.map { |capsule| capsule[:name] }).to eq(%w[critical])
       end
     end
 
