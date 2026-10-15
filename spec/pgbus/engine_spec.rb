@@ -300,6 +300,18 @@ RSpec.describe Pgbus::Engine do
     it "runs after the app's own initializer files" do
       expect(described_class.initializers.find { |i| i.name == "pgbus.finalize" }.after).to eq(:load_config_initializers)
     end
+
+    # An initializer's Pgbus.configure leaves the configuration open: later
+    # initializers and after_initialize blocks may still change it in place.
+    it "leaves finalizing to after_initialize while the app boots" do
+      Pgbus.reset!
+      allow(Rails.application).to receive(:initialized?).and_return(false)
+
+      Pgbus.configure { |c| c.streams_durable_patterns = [+"early"] }
+
+      expect(Pgbus.configuration).not_to be_finalized
+      expect(Pgbus.configuration.streams_durable_patterns).not_to be_frozen
+    end
   end
 
   describe "pgbus.integrations.appsignal initializer" do

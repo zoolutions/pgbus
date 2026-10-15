@@ -150,10 +150,37 @@ RSpec.describe Pgbus::Configuration do
       expect(Ractor.shareable?(Pgbus.configuration.streams_durable_patterns)).to be(true)
     end
 
-    it "leaves a never-finalized configuration open after Pgbus.configure" do
-      Pgbus.configure { |c| c.streams_durable_patterns = [+"early"] }
+    it "finalizes around the unshareable values an app configures, keeping them as they are" do
+      seen = []
+      auth = ->(request) { seen << request }
+      share = ->(queues) { queues.to_h { |queue| [queue, seen.size] } }
+      redact = ->(key, value) { value.replace("[FILTERED]") if key == "card" }
+      logger = Logger.new(StringIO.new)
+      Pgbus.configuration.web_auth = auth
+      Pgbus.configuration.fair_share = share
+      Pgbus.configuration.logger = logger
+      Pgbus.configuration.web_filter_parameters = [:token, redact]
+      Pgbus.configuration.streams_durable_patterns = [+"orders"]
 
-      expect(Pgbus.configuration.streams_durable_patterns).not_to be_frozen
+      expect { Pgbus.finalize! }.not_to raise_error
+
+      config = Pgbus.configuration
+      expect([config.web_auth, config.fair_share, config.logger]).to eq([auth, share, logger])
+      expect(config.web_auth.call(:request)).to equal(seen).and eq([:request])
+      expect(config.web_filter_parameters).to eq([:token, redact])
+      expect(config.web_filter_parameters).not_to be_frozen
+      expect(Ractor.shareable?(config.streams_durable_patterns)).to be(true)
+    end
+  end
+
+  describe "Pgbus.configure" do
+    # Without Rails, or once the app has booted. During a Rails boot the
+    # engine finalizes instead (spec/pgbus/engine_spec.rb).
+    it "finalizes at its end outside a Rails boot" do
+      Pgbus.configure { |c| c.streams_durable_patterns = [+"orders"] }
+
+      expect(Pgbus.configuration).to be_finalized
+      expect(Ractor.shareable?(Pgbus.configuration.streams_durable_patterns)).to be(true)
     end
   end
 end

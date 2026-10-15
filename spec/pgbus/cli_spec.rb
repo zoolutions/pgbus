@@ -149,6 +149,29 @@ RSpec.describe Pgbus::CLI do
       end
     end
 
+    context "when the flags change the configuration" do
+      around do |example|
+        original = Pgbus.configuration
+        Pgbus.instance_variable_set(:@configuration, Pgbus::Configuration.new)
+        example.run
+      ensure
+        Pgbus.instance_variable_set(:@configuration, original)
+      end
+
+      # The flags go through setters after the app's boot finalized the
+      # configuration, so the supervisor would fork with open values.
+      it "finalizes the configuration before the supervisor boots" do
+        finalized_at_boot = nil
+        allow(supervisor).to receive(:run) { finalized_at_boot = Pgbus.configuration.finalized? }
+
+        described_class.start(["start", "--queues", "critical: 5", "--workers-only"])
+
+        expect(finalized_at_boot).to be(true)
+        expect(Ractor.shareable?(Pgbus.configuration.workers)).to be(true)
+        expect(Ractor.shareable?(Pgbus.configuration.roles)).to be(true)
+      end
+    end
+
     context "without flags" do
       it "starts the supervisor with the existing workers config" do
         described_class.start(["start"])

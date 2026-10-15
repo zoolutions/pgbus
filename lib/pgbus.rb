@@ -102,6 +102,15 @@ module Pgbus
 
     private
 
+    # True while a Rails app boots (its initializers and after_initialize
+    # blocks run): the engine finalizes at the end of that.
+    def rails_booting?
+      return false unless defined?(::Rails::Application) && ::Rails.respond_to?(:application)
+
+      app = ::Rails.application
+      !app.nil? && !app.initialized?
+    end
+
     # Zeitwerk::Loader.for_gem works out the gem root from its caller, so this
     # must stay in lib/pgbus.rb.
     def build_loader
@@ -197,17 +206,21 @@ module Pgbus
       # until a worker path consumes it. Checking the flag after the yield
       # lets a block opt out for itself via `c.eager_validation = false`.
       configuration.validate! if configuration.eager_validation
-      # Once booted, a later configure (an after_initialize block, a spec)
-      # leaves the new values shareable too.
-      configuration.finalize! if configuration.finalized?
+      # Without Rails this is the end of boot, so it finalizes; so does any
+      # configure once a Rails app has booted. While a Rails app boots, the
+      # engine's after_initialize finalizes instead, after every initializer
+      # and after_initialize block has had its say.
+      configuration.finalize! if configuration.finalized? || !rails_booting?
       configuration
     end
 
-    # The end of boot (the engine's after_initialize; call it yourself
-    # without Rails, after your last Pgbus.configure): validates the
-    # configuration (unless eager_validation is off) and freezes its plain-data settings into Ractor-shareable
-    # values (Configuration#finalize!). Callables and the logger stay as
-    # they are, on the main Ractor.
+    # The end of boot: validates the configuration (unless eager_validation
+    # is off) and freezes its plain-data settings into Ractor-shareable values
+    # (Configuration#finalize!). Callables and the logger stay as they are, on
+    # the main Ractor. Runs on its own: from the engine's after_initialize in a
+    # Rails app, at the end of each Pgbus.configure without Rails, and in
+    # `pgbus start` after its flags. Call it yourself only when you configure
+    # pgbus through setters alone, without Rails.
     def finalize!
       configuration.validate! if configuration.eager_validation
       configuration.finalize!
