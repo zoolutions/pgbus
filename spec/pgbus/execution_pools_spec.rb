@@ -58,24 +58,40 @@ RSpec.describe Pgbus::ExecutionPools do
   # spec/pgbus/process/immediate_shutdown_spec.rb; this pins the order of the
   # steps with a pool double.
   describe ".terminate" do
-    let(:pool) { double("execution pool", shutdown: nil, kill: nil) }
-
-    before { allow(described_class).to receive(:reclaim_connections) }
-
-    it "reclaims the connections when every job finished within the grace" do
-      allow(pool).to receive(:wait_for_termination).with(2).and_return(true)
-
-      expect(described_class.terminate(pool, grace: 2)).to be(true)
-      expect(pool).not_to have_received(:kill)
-      expect(described_class).to have_received(:reclaim_connections)
+    let(:calls) { [] }
+    let(:pool) do
+      log = calls
+      double("execution pool").tap do |pool|
+        allow(pool).to receive(:shutdown) { log << :shutdown }
+        allow(pool).to receive(:kill) { log << :kill }
+      end
     end
 
-    it "kills what still runs after the grace, then reclaims the connections" do
-      allow(pool).to receive(:wait_for_termination).with(2).and_return(false)
+    before do
+      log = calls
+      allow(described_class).to receive(:reclaim_connections) { log << :reclaim }
+    end
+
+    def wait_returns(finished)
+      log = calls
+      allow(pool).to receive(:wait_for_termination).with(2) do
+        log << :wait
+        finished
+      end
+    end
+
+    it "stops the pool, waits the grace, and reclaims the connections when every job finished" do
+      wait_returns(true)
+
+      expect(described_class.terminate(pool, grace: 2)).to be(true)
+      expect(calls).to eq(%i[shutdown wait reclaim])
+    end
+
+    it "kills what still runs after the grace before it reclaims the connections" do
+      wait_returns(false)
 
       expect(described_class.terminate(pool, grace: 2)).to be(false)
-      expect(pool).to have_received(:kill)
-      expect(described_class).to have_received(:reclaim_connections)
+      expect(calls).to eq(%i[shutdown wait kill reclaim])
     end
 
     # An async pool's wait re-raises a fatal reactor error.
@@ -83,7 +99,7 @@ RSpec.describe Pgbus::ExecutionPools do
       allow(pool).to receive(:wait_for_termination).and_raise(RuntimeError, "reactor died")
 
       expect { described_class.terminate(pool, grace: 2) }.to raise_error(RuntimeError, "reactor died")
-      expect(described_class).to have_received(:reclaim_connections)
+      expect(calls).to eq(%i[shutdown reclaim])
     end
   end
 end

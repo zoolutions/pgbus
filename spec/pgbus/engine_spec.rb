@@ -323,6 +323,9 @@ RSpec.describe Pgbus::Engine do
 
       expect(Pgbus.configuration).not_to be_finalized
       expect(Pgbus.configuration.streams_durable_patterns).not_to be_frozen
+    ensure
+      # The app has booted: restore_baseline_config must finalize as usual.
+      allow(Rails.application).to receive(:initialized?).and_call_original
     end
   end
 
