@@ -11,7 +11,12 @@
 
 require_relative "bench_helper"
 
-Dispatcher = Pgbus::Web::Streamer::StreamEventDispatcher
+# An ephemeral wake always records a stat (record_stat ignores
+# streams_stats_enabled for ephemeral frames). This bench has no database, so
+# the stat is skipped and only the frame path is timed.
+Dispatcher = Class.new(Pgbus::Web::Streamer::StreamEventDispatcher) do
+  private def record_stat(**) = nil
+end
 
 # Accepts every frame and records nothing: only the dispatcher's own cost.
 FrameSink = Class.new do
