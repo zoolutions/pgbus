@@ -216,22 +216,27 @@ module Pgbus
         thread
       end
 
-      def running?
-        synchronize { @running }
+      # True while the calling thread is the ticker #register started last
+      # and #stop has not stopped it. A stopped ticker can wake after a
+      # #register has already started its successor; @running alone would be
+      # true again for it, and it would tick beside the new one.
+      def current_ticker?
+        synchronize { @running && @thread.equal?(Thread.current) }
       end
 
       def run_loop(config)
-        while running?
+        while current_ticker?
           # Half the interval keeps every extension inside [interval, 1.5 * interval]
           # of the previous one — at most half the visibility timeout.
           sleep([config.effective_visibility_heartbeat_interval / 2.0, 0.05].max)
-          break unless running?
+          break unless current_ticker?
 
           tick!(config: config)
         end
       rescue StandardError => e
         Pgbus.logger.error { "[Pgbus::VisibilityHeartbeat] ticker died: #{e.class}: #{e.message}" }
-        synchronize { @running = false }
+        # Only its own state: a stopped ticker must not stop its successor.
+        synchronize { @running = false if @thread.equal?(Thread.current) }
       end
 
       # A live holder keeps its semaphore from being swept, so `duration`

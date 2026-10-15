@@ -194,6 +194,50 @@ RSpec.describe Pgbus::VisibilityHeartbeat do
   # Issue #486: a worker's read-ahead buffer holds claimed messages that have
   # not started yet. hold/release keep them invisible across that wait, with
   # the same extension a running job gets.
+  # A register racing a stop could start a new ticker before the stopped one
+  # saw @running cleared: the stopped one then saw it set again and kept
+  # ticking beside the new one. The first ticker is held in its sleep until
+  # the stop and the restart are both done.
+  describe "restarting the ticker" do
+    def hold_first_ticker_in_sleep(gate, asleep)
+      first = nil
+      allow(described_class).to receive(:sleep).and_wrap_original do |original, seconds|
+        first ||= Thread.current
+        next original.call(seconds) unless Thread.current.equal?(first)
+
+        asleep << first
+        gate.pop
+      end
+    end
+
+    def record_ticks_by(ticks, thread_ref)
+      allow(described_class).to receive(:tick!).and_wrap_original do |original, **kwargs|
+        ticks << Thread.current if Thread.current.equal?(thread_ref.first)
+        original.call(**kwargs)
+      end
+    end
+
+    it "lets a stopped ticker exit when a new one has started" do
+      gate = Queue.new
+      asleep = Queue.new
+      ticks = Queue.new
+      first = []
+      hold_first_ticker_in_sleep(gate, asleep)
+      record_ticks_by(ticks, first)
+
+      described_class.hold(client: client, queue_name: "default", msg_id: 1, config: config)
+      first << asleep.pop
+      described_class.stop
+      described_class.hold(client: client, queue_name: "default", msg_id: 2, config: config)
+      gate << true
+      Thread.pass while first.first.alive? && ticks.empty?
+
+      expect(ticks).to be_empty
+    ensure
+      3.times { gate << true }
+    end
+  end
+
   describe ".hold / .release" do
     def hold(msg_id: 7, queue_name: "default", prefixed: true)
       described_class.hold(client: client, queue_name: queue_name, msg_id: msg_id, prefixed: prefixed,
