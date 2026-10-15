@@ -16,8 +16,10 @@ module Pgbus
 
     layout "pgbus/application"
 
-    helper Pgbus::ApplicationHelper unless self < Pgbus::ApplicationHelper
-    helper Pgbus::ButtonHelper unless self < Pgbus::ButtonHelper
+    # Rails calls `helper :all` only when the superclass is ActionController::Base.
+    # A custom base_controller_class skips that, and a partial rendered here
+    # (the processes table calls ProcessesHelper) then raises NoMethodError.
+    helper :all
 
     # Make `pgbus` route proxy available in views (e.g. pgbus.root_path).
     # With isolate_namespace, the non-prefixed helpers (root_path) work inside

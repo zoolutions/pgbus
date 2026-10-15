@@ -20,12 +20,14 @@ if $PROGRAM_NAME == __FILE__
   end
 
   puts "SUPERCLASS=#{Pgbus::ApplicationController.superclass.name}"
+  puts "HOST=#{Pgbus::DashboardController._helpers.method_defined?(:pgbus_spec_host_helper)}"
   helpers = Pgbus::DashboardController._helpers.ancestors.filter_map(&:name).grep(/\APgbus::\w+Helper\z/)
   puts helpers.sort
 
   session = ActionDispatch::Integration::Session.new(Rails.application)
   session.get("/pgbus")
   puts "STATUS=#{session.response.status}"
+  puts session.response.body
   exit(session.response.status == 200 ? 0 : 1)
 end
 # rubocop:enable RSpec/Output

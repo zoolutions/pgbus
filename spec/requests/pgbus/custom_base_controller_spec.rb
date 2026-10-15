@@ -12,9 +12,12 @@ RSpec.describe "Pgbus::DashboardController" do
 
     expect(status).to be_success, "#{stdout}\n#{stderr}"
     expect(stdout).to include("SUPERCLASS=PgbusSpecBaseController")
+    expect(stdout).to include("HOST=true")
     expect(stdout).to include("no supervisor to restart it")
-    %w[ApplicationHelper ButtonHelper DashboardHelper EventsHelper InsightsHelper ProcessesHelper StreamsHelper].each do |name|
-      expect(stdout).to include("Pgbus::#{name}")
-    end
+    helpers = stdout.lines.map(&:strip).grep(/\APgbus::\w+Helper\z/)
+    expect(helpers).to eq(%w[
+      Pgbus::ApplicationHelper Pgbus::ButtonHelper Pgbus::DashboardHelper
+      Pgbus::EventsHelper Pgbus::InsightsHelper Pgbus::ProcessesHelper Pgbus::StreamsHelper
+    ].sort)
   end
 end
