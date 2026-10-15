@@ -273,7 +273,9 @@ module ExecutionModeHarness
   # Runs the sampler on its own thread for the measured phase.
   def start_sampling(sampler, client)
     stop = Concurrent::AtomicBoolean.new(false)
-    thread = Thread.new do
+    # The sampler thread: the caller sets `stop` and joins it after the
+    # measured phase.
+    thread = Thread.new do # rubocop:disable ThreadSafety/NewThread
       until stop.true?
         sampler.record(client.pool_stats)
         sleep(sampler.interval)

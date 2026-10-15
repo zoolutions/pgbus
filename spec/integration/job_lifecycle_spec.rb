@@ -56,6 +56,8 @@ RSpec.describe "Job lifecycle (integration)", :integration do
     let(:queue) { "lifecycle_failed_events" }
     let(:executor) { Pgbus::ActiveJob::Executor.new(client: client) }
     let(:flaky_job) do
+      # A spec double: built per example and driven from the example's thread.
+      # rubocop:disable-next ThreadSafety/ClassAndModuleAttributes
       Class.new(ActiveJob::Base) do
         self.queue_adapter = :inline
         def self.name = "JobLifecycleSpec::FlakyJob"

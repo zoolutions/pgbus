@@ -12,6 +12,8 @@ RSpec.describe Pgbus::Streams::TurboBroadcastable do
   # (reads it). We fake just enough surface to assert the assignment. We do
   # not load turbo-rails in unit tests.
   let(:fake_job_class) do
+    # A spec double: built per example and driven from the example's thread.
+    # rubocop:disable-next ThreadSafety/ClassInstanceVariable
     Class.new do
       class << self
         attr_reader :assigned_queue

@@ -96,8 +96,9 @@ closed_pool_errors = Concurrent::AtomicFixnum.new(0)
 stop = Concurrent::AtomicBoolean.new(false)
 
 # Producers (4 threads): continuous durable broadcast.
+# Load generators, on purpose: `stop` ends them and each is joined below.
 producers = Array.new(4) do
-  Thread.new do
+  Thread.new do # rubocop:disable ThreadSafety/NewThread
     until stop.true?
       begin
         client.send_stream_message(STREAM, { "seq" => produced.value })
@@ -112,7 +113,7 @@ end
 
 # Reader (1 thread, matches the single dispatcher): continuous replay read.
 cursor = Concurrent::AtomicFixnum.new(0)
-reader = Thread.new do
+reader = Thread.new do # rubocop:disable ThreadSafety/NewThread -- ended by `stop`, joined below with the producers
   until stop.true?
     begin
       envs = client.read_after(STREAM, after_id: cursor.value, limit: 200)

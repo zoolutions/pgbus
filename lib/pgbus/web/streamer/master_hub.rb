@@ -124,9 +124,12 @@ module Pgbus
             File.umask(old_umask)
           end
           File.chmod(0o600, @socket_path)
-          @accept_thread = Thread.new { accept_loop }
-          @fanout_thread = Thread.new { fanout_loop }
-          @status_thread = Thread.new { status_loop }
+          # The hub's three loops, owned by this hub: #start runs once at hub
+          # start in the Puma master, under @lifecycle_mutex; #stop signals
+          # each loop and joins all three.
+          @accept_thread = Thread.new { accept_loop } # rubocop:disable ThreadSafety/NewThread
+          @fanout_thread = Thread.new { fanout_loop } # rubocop:disable ThreadSafety/NewThread
+          @status_thread = Thread.new { status_loop } # rubocop:disable ThreadSafety/NewThread
           self
         rescue StandardError
           @table_mutex.synchronize { @running = false }
@@ -201,8 +204,11 @@ module Pgbus
             @workers[@next_id] = entry
             @next_id
           end
-          entry[:writer] = Thread.new { writer_loop(id, entry) }
-          entry[:reader] = Thread.new { reader_loop(id, entry) }
+          # One writer and one reader per connected Puma worker, owned by its
+          # @workers entry: both end when cleanup_worker closes the entry's
+          # socket (a worker hangs up, or #stop cleans up every worker).
+          entry[:writer] = Thread.new { writer_loop(id, entry) } # rubocop:disable ThreadSafety/NewThread
+          entry[:reader] = Thread.new { reader_loop(id, entry) } # rubocop:disable ThreadSafety/NewThread
           id
         end
 

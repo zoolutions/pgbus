@@ -21,7 +21,9 @@ module Pgbus
       # failure path leaves the message for VT redelivery — and the next
       # delivery probes again.
       def completion_column?
-        detected = @completion_column
+        # Double-checked: the unlocked read only skips the lock once the
+        # answer is set; it is written under @completion_column_mutex.
+        detected = @completion_column # rubocop:disable ThreadSafety/ClassInstanceVariable
         return detected unless detected.nil?
 
         @completion_column_mutex.synchronize do

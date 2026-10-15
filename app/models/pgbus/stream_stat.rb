@@ -49,6 +49,9 @@ module Pgbus
     # false on the first hiccup would permanently disable stream
     # stats for the process lifetime, which is a worse failure mode
     # than a few retries.
+    # An idempotent schema memo: concurrent first callers probe the same
+    # schema and store the same Boolean, so the unlocked read/write is safe.
+    # rubocop:disable-next ThreadSafety/ClassInstanceVariable
     def self.table_exists?
       return @table_exists if defined?(@table_exists)
 

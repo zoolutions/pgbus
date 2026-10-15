@@ -22,10 +22,12 @@ module Pgbus
       apexcharts: FRONTEND_ROOT.join("vendor", "apexcharts.js")
     }.freeze
 
+    # An idempotent memo: concurrent first requests glob the same files and
+    # build equal Hashes; whichever is stored, every reader gets a frozen one.
     def self.js_modules
-      @js_modules ||= FRONTEND_ROOT.join("modules").glob("*.min.js").sort
+      @js_modules ||= FRONTEND_ROOT.join("modules").glob("*.min.js").sort # rubocop:disable ThreadSafety/ClassInstanceVariable
                                    .to_h { |f| [f.basename(".min.js").to_s.to_sym, f] }
-                                   .merge(MODULE_OVERRIDES)
+                                   .merge(MODULE_OVERRIDES).freeze
     end
 
     CURRENT_VERSION = Pgbus::VERSION.tr(".", "-").freeze

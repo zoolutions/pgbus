@@ -277,7 +277,8 @@ def run_suite(stats_enabled:)
 
       t0 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       threads = Array.new(k) do
-        Thread.new { connect_client(harness, stream_name, since_id: since) }
+        # K concurrent connects, on purpose; each is joined by #value below.
+        Thread.new { connect_client(harness, stream_name, since_id: since) } # rubocop:disable ThreadSafety/NewThread
       end
       clients = threads.map(&:value)
       elapsed = (Process.clock_gettime(Process::CLOCK_MONOTONIC) - t0) * 1000.0

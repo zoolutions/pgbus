@@ -8,6 +8,8 @@ module SseTestSupport
   # under spec/support/ via spec_helper, but doesn't boot Rails, so we
   # defer the falcon + async requires until an integration spec actually
   # uses the harness. This keeps the unit suite fast and isolated.
+  # Called from the example's thread only (the harness is built per example).
+  # rubocop:disable-next ThreadSafety/ClassInstanceVariable
   def self.require_falcon_runtime
     return if @falcon_runtime_loaded
 

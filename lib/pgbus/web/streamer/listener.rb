@@ -101,7 +101,10 @@ module Pgbus
           return if @running
 
           @running = true
-          @thread = Thread.new { run_loop }
+          # The LISTEN thread, owned by this object: Instance#start starts it
+          # once (under Streamer's @current_mutex); #stop clears @running and
+          # joins it.
+          @thread = Thread.new { run_loop } # rubocop:disable ThreadSafety/NewThread
           self
         end
 

@@ -165,6 +165,8 @@ RSpec.describe Pgbus::Testing do
 
     describe "#drain!" do
       let(:handler_class) do
+        # A spec double: built per example and driven from the example's thread.
+        # rubocop:disable-next ThreadSafety/ClassAndModuleAttributes
         klass = Class.new(Pgbus::EventBus::Handler) do
           class << self
             attr_accessor :handled_events

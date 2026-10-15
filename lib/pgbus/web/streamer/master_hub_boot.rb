@@ -50,7 +50,9 @@ module Pgbus
         def start
           ENV["PGBUS_STREAMS_HUB_SOCKET"] = @socket_path
           @state_mutex.synchronize { @running = true }
-          @thread = Thread.new { wait_and_start }
+          # The boot thread, owned by this object: the Puma plugin starts it
+          # once in the master; #stop clears @running and joins it.
+          @thread = Thread.new { wait_and_start } # rubocop:disable ThreadSafety/NewThread
           self
         end
 

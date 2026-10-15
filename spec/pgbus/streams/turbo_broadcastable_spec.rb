@@ -7,6 +7,8 @@ RSpec.describe Pgbus::Streams::TurboBroadcastable do
   # as the real turbo-rails version. We do not load turbo-rails in unit
   # tests — the patch is exercised via a minimal stand-in, and the
   # integration test in Phase 5 uses the real gem.
+  # A spec double: built per example and driven from the example's thread.
+  # rubocop:disable-next ThreadSafety/ClassInstanceVariable
   let(:fake_turbo_module) do
     Module.new do
       extend FakeTurboStreamHelpers

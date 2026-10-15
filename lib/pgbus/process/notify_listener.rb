@@ -105,7 +105,10 @@ module Pgbus
           @running = true
         end
         @physical_queues.each { |q| @commands << [:listen, q] }
-        @thread = Thread.new { run_loop }
+        # The listener's one thread, owned by this object: started once (the
+        # @running check above, under @state_mutex), the sole owner of @conn,
+        # and joined by #stop after it clears @running.
+        @thread = Thread.new { run_loop } # rubocop:disable ThreadSafety/NewThread
         self
       end
 

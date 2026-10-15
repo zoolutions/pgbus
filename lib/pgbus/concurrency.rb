@@ -12,6 +12,9 @@ module Pgbus
     # parked job whose class no longer resolves.
     DEFAULT_DURATION = 15 * 60
 
+    # Class-body macro: it runs while the job class loads (at boot, or under the
+    # autoloader's lock), stores a frozen Hash, and the reader only reads it.
+    # rubocop:disable-next ThreadSafety/ClassInstanceVariable
     class_methods do
       # Limit concurrent execution of jobs with the same key.
       #

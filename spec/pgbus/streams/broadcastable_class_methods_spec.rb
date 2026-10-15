@@ -73,6 +73,8 @@ RSpec.describe Pgbus::Streams::BroadcastableOverride::ClassMethods do
 
   describe "broadcasts_to with durable: true" do
     let(:model_class) do
+      # A spec double: built per example and driven from the example's thread.
+      # rubocop:disable-next ThreadSafety/ClassInstanceVariable
       klass = Class.new do
         # Simulate ActiveRecord callback infrastructure
         class << self
@@ -226,6 +228,8 @@ RSpec.describe Pgbus::Streams::BroadcastableOverride::ClassMethods do
 
   describe "broadcasts_refreshes_to with durable: true" do
     let(:model_class) do
+      # A spec double: built per example and driven from the example's thread.
+      # rubocop:disable-next ThreadSafety/ClassInstanceVariable
       klass = Class.new do
         class << self
           def after_commit(callback = nil, &block)

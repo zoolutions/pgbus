@@ -88,8 +88,9 @@ per_check_ms = ((monotonic - t0) / iters) * 1000.0
 # --- (2) grow-under-saturation: CHURN the pool (re-checkout each op so the load
 # follows the pool across a hot-swap), run checks, watch it grow step by step ---
 stop = Concurrent::AtomicBoolean.new(false)
+# Load generators, on purpose: `stop` ends them and each is joined below.
 churn = Array.new(12) do
-  Thread.new do
+  Thread.new do # rubocop:disable ThreadSafety/NewThread
     until stop.true?
       begin
         client.send(:streams_pool).with_connection { |c| c.exec("SELECT pg_sleep(0.05)") }

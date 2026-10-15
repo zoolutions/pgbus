@@ -37,6 +37,9 @@ module Pgbus
     # false on the first hiccup would permanently disable job stats
     # for the process lifetime, which is a worse failure mode than
     # a few retries. See issue #98 / PR #91 (StreamStat fix).
+    # An idempotent schema memo: concurrent first callers probe the same
+    # schema and store the same Boolean, so the unlocked read/write is safe.
+    # rubocop:disable ThreadSafety/ClassInstanceVariable
     def self.table_exists?
       return @table_exists if defined?(@table_exists)
 
@@ -59,6 +62,7 @@ module Pgbus
       Pgbus.logger.debug { "[Pgbus] Failed to check job stat latency columns: #{e.message}" }
       false
     end
+    # rubocop:enable ThreadSafety/ClassInstanceVariable
 
     # Throughput: jobs per minute bucketed by minute for the last N minutes
     def self.throughput(minutes: 60)
