@@ -1,0 +1,21 @@
+spec/pgbus/web/streamer/shareable_payload_spec.rb
+  s_4786a62cd35147::t_6428be37e72759 1-97
+benchmarks/streams_frame_bench.rb
+  s_4786a62cd35147::t_71bb64438a7700 1-78
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "ec07ea38ec292fbbe9f56b68280643bf32081856",
+  "prompts": {},
+  "sessions": {
+    "s_4786a62cd35147": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d1e58604-bb1b-456c-ace0-8fe7f151dae8",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
