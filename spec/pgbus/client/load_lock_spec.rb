@@ -19,4 +19,14 @@ RSpec.describe Pgbus::Client do
 
     expect(lock).to have_received(:synchronize)
   end
+
+  # The lock is Client's class state, which a subclass does not inherit.
+  it "loads pgmq under Client's lock when called on a subclass" do
+    lock = described_class.instance_variable_get(:@pgmq_require_mutex)
+    allow(lock).to receive(:synchronize).and_call_original
+
+    Class.new(described_class).load_pgmq_gem!
+
+    expect(lock).to have_received(:synchronize)
+  end
 end

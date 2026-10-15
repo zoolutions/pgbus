@@ -92,6 +92,22 @@ RSpec.describe Pgbus::Client do
       config.pgmq_schema_mode = :auto
     end
 
+    # The install lock is Client's class state, which a subclass does not
+    # inherit; a subclass's install is serialized with every other client's.
+    it "runs a subclass's install check under Client's install lock" do
+      lock = described_class.pgmq_install_mutex
+      allow(lock).to receive(:synchronize).and_call_original
+      allow(PGMQ::Client).to receive(:new).and_return(mock_pgmq)
+      subclassed = Class.new(described_class).new(config, schema_ensured: false)
+      allow(subclassed).to receive_messages(tune_autovacuum: nil, notify_trigger_current?: false)
+      allow(subclassed).to receive(:with_raw_connection).and_yield(raw_conn)
+      allow(raw_conn).to receive(:exec).with(/pg_tables.*pgmq.*meta/).and_return(double(ntuples: 1))
+
+      subclassed.ensure_queue("jobs")
+
+      expect(lock).to have_received(:synchronize)
+    end
+
     it "skips installation when pgmq.meta already exists" do
       allow(raw_conn).to receive(:exec).with(/pg_tables.*pgmq.*meta/).and_return(double(ntuples: 1))
 

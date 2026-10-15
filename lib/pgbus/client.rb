@@ -84,6 +84,9 @@ module Pgbus
     # instead of the global Kernel#require, which — if stubbed before pgmq is
     # genuinely loaded — permanently prevents the real gem from ever loading.
     def self.load_pgmq_gem!
+      # The lock is Client's class state, which a subclass does not inherit.
+      return Client.load_pgmq_gem! unless equal?(Client)
+
       @pgmq_require_mutex.synchronize do
         Object.const_set(:PGMQ, Module.new) unless defined?(::PGMQ)
         require "pgmq"
@@ -1214,7 +1217,8 @@ module Pgbus
     def ensure_pgmq_schema
       return if @schema_ensured
 
-      self.class.pgmq_install_mutex.synchronize do
+      # Client's lock, also for a subclass: it serializes every client's install.
+      Client.pgmq_install_mutex.synchronize do
         return if @schema_ensured
 
         # Cache only a durable result: true only when this call owned the
