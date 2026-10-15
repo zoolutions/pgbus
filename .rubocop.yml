@@ -180,6 +180,7 @@ ThreadSafety/NewThread:
     - spec/pgbus/process/consumer_read_ahead_spec.rb
     - spec/pgbus/process/consumer_spec.rb
     - spec/pgbus/process/memory_usage_spec.rb
+    - spec/pgbus/process/notify_listener_spec.rb
     - spec/pgbus/process/wake_signal_spec.rb
     - spec/pgbus/process/worker_read_ahead_spec.rb
     - spec/pgbus/process/worker_spec.rb

@@ -702,5 +702,37 @@ RSpec.describe Pgbus::Process::NotifyListener do
 
       expect(listener.running?).to be(false)
     end
+
+    # stop used to run whole between start's @running check and its
+    # Thread.new: it found no thread to join, and start then started one that
+    # nobody joins (and that a restart could run beside a second). start is
+    # held at its first LISTEN command until stop has finished or is blocked.
+    it "joins a thread that a concurrent start was still creating" do
+      held = Queue.new
+      release = Queue.new
+      hold_first_listen_command(held, release)
+
+      starter = Thread.new { listener.start }
+      held.pop
+      stopper = Thread.new { listener.stop }
+      Thread.pass until stopper.stop?
+      release << true
+      [starter, stopper].each(&:join)
+
+      expect(listener.instance_variable_get(:@thread)).to be_nil
+      expect(listener).not_to be_running
+    end
+
+    def hold_first_listen_command(held, release)
+      first = true
+      allow(listener.instance_variable_get(:@commands)).to receive(:<<).and_wrap_original do |original, command|
+        if first && command.first == :listen
+          first = false
+          held << true
+          release.pop
+        end
+        original.call(command)
+      end
+    end
   end
 end
