@@ -116,6 +116,9 @@ module ConfigReference
       { name: "stall_threshold", type: "Numeric", default: "300", desc: "Seconds without progress before a worker is stalled." },
       { name: "read_timeout", type: "Numeric", default: "30", desc: "Read timeout for worker fetches." },
       { name: "drain_timeout", type: "Numeric", default: "30", desc: "Seconds to wait for in-flight jobs to finish during graceful shutdown before abandoning them." },
+      { name: "immediate_shutdown_grace", type: "Numeric", default: "2",
+        desc: "On QUIT, seconds a worker or consumer gives running jobs to finish before it kills them; " \
+              "killed jobs' ActiveRecord connections are reclaimed." },
       { name: "shutdown_timeout", type: "Numeric, nil", default: "drain_timeout + 5",
         desc: "Seconds the supervisor waits for children after TERM before SIGKILL. nil derives drain_timeout + 5; " \
               "an orchestrator's stop grace period (Kamal stop_timeout, K8s terminationGracePeriodSeconds) must exceed it." }

@@ -170,7 +170,7 @@ module Pgbus
       def immediate_shutdown
         @shutting_down = true
         @wake_signal.notify!
-        @pool.kill
+        ExecutionPools.terminate(@pool, grace: config.immediate_shutdown_grace)
       end
 
       private

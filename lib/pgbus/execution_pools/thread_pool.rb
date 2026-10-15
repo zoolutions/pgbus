@@ -5,6 +5,10 @@ require "concurrent"
 module Pgbus
   module ExecutionPools
     class ThreadPool
+      # How long #kill waits for each killed job to unwind (run its ensure
+      # blocks) before giving up on it.
+      KILL_JOIN_TIMEOUT = 1
+
       attr_reader :capacity
 
       def initialize(capacity:, on_state_change: nil)
@@ -12,14 +16,17 @@ module Pgbus
         @on_state_change = on_state_change
         @available_capacity = Concurrent::AtomicFixnum.new(capacity)
         @pool = Concurrent::FixedThreadPool.new(capacity)
+        @running = Concurrent::Map.new
       end
 
       def post(&block)
         @available_capacity.decrement
         begin
           @pool.post do
+            @running[Thread.current] = true
             block.call
           ensure
+            @running.delete(Thread.current)
             @available_capacity.increment
             @on_state_change&.call
           end
@@ -52,8 +59,12 @@ module Pgbus
         @pool.wait_for_termination(timeout)
       end
 
+      # Thread#kill only asks a thread to stop: wait for the killed jobs to
+      # unwind, so the caller can reclaim what they held (ExecutionPools.terminate).
       def kill
+        running = @running.keys
         @pool.kill
+        running.each { |thread| thread.join(KILL_JOIN_TIMEOUT) }
       end
 
       def metadata

@@ -181,6 +181,20 @@ RSpec.describe Pgbus::Configuration do
       expect(config.drain_timeout).to eq(30)
     end
 
+    it "has default immediate_shutdown_grace of 2 seconds" do
+      expect(config.immediate_shutdown_grace).to eq(2)
+    end
+
+    it "rejects a negative immediate_shutdown_grace" do
+      config.immediate_shutdown_grace = -1
+      expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /immediate_shutdown_grace/)
+    end
+
+    it "accepts an immediate_shutdown_grace of 0 (kill at once)" do
+      config.immediate_shutdown_grace = 0
+      expect { config.validate! }.not_to raise_error
+    end
+
     it "defaults shutdown_timeout to drain_timeout + 5" do
       expect(config.shutdown_timeout).to eq(35)
     end

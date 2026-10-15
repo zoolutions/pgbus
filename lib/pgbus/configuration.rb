@@ -51,6 +51,12 @@ module Pgbus
     # wait, so recycling/deploy never wedges on a permanently-stuck job.
     attr_accessor :stall_threshold, :read_timeout, :drain_timeout
 
+    # immediate_shutdown_grace (default 2s): on QUIT, a worker or consumer
+    # stops taking work and gives the jobs already running this long to finish
+    # before it kills their threads. Killed jobs' ActiveRecord connections are
+    # reclaimed, so none stays checked out by a dead thread.
+    attr_accessor :immediate_shutdown_grace
+
     # shutdown_timeout bounds how long the supervisor waits for its children
     # after forwarding TERM before escalating to SIGKILL. nil (default) derives
     # drain_timeout + SHUTDOWN_TIMEOUT_MARGIN, so raising drain_timeout keeps
@@ -299,6 +305,7 @@ module Pgbus
       @stall_threshold = 90
       @read_timeout = 30
       @drain_timeout = 30
+      @immediate_shutdown_grace = 2
       @shutdown_timeout = nil
 
       @dispatch_interval = 1.0
@@ -836,6 +843,9 @@ module Pgbus
         raise Pgbus::ConfigurationError, "read_timeout must be a positive number or nil to disable"
       end
       raise Pgbus::ConfigurationError, "drain_timeout must be > 0" unless drain_timeout.is_a?(Numeric) && drain_timeout.positive?
+      unless immediate_shutdown_grace.is_a?(Numeric) && !immediate_shutdown_grace.negative?
+        raise Pgbus::ConfigurationError, "immediate_shutdown_grace must be a number >= 0"
+      end
 
       validate_shutdown_timeout!
 

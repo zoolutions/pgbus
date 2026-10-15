@@ -237,7 +237,7 @@ module Pgbus
         Pgbus.stopping = true
         @lifecycle.transition_to!(:stopped)
         @wake_signal.notify!
-        @pool.kill
+        ExecutionPools.terminate(@pool, grace: config.immediate_shutdown_grace)
       end
 
       WILDCARD_REFRESH_INTERVAL = 30 # seconds

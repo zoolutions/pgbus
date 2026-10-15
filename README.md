@@ -2369,6 +2369,7 @@ Curated headline options for the README. The full operator reference (with types
 | `zombie_detection` | `true` | Detect and reclaim work from crashed workers |
 | `read_timeout` | `30` | Seconds before a single PGMQ read is bounded (libpq `statement_timeout` + `tcp_user_timeout` on a dedicated connection; nil disables) |
 | `drain_timeout` | `30` | Seconds to wait for in-flight jobs during graceful shutdown before abandoning them |
+| `immediate_shutdown_grace` | `2` | On QUIT, seconds a worker or consumer gives running jobs to finish before killing them; killed jobs' ActiveRecord connections are reclaimed |
 | `shutdown_timeout` | `drain_timeout + 5` | Seconds the supervisor waits for children after TERM before SIGKILL; an orchestrator's stop grace period must exceed it |
 | `stall_threshold` | `300` | Seconds without progress before a worker is considered stalled |
 | `priority_levels` | `nil` | Number of priority sub-queues (nil = disabled, 2-10) |

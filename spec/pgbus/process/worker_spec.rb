@@ -310,10 +310,21 @@ RSpec.describe Pgbus::Process::Worker do
     before { worker.lifecycle.transition_to!(:running) }
     after { Pgbus.stopping = false }
 
-    it "transitions to stopped state and kills the pool" do
+    it "transitions to stopped state and kills a pool whose jobs outlive the grace" do
+      allow(pool).to receive(:wait_for_termination).and_return(false)
+
       worker.immediate_shutdown
+
       expect(worker.lifecycle.state).to eq(:stopped)
+      expect(pool).to have_received(:shutdown)
+      expect(pool).to have_received(:wait_for_termination).with(worker.config.immediate_shutdown_grace)
       expect(pool).to have_received(:kill)
+    end
+
+    it "does not kill a pool whose jobs finish within the grace" do
+      worker.immediate_shutdown
+
+      expect(pool).not_to have_received(:kill)
     end
 
     it "sets Pgbus.stopping for ActiveJob::Continuation support" do

@@ -70,11 +70,12 @@ RSpec.describe Pgbus::Process::Consumer do
   end
 
   describe "#immediate_shutdown" do
-    it "sets shutting_down flag and kills the thread pool" do
+    it "sets shutting_down flag and kills a thread pool whose jobs outlive the grace" do
       consumer = described_class.new(topics: ["orders.#"])
       consumer.immediate_shutdown
 
       expect(consumer.shutting_down?).to be true
+      expect(mock_pool).to have_received(:wait_for_termination).with(consumer.config.immediate_shutdown_grace)
       expect(mock_pool).to have_received(:kill)
     end
   end
