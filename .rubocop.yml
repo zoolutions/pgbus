@@ -200,5 +200,6 @@ ThreadSafety/NewThread:
     - spec/pgbus/web/streamer/registry_spec.rb
     - spec/pgbus/web/streamer/stream_counter_spec.rb
     - spec/support/falcon_test_harness.rb
+    - spec/support/first_call_race.rb
     - spec/support/puma_test_harness.rb
     - spec/support/sse_test_client.rb

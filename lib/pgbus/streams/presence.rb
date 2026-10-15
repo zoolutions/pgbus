@@ -77,11 +77,12 @@ module Pgbus
         # True when pgbus_presence_members has the seat columns (the
         # add_presence_seats migration ran). A true answer is kept for the
         # life of the process; a false one for SCHEMA_RECHECK_SECONDS.
+        #
+        # The answer is read and written under @schema_mutex only (issue
+        # #527); the probe itself runs at most once per SCHEMA_RECHECK_SECONDS.
         def seats_supported?
-          return @seats_supported if schema_answer_fresh?
-
           @schema_mutex.synchronize do
-            next @seats_supported if schema_answer_fresh?
+            next @seats_supported if schema_answer_fresh?(@seats_supported, @probed_at)
 
             rows = connection.exec_params(<<~SQL, [])
               SELECT 1 AS present FROM information_schema.columns
@@ -169,10 +170,7 @@ module Pgbus
 
         private
 
-        # Reads each ivar once: a concurrent reset_schema_cache! may nil them.
-        def schema_answer_fresh?
-          supported = @seats_supported
-          probed_at = @probed_at
+        def schema_answer_fresh?(supported, probed_at)
           return false if supported.nil? || probed_at.nil?
 
           supported || monotonic_now - probed_at < SCHEMA_RECHECK_SECONDS

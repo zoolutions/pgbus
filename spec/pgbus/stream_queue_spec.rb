@@ -5,6 +5,33 @@ require "spec_helper"
 RSpec.describe Pgbus::StreamQueue do
   before { described_class.reset_cache! }
 
+  # record! runs on broadcast threads while the dispatcher iterates the set it
+  # got from all_names (issue #527): the memo is a frozen Set, replaced whole.
+  describe ".all_names memo" do
+    let(:connection) { instance_double(ActiveRecord::ConnectionAdapters::AbstractAdapter) }
+
+    before do
+      allow(described_class).to receive_messages(connection: connection, table_exists?: true)
+      allow(described_class).to receive(:load_names).and_return(Set["pgbus_chat_1"])
+      allow(connection).to receive(:quote_table_name) { |name| %("#{name}") }
+      allow(connection).to receive(:quote) { |value| "'#{value}'" }
+      allow(connection).to receive(:execute)
+    end
+
+    it "hands out a frozen set" do
+      expect(described_class.all_names).to be_frozen
+    end
+
+    it "does not change the set a caller holds when record! adds a name" do
+      held = described_class.all_names
+
+      described_class.record!("pgbus_chat_2")
+
+      expect(held).to eq(Set["pgbus_chat_1"])
+      expect(described_class.all_names).to eq(Set["pgbus_chat_1", "pgbus_chat_2"])
+    end
+  end
+
   describe ".record!" do
     let(:connection) { instance_double(ActiveRecord::ConnectionAdapters::AbstractAdapter) }
 

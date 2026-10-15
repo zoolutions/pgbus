@@ -33,37 +33,48 @@ module Pgbus
     # `message`. Broadcasts may override it with a typed name (issue #170).
     DEFAULT_SSE_EVENT = "turbo-stream"
 
-    # Process-wide registry of server-side audience filter predicates.
-    # Register filters at boot time via:
-    #   Pgbus::Streams.filters.register(:admin_only) { |user| user.admin? }
-    # See lib/pgbus/streams/filters.rb for the full API.
-    def self.filters
-      @filters ||= Filters.new
+    class << self
+      # Process-wide registry of server-side audience filter predicates.
+      # Register filters at boot time via:
+      #   Pgbus::Streams.filters.register(:admin_only) { |user| user.admin? }
+      # See lib/pgbus/streams/filters.rb for the full API.
+      #
+      # Process-wide publish-side coalescer for high-frequency broadcasts
+      # (issue #171); the flush re-enters the normal broadcast path so a
+      # coalesced frame is just a deferred ordinary broadcast.
+      #
+      # Both are built when this file loads, not by `||=` on first use: two
+      # first callers could each build a registry, and a filter registered on
+      # the one that lost was gone (issue #527). Replaced only by the resets.
+      attr_reader :filters, :coalescer
+
+      # Fresh filters registry. Used by tests; not intended for runtime.
+      def reset_filters!
+        @reset_lock.synchronize { @filters = Filters.new }
+      end
+
+      # Fresh coalescer. Used by tests; not intended for runtime.
+      def reset_coalescer!
+        @reset_lock.synchronize { @coalescer = build_coalescer }
+      end
+
+      private
+
+      def build_coalescer
+        # `target:` is part of the flush signature but unused here — it's only
+        # a coalescing key; the target is already encoded in the payload's
+        # turbo-stream tag. Absorbed via ** so it isn't a broadcast argument.
+        Coalescer.new(
+          flush: lambda do |stream_name:, payload:, opts:, **|
+            Pgbus.stream(stream_name).broadcast(payload, **opts)
+          end
+        )
+      end
     end
 
-    # Clears the filters registry. Used by tests; not intended for runtime.
-    def self.reset_filters!
-      @filters = nil
-    end
-
-    # Process-wide publish-side coalescer for high-frequency broadcasts
-    # (issue #171). Lazily built; the flush re-enters the normal broadcast
-    # path so a coalesced frame is just a deferred ordinary broadcast.
-    def self.coalescer
-      # `target:` is part of the flush signature but unused here — it's only
-      # a coalescing key; the target is already encoded in the payload's
-      # turbo-stream tag. Absorbed via ** so it isn't a broadcast argument.
-      @coalescer ||= Coalescer.new(
-        flush: lambda do |stream_name:, payload:, opts:, **|
-          Pgbus.stream(stream_name).broadcast(payload, **opts)
-        end
-      )
-    end
-
-    # Clears the coalescer. Used by tests; not intended for runtime.
-    def self.reset_coalescer!
-      @coalescer = nil
-    end
+    @reset_lock = Mutex.new
+    @filters = Filters.new
+    @coalescer = build_coalescer
 
     # A handle on a single logical stream. The name can be any string, an
     # object responding to `to_gid_param`, or an array of streamables (which
