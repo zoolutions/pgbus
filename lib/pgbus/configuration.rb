@@ -886,9 +886,8 @@ module Pgbus
         raise Pgbus::ConfigurationError, "read_timeout must be a positive number or nil to disable"
       end
       raise Pgbus::ConfigurationError, "drain_timeout must be > 0" unless drain_timeout.is_a?(Numeric) && drain_timeout.positive?
-      unless immediate_shutdown_grace.is_a?(Numeric) && !immediate_shutdown_grace.negative?
-        raise Pgbus::ConfigurationError, "immediate_shutdown_grace must be a number >= 0"
-      end
+
+      validate_immediate_shutdown_grace!
 
       validate_shutdown_timeout!
 
@@ -1783,6 +1782,15 @@ module Pgbus
 
       raise Pgbus::ConfigurationError,
             "#{name} must be a Numeric (seconds), ActiveSupport::Duration, or nil to disable, got #{value.inspect}"
+    end
+
+    # A finite real number >= 0: NaN is not negative?, and an infinite grace
+    # would never kill a job that does not finish.
+    def validate_immediate_shutdown_grace!
+      grace = immediate_shutdown_grace
+      return if grace.is_a?(Numeric) && grace.real? && grace.finite? && grace >= 0
+
+      raise Pgbus::ConfigurationError, "immediate_shutdown_grace must be a finite number >= 0"
     end
 
     def validate_positive_duration!(numeric, name)
