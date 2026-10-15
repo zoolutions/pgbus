@@ -28,13 +28,15 @@ module Pgbus
       # Either way, reclaim the ActiveRecord connections the jobs left checked
       # out: a killed thread or fiber never checks its own back in, and the
       # pool would stay that many connections short until its reaper ran.
-      # Returns true when every job finished within the grace (issue #527).
+      # Also when the wait raises (an async pool re-raises a fatal reactor
+      # error). Returns true when every job finished within the grace (issue #527).
       def terminate(pool, grace:)
         pool.shutdown
         finished = pool.wait_for_termination(grace) ? true : false
         pool.kill unless finished
-        reclaim_connections
         finished
+      ensure
+        reclaim_connections
       end
 
       # The caller's own connection, then every connection whose owning

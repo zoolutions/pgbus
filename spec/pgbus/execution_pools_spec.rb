@@ -53,4 +53,37 @@ RSpec.describe Pgbus::ExecutionPools do
         .to raise_error(ArgumentError)
     end
   end
+
+  # Immediate shutdown (issue #527): the pools' real behaviour is in
+  # spec/pgbus/process/immediate_shutdown_spec.rb; this pins the order of the
+  # steps with a pool double.
+  describe ".terminate" do
+    let(:pool) { double("execution pool", shutdown: nil, kill: nil) }
+
+    before { allow(described_class).to receive(:reclaim_connections) }
+
+    it "reclaims the connections when every job finished within the grace" do
+      allow(pool).to receive(:wait_for_termination).with(2).and_return(true)
+
+      expect(described_class.terminate(pool, grace: 2)).to be(true)
+      expect(pool).not_to have_received(:kill)
+      expect(described_class).to have_received(:reclaim_connections)
+    end
+
+    it "kills what still runs after the grace, then reclaims the connections" do
+      allow(pool).to receive(:wait_for_termination).with(2).and_return(false)
+
+      expect(described_class.terminate(pool, grace: 2)).to be(false)
+      expect(pool).to have_received(:kill)
+      expect(described_class).to have_received(:reclaim_connections)
+    end
+
+    # An async pool's wait re-raises a fatal reactor error.
+    it "reclaims the connections also when the wait raises" do
+      allow(pool).to receive(:wait_for_termination).and_raise(RuntimeError, "reactor died")
+
+      expect { described_class.terminate(pool, grace: 2) }.to raise_error(RuntimeError, "reactor died")
+      expect(described_class).to have_received(:reclaim_connections)
+    end
+  end
 end
