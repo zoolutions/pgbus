@@ -5,6 +5,7 @@ module Pgbus
   class Configuration
     def allowed_global_id_models: () -> untyped
     def allowed_global_id_models=: (untyped) -> untyped
+    def apply_log_format!: () -> void
     def appsignal_enabled: () -> bool
     def appsignal_enabled=: (untyped) -> untyped
     def appsignal_probe_enabled: () -> bool

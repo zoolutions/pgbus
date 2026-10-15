@@ -340,6 +340,7 @@ module Pgbus
       @logger = nil
       @stdout_logger = Logger.new($stdout)
       @log_format = :text
+      @log_format_set = false # see #apply_log_format!
       @error_reporters = []
 
       @listen_notify = true
@@ -644,6 +645,17 @@ module Pgbus
       end
 
       @log_format = format
+      @log_format_set = true
+      apply_log_format!
+    end
+
+    # Installs log_format's formatter on the logger pgbus resolves now; a
+    # no-op until log_format is set. The configuration exists before
+    # Rails.logger does, so a log_format set that early (config/application.rb)
+    # formats only the $stdout fallback: the engine calls this again once
+    # Rails.logger exists.
+    def apply_log_format!
+      return unless @log_format_set
 
       # Only install pgbus's formatter when the logger still carries a nil or
       # pgbus-installed formatter. A user who set a custom logger with a custom
@@ -652,7 +664,7 @@ module Pgbus
       old_formatter = logger&.formatter
       return unless pgbus_installable_formatter?(old_formatter)
 
-      new_formatter = case format
+      new_formatter = case log_format
                       when :json then LogFormatter::JSON.new
                       when :text then LogFormatter::Text.new
                       end

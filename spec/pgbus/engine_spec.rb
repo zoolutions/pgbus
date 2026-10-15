@@ -284,6 +284,18 @@ RSpec.describe Pgbus::Engine do
     end
   end
 
+  describe "pgbus.logger initializer" do
+    # Rails.logger exists when engine initializers run; a log_format set
+    # before it did (config/application.rb) is applied to it here.
+    it "applies the configured log_format to the logger pgbus now resolves" do
+      allow(Pgbus.configuration).to receive(:apply_log_format!)
+
+      initializer_block("pgbus.logger").call
+
+      expect(Pgbus.configuration).to have_received(:apply_log_format!)
+    end
+  end
+
   describe "pgbus.finalize initializer" do
     after { restore_baseline_config }
 

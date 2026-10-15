@@ -81,6 +81,9 @@ module Pgbus
     end
 
     initializer "pgbus.logger" do
+      # Rails.logger exists now: a log_format set before it did went to the
+      # $stdout fallback only.
+      Pgbus.configuration.apply_log_format!
       ActiveSupport.on_load(:after_initialize) do
         Pgbus.configuration.logger ||= Rails.logger
       end

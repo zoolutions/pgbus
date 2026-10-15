@@ -41,4 +41,33 @@ RSpec.describe Pgbus::Configuration do
       expect(config.log_format).to eq(:json)
     end
   end
+
+  # The configuration is built when pgbus loads, before Rails.logger exists:
+  # a log_format set that early (config/application.rb) can only format the
+  # $stdout fallback, so the engine applies it again once Rails.logger exists.
+  describe "#apply_log_format!" do
+    let(:rails_logger) { Logger.new(IO::NULL) }
+
+    before do
+      config.logger = nil
+      allow(config).to receive(:rails_logger).and_return(nil)
+    end
+
+    it "installs a log_format set before Rails.logger existed on Rails.logger" do
+      config.log_format = :json
+      allow(config).to receive(:rails_logger).and_return(rails_logger)
+
+      config.apply_log_format!
+
+      expect(rails_logger.formatter).to be_a(Pgbus::LogFormatter::JSON)
+    end
+
+    it "leaves the formatter alone when no log_format was set" do
+      allow(config).to receive(:rails_logger).and_return(rails_logger)
+
+      config.apply_log_format!
+
+      expect(rails_logger.formatter).to be_nil
+    end
+  end
 end
