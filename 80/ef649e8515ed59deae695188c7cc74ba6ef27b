@@ -1,0 +1,28 @@
+spec/pgbus/configuration_finalize_spec.rb
+  s_4786a62cd35147::t_07f14b4f21d525 153-154,156-168,170-176,179-180,182-183
+  s_4786a62cd35147::t_1a49005dc43c09 155
+  s_4786a62cd35147::t_3b47e2d04736df 169
+spec/pgbus/boot_finalize_spec.rb
+  s_4786a62cd35147::t_a502704d3e0860 1-19,25-26,29-30,33-34
+  s_4786a62cd35147::t_f6a388d0ca8c34 20-24,27-28,31-32
+script/boot_finalized.rb
+  s_4786a62cd35147::t_4102362b7087f3 1-56
+spec/pgbus/cli_spec.rb
+  s_4786a62cd35147::t_2b6bcaac173afb 152-174
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "80ef649e8515ed59deae695188c7cc74ba6ef27b",
+  "prompts": {},
+  "sessions": {
+    "s_4786a62cd35147": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d1e58604-bb1b-456c-ace0-8fe7f151dae8",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
