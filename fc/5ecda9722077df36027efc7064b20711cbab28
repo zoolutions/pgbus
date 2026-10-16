@@ -1,0 +1,124 @@
+lib/pgbus/deploy/rollover.rb
+  s_e96e270ce76923::t_5c18c52cfb2c83 31-38
+lib/pgbus/web/deploy_task_state.rb
+  s_e96e270ce76923::t_130df3fc44416b 1-51
+lib/pgbus/web/data_source.rb
+  s_e96e270ce76923::t_c27f206fefa62d 15
+app/views/pgbus/deploy_tasks/_tasks_table.html.erb
+  s_e96e270ce76923::t_13ae366eab449c 1-71
+docs/app/models/doc.rb
+  s_e96e270ce76923::t_e0b251be7c6700 34
+spec/pgbus/mcp/deploy_tasks_tool_spec.rb
+  s_e96e270ce76923::t_cf20eff9ed74e3 1-37,39-184
+  s_e96e270ce76923::t_186db07b86252c 38
+config/locales/it.yml
+  s_e96e270ce76923::t_573da4da74f971 239-334,716
+docs/app/views/docs/pages/deploy_tasks.rb
+  s_e96e270ce76923::t_e0b251be7c6700 1-197
+config/locales/fr.yml
+  s_e96e270ce76923::t_573da4da74f971 239-334,716
+spec/integration/deploy/rollover_spec.rb
+  s_e96e270ce76923::t_5c18c52cfb2c83 47-64
+app/controllers/pgbus/deploy_tasks_controller.rb
+  s_e96e270ce76923::t_24e61796e77008 1-38
+config/routes.rb
+  s_e96e270ce76923::t_24e61796e77008 48-54
+app/views/pgbus/deploy_tasks/_rollover_banner.html.erb
+  s_e96e270ce76923::t_13ae366eab449c 1-25
+lib/pgbus/mcp/tools/deploy_tasks_tool.rb
+  s_e96e270ce76923::t_fdc281891d6ed2 1-86
+spec/requests/pgbus/deploy_tasks_controller_spec.rb
+  s_e96e270ce76923::t_787759df04ce12 16
+  s_e96e270ce76923::t_935c3a95b8804e 1-15,17-91
+config/locales/fi.yml
+  s_e96e270ce76923::t_573da4da74f971 239-334,716
+config/locales/nl.yml
+  s_e96e270ce76923::t_573da4da74f971 239-334,716
+config/locales/pt.yml
+  s_e96e270ce76923::t_573da4da74f971 239-334,716
+lib/pgbus/mcp.rb
+  s_e96e270ce76923::t_ba166bca3d0c99 31
+spec/system/sample_data_spec.rb
+  s_e96e270ce76923::t_9f3d8ce4078dca 65-76
+config/locales/da.yml
+  s_e96e270ce76923::t_573da4da74f971 239-334,716
+spec/system/deploy_tasks_spec.rb
+  s_e96e270ce76923::t_a790c44fb24d90 204
+  s_e96e270ce76923::t_d0552db6af42d5 1-203,205-226
+lib/pgbus/web/data_source/list_counts.rb
+  s_e96e270ce76923::t_c27f206fefa62d 37,44
+spec/pgbus/web/deploy_task_state_spec.rb
+  s_e96e270ce76923::t_b622084105b7ee 1-86
+spec/integration/deploy/deploy_task_run_spec.rb
+  s_e96e270ce76923::t_5c18c52cfb2c83 30-41
+lighthouserc.dashboard.json
+  s_e96e270ce76923::t_9f3d8ce4078dca 22-23
+spec/support/pgbus/stub_data_source/sample_data.rb
+  s_e96e270ce76923::t_6aac643db16edc 55
+app/helpers/pgbus/deploy_tasks_helper.rb
+  s_e96e270ce76923::t_13ae366eab449c 74
+  s_e96e270ce76923::t_0206e31220cdde 1-73,75-77
+CHANGELOG.md
+  s_e96e270ce76923::t_3f4a629c823ff6 3-6
+README.md
+  s_e96e270ce76923::t_3f4a629c823ff6 1220,2220-2255,2330-2331,2430-2434
+spec/support/pgbus/stub_data_source.rb
+  s_e96e270ce76923::t_6aac643db16edc 6,20,35-36,84-87,252,276-301,465-467
+app/views/pgbus/deploy_tasks/index.html.erb
+  s_e96e270ce76923::t_13ae366eab449c 1-6
+app/views/pgbus/deploy_tasks/show.html.erb
+  s_e96e270ce76923::t_5f3a8355921cdd 88
+  s_e96e270ce76923::t_ba85bc8f4a331e 1-87,89-133
+docs/app/views/docs/pages/cli_generators.rb
+  s_e96e270ce76923::t_e0b251be7c6700 175
+spec/system/accessibility_spec.rb
+  s_e96e270ce76923::t_9f3d8ce4078dca 60
+lib/pgbus/web/data_source/deploy_task_list.rb
+  s_e96e270ce76923::t_9da9ab120568d5 1-100
+docs/app/views/docs/pages/rolling_restarts.rb
+  s_e96e270ce76923::t_e0b251be7c6700 168-171
+spec/pgbus/web/data_source_deploy_task_list_spec.rb
+  s_e96e270ce76923::t_3ad431d7774701 1-173
+lib/pgbus/mcp/server.rb
+  s_e96e270ce76923::t_9032262ba7ca51 29-30
+app/models/pgbus/deploy_task_run.rb
+  s_e96e270ce76923::t_5c18c52cfb2c83 25-32
+docs/app/views/docs/pages/recurring_tasks.rb
+  s_e96e270ce76923::t_e0b251be7c6700 36-37
+config/locales/de.yml
+  s_e96e270ce76923::t_573da4da74f971 239-334,716
+config/locales/en.yml
+  s_e96e270ce76923::t_a92932037bb2f2 239-334,716
+config/locales/es.yml
+  s_e96e270ce76923::t_573da4da74f971 239-334,716
+config/locales/ja.yml
+  s_e96e270ce76923::t_573da4da74f971 239-334,716
+app/views/layouts/pgbus/application.html.erb
+  s_e96e270ce76923::t_ba85bc8f4a331e 129,190
+config/locales/nb.yml
+  s_e96e270ce76923::t_573da4da74f971 239-334,716
+config/locales/sv.yml
+  s_e96e270ce76923::t_573da4da74f971 239-334,716
+config/i18n-tasks.yml
+  s_e96e270ce76923::t_5b2ef03d77317c 42-43
+spec/support/pgbus/stub_data_source/sample_deploy_tasks.rb
+  s_e96e270ce76923::t_e50df366eb61bd 44-45
+  s_e96e270ce76923::t_6aac643db16edc 1-41,43,46-70
+  s_e96e270ce76923::t_7040c99b643a2a 42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "fc5ecda9722077df36027efc7064b20711cbab28",
+  "prompts": {},
+  "sessions": {
+    "s_e96e270ce76923": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5914cabb-29d8-407e-aea9-b5a4a5f09dbf",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
