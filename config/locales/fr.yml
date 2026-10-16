@@ -271,7 +271,7 @@ fr:
         disabled_html: 'Désactivée : le planificateur l''ignore.'
         due_html: 'Prête : s''exécute au prochain tick du planificateur.'
         manual_html: "· exécutée %{ago} (manuel)"
-        never_html: Jamais exécutée.
+        never_html: Jamais exécutée après une bascule.
         ran_html: Exécutée %{ago} sur <code>%{revision}</code> (bascule).
         waiting_lagging_html:
           one: 'En attente de bascule : 1 processus n''exécute pas encore <code>%{revision}</code>.'
@@ -282,7 +282,7 @@ fr:
         waiting_unknown_html: 'En attente : l''état de la bascule n''a pas pu être lu.'
       run_now: Exécuter maintenant
       show:
-        armed_html: Armée pour <code>%{armed_for}</code> %{ago}
+        armed_html: "%{armed_for}, armée %{ago}"
         back: Retour
         configuration: Configuration
         labels:

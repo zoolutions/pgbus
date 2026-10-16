@@ -271,7 +271,7 @@ it:
         disabled_html: 'Disattivata: lo scheduler la salta.'
         due_html: 'Pronta: parte al prossimo tick dello scheduler.'
         manual_html: "· eseguita %{ago} (manuale)"
-        never_html: Mai eseguita.
+        never_html: Mai eseguita dopo un passaggio.
         ran_html: Eseguita %{ago} su <code>%{revision}</code> (passaggio).
         waiting_lagging_html:
           one: 'In attesa del passaggio: 1 processo non esegue ancora <code>%{revision}</code>.'
@@ -282,7 +282,7 @@ it:
         waiting_unknown_html: 'In attesa: impossibile leggere lo stato del passaggio.'
       run_now: Esegui ora
       show:
-        armed_html: Armata per <code>%{armed_for}</code> %{ago}
+        armed_html: "%{armed_for}, armata %{ago}"
         back: Indietro
         configuration: Configurazione
         labels:

@@ -271,7 +271,7 @@ es:
         disabled_html: 'Desactivada: el planificador la omite.'
         due_html: 'Lista: se ejecuta en el siguiente tick del planificador.'
         manual_html: "· se ejecutó %{ago} (manual)"
-        never_html: Nunca se ejecutó.
+        never_html: Nunca se ejecutó tras una transición.
         ran_html: Se ejecutó %{ago} en <code>%{revision}</code> (transición).
         waiting_lagging_html:
           one: 'Esperando la transición: 1 proceso aún no ejecuta <code>%{revision}</code>.'
@@ -282,7 +282,7 @@ es:
         waiting_unknown_html: 'Esperando: no se pudo leer el estado de la transición.'
       run_now: Ejecutar ahora
       show:
-        armed_html: Armada para <code>%{armed_for}</code> %{ago}
+        armed_html: "%{armed_for}, armada %{ago}"
         back: Volver
         configuration: Configuración
         labels:

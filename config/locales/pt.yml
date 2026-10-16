@@ -271,7 +271,7 @@ pt:
         disabled_html: 'Desativada: o agendador a ignora.'
         due_html: 'Pronta: executa no próximo tick do agendador.'
         manual_html: "· executada %{ago} (manual)"
-        never_html: Nunca executada.
+        never_html: Nunca executada após uma transição.
         ran_html: Executada %{ago} em <code>%{revision}</code> (transição).
         waiting_lagging_html:
           one: 'Aguardando a transição: 1 processo ainda não executa <code>%{revision}</code>.'
@@ -282,7 +282,7 @@ pt:
         waiting_unknown_html: 'Aguardando: não foi possível ler o estado da transição.'
       run_now: Executar agora
       show:
-        armed_html: Armada para <code>%{armed_for}</code> %{ago}
+        armed_html: "%{armed_for}, armada %{ago}"
         back: Voltar
         configuration: Configuração
         labels:

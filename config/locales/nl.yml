@@ -271,7 +271,7 @@ nl:
         disabled_html: 'Uitgeschakeld: de scheduler slaat hem over.'
         due_html: 'Klaar: draait bij de volgende tick van de scheduler.'
         manual_html: "· draaide %{ago} (handmatig)"
-        never_html: Nooit gedraaid.
+        never_html: Nooit gedraaid na een uitrol.
         ran_html: Draaide %{ago} op <code>%{revision}</code> (uitrol).
         waiting_lagging_html:
           one: 'Wacht op uitrol: 1 proces draait nog niet op <code>%{revision}</code>.'
@@ -282,7 +282,7 @@ nl:
         waiting_unknown_html: 'Wacht: de uitrolstatus kon niet worden gelezen.'
       run_now: Nu uitvoeren
       show:
-        armed_html: Klaargezet voor <code>%{armed_for}</code> %{ago}
+        armed_html: "%{armed_for}, klaargezet %{ago}"
         back: Terug
         configuration: Configuratie
         labels:

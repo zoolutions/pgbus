@@ -271,7 +271,7 @@ ja:
         disabled_html: '無効: スケジューラーはスキップします。'
         due_html: '実行待ち: スケジューラーの次のティックで実行されます。'
         manual_html: "· %{ago}に実行（手動）"
-        never_html: 未実行です。
+        never_html: ロールオーバー後に実行されたことはありません。
         ran_html: "%{ago}に <code>%{revision}</code> で実行（ロールオーバー）。"
         waiting_lagging_html:
           one: 'ロールオーバー待ち: 1 個のプロセスがまだ <code>%{revision}</code> で動いていません。'
@@ -282,7 +282,7 @@ ja:
         waiting_unknown_html: '待機中: ロールオーバーの状態を読み取れませんでした。'
       run_now: 今すぐ実行
       show:
-        armed_html: "<code>%{armed_for}</code> 向けに準備済み（%{ago}）"
+        armed_html: "%{armed_for}（%{ago}に準備）"
         back: 戻る
         configuration: 設定
         labels:

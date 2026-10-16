@@ -68,7 +68,8 @@
       <% if @task[:armed_for] && @task[:armed_at] %>
         <div>
           <dt class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.deploy_tasks.show.labels.armed") %></dt>
-          <dd class="mt-1 text-sm text-gray-900 dark:text-white"><%= t("pgbus.deploy_tasks.show.armed_html", armed_for: @task[:armed_for], ago: pgbus_time(@task[:armed_at])) %></dd>
+          <dd class="mt-1 text-sm text-gray-900 dark:text-white"><%= t("pgbus.deploy_tasks.show.armed_html", ago: pgbus_time(@task[:armed_at]),
+                armed_for: @task[:every_deploy] ? @task[:armed_for] : t("pgbus.deploy_tasks.version", version: @task[:armed_for])) %></dd>
         </div>
       <% end %>
       <% if @task[:arguments]&.any? %>

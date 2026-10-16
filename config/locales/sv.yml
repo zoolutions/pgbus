@@ -271,7 +271,7 @@ sv:
         disabled_html: 'Inaktiverad: schemaläggaren hoppar över den.'
         due_html: 'Redo: körs vid schemaläggarens nästa tick.'
         manual_html: "· kördes %{ago} (manuellt)"
-        never_html: Har aldrig körts.
+        never_html: Har aldrig körts efter en utrullning.
         ran_html: Kördes %{ago} på <code>%{revision}</code> (utrullning).
         waiting_lagging_html:
           one: 'Väntar på utrullning: 1 process kör ännu inte <code>%{revision}</code>.'
@@ -282,7 +282,7 @@ sv:
         waiting_unknown_html: 'Väntar: utrullningsstatusen kunde inte läsas.'
       run_now: Kör nu
       show:
-        armed_html: Förberedd för <code>%{armed_for}</code> %{ago}
+        armed_html: "%{armed_for}, förberedd %{ago}"
         back: Tillbaka
         configuration: Konfiguration
         labels:

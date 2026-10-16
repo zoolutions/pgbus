@@ -271,7 +271,7 @@ da:
         disabled_html: 'Deaktiveret: planlæggeren springer den over.'
         due_html: 'Klar: kører ved planlæggerens næste tick.'
         manual_html: "· kørte %{ago} (manuelt)"
-        never_html: Har aldrig kørt.
+        never_html: Har aldrig kørt efter en udrulning.
         ran_html: Kørte %{ago} på <code>%{revision}</code> (udrulning).
         waiting_lagging_html:
           one: 'Venter på udrulning: 1 proces kører endnu ikke <code>%{revision}</code>.'
@@ -282,7 +282,7 @@ da:
         waiting_unknown_html: 'Venter: udrulningsstatussen kunne ikke læses.'
       run_now: Kør nu
       show:
-        armed_html: Klargjort til <code>%{armed_for}</code> %{ago}
+        armed_html: "%{armed_for}, klargjort %{ago}"
         back: Tilbage
         configuration: Konfiguration
         labels:

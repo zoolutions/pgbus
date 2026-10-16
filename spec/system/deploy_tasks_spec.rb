@@ -109,7 +109,7 @@ RSpec.describe "Deploy Tasks", type: :system do
         expect(page).to have_text("ran 1m ago (manual)")
         expect(page).to have_text("Every deploy")
       end
-      within("tr", text: "fix_currencies") { expect(page).to have_text("Never ran.") }
+      within("tr", text: "fix_currencies") { expect(page).to have_text("Never ran after a rollover.") }
       within("tr", text: "purge_tokens") { expect(page).to have_text("Disabled: the scheduler skips it.") }
     end
 
@@ -207,6 +207,12 @@ RSpec.describe "Deploy Tasks", type: :system do
         expect(page).to have_text("rev-a")
         expect(page).to have_css("time", text: "5m ago")
       end
+    end
+
+    it "says which version a pending arm fires" do
+      visit "/pgbus/deploy_tasks/1"
+
+      expect(page).to have_text("v2, armed 2m ago")
     end
 
     it "redirects an unknown task to the list" do

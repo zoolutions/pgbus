@@ -271,7 +271,7 @@ fi:
         disabled_html: 'Poistettu käytöstä: ajastin ohittaa sen.'
         due_html: 'Valmis: ajetaan ajastimen seuraavalla kierroksella.'
         manual_html: "· ajettu %{ago} (manuaalisesti)"
-        never_html: Ei koskaan ajettu.
+        never_html: Ei koskaan ajettu käyttöönoton jälkeen.
         ran_html: Ajettu %{ago} versiossa <code>%{revision}</code> (käyttöönotto).
         waiting_lagging_html:
           one: 'Odotetaan käyttöönottoa: 1 prosessi ei vielä aja versiota <code>%{revision}</code>.'
@@ -282,7 +282,7 @@ fi:
         waiting_unknown_html: 'Odottaa: käyttöönoton tilaa ei voitu lukea.'
       run_now: Suorita nyt
       show:
-        armed_html: Valmisteltu versiolle <code>%{armed_for}</code> %{ago}
+        armed_html: "%{armed_for}, valmisteltu %{ago}"
         back: Takaisin
         configuration: Asetukset
         labels:

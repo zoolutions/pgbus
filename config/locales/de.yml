@@ -271,7 +271,7 @@ de:
         disabled_html: 'Deaktiviert: Der Scheduler überspringt sie.'
         due_html: 'Fällig: läuft beim nächsten Scheduler-Tick.'
         manual_html: "· lief %{ago} (manuell)"
-        never_html: Nie gelaufen.
+        never_html: Nach keinem Rollover gelaufen.
         ran_html: Lief %{ago} auf <code>%{revision}</code> (Rollover).
         waiting_lagging_html:
           one: 'Warte auf Rollover: 1 Prozess läuft noch nicht auf <code>%{revision}</code>.'
@@ -282,7 +282,7 @@ de:
         waiting_unknown_html: 'Wartet: Der Rollover-Status konnte nicht gelesen werden.'
       run_now: Jetzt ausführen
       show:
-        armed_html: Vorgemerkt für <code>%{armed_for}</code> %{ago}
+        armed_html: "%{armed_for}, vorgemerkt %{ago}"
         back: Zurück
         configuration: Konfiguration
         labels:
