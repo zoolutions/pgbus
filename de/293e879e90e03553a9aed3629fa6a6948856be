@@ -1,0 +1,37 @@
+lib/pgbus/process/dispatcher.rb
+  s_e96e270ce76923::t_b56562428fa06c 16,56-57,241,687-694
+.rubocop.yml
+  s_e96e270ce76923::t_36713918311bdf 161
+lib/pgbus/instrumentation.rb
+  s_e96e270ce76923::t_2378754790a343 31-32
+spec/pgbus/recurring/scheduler_spec.rb
+  s_e96e270ce76923::t_b288e1e4e2aa61 173-243
+spec/pgbus/process/dispatcher_spec.rb
+  s_e96e270ce76923::t_6227c423c24d52 560-587,733
+lib/pgbus/process/supervisor.rb
+  s_e96e270ce76923::t_97d73a7bd0adcb 428-429,431-433,444-445,495-518
+spec/pgbus/process/supervisor_spec.rb
+  s_e96e270ce76923::t_b288e1e4e2aa61 1289-1358
+spec/integration/deploy_tasks_spec.rb
+  s_e96e270ce76923::t_f69b602f0f7864 1-79,83-124
+  s_e96e270ce76923::t_36713918311bdf 80-82
+lib/pgbus/recurring/scheduler.rb
+  s_e96e270ce76923::t_613a438c10a85a 94-117
+  s_e96e270ce76923::t_175a969758a20a 10,15-17,23-25,30,34,54-59,121,142
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "de293e879e90e03553a9aed3629fa6a6948856be",
+  "prompts": {},
+  "sessions": {
+    "s_e96e270ce76923": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5914cabb-29d8-407e-aea9-b5a4a5f09dbf",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
