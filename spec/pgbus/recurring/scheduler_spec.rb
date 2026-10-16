@@ -170,6 +170,77 @@ RSpec.describe Pgbus::Recurring::Scheduler do
     end
   end
 
+  describe "deploy tasks (issue #536)" do
+    let(:runner) { instance_double(Pgbus::Deploy::Runner, task_count: 1, sync!: nil, tick: nil) }
+    let(:heartbeat) { instance_double(Pgbus::Process::Heartbeat, start: true, stop: true) }
+
+    before do
+      config.recurring_tasks = nil
+      config.deploy_tasks = { "backfill" => { "class" => "BackfillJob" } }
+      allow(Pgbus::Deploy::Runner).to receive(:new).and_return(runner)
+      allow(Pgbus::Process::Heartbeat).to receive(:new).and_return(heartbeat)
+    end
+
+    it "builds a runner when deploy tasks are configured and enabled" do
+      expect(described_class.new(config: config).deploy_runner).to be(runner)
+    end
+
+    it "builds no runner when deploy tasks are disabled or absent" do
+      config.deploy_tasks_enabled = false
+      expect(described_class.new(config: config).deploy_runner).to be_nil
+
+      config.deploy_tasks_enabled = true
+      config.deploy_tasks = nil
+      expect(described_class.new(config: config).deploy_runner).to be_nil
+    end
+
+    it "starts its heartbeat, then syncs deploy tasks, then ticks the runner" do
+      calls = []
+      allow(heartbeat).to receive(:start) { calls << :heartbeat }
+      allow(runner).to receive(:sync!) { calls << :sync }
+      scheduler = described_class.new(config: config)
+      allow(runner).to receive(:tick) do
+        calls << :tick
+        scheduler.graceful_shutdown
+      end
+      allow(scheduler).to receive(:setup_signals)
+      allow(scheduler).to receive(:restore_signals)
+
+      scheduler.run
+
+      expect(calls).to eq(%i[heartbeat sync tick])
+    end
+
+    it "reports the deploy task count in its heartbeat metadata" do
+      described_class.new(config: config).send(:start_heartbeat)
+
+      expect(Pgbus::Process::Heartbeat).to have_received(:new)
+        .with(hash_including(metadata: hash_including(tasks: 0, deploy_tasks: 1)))
+    end
+
+    it "ticks the runner but neither syncs nor runs recurring tasks when recurring is disabled" do
+      config.recurring_enabled = false
+      config.recurring_tasks = { "every_minute" => { "class" => "MinuteJob", "schedule" => "* * * * *" } }
+      allow(Pgbus::RecurringTask).to receive(:sync_from_config!)
+      scheduler = described_class.new(config: config)
+
+      scheduler.send(:sync_recurring_tasks)
+      scheduler.tick(Time.utc(2026, 3, 31, 12, 1, 0))
+
+      expect(Pgbus::RecurringTask).not_to have_received(:sync_from_config!)
+      expect(mock_client).not_to have_received(:send_message)
+      expect(runner).to have_received(:tick)
+    end
+
+    it "logs and survives a runner tick that raises" do
+      allow(runner).to receive(:tick).and_raise(StandardError, "db down")
+      allow(Pgbus.logger).to receive(:error)
+
+      expect { described_class.new(config: config).tick(Time.current) }.not_to raise_error
+      expect(Pgbus.logger).to have_received(:error)
+    end
+  end
+
   describe "#stamp_loop_tick (private)" do
     it "advances the beacon on each call" do
       scheduler = described_class.new(config: config)

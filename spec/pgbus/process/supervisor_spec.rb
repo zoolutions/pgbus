@@ -1286,6 +1286,76 @@ RSpec.describe Pgbus::Process::Supervisor do
     end
   end
 
+  describe "boot_scheduler with deploy tasks (issue #536, private)" do
+    let(:supervisor) { described_class.new }
+
+    around do |example|
+      saved = %i[recurring_tasks recurring_tasks_file recurring_enabled deploy_tasks deploy_tasks_enabled]
+              .to_h { |name| [name, config.public_send(name)] }
+      example.run
+    ensure
+      saved.each { |name, value| config.public_send("#{name}=", value) }
+    end
+
+    before do
+      config.recurring_tasks = nil
+      config.recurring_tasks_file = nil
+      allow(supervisor).to receive(:fork_scheduler)
+    end
+
+    it "forks the scheduler with deploy tasks only" do
+      config.deploy_tasks = { "backfill" => { "class" => "BackfillJob" } }
+
+      supervisor.send(:boot_scheduler)
+
+      expect(supervisor).to have_received(:fork_scheduler)
+    end
+
+    it "forks the scheduler for deploy tasks even when recurring is disabled" do
+      config.recurring_enabled = false
+      config.deploy_tasks = { "backfill" => { "class" => "BackfillJob" } }
+
+      supervisor.send(:boot_scheduler)
+
+      expect(supervisor).to have_received(:fork_scheduler)
+    end
+
+    it "does not fork when deploy tasks are disabled and no recurring tasks are configured" do
+      config.deploy_tasks = { "backfill" => { "class" => "BackfillJob" } }
+      config.deploy_tasks_enabled = false
+
+      supervisor.send(:boot_scheduler)
+
+      expect(supervisor).not_to have_received(:fork_scheduler)
+    end
+
+    it "detects deploy_tasks_files that exist" do
+      Dir.mktmpdir do |dir|
+        path = File.join(dir, "deploy_tasks.yml")
+        File.write(path, "backfill:\n  class: BackfillJob\n")
+        config.deploy_tasks_files = [path]
+
+        expect(supervisor.send(:deploy_tasks_configured?)).to be(true)
+      ensure
+        config.deploy_tasks_files = nil
+      end
+    end
+
+    it "loads deploy_tasks_files into the configuration in the scheduler fork" do
+      Dir.mktmpdir do |dir|
+        path = File.join(dir, "deploy_tasks.yml")
+        File.write(path, "backfill:\n  class: BackfillJob\n")
+        config.deploy_tasks_files = [path]
+
+        supervisor.send(:load_deploy_tasks_config)
+
+        expect(config.deploy_tasks).to eq("backfill" => { "class" => "BackfillJob" })
+      ensure
+        config.deploy_tasks_files = nil
+      end
+    end
+  end
+
   describe "NotifyHub wiring (issue #381)" do
     let(:hub) do
       instance_double(Pgbus::Process::NotifyHub,

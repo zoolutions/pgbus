@@ -7,24 +7,31 @@ module Pgbus
     class Scheduler
       include Process::SignalHandler
 
-      attr_reader :schedule, :config
+      attr_reader :schedule, :config, :deploy_runner
 
       def initialize(config: Pgbus.configuration)
         @config = config
         @schedule = Schedule.new(config: config)
+        # Deploy tasks (issue #536) ride this loop: the scheduler is already
+        # the one-per-deployment process, dedup'd across the overlap window.
+        @deploy_runner = Deploy::Runner.new(config: config) if config.deploy_tasks_enabled && config.deploy_tasks&.any?
         @shutting_down = false
         @last_runs = {}
         @loop_tick_at = Concurrent::AtomicReference.new(nil)
       end
 
+      # The order is load-bearing: this scheduler's own heartbeat row must
+      # exist before it arms deploy tasks, so an old-revision scheduler in the
+      # overlap window sees it as lagging and keeps its gate closed.
       def run
         setup_signals
         start_heartbeat
         sync_recurring_tasks
+        deploy_runner&.sync!
 
         Pgbus.logger.info do
           "[Pgbus] Scheduler started: #{schedule.tasks.size} recurring tasks, " \
-            "interval=#{config.recurring_schedule_interval}s"
+            "#{deploy_task_count} deploy tasks, interval=#{config.recurring_schedule_interval}s"
         end
 
         loop do
@@ -44,22 +51,12 @@ module Pgbus
       end
 
       def tick(now)
-        schedule.due_tasks(now).each do |task, run_at|
-          Pgbus::Instrumentation.instrument(
-            "pgbus.recurring.enqueue",
-            task: task.key,
-            class_name: task.class_name,
-            queue: task.queue_name,
-            run_at: run_at
-          ) do
-            schedule.enqueue_task(task, run_at: run_at)
-            @last_runs[task.key] = now
-          end
-        rescue StandardError => e
-          Pgbus.logger.error do
-            "[Pgbus] Error scheduling recurring task #{task.key}: #{e.class}: #{e.message}"
-          end
-        end
+        tick_recurring(now) if config.recurring_enabled
+        tick_deploy_tasks(now)
+      end
+
+      def deploy_task_count
+        deploy_runner&.task_count || 0
       end
 
       def last_run_at(key)
@@ -94,9 +91,34 @@ module Pgbus
 
       private
 
+      def tick_recurring(now)
+        schedule.due_tasks(now).each do |task, run_at|
+          Pgbus::Instrumentation.instrument(
+            "pgbus.recurring.enqueue",
+            task: task.key,
+            class_name: task.class_name,
+            queue: task.queue_name,
+            run_at: run_at
+          ) do
+            schedule.enqueue_task(task, run_at: run_at)
+            @last_runs[task.key] = now
+          end
+        rescue StandardError => e
+          Pgbus.logger.error do
+            "[Pgbus] Error scheduling recurring task #{task.key}: #{e.class}: #{e.message}"
+          end
+        end
+      end
+
+      def tick_deploy_tasks(now)
+        deploy_runner&.tick(now)
+      rescue StandardError => e
+        Pgbus.logger.error { "[Pgbus] Error running deploy tasks: #{e.class}: #{e.message}" }
+      end
+
       def sync_recurring_tasks
         tasks = config.recurring_tasks
-        return if tasks.nil?
+        return if tasks.nil? || !config.recurring_enabled
 
         RecurringTask.sync_from_config!(tasks)
         Pgbus.logger.info { "[Pgbus] Synced #{tasks.size} recurring task(s) from configuration" }
@@ -117,7 +139,7 @@ module Pgbus
         @heartbeat = Process::Heartbeat.new(
           kind: "scheduler",
           metadata: { pid: ::Process.pid, tasks: schedule.tasks.size, started_at: Time.now.to_f,
-                      supervisor_pid: ::Process.ppid },
+                      supervisor_pid: ::Process.ppid }.merge(deploy_runner ? { deploy_tasks: deploy_task_count } : {}),
           loop_tick_supplier: -> { @loop_tick_at.get }
         )
         @heartbeat.start
