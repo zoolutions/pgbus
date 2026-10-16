@@ -20,9 +20,6 @@ module Pgbus
 
     attr_reader :pgmq, :config, :connection_health
 
-    PGMQ_REQUIRE_MUTEX = Mutex.new
-    private_constant :PGMQ_REQUIRE_MUTEX
-
     # Fixed advisory-lock key serializing pgmq schema installation across
     # processes (issue #397). "pgmqinst" in ASCII hex — arbitrary but stable;
     # it only has to be identical in every process that can install.
@@ -55,6 +52,11 @@ module Pgbus
     # (issue #397, forensics in getzazu/app#3413).
     @pgmq_install_mutex = Mutex.new
 
+    # Serializes the one-time `require "pgmq"` (see load_pgmq_gem!). Class
+    # state built at load, not a constant: a constant holding a Mutex is
+    # unreadable from a non-main Ractor (issue #527).
+    @pgmq_require_mutex = Mutex.new
+
     class << self
       attr_reader :pgmq_install_mutex
     end
@@ -82,7 +84,10 @@ module Pgbus
     # instead of the global Kernel#require, which — if stubbed before pgmq is
     # genuinely loaded — permanently prevents the real gem from ever loading.
     def self.load_pgmq_gem!
-      PGMQ_REQUIRE_MUTEX.synchronize do
+      # The lock is Client's class state, which a subclass does not inherit.
+      return Client.load_pgmq_gem! unless equal?(Client)
+
+      @pgmq_require_mutex.synchronize do
         Object.const_set(:PGMQ, Module.new) unless defined?(::PGMQ)
         require "pgmq"
       end
@@ -920,10 +925,33 @@ module Pgbus
 
     # --- LISTEN/NOTIFY management (PGMQ v1.11.0+) ---
 
-    def wait_for_notify(queue_name, timeout: nil, &block)
-      full_name = config.queue_name(queue_name)
-      with_stale_connection_retry do
-        synchronized { @pgmq.wait_for_notify(full_name, timeout: timeout, &block) }
+    # Blocks until PGMQ's insert trigger notifies +queue_name+ or +timeout+
+    # seconds pass (nil waits indefinitely); returns the channel, or nil on a
+    # timeout, and yields (channel, pid, payload) like
+    # PG::Connection#wait_for_notify. The wait gets a dedicated connection of
+    # its own (worker_notify_connection_options), opened for it and closed
+    # after: never a pool connection, and never under @pgmq_mutex, which on
+    # the shared-AR path serializes every PGMQ call, so holding it across a
+    # blocking wait stalled the whole client (issue #527). The shared-AR path
+    # therefore needs worker_notify_database_url (or a base database_url).
+    # A connection found dead before it was used (STALE_CONNECTION_PATTERNS)
+    # is replaced and the wait starts again, as with_stale_connection_retry
+    # did for the pooled wait; a connection lost mid-wait is not retried.
+    def wait_for_notify(queue_name, timeout: nil, &)
+      channel = "pgmq.q_#{config.queue_name(queue_name)}.INSERT"
+      attempts = 0
+      begin
+        listen_on_dedicated_connection(channel, timeout, &)
+      rescue StandardError => e
+        attempts += 1
+        raise unless attempts <= STALE_RETRY_ATTEMPTS && stale_pg_error?(e)
+
+        sleep STALE_RETRY_DELAYS[[attempts - 1, STALE_RETRY_DELAYS.size - 1].min]
+        Pgbus.logger.warn do
+          "[Pgbus::Client] Retrying wait_for_notify after a stale connection " \
+            "(attempt #{attempts}/#{STALE_RETRY_ATTEMPTS}): #{e.message}"
+        end
+        retry
       end
     end
 
@@ -1199,7 +1227,8 @@ module Pgbus
     def ensure_pgmq_schema
       return if @schema_ensured
 
-      self.class.pgmq_install_mutex.synchronize do
+      # Client's lock, also for a subclass: it serializes every client's install.
+      Client.pgmq_install_mutex.synchronize do
         return if @schema_ensured
 
         # Cache only a durable result: true only when this call owned the
@@ -2067,6 +2096,22 @@ module Pgbus
         end
         retry
       end
+    end
+
+    def listen_on_dedicated_connection(channel, timeout, &)
+      conn = DedicatedConnection.connect(config.worker_notify_connection_options)
+      begin
+        conn.exec("LISTEN #{conn.quote_ident(channel)}")
+        conn.wait_for_notify(timeout, &)
+      ensure
+        DedicatedConnection.close_quietly(conn)
+      end
+    end
+
+    # A raw PG::Error (the dedicated connection is not wrapped by pgmq-ruby)
+    # whose message says the connection was dead before it was used.
+    def stale_pg_error?(error)
+      defined?(::PG::Error) && error.is_a?(::PG::Error) && stale_connection_error?(error)
     end
 
     def stale_connection_error?(error)

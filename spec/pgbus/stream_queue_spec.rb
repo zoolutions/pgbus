@@ -5,6 +5,91 @@ require "spec_helper"
 RSpec.describe Pgbus::StreamQueue do
   before { described_class.reset_cache! }
 
+  # record! runs on broadcast threads while the dispatcher iterates the set it
+  # got from all_names (issue #527): the memo is a frozen Set, replaced whole.
+  describe ".all_names memo" do
+    let(:connection) { instance_double(ActiveRecord::ConnectionAdapters::AbstractAdapter) }
+
+    before do
+      allow(described_class).to receive_messages(connection: connection, table_exists?: true)
+      allow(described_class).to receive(:load_names).and_return(Set["pgbus_chat_1"])
+      allow(connection).to receive(:quote_table_name) { |name| %("#{name}") }
+      allow(connection).to receive(:quote) { |value| "'#{value}'" }
+      allow(connection).to receive(:execute)
+    end
+
+    it "hands out a frozen set" do
+      expect(described_class.all_names).to be_frozen
+    end
+
+    it "does not change the set a caller holds when record! adds a name" do
+      held = described_class.all_names
+
+      described_class.record!("pgbus_chat_2")
+
+      expect(held).to eq(Set["pgbus_chat_1"])
+      expect(described_class.all_names).to eq(Set["pgbus_chat_1", "pgbus_chat_2"])
+    end
+
+    # A cold load's snapshot can predate a concurrent record! or reset_cache!.
+    # The load is held mid-query while the other call runs, so publishing
+    # that snapshot afterwards would lose the other call's change every run.
+    # The database has the recorded name by the next load.
+    context "when a cold load is in flight" do
+      let(:loading) { Queue.new }
+      let(:release) { Queue.new }
+
+      before do
+        loads = 0
+        allow(described_class).to receive(:load_names) do
+          loads += 1
+          next Set["pgbus_chat_1", "pgbus_chat_2"] unless loads == 1
+
+          loading << true
+          release.pop
+          Set["pgbus_chat_1"]
+        end
+      end
+
+      def during_cold_load(&other_call)
+        reader = Thread.new { described_class.all_names }
+        loading.pop
+        other = Thread.new(&other_call)
+        Thread.pass until other.stop?
+        release << true
+        [reader, other].each(&:join)
+      end
+
+      it "keeps a name record! adds meanwhile" do
+        during_cold_load { described_class.record!("pgbus_chat_2") }
+
+        expect(described_class.all_names).to include("pgbus_chat_2")
+      end
+
+      it "does not undo a reset_cache! made meanwhile" do
+        during_cold_load { described_class.reset_cache! }
+
+        expect(described_class.instance_variable_get(:@all_names)).to be_nil
+      end
+    end
+
+    # record! takes a connection before the memo's lock; a load holding the
+    # lock while it waits for a connection would invert that order and could
+    # deadlock on an exhausted pool.
+    it "runs the load without holding the memo's lock" do
+      lock = described_class.instance_variable_get(:@names_lock)
+      held_during_load = nil
+      allow(described_class).to receive(:load_names) do
+        held_during_load = lock.owned?
+        Set["pgbus_chat_1"]
+      end
+
+      described_class.all_names
+
+      expect(held_during_load).to be(false)
+    end
+  end
+
   describe ".record!" do
     let(:connection) { instance_double(ActiveRecord::ConnectionAdapters::AbstractAdapter) }
 

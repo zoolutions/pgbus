@@ -10,6 +10,8 @@ require_relative "../integration_helper"
 # the event path feeds it correctly, including through the outbox.
 RSpec.describe "Fair share for event-bus consumers (issue #427)", :integration do
   let(:handler_class) do
+    # A spec double: built per example and driven from the example's thread.
+    # rubocop:disable-next ThreadSafety/ClassInstanceVariable
     Class.new(Pgbus::EventBus::Handler) do
       def self.handled
         @handled ||= []

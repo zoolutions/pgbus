@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# conformance-kit's ractor.setup (.conformance.yml): prepares the Postgres
+# database the Ractor run (`bundle exec rspec --tag ractor`, every spec file
+# loaded) reaches through PGBUS_DATABASE_URL. With that set, the integration
+# helper connects at load and purges pgbus's queues around each example, so
+# the database and its pgmq schema must exist.
+#
+# PGBUS_DATABASE_URL (ractor.env) names no user: you connect as yourself, to
+# pgbus_test on localhost. Locally that is your own server and pgbus's own test
+# database, created here when it is missing; nothing else is touched.
+#
+# In GitHub Actions the conformance workflow's postgres:18 service has only the
+# postgres/postgres superuser and no test database. There the runner's own user
+# gets a role (via that superuser) and a ~/.pgpass entry, so the same URL works
+# for every later stage of `conformance-kit check`.
+set -euo pipefail
+
+db=pgbus_test
+user="${USER:-$(id -un)}"
+
+if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
+  admin=(psql --host localhost --username postgres --dbname postgres --tuples-only --no-align --quiet)
+  if [ -z "$(PGPASSWORD=postgres "${admin[@]}" --command "SELECT 1 FROM pg_roles WHERE rolname = '$user'")" ]; then
+    PGPASSWORD=postgres "${admin[@]}" --command "CREATE ROLE \"$user\" LOGIN SUPERUSER PASSWORD 'postgres'"
+  fi
+  echo "localhost:5432:*:$user:postgres" >> "$HOME/.pgpass"
+  chmod 600 "$HOME/.pgpass"
+fi
+
+if [ -z "$(psql --host localhost --dbname postgres --tuples-only --no-align --quiet \
+  --command "SELECT 1 FROM pg_database WHERE datname = '$db'")" ]; then
+  createdb --host localhost "$db"
+fi
+
+# The embedded PGMQ schema, as the integration CI job installs it; skipped
+# when the database already has one.
+bundle exec ruby -e '
+  require "pg"
+  require "pgbus"
+  conn = PG.connect(ENV.fetch("PGBUS_DATABASE_URL"))
+  installed = conn.exec("SELECT 1 FROM pg_tables WHERE schemaname = $$pgmq$$ AND tablename = $$meta$$").ntuples.positive?
+  unless installed
+    conn.exec("CREATE SCHEMA IF NOT EXISTS pgmq")
+    conn.exec(Pgbus::PgmqSchema.install_sql)
+    conn.exec(Pgbus::PgmqSchema.version_tracking_sql)
+  end
+  conn.close
+'

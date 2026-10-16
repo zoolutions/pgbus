@@ -45,7 +45,9 @@ module Pgbus
       extend ActiveSupport::Concern
 
       included do
-        class_attribute :pgbus_visibility_heartbeat_enabled, instance_writer: false, default: nil
+        # A per-class setting the job's own class body writes at load
+        # (`pgbus_visibility_heartbeat false`); jobs only read it while they run.
+        class_attribute :pgbus_visibility_heartbeat_enabled, instance_writer: false, default: nil # rubocop:disable ThreadSafety/ClassAndModuleAttributes
       end
 
       class_methods do
@@ -54,6 +56,14 @@ module Pgbus
         end
       end
     end
+
+    # Built at load, never lazily: a `@mutex ||= Mutex.new` is itself a race in
+    # which two first callers each lock a Mutex of their own (issue #527). It
+    # guards @entries, @running, @thread and @pid, which are only touched inside
+    # #synchronize. A forked child can take it even when a parent thread held it
+    # at the fork: Ruby abandons a Mutex whose owner did not survive the fork.
+    @mutex = Mutex.new
+    @entries = {} # rubocop:disable ThreadSafety/MutableClassInstanceVariable -- only read or written inside #synchronize
 
     class << self
       # Track the message for the duration of the block.
@@ -106,13 +116,13 @@ module Pgbus
       # can drive it.
       def tick!(now: monotonic_now, config: Pgbus.configuration)
         interval = config.effective_visibility_heartbeat_interval
-        due = synchronize { entries.values.select { |entry| now - entry.extended_at >= interval } }
+        due = synchronize { @entries.values.select { |entry| now - entry.extended_at >= interval } }
         due.each { |entry| extend!(entry, now: now, config: config) }
         due.size
       end
 
       def tracked_count
-        synchronize { entries.size }
+        synchronize { @entries.size }
       end
 
       # Stop the background thread. Tracked entries are kept: a job still
@@ -141,9 +151,20 @@ module Pgbus
 
       def register(entry, config)
         synchronize do
-          forget_parent_entries!
-          entries[key_for(entry)] = entry
-          ensure_thread(config)
+          # Entries registered before a fork belong to the parent's jobs; the
+          # thread did not survive the fork either.
+          unless @pid == ::Process.pid
+            @pid = ::Process.pid
+            @entries = {}
+            @running = false
+            @thread = nil
+          end
+          @entries[key_for(entry)] = entry
+          # Start the ticker once per process.
+          unless @running && @thread&.alive?
+            @running = true
+            @thread = start_ticker(config)
+          end
         end
       end
 
@@ -153,7 +174,7 @@ module Pgbus
       def unregister(entry)
         synchronize do
           key = key_for(entry)
-          entries.delete(key) if entries[key].equal?(entry)
+          @entries.delete(key) if @entries[key].equal?(entry)
         end
       end
 
@@ -186,31 +207,38 @@ module Pgbus
         end
       end
 
-      # Caller holds the mutex. Start the ticker once per process.
-      def ensure_thread(config)
-        return if @running && @thread&.alive?
+      # One ticker per process, owned by this module: #register starts it under
+      # the lock (at most one live thread, see @running/@thread) and #stop
+      # clears @running, wakes it and joins it; Worker#shutdown calls #stop.
+      def start_ticker(config)
+        thread = Thread.new { run_loop(config) } # rubocop:disable ThreadSafety/NewThread
+        thread.name = "pgbus-visibility-heartbeat"
+        thread
+      end
 
-        @running = true
-        @thread = Thread.new { run_loop(config) }
-        @thread.name = "pgbus-visibility-heartbeat"
+      # True while the calling thread is the ticker #register started last
+      # and #stop has not stopped it. A stopped ticker can wake after a
+      # #register has already started its successor; @running alone would be
+      # true again for it, and it would tick beside the new one.
+      def current_ticker?
+        synchronize { @running && @thread.equal?(Thread.current) }
       end
 
       def run_loop(config)
-        while @running
+        while current_ticker?
           # Half the interval keeps every extension inside [interval, 1.5 * interval]
           # of the previous one — at most half the visibility timeout.
           sleep([config.effective_visibility_heartbeat_interval / 2.0, 0.05].max)
-          break unless @running
+          break unless current_ticker?
 
           tick!(config: config)
         end
       rescue StandardError => e
         Pgbus.logger.error { "[Pgbus::VisibilityHeartbeat] ticker died: #{e.class}: #{e.message}" }
-        synchronize { @running = false }
+        # Only its own state: a stopped ticker must not stop its successor.
+        synchronize { @running = false if @thread.equal?(Thread.current) }
       end
 
-      # Entries registered before a fork belong to the parent's jobs; the
-      # thread did not survive the fork either.
       # A live holder keeps its semaphore from being swept, so `duration`
       # bounds heartbeat silence rather than run time. Its own rescue: a
       # failed touch must not cost the message its visibility extension.
@@ -236,29 +264,18 @@ module Pgbus
         end
       end
 
-      def forget_parent_entries!
-        return if @pid == ::Process.pid
-
-        @pid = ::Process.pid
-        @entries = {}
-        @running = false
-        @thread = nil
-      end
-
-      def entries
-        @entries ||= {}
-      end
-
       def registered?(entry)
-        synchronize { entries[key_for(entry)].equal?(entry) }
+        synchronize { @entries[key_for(entry)].equal?(entry) }
       end
 
       def key_for(entry)
         [entry.queue_name, entry.msg_id]
       end
 
-      def synchronize(&)
-        (@mutex ||= Mutex.new).synchronize(&)
+      # A literal block, not `(&)`: ThreadSafety/ClassInstanceVariable accepts
+      # @mutex as the receiver of a synchronize block only.
+      def synchronize
+        @mutex.synchronize { yield } # rubocop:disable Style/ExplicitBlockArgument
       end
 
       def monotonic_now

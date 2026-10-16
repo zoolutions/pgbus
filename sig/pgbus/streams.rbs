@@ -1,0 +1,22 @@
+module Pgbus
+  # Streams: broadcasting rendered updates over PGMQ (Pgbus.stream).
+  module Streams
+    DEFAULT_SSE_EVENT: String
+
+    class StreamNameTooLong < ArgumentError
+    end
+
+    class PayloadTooLarge < Pgbus::Error
+    end
+
+    def self.filters: () -> untyped
+    def self.coalescer: () -> untyped
+    def self.reset_filters!: () -> untyped
+    def self.reset_coalescer!: () -> untyped
+
+    # The Turbo patches, installed by the engine when turbo-rails is loaded.
+    def self.install_turbo_broadcastable_patch!: () -> void
+    def self.install_turbo_stream_override!: () -> void
+    def self.install_broadcast_queue!: (String? queue_name) -> void
+  end
+end

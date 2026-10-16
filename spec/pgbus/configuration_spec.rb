@@ -181,6 +181,10 @@ RSpec.describe Pgbus::Configuration do
       expect(config.drain_timeout).to eq(30)
     end
 
+    it "has default immediate_shutdown_grace of 2 seconds" do
+      expect(config.immediate_shutdown_grace).to eq(2)
+    end
+
     it "defaults shutdown_timeout to drain_timeout + 5" do
       expect(config.shutdown_timeout).to eq(35)
     end
@@ -1171,6 +1175,23 @@ RSpec.describe Pgbus::Configuration do
   end
 
   describe "#validate!" do
+    it "rejects a negative immediate_shutdown_grace" do
+      config.immediate_shutdown_grace = -1
+      expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /immediate_shutdown_grace/)
+    end
+
+    it "rejects an immediate_shutdown_grace that is not a finite number" do
+      [Float::NAN, Float::INFINITY].each do |grace|
+        config.immediate_shutdown_grace = grace
+        expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /immediate_shutdown_grace/)
+      end
+    end
+
+    it "accepts an immediate_shutdown_grace of 0 (kill at once)" do
+      config.immediate_shutdown_grace = 0
+      expect { config.validate! }.not_to raise_error
+    end
+
     it "rejects invalid prefetch_limit" do
       config.prefetch_limit = 0
       expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /prefetch_limit/)

@@ -20,6 +20,9 @@ module Pgbus
     module JobMixin
       extend ActiveSupport::Concern
 
+      # Class-body macro: it runs while the job class loads (at boot, or under the
+      # autoloader's lock), stores a frozen Hash, and the reader only reads it.
+      # rubocop:disable-next ThreadSafety/ClassInstanceVariable
       class_methods do
         def pgbus_retry_backoff(base: nil, max: nil, jitter: nil)
           raise ArgumentError, "retry_backoff base must be > 0" if !base.nil? && (!base.is_a?(Numeric) || base <= 0)

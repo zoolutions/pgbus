@@ -1,0 +1,144 @@
+# conformance-kit (zoolutions/phlex-reactive#363, #527): what pgbus is held to.
+# `bundle exec conformance-kit check` runs what the conformance workflow runs.
+audit:
+  # Boots the dummy app (whose after_initialize runs Pgbus.finalize!) and loads
+  # every constant pgbus defines; see the file for what it leaves out and why.
+  require: [./spec/conformance_eager_load.rb]
+  namespace: [Pgbus, ActiveJob::QueueAdapters::PgbusAdapter]
+  strict_autoloads: true
+ractor:
+  # Every spec file loads, so the integration helper connects to Postgres: CI's
+  # postgres:18 service, or your own server locally (bin/conformance-db says
+  # how each is reached). Coverage floors are for full runs only.
+  env:
+    PGBUS_COVERAGE: "off"
+    PGBUS_DATABASE_URL: postgres://localhost:5432/pgbus_test
+  setup: bin/conformance-db
+  # The Ractor canaries (spec/pgbus/ractor_canary_spec.rb).
+  test_command: bundle exec rspec --tag ractor
+probes:
+  gem_name: pgbus
+  roundhouse_app: spec/dummy
+# State that is main-Ractor-only by design, each with the reason it is safe.
+# pgbus's own state is named one entry at a time. Framework state on pgbus's
+# own classes is one ancestor: rule per framework, narrowed with ivars: to the
+# framework's own ivars, so state pgbus keeps on those same classes (the locks
+# on ProcessedEvent, StreamQueue and Web::Authentication) is still audited and
+# named below.
+main_only:
+  # pgbus's own process state: locks built at load, and the objects they guard
+  - name: Pgbus.@configuration
+    reason: >-
+      the configuration holds the app's logger (a Monitor) and any callables it configured (error reporters, hooks, the web data source); Pgbus.finalize! freezes every plain-data setting into a shareable value at boot (spec/pgbus/configuration_finalize_spec.rb)
+  - name: Pgbus.@loader
+    reason: >-
+      the gem's Zeitwerk loader, built when pgbus is required on the main Ractor; autoloading happens there
+  - name: Pgbus.@state_lock
+    reason: >-
+      guards the client memo, reset!/reset_client! and the stopping flag; built at load and taken only by the worker, dispatcher and web code, which run on the main Ractor
+  - name: Pgbus.@stream_cache
+    reason: >-
+      the process's cache of Stream handles, each holding the PGMQ client and its connection pools; streams broadcast from the main Ractor
+  - name: Pgbus::Batch.@schema_lock
+    reason: >-
+      guards the batch schema-probe memos and their warn-once flag; taken by job code on the main Ractor
+  - name: Pgbus::Client.@pgmq_install_mutex
+    reason: >-
+      serializes the PGMQ schema install across a process's clients; clients and their connection pools live on the main Ractor
+  - name: Pgbus::Client.@pgmq_require_mutex
+    reason: >-
+      serializes the one-time require of the pgmq gem, which happens on the main Ractor when the first client is built
+  - name: Pgbus::CurrentAttributes.@missing_warned
+    reason: >-
+      the warn-once set for missing CurrentAttributes classes (a Concurrent::Map built at load); used while jobs serialize on the main Ractor
+  - name: Pgbus::EventBus::Handler.@dedup_cache
+    reason: >-
+      the handler's in-process dedup cache (Concurrent::Map + a lock), one per handler class; handlers run on the main Ractor (they are ActiveRecord-bound)
+  - name: Pgbus::EventBus::Registry.@singleton__mutex__
+    reason: >-
+      Ruby's Singleton lock for Registry.instance; the registry is built and read on the main Ractor
+  - name: Pgbus::Integrations::Appsignal.@lock
+    reason: >-
+      makes AppSignal install! atomic and guards the dashboard memos; installed at boot on the main Ractor
+  - name: Pgbus::Integrations::Appsignal::Probe.@install_lock
+    reason: >-
+      makes the probe registration atomic; registered at boot on the main Ractor
+  - name: Pgbus::Integrations::Appsignal::Subscriber.@install_lock
+    reason: >-
+      makes the subscriber install atomic; installed at boot on the main Ractor
+  - name: Pgbus::Metrics::Subscriber.@install_lock
+    reason: >-
+      makes the metrics subscriber install atomic; installed at boot on the main Ractor
+  - name: Pgbus::Process::ConsumerPriority.@cache
+    reason: >-
+      a per-process TTL cache of the priority query, read and written only under @cache_mutex by worker threads on the main Ractor
+  - name: Pgbus::Process::ConsumerPriority.@cache_mutex
+    reason: >-
+      guards ConsumerPriority's cache; taken by worker threads on the main Ractor
+  - name: Pgbus::Process::MemoryUsage.@mutex
+    reason: >-
+      guards the cached memory reading (a TTL memo); taken by the worker and consumer recycle checks on the main Ractor
+  - name: Pgbus::ProcessedEvent.@completion_column_mutex
+    reason: >-
+      guards the schema probe for the completion column; taken by event handlers on the main Ractor
+  - name: Pgbus::StreamQueue.@names_lock
+    reason: >-
+      guards the stream-queue name memo (a frozen Set replaced whole); taken by broadcast and dispatcher threads on the main Ractor
+  - name: Pgbus::StreamQueue.@record_failure_mutex
+    reason: >-
+      guards the warn-once latch of record!; taken by broadcast threads on the main Ractor
+  - name: Pgbus::Streams.@coalescer
+    reason: >-
+      the process's publish-side coalescer: a buffer, a lock and a flush lambda that broadcasts through the process's client; main-Ractor only by design
+  - name: Pgbus::Streams.@filters
+    reason: >-
+      the audience-filter registry: app predicates (callables) under a lock, registered at boot and evaluated by the dispatcher on the main Ractor
+  - name: Pgbus::Streams.@reset_lock
+    reason: >-
+      guards the test resets of the filters registry and the coalescer; main Ractor
+  - name: Pgbus::Streams::Presence.@schema_mutex
+    reason: >-
+      guards the seats schema probe; taken by presence writes on the main Ractor
+  - name: Pgbus::Testing.@mode_lock
+    reason: >-
+      guards the process-wide test mode; the test suite runs on the main Ractor
+  - name: Pgbus::Testing.@store
+    reason: >-
+      the in-memory event store of the test helpers (a lock and a list); the test suite runs on the main Ractor
+  - name: Pgbus::VisibilityHeartbeat.@entries
+    reason: >-
+      the in-flight message table, read and written only under @mutex by job threads and the heartbeat thread on the main Ractor
+  - name: Pgbus::VisibilityHeartbeat.@mutex
+    reason: >-
+      guards the heartbeat's entry table and ticker state; taken by job threads and the heartbeat thread on the main Ractor
+  - name: Pgbus::Web::Authentication.@warn_lock
+    reason: >-
+      guards the dashboard's warn-once flag; taken by request threads on the main Ractor
+  - name: Pgbus::Web::Streamer.@current_mutex
+    reason: >-
+      guards the per-process streamer instance (its threads and PG connection); the streamer runs on the main Ractor
+  # Rails' own class state on the engine
+  - ancestor: Rails::Engine
+    ivars: ["@called_from", "@initializers", "@instance", "@railtie_name", "@rake_tasks"]
+    reason: >-
+      Rails::Engine's own class state, set by Rails at boot on the main Ractor
+  # Rails' own class state on pgbus's models
+  - ancestor: ActiveRecord::Base
+    ivars: ["@_type_candidates_cache", "@find_by_statement_cache", "@load_schema_monitor", "@relation_delegate_cache"]
+    reason: >-
+      ActiveRecord::Base's own class state (schema, statement and relation caches), built by Rails on the main Ractor; pgbus models are not used from non-main Ractors (Active Job inside Ractors is out of scope, #527)
+  # Rails' own class state on the dashboard controllers
+  - ancestor: ActionController::Base
+    ivars: ["@_parameter_encodings", "@controller_path", "@renderer"]
+    reason: >-
+      ActionController::Base's own class state, set by Rails when the controller loads on the main Ractor, where the dashboard serves requests
+  # ActiveSupport::Concern's state on pgbus's concerns
+  - ancestor: ActiveSupport::Concern
+    ivars: ["@_dependencies", "@_included_block"]
+    reason: >-
+      ActiveSupport::Concern's own module state, set when the module body loads on the main Ractor and read only when a class includes the concern at boot
+  # The mcp gem's class DSL state on the MCP tools
+  - ancestor: MCP::Tool
+    ivars: ["@annotations_value", "@input_schema_value"]
+    reason: >-
+      the mcp gem's MCP::Tool class DSL state, set in the tool's class body; the MCP server (`pgbus mcp`) runs on the main Ractor

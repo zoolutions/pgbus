@@ -19,6 +19,24 @@ RSpec.describe Pgbus::EventBus::Handler do
   end
   let(:message) { build_message_double(msg_id: 1, message: raw_message) }
 
+  # One DedupCache per handler class, built when the class is defined: a lazy
+  # `@dedup_cache ||=` let two first deliveries each build one (issue #527).
+  describe ".dedup_cache" do
+    it "is built when a handler class is defined" do
+      expect(Class.new(described_class).instance_variable_get(:@dedup_cache)).to be_a(Pgbus::DedupCache)
+    end
+
+    it "is one cache per class, shared by every thread", :first_call_race do
+      handler_class = Class.new(described_class)
+      hold_first_call(Pgbus::DedupCache, :new)
+
+      caches = race(threads: 10) { handler_class.dedup_cache }
+
+      expect(caches.uniq.size).to eq(1)
+      expect(caches.first).not_to be(Class.new(described_class).dedup_cache)
+    end
+  end
+
   describe "concrete subclass that implements #handle" do
     let(:handler_class) do
       Class.new(described_class) do

@@ -56,6 +56,9 @@ module Pgbus
         end
       end
 
+      # broadcasts_to / broadcasts_refreshes_to are class-body macros: they write
+      # @pgbus_durable_streams while the model class loads, and it is only read after.
+      # rubocop:disable-next ThreadSafety/ClassInstanceVariable
       module ClassMethods
         def broadcasts_to(stream, durable: nil, inserts_by: :append, target: broadcast_target_default, **rendering)
           if durable.nil?

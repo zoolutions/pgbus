@@ -51,6 +51,12 @@ module Pgbus
     # wait, so recycling/deploy never wedges on a permanently-stuck job.
     attr_accessor :stall_threshold, :read_timeout, :drain_timeout
 
+    # immediate_shutdown_grace (default 2s): on QUIT, a worker or consumer
+    # stops taking work and gives the jobs already running this long to finish
+    # before it kills their threads. Killed jobs' ActiveRecord connections are
+    # reclaimed, so none stays checked out by a dead thread.
+    attr_accessor :immediate_shutdown_grace
+
     # shutdown_timeout bounds how long the supervisor waits for its children
     # after forwarding TERM before escalating to SIGKILL. nil (default) derives
     # drain_timeout + SHUTDOWN_TIMEOUT_MARGIN, so raising drain_timeout keeps
@@ -132,8 +138,11 @@ module Pgbus
     # Event bus
     attr_reader :idempotency_ttl
 
-    # Logging
-    attr_accessor :logger
+    # Logging. Unset means Rails.logger when Rails has one at the time of the
+    # read, else a $stdout Logger. Resolved on every read rather than when the
+    # configuration is built, because Pgbus builds it when the gem loads,
+    # which in a Rails app is before Rails.logger exists.
+    attr_writer :logger
     attr_reader :log_format # rubocop:disable Style/AccessorGrouping
 
     # Error reporting — array of callable objects invoked on caught exceptions.
@@ -296,6 +305,7 @@ module Pgbus
       @stall_threshold = 90
       @read_timeout = 30
       @drain_timeout = 30
+      @immediate_shutdown_grace = 2
       @shutdown_timeout = nil
 
       @dispatch_interval = 1.0
@@ -327,8 +337,10 @@ module Pgbus
       @idempotency_ttl = 7 * 24 * 3600 # 7 days
       @allowed_global_id_models = nil # nil = allow all (for backwards compat)
 
-      @logger = (defined?(Rails) && Rails.respond_to?(:logger) && Rails.logger) || Logger.new($stdout)
+      @logger = nil
+      @stdout_logger = Logger.new($stdout)
       @log_format = :text
+      @log_format_set = false # see #apply_log_format!
       @error_reporters = []
 
       @listen_notify = true
@@ -566,6 +578,7 @@ module Pgbus
       @statsd_port = 8125
 
       @eager_validation = true
+      @finalized = false
     end
 
     def queue_name(name)
@@ -619,6 +632,10 @@ module Pgbus
       ExecutionPools.normalize_mode(mode)
     end
 
+    def logger
+      @logger || rails_logger || @stdout_logger
+    end
+
     VALID_LOG_FORMATS = %i[text json].freeze
 
     def log_format=(format)
@@ -628,15 +645,26 @@ module Pgbus
       end
 
       @log_format = format
+      @log_format_set = true
+      apply_log_format!
+    end
+
+    # Installs log_format's formatter on the logger pgbus resolves now; a
+    # no-op until log_format is set. The configuration exists before
+    # Rails.logger does, so a log_format set that early (config/application.rb)
+    # formats only the $stdout fallback: the engine calls this again once
+    # Rails.logger exists.
+    def apply_log_format!
+      return unless @log_format_set
 
       # Only install pgbus's formatter when the logger still carries a nil or
       # pgbus-installed formatter. A user who set a custom logger with a custom
       # formatter keeps it — log_format only records the intended format for
       # pgbus's own defaults, it must not silently clobber their formatting.
-      old_formatter = @logger&.formatter
+      old_formatter = logger&.formatter
       return unless pgbus_installable_formatter?(old_formatter)
 
-      new_formatter = case format
+      new_formatter = case log_format
                       when :json then LogFormatter::JSON.new
                       when :text then LogFormatter::Text.new
                       end
@@ -649,7 +677,7 @@ module Pgbus
       # formatter. Re-extend the new formatter with the same module when the old
       # one carried it, so tagging keeps working (issue #334).
       preserve_tagged_logging(old_formatter, new_formatter)
-      @logger.formatter = new_formatter
+      logger.formatter = new_formatter
     end
 
     VALID_BROADCAST_MODES = %i[ephemeral durable].freeze
@@ -799,6 +827,36 @@ module Pgbus
       @worker_notify_scope = coerced
     end
 
+    # Settings finalize! never freezes: @error_reporters is a list of
+    # callables apps append to (`c.error_reporters << ...`), and
+    # @deprecation_warned is this object's own bookkeeping.
+    FINALIZE_SKIP = %i[@error_reporters @deprecation_warned @finalized].freeze
+    private_constant :FINALIZE_SKIP
+
+    # Replaces every plain-data setting (Strings, Symbols, numbers, booleans,
+    # nil, Regexps, classes, and Arrays/Hashes/Sets/Ranges of those) with a
+    # deep-frozen, Ractor-shareable copy, so each reader hands back a value
+    # any Ractor can read (issue #527). Settings that hold a callable or an
+    # object (the logger, error reporters, hooks, the web data source, a
+    # metrics backend) are left as they are: they stay main-Ractor-only.
+    # Writers keep working (a setter assigns a new value; Pgbus.configure
+    # finalizes again); only in-place mutation of a frozen collection raises.
+    # Called once at boot by Pgbus.finalize!.
+    def finalize!
+      instance_variables.each do |ivar|
+        next if FINALIZE_SKIP.include?(ivar)
+
+        value = instance_variable_get(ivar)
+        instance_variable_set(ivar, Shareable.freeze_copy(value)) if Shareable.data?(value)
+      end
+      @finalized = true
+      self
+    end
+
+    def finalized?
+      @finalized
+    end
+
     def validate!
       if pool_size && !(pool_size.is_a?(Numeric) && pool_size.positive?)
         raise Pgbus::ConfigurationError, "pool_size must be a positive number or nil (auto-tune)"
@@ -828,6 +886,8 @@ module Pgbus
         raise Pgbus::ConfigurationError, "read_timeout must be a positive number or nil to disable"
       end
       raise Pgbus::ConfigurationError, "drain_timeout must be > 0" unless drain_timeout.is_a?(Numeric) && drain_timeout.positive?
+
+      validate_immediate_shutdown_grace!
 
       validate_shutdown_timeout!
 
@@ -1279,15 +1339,17 @@ module Pgbus
       validate_processes!(options[:processes]) unless options[:processes].nil?
 
       normalized_name = name.to_s
-      @workers ||= []
+      existing = @workers || []
 
-      if @workers.any? { |c| capsule_name(c) == normalized_name }
+      if existing.any? { |c| capsule_name(c) == normalized_name }
         raise Pgbus::ConfigurationError, "capsule #{name.inspect} is already defined"
       end
 
       validate_no_queue_overlap!(queues)
 
-      @workers << { name: normalized_name, queues: queues, threads: threads, **options }
+      # A new list rather than <<: after finalize! @workers is frozen, and a
+      # writer keeps working (a later Pgbus.configure finalizes again).
+      @workers = [*existing, { name: normalized_name, queues: queues, threads: threads, **options }]
     end
 
     # Look up a capsule by its name. Accepts symbol or string. Returns the
@@ -1631,6 +1693,10 @@ module Pgbus
       end
     end
 
+    def rails_logger
+      ::Rails.logger if defined?(::Rails) && ::Rails.respond_to?(:logger)
+    end
+
     # When the logger's previous formatter was extended with
     # ActiveSupport::TaggedLogging::Formatter (the case for a Rails
     # Rails.logger), extend the replacement pgbus formatter with the same module
@@ -1716,6 +1782,15 @@ module Pgbus
 
       raise Pgbus::ConfigurationError,
             "#{name} must be a Numeric (seconds), ActiveSupport::Duration, or nil to disable, got #{value.inspect}"
+    end
+
+    # A finite real number >= 0: NaN is not negative?, and an infinite grace
+    # would never kill a job that does not finish.
+    def validate_immediate_shutdown_grace!
+      grace = immediate_shutdown_grace
+      return if grace.is_a?(Numeric) && grace.real? && grace.finite? && grace >= 0
+
+      raise Pgbus::ConfigurationError, "immediate_shutdown_grace must be a finite number >= 0"
     end
 
     def validate_positive_duration!(numeric, name)

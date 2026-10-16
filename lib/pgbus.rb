@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "concurrent/map"
 require "zeitwerk"
 
 module Pgbus
@@ -83,17 +84,37 @@ module Pgbus
   end
 
   class << self
+    # The gem's Zeitwerk loader, the app/models loader used outside Rails, and
+    # the configuration: built once when this file loads (see the bottom of
+    # the module body) and replaced only by reset!/teardown under @state_lock.
+    # Readers need no lock: a reference is published whole.
+    attr_reader :loader, :models_loader, :configuration
+
     # Process-global flag set by Worker#graceful_shutdown so the adapter
     # can report stopping? to ActiveJob::Continuation (Rails 8.1+).
-    attr_writer :stopping
-
     def stopping
-      @stopping || false
+      @state_lock.synchronize { @stopping }
     end
 
-    def loader
-      @loader ||= begin
-        loader = Zeitwerk::Loader.for_gem
+    def stopping=(value)
+      @state_lock.synchronize { @stopping = value ? true : false }
+    end
+
+    private
+
+    # True while a Rails app boots (its initializers and after_initialize
+    # blocks run): the engine finalizes at the end of that.
+    def rails_booting?
+      return false unless defined?(::Rails::Application) && ::Rails.respond_to?(:application)
+
+      app = ::Rails.application
+      !app.nil? && !app.initialized?
+    end
+
+    # Zeitwerk::Loader.for_gem works out the gem root from its caller, so this
+    # must stay in lib/pgbus.rb.
+    def build_loader
+      Zeitwerk::Loader.for_gem.tap do |loader|
         loader.inflector.inflect(
           "pgbus" => "Pgbus",
           "cli" => "CLI",
@@ -127,35 +148,32 @@ module Pgbus
         # root and tries to autoload Puma::Plugin, which collides with the real
         # Puma::Plugin class defined by the puma gem itself.
         loader.ignore("#{__dir__}/puma")
-        loader
       end
     end
 
     # Separate loader for app/models used only in non-Rails contexts (specs,
     # standalone scripts). When the Engine boots, Rails' autoloader takes over
     # app/models and this loader is torn down to avoid conflicts.
-    def models_loader
+    def build_models_loader
       models_dir = File.expand_path("../app/models", __dir__)
       return nil unless File.directory?(models_dir)
 
-      @models_loader ||= begin
-        loader = Zeitwerk::Loader.new
+      Zeitwerk::Loader.new.tap do |loader|
         loader.tag = "pgbus-models"
         loader.push_dir(models_dir)
         loader.setup
-        loader
       end
     end
 
+    public
+
     def teardown_models_loader!
-      return unless @models_loader
-
-      @models_loader.unregister
-      @models_loader = nil
-    end
-
-    def configuration
-      @configuration ||= Configuration.new
+      loader = @state_lock.synchronize do
+        current = @models_loader
+        @models_loader = nil
+        current
+      end
+      loader&.unregister
     end
 
     # True when the current process is running a rake task (db:*, assets:*, …
@@ -188,11 +206,32 @@ module Pgbus
       # until a worker path consumes it. Checking the flag after the yield
       # lets a block opt out for itself via `c.eager_validation = false`.
       configuration.validate! if configuration.eager_validation
+      # Without Rails this is the end of boot, so it finalizes; so does any
+      # configure once a Rails app has booted. While a Rails app boots, the
+      # engine's after_initialize finalizes instead, after every initializer
+      # and after_initialize block has had its say.
+      configuration.finalize! if configuration.finalized? || !rails_booting?
       configuration
     end
 
+    # The end of boot: validates the configuration (unless eager_validation
+    # is off) and freezes its plain-data settings into Ractor-shareable values
+    # (Configuration#finalize!). Callables and the logger stay as they are, on
+    # the main Ractor. Runs on its own: from the engine's after_initialize in a
+    # Rails app, at the end of each Pgbus.configure without Rails, and in
+    # `pgbus start` after its flags. Call it yourself only when you configure
+    # pgbus through setters alone, without Rails.
+    def finalize!
+      configuration.validate! if configuration.eager_validation
+      configuration.finalize!
+    end
+
+    # Built on first use, under @state_lock: two threads making the first
+    # call at once must not each build a Client (the loser's pool would be
+    # orphaned, its connections never closed). Not built at boot: a Client
+    # resolves connection options, which a rake db: task must not need.
     def client
-      @client ||= Client.new(configuration)
+      @state_lock.synchronize { @client ||= Client.new(configuration) }
     end
 
     # Entry point for the streams subsystem — `Pgbus.stream(name).broadcast(html)`
@@ -218,8 +257,7 @@ module Pgbus
       name = Streams::Stream.name_from(streamables)
       resolved = durable.nil? ? configuration.stream_durable?(name) : durable
       cache_key = "#{name}:#{resolved ? "d" : "e"}"
-      @stream_cache ||= Concurrent::Map.new
-      @stream_cache.compute_if_absent(cache_key) { Streams::Stream.new(streamables, durable: resolved) }
+      stream_cache.compute_if_absent(cache_key) { Streams::Stream.new(streamables, durable: resolved) }
     end
 
     # Compose a short, pgbus-safe stream identifier from any mix of
@@ -278,11 +316,14 @@ module Pgbus
       EventBus::Publisher.publish_later(routing_key, payload, delay: delay, headers: headers)
     end
 
+    # A fresh configuration (never nil, so readers need no lock) and no client.
     def reset!
-      @client&.close
-      @client = nil
-      @configuration = nil
-      @stream_cache = nil
+      @state_lock.synchronize do
+        @client&.close
+        @client = nil
+        @configuration = Configuration.new
+        @stream_cache = Concurrent::Map.new
+      end
     end
 
     # Discard the inherited PGMQ client after fork.
@@ -290,9 +331,13 @@ module Pgbus
     # state post-fork and attempting to acquire it can deadlock.
     # The next call to Pgbus.client will lazily create a fresh one.
     # Cached streams hold the client they were built with, so they go too.
+    # (@state_lock itself is safe to take in the child: Ruby abandons a Mutex
+    # whose owning thread did not survive the fork.)
     def reset_client!
-      @client = nil
-      @stream_cache = nil
+      @state_lock.synchronize do
+        @client = nil
+        @stream_cache = Concurrent::Map.new
+      end
     end
 
     def logger
@@ -302,13 +347,30 @@ module Pgbus
     def logger=(value)
       configuration.logger = value
     end
+
+    private
+
+    # Process-local, like the client it holds; replaced (never mutated in
+    # place) by reset!/reset_client!.
+    attr_reader :stream_cache
   end
 
-  loader.setup
+  # Module state, built here at load rather than by `||=` on first use, so no
+  # two threads can each build their own (issue #527). @state_lock guards every
+  # later write: the client memo, reset!/reset_client!, the stopping flag.
+  @state_lock = Mutex.new
+  @stopping = false
+  @client = nil
+  @stream_cache = Concurrent::Map.new
+  @loader = build_loader
+  @loader.setup
+
+  # After loader.setup: Configuration is Zeitwerk-managed.
+  @configuration = Configuration.new
 
   # In non-Rails contexts, set up model autoloading via a separate loader.
   # This is torn down by the Engine initializer when Rails boots.
-  models_loader unless defined?(Rails::Engine)
+  @models_loader = defined?(Rails::Engine) ? nil : build_models_loader
 end
 
 require "active_job/queue_adapters/pgbus_adapter" if defined?(ActiveJob)

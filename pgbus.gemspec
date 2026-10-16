@@ -27,7 +27,7 @@ Gem::Specification.new do |spec|
 
   spec.files = IO.popen(%w[git ls-files -z], chdir: __dir__, err: IO::NULL) do |ls|
     ls.readlines("\x0", chomp: true).select do |f|
-      f.start_with?("app/", "config/", "exe/", "lib/") ||
+      f.start_with?("app/", "config/", "exe/", "lib/", "sig/") ||
         f == "CHANGELOG.md" || f == "LICENSE.txt" || f == "README.md" || f == "Rakefile"
     end
   end

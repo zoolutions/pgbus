@@ -62,8 +62,17 @@ module Pgbus
         #                    nil means the default (turbo-stream); a typed
         #                    name (e.g. "presence", "reactive") lets clients
         #                    route without sniffing the HTML (issue #170).
+        #
+        # Kept Ractor-shareable, like WakeMessage (issue #527): its Strings are
+        # frozen in place (the dispatcher's own, from JSON.parse or the read),
+        # and `exclude` is normalized to the String it is compared as.
         StreamEnvelope = Data.define(:msg_id, :enqueued_at, :payload, :source, :visible_to, :exclude, :event) do
           def initialize(msg_id:, enqueued_at:, payload:, source:, visible_to: nil, exclude: nil, event: nil)
+            enqueued_at&.freeze
+            payload&.freeze
+            source&.freeze
+            event&.freeze
+            exclude = exclude&.to_s&.freeze
             super
           end
         end
@@ -147,7 +156,10 @@ module Pgbus
           return if @running
 
           @running = true
-          @thread = Thread.new { run_loop }
+          # The dispatcher's one thread, owned by this object: Instance#start
+          # starts it once (under Streamer's @current_mutex); #stop sends the
+          # sentinel and joins it.
+          @thread = Thread.new { run_loop } # rubocop:disable ThreadSafety/NewThread
           self
         end
 

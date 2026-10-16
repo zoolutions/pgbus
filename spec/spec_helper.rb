@@ -4,24 +4,29 @@
 # instrumented as they load. rails_helper.rb requires this file, so unit,
 # generator, and request specs are all measured. NOTE: integration_helper.rb
 # and system_helper.rb do NOT require spec_helper, so those runs are unmeasured.
-require "simplecov"
-SimpleCov.start do
-  enable_coverage :branch
+# PGBUS_COVERAGE=off skips it: the conformance gate's Ractor run
+# (.conformance.yml ractor.env) loads every spec but runs a handful of
+# examples, which the floors below would fail.
+unless ENV["PGBUS_COVERAGE"] == "off"
+  require "simplecov"
+  SimpleCov.start do
+    enable_coverage :branch
 
-  add_filter "/spec/"
+    add_filter "/spec/"
 
-  add_group "Client", "lib/pgbus/client"
-  add_group "ActiveJob", "lib/pgbus/active_job"
-  add_group "Event Bus", "lib/pgbus/event_bus"
-  add_group "Process", "lib/pgbus/process"
-  add_group "Web", %w[lib/pgbus/web app/controllers app/views app/helpers]
-  add_group "Generators", "lib/generators"
+    add_group "Client", "lib/pgbus/client"
+    add_group "ActiveJob", "lib/pgbus/active_job"
+    add_group "Event Bus", "lib/pgbus/event_bus"
+    add_group "Process", "lib/pgbus/process"
+    add_group "Web", %w[lib/pgbus/web app/controllers app/views app/helpers]
+    add_group "Generators", "lib/generators"
 
-  # Baseline measured from `bundle exec rspec spec/pgbus/ spec/generators/`:
-  # line 89.75% (7920/8825), branch 75.41% (2183/2895). Floors set below the
-  # measured values so CI is green day one; ratchet toward the 80%/100% targets
-  # in .claude/rules/testing.md in follow-ups.
-  minimum_coverage line: 89, branch: 75
+    # Baseline measured from `bundle exec rspec spec/pgbus/ spec/generators/`:
+    # line 89.75% (7920/8825), branch 75.41% (2183/2895). Floors set below the
+    # measured values so CI is green day one; ratchet toward the 80%/100% targets
+    # in .claude/rules/testing.md in follow-ups.
+    minimum_coverage line: 89, branch: 75
+  end
 end
 
 require "active_record"

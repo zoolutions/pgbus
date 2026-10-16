@@ -9,6 +9,8 @@ require_relative "../integration_helper"
 # the handler queue out.
 RSpec.describe "Dashboard event list (integration)", :integration do
   let(:handler_class) do
+    # A spec double: built per example and driven from the example's thread.
+    # rubocop:disable-next ThreadSafety/ClassAndModuleAttributes, ThreadSafety/ClassInstanceVariable
     Class.new(Pgbus::EventBus::Handler) do
       idempotent!
 

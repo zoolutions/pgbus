@@ -64,6 +64,9 @@ module Pgbus
         @health_check_ms = health_check_ms
         @logger = logger
         @state_mutex = Mutex.new
+        # Serializes #start and #stop whole (see #start). Never taken by the
+        # listener thread, so #stop can join it while holding this.
+        @lifecycle_mutex = Mutex.new
         @listening_to = Set.new
         @commands = Queue.new
         @running = false
@@ -98,33 +101,44 @@ module Pgbus
         @state_mutex.synchronize { @delivering }
       end
 
+      # Under @lifecycle_mutex, like #stop: a stop that ran between the
+      # @running check and Thread.new found no thread to join, and the thread
+      # started after it was joined by nobody (and a restart could run a
+      # second run_loop beside it).
       def start
-        @state_mutex.synchronize do
-          return self if @running
+        @lifecycle_mutex.synchronize do
+          @state_mutex.synchronize do
+            return self if @running
 
-          @running = true
+            @running = true
+          end
+          @physical_queues.each { |q| @commands << [:listen, q] }
+          # The listener's one thread, owned by this object: started once (the
+          # @running check above, with #start and #stop serialized), the sole
+          # owner of @conn, and joined by #stop after it clears @running.
+          @thread = Thread.new { run_loop } # rubocop:disable ThreadSafety/NewThread
         end
-        @physical_queues.each { |q| @commands << [:listen, q] }
-        @thread = Thread.new { run_loop }
         self
       end
 
       def stop
-        @state_mutex.synchronize do
-          return self unless @running
+        @lifecycle_mutex.synchronize do
+          @state_mutex.synchronize do
+            return self unless @running
 
-          @running = false
+            @running = false
+          end
+          @commands << [:stop]
+          # Deliberately does NOT touch @conn. PG::Connection is not thread-safe
+          # and #close is PQfinish: it frees the PGconn and its OpenSSL objects
+          # out from under whatever libpq call the listener thread is making on
+          # the same connection. That is a use-after-free — a process-killing
+          # SEGV, not a rescuable PG::Error (issue #375). The listener thread is
+          # the sole owner of @conn for its entire life and closes it in
+          # run_loop's ensure; clearing @running above is the whole stop signal.
+          @thread&.join(stop_join_timeout)
+          @thread = nil
         end
-        @commands << [:stop]
-        # Deliberately does NOT touch @conn. PG::Connection is not thread-safe
-        # and #close is PQfinish: it frees the PGconn and its OpenSSL objects
-        # out from under whatever libpq call the listener thread is making on
-        # the same connection. That is a use-after-free — a process-killing
-        # SEGV, not a rescuable PG::Error (issue #375). The listener thread is
-        # the sole owner of @conn for its entire life and closes it in
-        # run_loop's ensure; clearing @running above is the whole stop signal.
-        @thread&.join(stop_join_timeout)
-        @thread = nil
         self
       end
 

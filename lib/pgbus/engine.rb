@@ -81,6 +81,9 @@ module Pgbus
     end
 
     initializer "pgbus.logger" do
+      # Rails.logger exists now: a log_format set before it did went to the
+      # $stdout fallback only.
+      Pgbus.configuration.apply_log_format!
       ActiveSupport.on_load(:after_initialize) do
         Pgbus.configuration.logger ||= Rails.logger
       end
@@ -208,6 +211,14 @@ module Pgbus
           Pgbus::Streams.install_turbo_stream_override!
         end
       end
+    end
+
+    # Last: once the app's initializers have configured pgbus, freeze the
+    # configuration's plain-data settings into Ractor-shareable values
+    # (Pgbus.finalize!, issue #527). Registered after the app's initializer
+    # files, so it runs after the after_initialize blocks they add.
+    initializer "pgbus.finalize", after: :load_config_initializers do
+      ActiveSupport.on_load(:after_initialize) { Pgbus.finalize! }
     end
   end
 end

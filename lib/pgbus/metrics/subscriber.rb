@@ -17,15 +17,45 @@ module Pgbus
       METRIC_PREFIX = "pgbus_"
       private_constant :METRIC_PREFIX
 
-      @subscriptions = []
+      # Installed once at boot (the engine's after_initialize) and torn down by
+      # reset! in specs; @install_lock makes the check-then-install atomic so
+      # two callers can never subscribe twice (issue #527). Handlers read
+      # @backend through the private reader: a reference swapped whole.
+      @install_lock = Mutex.new
+      @subscriptions = [].freeze
       @backend = nil
+      @installed = false
 
       class << self
         def install!(backend:)
-          return false if @installed
+          @install_lock.synchronize do
+            next false if @installed
 
-          @backend = backend
-          @subscriptions = [
+            @backend = backend
+            @subscriptions = subscribe_all
+            @installed = true
+          end
+        end
+
+        def installed?
+          @install_lock.synchronize { @installed }
+        end
+
+        def reset!
+          @install_lock.synchronize do
+            @subscriptions.each { |s| ActiveSupport::Notifications.unsubscribe(s) }
+            @subscriptions = [].freeze
+            @backend = nil
+            @installed = false
+          end
+        end
+
+        private
+
+        attr_reader :backend
+
+        def subscribe_all
+          [
             subscribe("pgbus.executor.execute") { |event| on_executor_execute(event) },
             subscribe("pgbus.job_completed") { |event| on_job_completed(event) },
             subscribe("pgbus.job_failed") { |event| on_job_failed(event) },
@@ -43,24 +73,8 @@ module Pgbus
             subscribe("pgbus.worker.recycle") { |event| on_worker_recycle(event) },
             subscribe("pgbus.consumer.recycle") { |event| on_consumer_recycle(event) },
             subscribe("pgbus.client.pool") { |event| on_client_pool(event) }
-          ]
-          @installed = true
+          ].freeze
         end
-
-        def installed?
-          @installed == true
-        end
-
-        def reset!
-          @subscriptions&.each { |s| ActiveSupport::Notifications.unsubscribe(s) }
-          @subscriptions = []
-          @backend = nil
-          @installed = false
-        end
-
-        private
-
-        attr_reader :backend
 
         def subscribe(name, &block)
           ActiveSupport::Notifications.subscribe(name) do |*args|

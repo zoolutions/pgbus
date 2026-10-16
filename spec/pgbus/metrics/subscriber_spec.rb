@@ -38,6 +38,15 @@ RSpec.describe Pgbus::Metrics::Subscriber do
   after { described_class.reset! }
 
   describe ".install!" do
+    it "subscribes once when two threads install at once", :first_call_race do
+      described_class.reset!
+      hold_first_call(ActiveSupport::Notifications, :subscribe)
+
+      race { described_class.install!(backend: backend) }
+
+      expect(ActiveSupport::Notifications).to have_received(:subscribe).with("pgbus.job_completed").once
+    end
+
     it "is idempotent" do
       expect(described_class.install!(backend: backend)).to be(false)
       expect(described_class).to be_installed

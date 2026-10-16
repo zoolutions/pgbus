@@ -21,14 +21,39 @@ module Pgbus
         METRIC_PREFIX = "pgbus_"
         private_constant :BACKGROUND_JOB, :METRIC_PREFIX
 
-        # Tracked so we can detach in reset! (used by specs).
-        @subscriptions = []
+        # Tracked so we can detach in reset! (used by specs). Installed once
+        # at boot (the engine's after_initialize); @install_lock makes the
+        # check-then-install atomic so nothing subscribes twice (issue #527).
+        @install_lock = Mutex.new
+        @subscriptions = [].freeze
+        @installed = false
 
         class << self
           def install!
-            return false if @installed
+            @install_lock.synchronize do
+              next false if @installed
 
-            @subscriptions = [
+              @subscriptions = subscribe_all
+              @installed = true
+            end
+          end
+
+          def installed?
+            @install_lock.synchronize { @installed }
+          end
+
+          def reset!
+            @install_lock.synchronize do
+              @subscriptions.each { |s| ActiveSupport::Notifications.unsubscribe(s) }
+              @subscriptions = [].freeze
+              @installed = false
+            end
+          end
+
+          private
+
+          def subscribe_all
+            [
               subscribe("pgbus.executor.execute") { |event| on_executor_execute(event) },
               subscribe("pgbus.job_completed") { |event| on_job_completed(event) },
               subscribe("pgbus.job_failed") { |event| on_job_failed(event) },
@@ -48,21 +73,8 @@ module Pgbus
               # pgbus_pool_available gauges for AppSignal (see probe.rb).
               # Subscribing here too would double-report on every heartbeat
               # and skew the gauges.
-            ]
-            @installed = true
+            ].freeze
           end
-
-          def installed?
-            @installed == true
-          end
-
-          def reset!
-            @subscriptions&.each { |s| ActiveSupport::Notifications.unsubscribe(s) }
-            @subscriptions = []
-            @installed = false
-          end
-
-          private
 
           def subscribe(name, &block)
             # silence rubocop unused

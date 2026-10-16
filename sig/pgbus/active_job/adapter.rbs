@@ -1,0 +1,57 @@
+module Pgbus
+  module ActiveJob
+    # What the queue adapter delegates to.
+    class Adapter
+      def enqueue: (untyped active_job) -> untyped
+      def enqueue_at: (untyped active_job, Numeric timestamp) -> untyped
+      def enqueue_all: (Array[untyped] active_jobs) -> Integer
+    end
+  end
+
+  # The job-class options, included on ActiveJob::Base by the engine.
+  module Concurrency
+    module ClassMethods
+      def limits_concurrency: (to: Integer, ?key: untyped, ?duration: Numeric, ?on_conflict: :block | :discard | :raise) -> untyped
+      def pgbus_concurrency: () -> Hash[Symbol, untyped]?
+    end
+  end
+
+  module Uniqueness
+    module ClassMethods
+      # Any other keyword raises ArgumentError (lock_ttl: with a pointer to 1.0's removal).
+      def ensures_uniqueness: (?strategy: :until_executed | :while_executing, ?key: untyped,
+                               ?on_conflict: :reject | :discard | :log) -> untyped
+      def pgbus_uniqueness: () -> Hash[Symbol, untyped]?
+    end
+  end
+
+  module RetryBackoff
+    module JobMixin
+      module ClassMethods
+        def pgbus_retry_backoff: (?base: Numeric?, ?max: Numeric?, ?jitter: Numeric?) -> untyped
+        def pgbus_retry_backoff_config: () -> Hash[Symbol, Numeric]?
+      end
+    end
+  end
+
+  module VisibilityHeartbeat
+    module JobMixin
+      module ClassMethods
+        def pgbus_visibility_heartbeat: (?boolish enabled) -> bool
+      end
+    end
+  end
+end
+
+module ActiveJob
+  module QueueAdapters
+    # `config.active_job.queue_adapter = :pgbus`
+    class PgbusAdapter
+      def enqueue: (untyped active_job) -> untyped
+      def enqueue_at: (untyped active_job, Numeric timestamp) -> untyped
+      def enqueue_all: (Array[untyped] active_jobs) -> Integer
+      def enqueue_after_transaction_commit?: () -> bool
+      def stopping?: () -> bool
+    end
+  end
+end

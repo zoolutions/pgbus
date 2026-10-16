@@ -65,7 +65,10 @@ module Pgbus
 
         @server = TCPServer.new(@bind, @configured_port)
         @port = @server.addr[1]
-        @thread = Thread.new { accept_loop }
+        # The accept loop, owned by this server: started once (the @server
+        # check above) by the supervisor, joined (then killed if it hangs) by
+        # #stop.
+        @thread = Thread.new { accept_loop } # rubocop:disable ThreadSafety/NewThread
         logger.info { "[Pgbus::Web::HealthServer] listening on #{@bind}:#{@port} (/livez, /readyz)" }
       end
 

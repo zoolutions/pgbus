@@ -36,6 +36,8 @@ module Accessibility
     JSON.parse(CONFIG_PATH.read).dig("ci", "collect", "url").map { |url| URI.parse(url).request_uri }
   end
 
+  # Called from the system spec's thread only; the file never changes mid-run.
+  # rubocop:disable-next ThreadSafety/ClassInstanceVariable
   def self.source
     @source ||= SOURCE_PATH.read
   rescue Errno::ENOENT

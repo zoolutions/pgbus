@@ -37,6 +37,9 @@ module Pgbus
 
     def start_supervisor(args = [])
       apply_start_options(args)
+      # The flags go through setters, after boot finalized the configuration:
+      # finalize their values too before the supervisor forks.
+      Pgbus.finalize!
       Pgbus.logger.info { "[Pgbus] Starting Pgbus #{Pgbus::VERSION}..." }
 
       supervisor = Process::Supervisor.new

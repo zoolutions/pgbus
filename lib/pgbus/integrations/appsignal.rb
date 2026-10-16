@@ -28,41 +28,51 @@ module Pgbus
       DASHBOARD_PATH = File.expand_path("appsignal/dashboard.json", __dir__).freeze
       DASHBOARDS_DIR = File.expand_path("appsignal/dashboards", __dir__).freeze
 
+      # Installed once at boot (the engine's after_initialize); @lock makes
+      # the check-then-install atomic and guards the parsed-dashboard memos
+      # (issue #527).
+      @lock = Mutex.new
+      @installed = false
+
       module_function
 
-      def install! # rubocop:disable Naming/PredicateMethod
+      def install!
         return false unless defined?(::Appsignal)
-        return false if @installed
 
-        Subscriber.install!
-        Probe.install! if Pgbus.configuration.appsignal_probe_enabled
-        @installed = true
-        Pgbus.logger.info { "[Pgbus] AppSignal integration installed" }
-        true
+        installed_now = @lock.synchronize do
+          next false if @installed
+
+          Subscriber.install!
+          Probe.install! if Pgbus.configuration.appsignal_probe_enabled
+          @installed = true
+        end
+        Pgbus.logger.info { "[Pgbus] AppSignal integration installed" } if installed_now
+        installed_now
       end
 
       def installed?
-        @installed == true
+        @lock.synchronize { @installed }
       end
 
       def dashboard_definition
-        @dashboard_definition ||= JSON.parse(File.read(DASHBOARD_PATH))
+        @lock.synchronize { @dashboard_definition ||= JSON.parse(File.read(DASHBOARD_PATH)) }
       end
 
       def dashboard_definitions
-        @dashboard_definitions ||=
-          Dir[File.join(DASHBOARDS_DIR, "*.json")].map do |path|
-            JSON.parse(File.read(path))
-          end
+        @lock.synchronize do
+          @dashboard_definitions ||= Dir[File.join(DASHBOARDS_DIR, "*.json")].map { |path| JSON.parse(File.read(path)) }
+        end
       end
 
       # Test hook: tear everything down so a fresh install! can run.
       def reset!
         Subscriber.reset! if defined?(Subscriber)
         Probe.reset! if defined?(Probe)
-        @installed = false
-        @dashboard_definition = nil
-        @dashboard_definitions = nil
+        @lock.synchronize do
+          @installed = false
+          @dashboard_definition = nil
+          @dashboard_definitions = nil
+        end
       end
     end
   end

@@ -57,6 +57,8 @@ RSpec.describe Pgbus::Streams::BroadcastableOverride do
     end
   end
 
+  # A spec double: built per example and driven from the example's thread.
+  # rubocop:disable-next ThreadSafety/ClassInstanceVariable
   let(:fake_turbo_channel) do
     Module.new do
       extend FakeTurboStreamHelpers

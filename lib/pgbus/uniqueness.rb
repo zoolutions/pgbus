@@ -52,6 +52,9 @@ module Pgbus
     VALID_STRATEGIES = %i[until_executed while_executing].freeze
     VALID_CONFLICTS = %i[reject discard log].freeze
 
+    # Class-body macro: it runs while the job class loads (at boot, or under the
+    # autoloader's lock), stores a frozen Hash, and the reader only reads it.
+    # rubocop:disable-next ThreadSafety/ClassInstanceVariable
     class_methods do
       def ensures_uniqueness(strategy: :until_executed, key: nil, on_conflict: :reject, **opts)
         # lock_ttl was validated and stored in message metadata but never read

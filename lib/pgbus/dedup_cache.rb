@@ -17,6 +17,10 @@ module Pgbus
       @ttl = ttl
       @cache = Concurrent::Map.new
       @insertion_order = Concurrent::Array.new
+      # Serializes the check-then-act writers (mark!, expiry eviction, clear!)
+      # so the size bound and @insertion_order stay consistent (issue #527).
+      # seen? reads @cache without it.
+      @lock = Mutex.new
     end
 
     # Returns true if this key was already seen (duplicate).
@@ -26,7 +30,7 @@ module Pgbus
       return false unless entry
 
       if expired?(entry)
-        evict(key)
+        @lock.synchronize { evict(key) if @cache[key].equal?(entry) }
         return false
       end
 
@@ -36,11 +40,13 @@ module Pgbus
     # Mark a key as seen. Call this after successfully claiming idempotency
     # in the database so future lookups skip the DB.
     def mark!(key)
-      already_present = @cache.key?(key)
-      evict_oldest if !already_present && @cache.size >= @max_size
+      @lock.synchronize do
+        already_present = @cache.key?(key)
+        evict_oldest if !already_present && @cache.size >= @max_size
 
-      @cache[key] = monotonic_now
-      @insertion_order << key unless already_present
+        @cache[key] = monotonic_now
+        @insertion_order << key unless already_present
+      end
     end
 
     def size
@@ -48,8 +54,10 @@ module Pgbus
     end
 
     def clear!
-      @cache.clear
-      @insertion_order.clear
+      @lock.synchronize do
+        @cache.clear
+        @insertion_order.clear
+      end
     end
 
     private

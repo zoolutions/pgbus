@@ -44,6 +44,8 @@ RSpec.describe Pgbus::EventBus::Publisher do
 
   describe "inline mode" do
     let(:handler_class) do
+      # A spec double: built per example and driven from the example's thread.
+      # rubocop:disable-next ThreadSafety/ClassAndModuleAttributes
       klass = Class.new(Pgbus::EventBus::Handler) do
         class << self
           attr_accessor :handled_events
@@ -90,6 +92,8 @@ RSpec.describe Pgbus::EventBus::Publisher do
   describe "Current attributes round-trip (issue #431)" do
     let(:current_class) { Class.new(ActiveSupport::CurrentAttributes) { attribute :tenant } }
     let(:handler_class) do
+      # A spec double: built per example and driven from the example's thread.
+      # rubocop:disable-next ThreadSafety/ClassAndModuleAttributes
       klass = Class.new(Pgbus::EventBus::Handler) do
         class << self
           attr_accessor :seen

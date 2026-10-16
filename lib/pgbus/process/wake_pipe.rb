@@ -53,7 +53,10 @@ module Pgbus
 
           @running = true
         end
-        @thread = Thread.new { run_loop }
+        # The pipe watcher's one thread, owned by this object: started once
+        # (the @running check above, under @state_mutex) and stopped by #stop,
+        # which closes the pipe under it and joins it.
+        @thread = Thread.new { run_loop } # rubocop:disable ThreadSafety/NewThread
         self
       end
 

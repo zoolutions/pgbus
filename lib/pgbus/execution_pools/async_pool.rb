@@ -3,6 +3,10 @@
 module Pgbus
   module ExecutionPools
     class AsyncPool
+      # How long #kill waits for the killed reactor thread (and the job
+      # fibers it cancels) to unwind before giving up on it.
+      KILL_JOIN_TIMEOUT = 1
+
       attr_reader :capacity
 
       def initialize(capacity:, on_state_change: nil)
@@ -70,9 +74,15 @@ module Pgbus
         @reactor_thread&.join(timeout)
       end
 
+      # Killing the reactor thread cancels its job fibers; wait for them to
+      # unwind so the caller can reclaim what they held (ExecutionPools.terminate).
       def kill
         shutdown
-        @reactor_thread&.kill
+        thread = @reactor_thread
+        return unless thread
+
+        thread.kill
+        join_killed(thread)
       end
 
       def metadata
@@ -86,6 +96,14 @@ module Pgbus
 
       private
 
+      # The reactor's own failure is already recorded (register_fatal_error);
+      # Thread#join would raise it again here.
+      def join_killed(thread)
+        thread.join(KILL_JOIN_TIMEOUT)
+      rescue StandardError => e
+        Pgbus.logger.debug { "[Pgbus] Async pool reactor ended with #{e.class}: #{e.message}" }
+      end
+
       def validate_dependencies!
         require "async"
         require "async/semaphore"
@@ -95,9 +113,12 @@ module Pgbus
               "Add `gem \"async\"` to your Gemfile. Original error: #{e.message}"
       end
 
+      # The pool's one reactor thread, owned by this pool: started once by
+      # #initialize, it exits when #shutdown lets the reactor drain, and
+      # #wait_for_termination / #kill join it.
       # rubocop:disable-next Lint/RescueException
       def start_reactor
-        Thread.new do
+        Thread.new do # rubocop:disable ThreadSafety/NewThread
           Thread.current.name = "pgbus-async-reactor-#{object_id}"
           Async do |task|
             semaphore = Async::Semaphore.new(@capacity, parent: task)

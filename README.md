@@ -139,6 +139,8 @@ The capsule string DSL is the shortest form for the common case. Use `c.capsule`
 
 Configuration is validated eagerly: `Pgbus.configure` runs `Configuration#validate!` right after your block yields, so an invalid value (`visibility_timeout = 0`, for example) raises `Pgbus::ConfigurationError` at boot instead of failing later inside a worker. Set `c.eager_validation = false` for the rare setup that intentionally holds a transiently-invalid config across sequential `configure` calls.
 
+Configuration is finalized at boot: once the app's initializers have run, the engine calls `Pgbus.finalize!`, which freezes every plain-data setting (strings, symbols, numbers, regexps, and arrays and hashes of those) into a Ractor-shareable value. Callables and the logger are left as they are. Setters keep working, and a later `Pgbus.configure` finalizes again, but changing a collection in place after boot (`Pgbus.configuration.streams_durable_patterns << "x"`) raises `FrozenError`: assign a new value instead. `c.error_reporters << reporter` keeps working. Without Rails, each `Pgbus.configure` finalizes at its end; `pgbus start` finalizes again once its flags are applied. Call `Pgbus.finalize!` yourself only when you configure pgbus through setters alone. A value that cannot be made shareable (a lambda that closes over app state, a logger, a filter list holding a proc) never makes finalizing raise: it is kept as it is, for the main Ractor. More in [docs/concurrency.md](docs/concurrency.md).
+
 > **Upgrading from an older pgbus?** Run `rails generate pgbus:update`. It inspects your live database and adds any missing pgbus migrations to `db/migrate` (or `db/pgbus_migrate` if you use `connects_to`). The generator detects your separate-database config automatically from `Pgbus.configuration.connects_to` or by scanning the initializer / `config/application.rb`, so you don't have to re-specify `--database=pgbus` every time.
 >
 > Useful flags: `--dry-run` (print the plan without creating files), `--skip-migrations`, `--quiet`. Running it on a database with no pgbus tables at all will redirect you to `pgbus:install` instead of stacking individual add_* migrations.
@@ -690,6 +692,8 @@ end
 **Safety:** Messages stay in PGMQ with visibility timeout protection regardless of execution mode. If a fiber or worker crashes, the visibility timeout expires and messages become available for re-read. No data loss risk.
 
 **Not recommended for:** CPU-bound jobs (image processing, heavy computation). These block the single reactor thread and should use thread mode.
+
+Which state is fiber-local (broadcast options, the batch a job joins, the uniqueness key an enqueue holds) and what that means when work hops between fibers is in [docs/concurrency.md](docs/concurrency.md), with the threads each process runs and pgbus's Ractor readiness.
 
 ## Routing and ordering
 
@@ -2369,6 +2373,7 @@ Curated headline options for the README. The full operator reference (with types
 | `zombie_detection` | `true` | Detect and reclaim work from crashed workers |
 | `read_timeout` | `30` | Seconds before a single PGMQ read is bounded (libpq `statement_timeout` + `tcp_user_timeout` on a dedicated connection; nil disables) |
 | `drain_timeout` | `30` | Seconds to wait for in-flight jobs during graceful shutdown before abandoning them |
+| `immediate_shutdown_grace` | `2` | On QUIT, seconds a worker or consumer gives running jobs to finish before killing them; killed jobs' ActiveRecord connections are reclaimed |
 | `shutdown_timeout` | `drain_timeout + 5` | Seconds the supervisor waits for children after TERM before SIGKILL; an orchestrator's stop grace period must exceed it |
 | `stall_threshold` | `300` | Seconds without progress before a worker is considered stalled |
 | `priority_levels` | `nil` | Number of priority sub-queues (nil = disabled, 2-10) |

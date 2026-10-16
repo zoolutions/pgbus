@@ -284,6 +284,51 @@ RSpec.describe Pgbus::Engine do
     end
   end
 
+  describe "pgbus.logger initializer" do
+    # Rails.logger exists when engine initializers run; a log_format set
+    # before it did (config/application.rb) is applied to it here.
+    it "applies the configured log_format to the logger pgbus now resolves" do
+      allow(Pgbus.configuration).to receive(:apply_log_format!)
+
+      initializer_block("pgbus.logger").call
+
+      expect(Pgbus.configuration).to have_received(:apply_log_format!)
+    end
+  end
+
+  describe "pgbus.finalize initializer" do
+    after { restore_baseline_config }
+
+    # The app has booted, so on_load(:after_initialize) runs the hook at once.
+    it "finalizes the configuration after initialize" do
+      Pgbus.reset!
+
+      initializer_block("pgbus.finalize").call
+
+      expect(Pgbus.configuration).to be_finalized
+      expect(Ractor.shareable?(Pgbus.configuration.workers)).to be(true)
+    end
+
+    it "runs after the app's own initializer files" do
+      expect(described_class.initializers.find { |i| i.name == "pgbus.finalize" }.after).to eq(:load_config_initializers)
+    end
+
+    # An initializer's Pgbus.configure leaves the configuration open: later
+    # initializers and after_initialize blocks may still change it in place.
+    it "leaves finalizing to after_initialize while the app boots" do
+      Pgbus.reset!
+      allow(Rails.application).to receive(:initialized?).and_return(false)
+
+      Pgbus.configure { |c| c.streams_durable_patterns = [+"early"] }
+
+      expect(Pgbus.configuration).not_to be_finalized
+      expect(Pgbus.configuration.streams_durable_patterns).not_to be_frozen
+    ensure
+      # The app has booted: restore_baseline_config must finalize as usual.
+      allow(Rails.application).to receive(:initialized?).and_call_original
+    end
+  end
+
   describe "pgbus.integrations.appsignal initializer" do
     subject(:block) { initializer_block("pgbus.integrations.appsignal") }
 

@@ -209,22 +209,28 @@ module Pgbus
       0
     end
 
+    # Schema-probe memos (a true answer is kept for the life of the process)
+    # and the warn-once flag, read and written under @schema_lock (issue
+    # #527). The probes run outside it: a duplicate probe on a race is
+    # harmless, a lock held across a query is not.
+    @schema_lock = Mutex.new
+
     def self.executions_migrated?
-      return true if @executions_migrated
+      return true if @schema_lock.synchronize { @executions_migrated }
 
       result = begin
         BatchExecution.table_exists?
       rescue StandardError
         false
       end
-      @executions_migrated = true if result
+      @schema_lock.synchronize { @executions_migrated = true } if result
       result
     end
 
     def self.warn_callback_jobs_unmigrated
-      return if @warned_callback_jobs_unmigrated
+      first = @schema_lock.synchronize { @warned_callback_jobs_unmigrated ? false : (@warned_callback_jobs_unmigrated = true) }
+      return unless first
 
-      @warned_callback_jobs_unmigrated = true
       Pgbus.logger.warn do
         "[Pgbus] Batch callback configured as an ActiveJob instance, but pgbus_batches has no " \
           "on_*_job columns yet — .set options (queue, wait, priority) are ignored until " \
@@ -233,23 +239,25 @@ module Pgbus
     end
 
     def self.reset_executions_migrated_cache!
-      @executions_migrated = nil
-      @callback_jobs_migrated = nil
-      @warned_callback_jobs_unmigrated = nil
+      @schema_lock.synchronize do
+        @executions_migrated = nil
+        @callback_jobs_migrated = nil
+        @warned_callback_jobs_unmigrated = nil
+      end
     end
 
     # True once the on_finish_job / on_success_job / on_failure_job jsonb
     # columns exist (issue #415). Until then, configured callback instances
     # have nowhere to live and only bare classes are stored.
     def self.callback_jobs_migrated?
-      return true if @callback_jobs_migrated
+      return true if @schema_lock.synchronize { @callback_jobs_migrated }
 
       result = begin
         BatchEntry.column_names.include?("on_finish_job")
       rescue StandardError
         false
       end
-      @callback_jobs_migrated = true if result
+      @schema_lock.synchronize { @callback_jobs_migrated = true } if result
       result
     end
 

@@ -11,6 +11,8 @@ RSpec.describe "Event bus flow (integration)", :integration do
   # A real handler that records every event it handles, so the spec can assert
   # the handler actually ran (not merely that a row was written).
   let(:handler_class) do
+    # A spec double: built per example and driven from the example's thread.
+    # rubocop:disable-next ThreadSafety/ClassInstanceVariable
     Class.new(Pgbus::EventBus::Handler) do
       idempotent!
 

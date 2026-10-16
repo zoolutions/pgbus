@@ -43,7 +43,10 @@ module Pgbus
 
         def connect
           @sock = UNIXSocket.new(@socket_path)
-          @reader = Thread.new { reader_loop }
+          # The client's reader thread, owned by this object: #connect starts
+          # it once per socket; it ends when the socket closes, and #stop
+          # closes the socket and joins it.
+          @reader = Thread.new { reader_loop } # rubocop:disable ThreadSafety/NewThread
           self
         rescue SystemCallError, IOError, ArgumentError, ThreadError => e
           # ArgumentError: a socket path over the platform sun_path limit;

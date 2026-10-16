@@ -31,33 +31,122 @@ RSpec.describe Pgbus::Client do
     let(:mock_pgmq) { build_mock_pgmq }
 
     describe "#wait_for_notify" do
+      # The wait runs on a dedicated connection of its own (issue #527), never
+      # on a pool connection or under the shared-path @pgmq_mutex.
+      let(:listen_conn) do
+        double("PG::Connection", exec: nil, close: nil).tap do |conn|
+          allow(conn).to receive(:quote_ident) { |name| %("#{name}") }
+          allow(conn).to receive(:wait_for_notify).and_return("pgmq.q_pgbus_test_default.INSERT")
+        end
+      end
+
       before do
+        allow(Pgbus::DedicatedConnection).to receive(:connect).and_return(listen_conn)
         allow(mock_pgmq).to receive(:wait_for_notify).and_return("pgmq.q_pgbus_test_default.INSERT")
       end
 
-      it "delegates to pgmq-ruby wait_for_notify with the full queue name" do
+      it "listens on the queue's insert channel over a dedicated connection" do
         client.wait_for_notify("default", timeout: 5)
 
-        expect(mock_pgmq).to have_received(:wait_for_notify).with("pgbus_test_default", timeout: 5)
+        expect(Pgbus::DedicatedConnection).to have_received(:connect).with(config.worker_notify_connection_options)
+        expect(listen_conn).to have_received(:exec).with('LISTEN "pgmq.q_pgbus_test_default.INSERT"')
+        expect(listen_conn).to have_received(:wait_for_notify).with(5)
+        expect(mock_pgmq).not_to have_received(:wait_for_notify)
       end
 
-      it "returns the channel name from pgmq" do
-        result = client.wait_for_notify("default", timeout: 5)
-        expect(result).to eq("pgmq.q_pgbus_test_default.INSERT")
+      it "returns the channel name" do
+        expect(client.wait_for_notify("default", timeout: 5)).to eq("pgmq.q_pgbus_test_default.INSERT")
       end
 
       it "passes nil timeout for indefinite wait" do
         client.wait_for_notify("default")
-        expect(mock_pgmq).to have_received(:wait_for_notify).with("pgbus_test_default", timeout: nil)
+
+        expect(listen_conn).to have_received(:wait_for_notify).with(nil)
       end
 
-      it "yields block to pgmq when given" do
+      it "yields the notification to the block" do
+        allow(listen_conn).to receive(:wait_for_notify).and_yield("ch", 42, "payload")
         yielded = nil
-        allow(mock_pgmq).to receive(:wait_for_notify).and_yield("ch", 42, "payload")
 
         client.wait_for_notify("default", timeout: 1) { |ch, pid, pl| yielded = [ch, pid, pl] }
 
         expect(yielded).to eq(["ch", 42, "payload"])
+      end
+
+      # The retry the pooled wait had (with_stale_connection_retry): a
+      # connection found dead before it was used is replaced and the wait
+      # starts again. A connection lost mid-wait is not retried, as before.
+      context "when the dedicated connection is stale" do
+        let(:stale_conn) do
+          double("PG::Connection", exec: nil, close: nil).tap do |conn|
+            allow(conn).to receive(:quote_ident) { |name| %("#{name}") }
+            allow(conn).to receive(:wait_for_notify).and_raise(PG::ConnectionBad, "no connection to the server")
+          end
+        end
+
+        before do
+          require "pg"
+          allow(Pgbus::DedicatedConnection).to receive(:connect).and_return(stale_conn, listen_conn)
+          allow(client).to receive(:sleep)
+        end
+
+        it "waits again on a fresh connection" do
+          expect(client.wait_for_notify("default", timeout: 5)).to eq("pgmq.q_pgbus_test_default.INSERT")
+          expect(Pgbus::DedicatedConnection).to have_received(:connect).twice
+          expect(stale_conn).to have_received(:close)
+        end
+
+        it "does not retry a connection lost mid-wait" do
+          allow(stale_conn).to receive(:wait_for_notify)
+            .and_raise(PG::ConnectionBad, "server closed the connection unexpectedly")
+
+          expect { client.wait_for_notify("default", timeout: 5) }.to raise_error(PG::ConnectionBad)
+          expect(Pgbus::DedicatedConnection).to have_received(:connect).once
+        end
+      end
+
+      it "closes the dedicated connection, also when the wait raises" do
+        allow(listen_conn).to receive(:wait_for_notify).and_raise(IOError, "gone")
+
+        expect { client.wait_for_notify("default", timeout: 1) }.to raise_error(IOError)
+        expect(listen_conn).to have_received(:close)
+      end
+
+      context "with the shared-connection Proc path" do
+        let(:waiting) { Queue.new }
+        let(:release) { Queue.new }
+
+        before do
+          config.worker_notify_database_url = "postgres://localhost/pgbus_test"
+          allow(config).to receive(:connection_options).and_return(-> { double("raw PG::Connection") })
+          blocking_wait = lambda do |*|
+            waiting << true
+            release.pop
+          end
+          allow(listen_conn).to receive(:wait_for_notify, &blocking_wait)
+          allow(mock_pgmq).to receive(:wait_for_notify, &blocking_wait)
+        end
+
+        it "needs a connection of its own when there is no dedicated URL" do
+          config.worker_notify_database_url = nil
+          allow(Pgbus::DedicatedConnection).to receive(:connect).and_call_original
+
+          expect { client.wait_for_notify("default", timeout: 1) }.to raise_error(Pgbus::ConfigurationError)
+          expect(mock_pgmq).not_to have_received(:wait_for_notify)
+        end
+
+        # Bounded handshake: a wait_for_notify that raises before it blocks
+        # fails the example (through join) instead of hanging the suite.
+        it "does not hold the PGMQ mutex while it waits" do
+          waiter = Thread.new { client.wait_for_notify("default", timeout: 5) }
+          reached = waiting.pop(timeout: 5) || waiter.join(0)
+          locked = client.instance_variable_get(:@pgmq_mutex).locked?
+          release << true
+          waiter.join
+
+          expect(reached).to be(true), "wait_for_notify never reached the blocking wait"
+          expect(locked).to be(false)
+        end
       end
     end
 

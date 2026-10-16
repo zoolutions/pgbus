@@ -118,5 +118,59 @@ RSpec.describe Pgbus::DedupCache do
       threads.each(&:join)
       expect(big_cache.size).to be <= 1000
     end
+
+    # mark! used to check `key?` and the size, then insert: two threads could
+    # both pass the checks before either inserted (issue #527). The first
+    # racer is held right after its +check+ until the second has made its own
+    # (the old check-then-act: both get through every run) or is blocked on
+    # the lock (mark! now). A racer counts as blocked only once it has
+    # started, so one the scheduler has not run yet is waited for, not
+    # mistaken for blocked.
+    def race_mark(target, keys, check:)
+      racers = []
+      started = Concurrent::Set.new
+      second_checked = Concurrent::AtomicBoolean.new(false)
+      hold_first_check(target, check, racers, started, second_checked)
+
+      go = Queue.new
+      keys.each do |key|
+        racers << Thread.new do
+          go.pop
+          started << Thread.current
+          target.mark!(key)
+        end
+      end
+      keys.size.times { go << true }
+      racers.each(&:join)
+    end
+
+    def hold_first_check(target, check, racers, started, second_checked)
+      count = Concurrent::AtomicFixnum.new(0)
+      allow(target.instance_variable_get(:@cache)).to receive(check).and_wrap_original do |original, *args|
+        present = original.call(*args)
+        case count.increment
+        when 1
+          contender = (racers - [Thread.current]).first
+          Thread.pass until second_checked.true? || (started.include?(contender) && contender.stop?)
+        when 2 then second_checked.make_true
+        end
+        present
+      end
+    end
+
+    it "records a key marked by two threads at once once" do
+      race_mark(cache, %w[same:Handler same:Handler], check: :key?)
+
+      expect(cache.instance_variable_get(:@insertion_order)).to eq(%w[same:Handler])
+    end
+
+    it "stays within max_size when two threads add the last keys at once" do
+      small = described_class.new(max_size: 2, ttl: 10)
+      small.mark!("first:Handler")
+
+      race_mark(small, %w[second:Handler third:Handler], check: :size)
+
+      expect(small.size).to eq(2)
+    end
   end
 end

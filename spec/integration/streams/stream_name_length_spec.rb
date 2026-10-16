@@ -129,13 +129,13 @@ RSpec.describe "Streams: name length safety net (integration)", :integration do
       # baseline prefix ever changes. Appending any non-empty suffix
       # shrinks the budget and pushes `name` past it.
       Pgbus.configuration.queue_prefix = "#{original_prefix}_overflow"
-      Pgbus.instance_variable_set(:@stream_cache, nil)
+      Pgbus.instance_variable_set(:@stream_cache, Concurrent::Map.new)
 
       expect { Pgbus.stream(name) }
         .to raise_error(Pgbus::Streams::StreamNameTooLong)
     ensure
       Pgbus.configuration.queue_prefix = original_prefix
-      Pgbus.instance_variable_set(:@stream_cache, nil)
+      Pgbus.instance_variable_set(:@stream_cache, Concurrent::Map.new)
     end
   end
 

@@ -30,12 +30,14 @@ module Pgbus
           ) b ON s.key = b.concurrency_key
         SQL
 
+        # Model names, resolved when counted (the models autoload lazily):
+        # names rather than lambdas, so the constant is plain frozen data.
         LIST_MODELS = {
-          batches: -> { BatchEntry },
-          job_locks: -> { UniquenessKey },
-          outbox: -> { OutboxEntry },
-          processed_events: -> { ProcessedEvent },
-          recurring_tasks: -> { RecurringTask }
+          batches: :BatchEntry,
+          job_locks: :UniquenessKey,
+          outbox: :OutboxEntry,
+          processed_events: :ProcessedEvent,
+          recurring_tasks: :RecurringTask
         }.freeze
 
         # list – :batches, :job_locks, :concurrency_keys, :outbox, :processed_events or :recurring_tasks.
@@ -62,7 +64,7 @@ module Pgbus
         private
 
         def bounded_count(list)
-          rows = list == :concurrency_keys ? concurrency_keys_probe : LIST_MODELS.fetch(list).call.limit(COUNT_CAP + 1).count
+          rows = list == :concurrency_keys ? concurrency_keys_probe : Pgbus.const_get(LIST_MODELS.fetch(list)).limit(COUNT_CAP + 1).count
           Count.new(total: [rows.to_i, COUNT_CAP].min, capped: rows.to_i > COUNT_CAP)
         rescue StandardError => e
           Pgbus.logger.debug { "[Pgbus::Web] Error counting #{list}: #{e.message}" }

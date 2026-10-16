@@ -9,6 +9,8 @@ RSpec.describe "Pgbus::Integrations::Appsignal::Subscriber" do
   # add_distribution_value, set_error.
 
   let(:appsignal_class) do
+    # A spec double: built per example and driven from the example's thread.
+    # rubocop:disable-next ThreadSafety/ClassAndModuleAttributes
     Class.new do
       class << self
         attr_accessor :counters, :gauges, :distributions, :errors
@@ -68,6 +70,17 @@ RSpec.describe "Pgbus::Integrations::Appsignal::Subscriber" do
 
   after do
     Pgbus::Integrations::Appsignal::Subscriber.reset!
+  end
+
+  describe ".install!" do
+    it "subscribes once when two threads install at once", :first_call_race do
+      Pgbus::Integrations::Appsignal::Subscriber.reset!
+      hold_first_call(ActiveSupport::Notifications, :subscribe)
+
+      race { Pgbus::Integrations::Appsignal::Subscriber.install! }
+
+      expect(ActiveSupport::Notifications).to have_received(:subscribe).with("pgbus.job_completed").once
+    end
   end
 
   describe "pgbus.executor.execute" do

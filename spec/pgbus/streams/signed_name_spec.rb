@@ -58,6 +58,8 @@ RSpec.describe Pgbus::Streams::SignedName do
         # Reusing turbo's key is the whole point — existing broadcasts_to calls
         # generate tokens we must be able to verify.
         turbo_secret = "c" * 64
+        # A spec double: built per example and driven from the example's thread.
+        # rubocop:disable-next ThreadSafety/ClassInstanceVariable
         turbo_module = Module.new do
           define_singleton_method(:signed_stream_verifier_key) { turbo_secret }
           define_singleton_method(:signed_stream_verifier) do

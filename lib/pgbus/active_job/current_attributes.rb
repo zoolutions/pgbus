@@ -28,7 +28,9 @@ module Pgbus
       included do
         attr_accessor :pgbus_current_attributes
 
-        class_attribute :pgbus_persist_current_attributes, instance_writer: false, default: nil
+        # A per-class setting the job's own class body writes at load; jobs
+        # only read it while they serialize.
+        class_attribute :pgbus_persist_current_attributes, instance_writer: false, default: nil # rubocop:disable ThreadSafety/ClassAndModuleAttributes
       end
 
       def serialize

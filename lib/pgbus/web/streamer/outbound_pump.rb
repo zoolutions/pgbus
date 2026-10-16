@@ -62,7 +62,10 @@ module Pgbus
 
           @started = true
           @partitions.each do |partition|
-            @threads << Thread.new { run_worker(partition) }
+            # One writer per partition, owned by this pump: Instance#start
+            # starts them once (the @started check above); #stop signals each
+            # partition and joins every thread.
+            @threads << Thread.new { run_worker(partition) } # rubocop:disable ThreadSafety/NewThread
           end
           self
         end

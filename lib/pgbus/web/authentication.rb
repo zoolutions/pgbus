@@ -9,8 +9,25 @@ module Pgbus
         before_action :authenticate_pgbus!
       end
 
+      # The "dashboard has no authentication" warning is logged once per
+      # process. Request threads check and set the flag under @warn_lock, so
+      # concurrent first requests cannot both log it (issue #527).
+      @warn_lock = Mutex.new
+      @auth_warned = false
+
       class << self
-        attr_accessor :auth_warned
+        def auth_warned
+          @warn_lock.synchronize { @auth_warned }
+        end
+
+        def auth_warned=(value)
+          @warn_lock.synchronize { @auth_warned = value }
+        end
+
+        # True for the one caller that flips the flag from false to true.
+        def claim_auth_warning!
+          @warn_lock.synchronize { @auth_warned ? false : (@auth_warned = true) }
+        end
       end
 
       # Default base controller — anything else means the app deliberately
@@ -40,13 +57,13 @@ module Pgbus
         # place; don't nag apps that gate the dashboard via a custom controller
         # (they had to set a redundant web_auth lambda just to silence us — #334).
         return unless default_base_controller?
+        return unless Pgbus::Web::Authentication.claim_auth_warning!
 
         Pgbus.logger.warn do
           "[Pgbus] Dashboard is accessible without authentication. " \
             "Configure Pgbus.configuration.web_auth to restrict access. " \
             "See: https://github.com/zoolutions/pgbus#dashboard-authentication"
         end
-        Pgbus::Web::Authentication.auth_warned = true
       end
 
       # True when base_controller_class is (still) the default ActionController::Base.

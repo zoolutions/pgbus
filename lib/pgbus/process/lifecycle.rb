@@ -22,11 +22,11 @@ module Pgbus
       STATES = %i[starting running paused draining stopped].freeze
 
       TRANSITIONS = {
-        starting: %i[running stopped],
-        running: %i[paused draining stopped],
-        paused: %i[running draining stopped],
-        draining: %i[stopped],
-        stopped: []
+        starting: %i[running stopped].freeze,
+        running: %i[paused draining stopped].freeze,
+        paused: %i[running draining stopped].freeze,
+        draining: %i[stopped].freeze,
+        stopped: [].freeze
       }.freeze
 
       attr_reader :state

@@ -12,11 +12,12 @@ group :development do
   gem "i18n-tasks", "~> 1.0"
   gem "rubocop", "~> 1.21"
   gem "rubocop-rspec", "~> 3.0"
+  gem "rubocop-thread_safety", ">= 0.8", require: false # conformance-kit's config/rubocop.yml (Tier 1)
   gem "ruby-openai"
 end
 
 group :test do
-  gem "conformance-kit", "~> 0.1", require: false # concurrency conformance gates (zoolutions/phlex-reactive#363)
+  gem "conformance-kit", "~> 0.4", require: false # concurrency conformance gates (zoolutions/phlex-reactive#363)
   gem "rspec", "~> 3.0"
   gem "rspec-rails", ">= 7.0", "< 9"
 
@@ -73,4 +74,8 @@ group :development, :test do
   # Loaded at the top of spec/spec_helper.rb before "pgbus" so lib files
   # are instrumented before they load.
   gem "simplecov", require: false
+
+  # sig/ (the typed public surface): `rbs -I sig validate` in the lint job and
+  # spec/pgbus/rbs_spec.rb, which checks the signatures cover the code (#527).
+  gem "rbs", require: false
 end

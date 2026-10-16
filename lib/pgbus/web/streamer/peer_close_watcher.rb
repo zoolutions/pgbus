@@ -57,7 +57,10 @@ module Pgbus
 
           @wake_reader, @wake_writer = IO.pipe if @wake_reader.closed?
           @running = true
-          @thread = Thread.new { run_loop }
+          # The watcher's one thread, owned by this object: Instance#start
+          # starts it once (under Streamer's @current_mutex); #stop wakes it
+          # through the pipe and joins it.
+          @thread = Thread.new { run_loop } # rubocop:disable ThreadSafety/NewThread
           self
         end
 

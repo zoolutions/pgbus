@@ -5,27 +5,29 @@ module Pgbus
     protect_from_forgery with: :exception
     skip_after_action :verify_same_origin_request, raise: false
 
-    FRONTEND_ROOT = Engine.root.join("app", "frontend", "pgbus")
+    FRONTEND_ROOT = Engine.root.join("app", "frontend", "pgbus").freeze
 
     STATIC_ASSETS = {
       css: {
-        style: FRONTEND_ROOT.join("style.css")
-      }
+        style: FRONTEND_ROOT.join("style.css").freeze
+      }.freeze
     }.freeze
 
     # Modules are served minified (rake frontend:js), each with its .min.js.map
     # beside it. ApexCharts ships minified already; charts.js imports it on
     # demand, so only Insights downloads it.
     MODULE_OVERRIDES = {
-      application: FRONTEND_ROOT.join("application.min.js"),
-      turbo: FRONTEND_ROOT.join("vendor", "turbo.min.js"),
-      apexcharts: FRONTEND_ROOT.join("vendor", "apexcharts.js")
+      application: FRONTEND_ROOT.join("application.min.js").freeze,
+      turbo: FRONTEND_ROOT.join("vendor", "turbo.min.js").freeze,
+      apexcharts: FRONTEND_ROOT.join("vendor", "apexcharts.js").freeze
     }.freeze
 
+    # An idempotent memo: concurrent first requests glob the same files and
+    # build equal Hashes; whichever is stored, every reader gets a frozen one.
     def self.js_modules
-      @js_modules ||= FRONTEND_ROOT.join("modules").glob("*.min.js").sort
+      @js_modules ||= FRONTEND_ROOT.join("modules").glob("*.min.js").sort # rubocop:disable ThreadSafety/ClassInstanceVariable
                                    .to_h { |f| [f.basename(".min.js").to_s.to_sym, f] }
-                                   .merge(MODULE_OVERRIDES)
+                                   .merge(MODULE_OVERRIDES).freeze
     end
 
     CURRENT_VERSION = Pgbus::VERSION.tr(".", "-").freeze

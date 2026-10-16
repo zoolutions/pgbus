@@ -35,8 +35,14 @@ module Pgbus
       # For a queue named `pgbus_stream_chat` the trigger table is
       # `q_pgbus_stream_chat`, so the channel is `pgmq.q_pgbus_stream_chat.INSERT`.
       class Listener
+        # Kept Ractor-shareable (issue #527): the hand-off to the dispatcher
+        # is the seam a Ractor dispatcher would pass by reference. The Strings
+        # are frozen in place: they are the sender's own (the NOTIFY's, or the
+        # hub frame's).
         WakeMessage = Data.define(:queue_name, :payload) do
           def initialize(queue_name:, payload: nil)
+            queue_name.freeze
+            payload&.freeze
             super
           end
         end
@@ -101,7 +107,10 @@ module Pgbus
           return if @running
 
           @running = true
-          @thread = Thread.new { run_loop }
+          # The LISTEN thread, owned by this object: Instance#start starts it
+          # once (under Streamer's @current_mutex); #stop clears @running and
+          # joins it.
+          @thread = Thread.new { run_loop } # rubocop:disable ThreadSafety/NewThread
           self
         end
 

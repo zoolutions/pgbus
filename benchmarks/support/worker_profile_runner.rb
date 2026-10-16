@@ -80,7 +80,9 @@ module WorkerProfileRunner
     measurement = nil
     run = lambda do
       measurement = measure do
-        runner = Thread.new { process.run }
+        # The worker loop under measurement, on its own thread on purpose;
+        # graceful_shutdown ends it and it is joined right after.
+        runner = Thread.new { process.run } # rubocop:disable ThreadSafety/NewThread
         runner.name = WorkerProfileHarness::LOOP_THREAD_NAME
         # sleep, not Thread.pass: a spinning watcher holds the GVL and would
         # show up as gvl_wait on every thread it is measuring.
