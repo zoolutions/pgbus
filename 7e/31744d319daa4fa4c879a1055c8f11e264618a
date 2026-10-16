@@ -1,0 +1,21 @@
+spec/pgbus/deploy/runner_spec.rb
+  s_e96e270ce76923::t_f6c6d1ff970bf2 251-255
+lib/pgbus/deploy/runner.rb
+  s_e96e270ce76923::t_d145b7ae41d4bc 187-190,192-193,195,199-200,202-210
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "7e31744d319daa4fa4c879a1055c8f11e264618a",
+  "prompts": {},
+  "sessions": {
+    "s_e96e270ce76923": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5914cabb-29d8-407e-aea9-b5a4a5f09dbf",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
