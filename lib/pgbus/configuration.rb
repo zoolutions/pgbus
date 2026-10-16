@@ -6,6 +6,7 @@ module Pgbus
   class Configuration
     include PresenceSettings
     include StreamAuthorization
+    include DeploySettings
 
     # Connection settings
     attr_accessor :database_url, :connection_params, :pool_size, :pool_timeout
@@ -363,6 +364,7 @@ module Pgbus
       @recurring_tasks_files = nil
       @recurring_enabled = true
       @recurring_execution_retention = 7 * 24 * 3600 # 7 days
+      initialize_deploy_settings
 
       @zombie_detection = true
 
@@ -944,6 +946,7 @@ module Pgbus
       validate_streams!
       validate_metrics_backend!
       validate_fair_share!
+      validate_deploy_settings!
 
       self
     end

@@ -13,7 +13,10 @@ module Pgbus
 
       def initialize(kind:, metadata: {}, on_beat: nil, loop_tick_supplier: nil, metadata_supplier: nil)
         @kind = kind
-        @metadata = metadata
+        # Every kind's row carries the app revision from its first
+        # registration on, nil included: the deploy-task rollover gate reads
+        # it (issue #536), and beat_metadata dups this hash so it survives.
+        @metadata = metadata.merge(revision: Deploy::Revision.current)
         @on_beat = on_beat
         @loop_tick_supplier = loop_tick_supplier
         @metadata_supplier = metadata_supplier

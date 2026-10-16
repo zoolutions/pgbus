@@ -1,0 +1,41 @@
+class AddPgbusDeployTasksTables < ActiveRecord::Migration<%= migration_version %>
+  def change
+    create_table :pgbus_deploy_tasks do |t|
+      t.string :key, null: false
+      t.string :class_name
+      t.string :command, limit: 2048
+      t.text :arguments
+      t.string :queue_name
+      t.integer :priority, default: 0
+      t.string :version, null: false, default: "1"
+      t.boolean :every_deploy, null: false, default: false
+      t.boolean :static, null: false, default: true
+      t.boolean :enabled, null: false, default: true
+      t.text :description
+      t.datetime :armed_at
+      t.string :armed_for
+      t.timestamps
+    end
+
+    add_index :pgbus_deploy_tasks, :key,
+      unique: true, name: "idx_pgbus_deploy_tasks_key"
+    add_index :pgbus_deploy_tasks, :armed_at,
+      where: "armed_at IS NOT NULL", name: "idx_pgbus_deploy_tasks_armed"
+
+    create_table :pgbus_deploy_task_runs do |t|
+      t.string :task_key, null: false
+      t.string :version, null: false
+      t.string :revision
+      t.string :triggered_by, null: false
+      t.string :queue_name
+      t.bigint :msg_id
+      t.datetime :run_at, null: false
+      t.datetime :created_at, null: false, default: -> { "CURRENT_TIMESTAMP" }
+    end
+
+    add_index :pgbus_deploy_task_runs, [:task_key, :run_at],
+      name: "idx_pgbus_deploy_task_runs_task"
+    add_index :pgbus_deploy_task_runs, :run_at,
+      name: "idx_pgbus_deploy_task_runs_cleanup"
+  end
+end

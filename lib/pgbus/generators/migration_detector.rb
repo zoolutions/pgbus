@@ -77,6 +77,7 @@ module Pgbus
         add_queue_states: "pgbus:add_queue_states",
         add_outbox: "pgbus:add_outbox",
         add_recurring: "pgbus:add_recurring",
+        add_deploy_tasks: "pgbus:add_deploy_tasks",
         add_failed_events_index: "pgbus:add_failed_events_index",
         add_processed_event_completion: "pgbus:add_processed_event_completion",
         add_batch_executions: "pgbus:add_batch_executions",
@@ -99,6 +100,7 @@ module Pgbus
         add_queue_states: "queue states table (pause/resume)",
         add_outbox: "outbox entries table (transactional outbox)",
         add_recurring: "recurring tasks + executions tables",
+        add_deploy_tasks: "deploy tasks + runs tables (one-time jobs run after a rollover)",
         add_failed_events_index: "unique index on pgbus_failed_events (queue_name, msg_id)",
         add_processed_event_completion: "completed_at on pgbus_processed_events (two-phase idempotency claim)",
         add_batch_executions: "batch execution-row tracking (self-healing completion, on_failure rename)",
@@ -127,6 +129,7 @@ module Pgbus
           *queue_states_migrations,
           *outbox_migrations,
           *recurring_migrations,
+          *deploy_tasks_migrations,
           *failed_events_index_migrations,
           *processed_event_completion_migrations,
           *batch_executions_migrations,
@@ -213,6 +216,14 @@ module Pgbus
         return [] if table_exists?("pgbus_recurring_tasks") && table_exists?("pgbus_recurring_executions")
 
         [:add_recurring]
+      end
+
+      # Same shape as recurring_migrations: plain create_table in the
+      # template, so the generator is queued only while a table is absent.
+      def deploy_tasks_migrations
+        return [] if table_exists?("pgbus_deploy_tasks") && table_exists?("pgbus_deploy_task_runs")
+
+        [:add_deploy_tasks]
       end
 
       def failed_events_index_migrations
