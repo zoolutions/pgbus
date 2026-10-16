@@ -9,8 +9,12 @@ module Pgbus
       module DeployTaskList
         RUN_HISTORY = 25
 
-        # page/per_page nil returns every task (the MCP tool's default).
+        # page/per_page nil returns every task (the MCP tool's default). An
+        # install without the tables (pgbus:add_deploy_tasks not run) gets the
+        # empty state, whose hint names the generator, not an error per refresh.
         def deploy_tasks(page: nil, per_page: nil)
+          return [] unless DeployTask.table_exists?
+
           scope = DeployTask.order(:key)
           scope = scope.limit(per_page).offset(((page || 1) - 1) * per_page) if per_page
           records = scope.to_a
@@ -22,6 +26,8 @@ module Pgbus
         end
 
         def deploy_task(id)
+          return nil unless DeployTask.table_exists?
+
           record = DeployTask.find_by(id: id)
           return nil unless record
 

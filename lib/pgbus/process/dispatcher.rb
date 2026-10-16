@@ -684,9 +684,11 @@ module Pgbus
         e
       end
 
+      # Guarded on the table: deploy tasks default on, and an install that has
+      # not run pgbus:add_deploy_tasks must not warn every hour.
       def cleanup_deploy_task_runs
         retention = config.deploy_task_run_retention
-        return unless retention&.positive?
+        return unless retention&.positive? && DeployTaskRun.table_exists?
 
         deleted = DeployTaskRun.older_than(Time.current - retention).delete_all
         Pgbus.logger.debug { "[Pgbus] Cleaned up #{deleted} old deploy task runs" } if deleted.positive?

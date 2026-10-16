@@ -109,6 +109,31 @@ RSpec.describe "Deploy tasks (integration)", :integration do
     expect(Pgbus::DeployTaskRun.rollover.count).to eq(2)
   end
 
+  # The take-over (issue #536 deviation): v1 never fired (disabled, or its
+  # gate never opened), so an old-revision scheduler that crash-restarts
+  # mid-deploy re-arms "1". Once the fleet is on rev-b, the new runner owes
+  # v2, takes the arm over and fires v2 exactly once.
+  it "takes over an arm an old scheduler re-armed for an unfired version" do
+    process("scheduler", revision: "rev-b", pid: 1)
+    process("worker", revision: "rev-a", pid: 2)
+    runner("rev-b").sync!(now: now)
+
+    declare(version: 1)
+    runner("rev-a").sync!(now: now)
+    expect(Pgbus::DeployTask.sole.armed_for).to eq("1")
+
+    Pgbus::ProcessEntry.where(pid: 2).delete_all
+    process("worker", revision: "rev-b", pid: 3)
+    declare(version: 2)
+    new_runner = runner("rev-b")
+    new_runner.tick(now)
+    new_runner.tick(now + 10)
+
+    expect(messages.size).to eq(1)
+    expect(Pgbus::DeployTaskRun.sole).to have_attributes(version: "2", revision: "rev-b", triggered_by: "rollover")
+    expect(Pgbus::DeployTask.sole.armed_at).to be_nil
+  end
+
   it "re-arms a task whose enqueue fails" do
     process("worker", revision: "rev-b", pid: 3)
     new_runner = runner("rev-b")

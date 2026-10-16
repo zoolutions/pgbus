@@ -558,6 +558,17 @@ RSpec.describe Pgbus::Process::Dispatcher do
   end
 
   describe "#cleanup_deploy_task_runs (private)" do
+    before { allow(Pgbus::DeployTaskRun).to receive(:table_exists?).and_return(true) }
+
+    # Deploy tasks default on, so an install that bumps the gem without
+    # running pgbus:add_deploy_tasks must not warn every hour.
+    it "skips an install without the deploy task tables" do
+      allow(Pgbus::DeployTaskRun).to receive_messages(table_exists?: false, older_than: nil)
+
+      expect(dispatcher.send(:cleanup_deploy_task_runs)).to be_nil
+      expect(Pgbus::DeployTaskRun).not_to have_received(:older_than)
+    end
+
     it "deletes run rows older than the retention" do
       relation = instance_double(ActiveRecord::Relation, delete_all: 3)
       allow(Pgbus::DeployTaskRun).to receive(:older_than).and_return(relation)

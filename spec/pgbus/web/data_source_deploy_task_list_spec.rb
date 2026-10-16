@@ -14,6 +14,8 @@ RSpec.describe Pgbus::Web::DataSource::DeployTaskList do
                                 updated_at: now - 60, parsed_arguments: [{ "batch_size" => 500 }])
   end
 
+  before { allow(Pgbus::DeployTask).to receive(:table_exists?).and_return(true) }
+
   def run(triggered_by, revision: "rev-a", run_at: now - 300)
     double("Pgbus::DeployTaskRun", task_key: "backfill", triggered_by: triggered_by, revision: revision,
                                    version: "2", run_at: run_at, queue_name: "maintenance", msg_id: 42)
@@ -50,6 +52,15 @@ RSpec.describe Pgbus::Web::DataSource::DeployTaskList do
       allow(Pgbus::DeployTaskRun).to receive(:latest_for).and_return([])
 
       expect(data_source.deploy_tasks.sole).to include(last_rollover_run: nil, last_manual_run: nil)
+    end
+
+    it "returns [] without logging an error on an install without the tables" do
+      allow(Pgbus::DeployTask).to receive(:table_exists?).and_return(false)
+      allow(Pgbus.logger).to receive(:error)
+
+      expect(data_source.deploy_tasks).to eq([])
+      expect(data_source.deploy_task(7)).to be_nil
+      expect(Pgbus.logger).not_to have_received(:error)
     end
 
     it "returns [] on error" do

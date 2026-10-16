@@ -117,6 +117,11 @@ class Views::Docs::Pages::DeployTasks < DocsUI::Page
         dash or Kamal deploy opens the gate within a scheduler tick after the last old
         container drains. A hard-killed old container keeps the gate closed until its
         row goes stale, up to 5 minutes.
+
+        Every scheduler that boots syncs its own declarations. If an old-revision
+        scheduler crash-restarts inside the overlap window, it removes the rows of
+        tasks only the new release declares; the new scheduler restores them on its
+        next boot.
       MD
     end
   end
@@ -164,8 +169,15 @@ class Views::Docs::Pages::DeployTasks < DocsUI::Page
 
         If the enqueue fails (`perform_later` raises, returns false, or does not
         enqueue the job), the task is re-armed, the failure is logged and reported to
-        your error reporters, and it fires again on a later tick. Each enqueue emits
-        `pgbus.deploy_task.enqueue` (`task`, `version`, `revision`, `triggered_by`).
+        your error reporters, and the scheduler retries it after 5 seconds, then 10,
+        20, and so on up to 5 minutes. Disable the task to stop the retries. Each
+        enqueue emits `pgbus.deploy_task.enqueue` (`task`, `version`, `revision`,
+        `triggered_by`).
+
+        The run row is what marks a version as done. If it cannot be written right
+        after a successful enqueue (logged and reported), the job still runs, but the
+        next scheduler boot sees the version as owed and runs it again: make deploy
+        tasks idempotent.
       MD
     end
   end

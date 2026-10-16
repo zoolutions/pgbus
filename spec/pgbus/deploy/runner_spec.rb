@@ -194,6 +194,56 @@ RSpec.describe Pgbus::Deploy::Runner do
                                                    arguments: ["Cache.warm!"])
     end
 
+    describe "retry backoff after a failed enqueue" do
+      let(:clock) { [1_000.0] }
+
+      before do
+        allow(runner).to receive(:monotonic_now) { clock.first }
+        job_class.before_enqueue { throw :abort }
+      end
+
+      def advance(seconds) = clock[0] += seconds
+
+      it "does not retry a task inside its backoff window" do
+        backfill = row("backfill")
+
+        runner.tick(now)
+        advance(1)
+        runner.tick(now + 1)
+
+        expect(backfill).to have_received(:claim!).once
+        expect(Pgbus::ErrorReporter).to have_received(:report).once
+      end
+
+      it "retries once the window has passed, doubling it up to the cap" do
+        backfill = row("backfill")
+
+        runner.tick(now)
+        advance(described_class::RETRY_BACKOFF_BASE)
+        runner.tick(now)
+        advance(described_class::RETRY_BACKOFF_BASE)
+        runner.tick(now) # inside the doubled window
+        advance(described_class::RETRY_BACKOFF_BASE)
+        runner.tick(now)
+
+        expect(backfill).to have_received(:claim!).exactly(3).times
+        expect(runner.send(:retry_delay, 20)).to eq(described_class::RETRY_BACKOFF_MAX)
+      end
+
+      it "forgets the backoff once the task enqueues" do
+        backfill = row("backfill")
+        runner.tick(now)
+        job_class.reset_callbacks(:enqueue)
+        advance(described_class::RETRY_BACKOFF_BASE)
+
+        runner.tick(now)
+
+        expect(adapter.jobs.size).to eq(1)
+        expect(runner.send(:backing_off?, "backfill")).to be(false)
+        expect(backfill).to have_received(:claim!).twice
+      end
+    end
+
     it "re-arms and reports when perform_later raises, then carries on with the next task" do
       config.deploy_tasks = { "a" => { "class" => "DeployBackfillJob" }, "b" => { "command" => "B.run" } }
       first = row("a")

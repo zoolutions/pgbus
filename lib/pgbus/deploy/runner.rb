@@ -13,6 +13,12 @@ module Pgbus
     # transaction: the adapter defers an enqueue inside one to its commit.
     class Runner
       ROLLOVER_CHECK_INTERVAL = 5 # seconds
+      # A task whose enqueue failed is retried after 5 s, then 10, 20, … up to
+      # 5 minutes, so a deterministic failure (a before_enqueue that always
+      # aborts, a uniqueness reject while the duplicate is queued) does not
+      # retry and report on every tick.
+      RETRY_BACKOFF_BASE = 5 # seconds
+      RETRY_BACKOFF_MAX = 300 # seconds
       ROLLOVER = "rollover"
       MANUAL = "manual"
 
@@ -25,6 +31,7 @@ module Pgbus
         @status = nil
         @checked_at = nil
         @logged_wait = nil
+        @failures = {}
       end
 
       # The valid declared tasks, in key order. A class: that does not resolve
@@ -61,7 +68,7 @@ module Pgbus
         rows = DeployTask.where(key: tasks.map(&:key)).index_by(&:key)
         tasks.each do |task|
           row = rows[task.key]
-          fire(task, row, now) if row&.enabled && row.armed?
+          fire(task, row, now) if row&.enabled && row.armed? && !backing_off?(task.key)
         end
       end
 
@@ -109,7 +116,7 @@ module Pgbus
       end
 
       def gate_status
-        at = ::Process.clock_gettime(::Process::CLOCK_MONOTONIC)
+        at = monotonic_now
         return @status if @checked_at && at - @checked_at < ROLLOVER_CHECK_INTERVAL
 
         @checked_at = at
@@ -142,17 +149,39 @@ module Pgbus
         armed_for = task.armed_for(revision)
         row.take_over!(armed_for: armed_for, now: now) if row.armed_for != armed_for && DeployTask.owed?(task, revision)
         return unless row.claim!(armed_for: armed_for, now: now)
-        return unless enqueue(task, triggered_by: ROLLOVER, now: now) == :failed
+        return @failures.delete(task.key) if enqueue(task, triggered_by: ROLLOVER, now: now) == :enqueued
 
         rearm(task, row, armed_for)
       end
 
       def rearm(task, row, armed_for)
+        delay = note_failure(task.key)
         row.rearm!(armed_for: armed_for, now: Time.current)
-        Pgbus.logger.warn { "[Pgbus] Deploy task #{task.key} re-armed; it fires again on a later tick" }
+        Pgbus.logger.warn { "[Pgbus] Deploy task #{task.key} re-armed; retrying in #{delay}s" }
       rescue StandardError => e
         Pgbus.logger.error { "[Pgbus] Could not re-arm deploy task #{task.key}: #{e.class}: #{e.message}" }
         ErrorReporter.report(e, { action: "deploy_task_rearm", task: task.key, armed_for: armed_for })
+      end
+
+      def backing_off?(key)
+        failure = @failures[key]
+        !failure.nil? && monotonic_now < failure[:retry_at]
+      end
+
+      # Records one more failed enqueue for +key+ and returns the seconds until its retry.
+      def note_failure(key)
+        count = @failures.fetch(key, { count: 0 })[:count] + 1
+        delay = retry_delay(count)
+        @failures[key] = { count: count, retry_at: monotonic_now + delay }
+        delay
+      end
+
+      def retry_delay(count)
+        [RETRY_BACKOFF_BASE * (2**(count - 1)), RETRY_BACKOFF_MAX].min
+      end
+
+      def monotonic_now
+        ::Process.clock_gettime(::Process::CLOCK_MONOTONIC)
       end
 
       def submit(task)
