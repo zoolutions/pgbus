@@ -248,7 +248,11 @@ RSpec.describe Pgbus::Deploy::Runner do
       config.deploy_tasks = { "a" => { "class" => "DeployBackfillJob" }, "b" => { "command" => "B.run" } }
       first = row("a")
       row("b")
-      allow(job_class).to receive(:set).and_raise(Pgbus::JobNotUnique, "already locked")
+      allow(adapter).to receive(:enqueue).and_wrap_original do |original, job|
+        raise Pgbus::JobNotUnique, "already locked" if job.is_a?(job_class)
+
+        original.call(job)
+      end
 
       runner.tick(now)
 

@@ -184,24 +184,30 @@ module Pgbus
         ::Process.clock_gettime(::Process::CLOCK_MONOTONIC)
       end
 
+      # Builds the job and enqueues it directly (what perform_later does), so
+      # the job, and its enqueue_error, is in hand on every Rails version:
+      # perform_later returns false on failure, and on Rails 7.1 a .set(...)
+      # job never yields it to perform_later's block.
       def submit(task)
-        captured = nil
-        job = job_for(task).perform_later(*job_arguments(task)) { |j| captured = j }
-        return job if job
+        job = job_class_for(task).new(*job_arguments(task))
+        return job if job.enqueue(job_options(task))
 
-        error = captured&.enqueue_error
+        error = job.enqueue_error
         raise EnqueueError, error ? "#{error.class}: #{error.message}" : "the job was not enqueued (a before_enqueue callback aborted)"
       end
 
-      def job_for(task)
-        if task.command
-          Recurring::CommandJob.set(**{ queue: task.queue_name }.compact)
-        else
-          klass = task.job_class
-          raise EnqueueError, "#{task.class_name} does not resolve to a job class" unless active_job?(klass)
+      def job_class_for(task)
+        return Recurring::CommandJob if task.command
 
-          klass.set(**{ queue: task.queue_name, priority: task.priority.zero? ? nil : task.priority }.compact)
-        end
+        klass = task.job_class
+        raise EnqueueError, "#{task.class_name} does not resolve to a job class" unless active_job?(klass)
+
+        klass
+      end
+
+      def job_options(task)
+        priority = task.command || task.priority.zero? ? nil : task.priority
+        { queue: task.queue_name, priority: priority }.compact
       end
 
       def job_arguments(task)
