@@ -28,12 +28,14 @@ module Pgbus
 
         def child(now, started_ago, tick_ago, extra = {})
           { "supervisor_pid" => SUPERVISOR_PID, "started_at" => now.to_f - started_ago,
-            "loop_tick_at" => tick_ago && (now.to_f - tick_ago) }.compact.merge(extra)
+            "loop_tick_at" => tick_ago && (now.to_f - tick_ago), "revision" => SampleDeployTasks::NEW_REVISION }
+            .compact.merge(extra)
         end
 
         def supervisor_row(now)
           process_row(1, "supervisor", SUPERVISOR_PID, now,
-                      metadata: { "hostname" => "web-01.prod", "started_at" => now.to_f - 10_800 })
+                      metadata: { "hostname" => "web-01.prod", "started_at" => now.to_f - 10_800,
+                                  "revision" => SampleDeployTasks::NEW_REVISION })
         end
 
         def supervised_rows(now)
@@ -42,7 +44,7 @@ module Pgbus
             process_row(3, "worker", 102, now, status: :stalled, heartbeat_ago: 20,
                                                metadata: child(now, 5400, 120, stalled_worker_metadata)),
             process_row(4, "dispatcher", 103, now, metadata: child(now, 10_790, 3)),
-            process_row(5, "scheduler", 104, now, metadata: child(now, 10_790, 2, "tasks" => 14)),
+            process_row(5, "scheduler", 104, now, metadata: child(now, 10_790, 2, "tasks" => 14, "deploy_tasks" => 6)),
             process_row(6, "outbox_poller", 105, now, status: :stale, heartbeat_ago: 420,
                                                       metadata: child(now, 10_790, nil))
           ]
