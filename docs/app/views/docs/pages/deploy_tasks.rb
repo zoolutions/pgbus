@@ -31,8 +31,13 @@ class Views::Docs::Pages::DeployTasks < DocsUI::Page
         is alive. So it:
 
         - never runs on old code during the [deploy overlap window](/docs/rolling-restarts);
-        - never runs twice, however many hosts you have or how often processes restart;
+        - runs once per rollover in normal operation, however many hosts you have —
+          two schedulers never both fire it;
         - is not forgotten — a task that is owed waits until the fleet has rolled over.
+
+        It is not an exactly-once guarantee: a failure between the enqueue and
+        recording the run can repeat it after a scheduler restart (see "What
+        ran means" below), so make deploy tasks idempotent.
       MD
     end
   end

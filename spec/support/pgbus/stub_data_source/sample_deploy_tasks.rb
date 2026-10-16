@@ -29,6 +29,7 @@ module Pgbus
         def sample_deploy_tasks(now)
           [
             deploy_task_row(now, 1, version: "2", armed_at: now - 240, armed_for: "2", queue_name: "maintenance",
+                                    arguments: [{ "batch_size" => 500 }],
                                     description: "Recompute totals after the currency migration",
                                     last_rollover_run: deploy_run(now - (3 * 86_400), OLD_REVISION, "1")),
             deploy_task_row(now, 2, class_name: nil, command: "FragmentCacheWarmer.run", every_deploy: true,
@@ -61,7 +62,7 @@ module Pgbus
         def sample_deploy_task_runs(now)
           [deploy_run(now - 90, NEW_REVISION, "1", "manual"), deploy_run(now - (3 * 86_400), OLD_REVISION, "1"),
            deploy_run(now - (9 * 86_400), "c09e4d2", "1")].each_with_index.map do |run, i|
-            run.merge(queue_name: "default", msg_id: 9100 - i)
+            run.merge(task_key: DEPLOY_KEYS.first, queue_name: "default", msg_id: 9100 - i)
           end
         end
       end

@@ -45,6 +45,7 @@ RSpec.describe Pgbus::Web::DataSource::DeployTaskList do
 
       data_source.deploy_tasks(page: 2, per_page: 25)
 
+      expect(relation).to have_received(:limit).with(25)
       expect(relation).to have_received(:offset).with(25)
     end
 
@@ -78,13 +79,17 @@ RSpec.describe Pgbus::Web::DataSource::DeployTaskList do
       allow(Pgbus::DeployTask).to receive(:find_by).with(id: "7").and_return(record)
       allow(Pgbus::DeployTaskRun).to receive(:for_task).with("backfill").and_return(for_task)
       allow(for_task).to receive(:recent).with(25).and_return(recent)
+      # A rollover run older than the 25 shown still drives the state.
+      old_rollover = run("rollover", run_at: now - (400 * 86_400))
+      allow(Pgbus::DeployTaskRun).to receive(:latest_for).with(["backfill"])
+                                                         .and_return(double(to_a: [old_rollover, runs.first]))
 
       task = data_source.deploy_task("7")
 
       expect(task).to include(key: "backfill", arguments: [{ "batch_size" => 500 }])
       expect(task[:runs].size).to eq(2)
       expect(task[:runs].first).to include(triggered_by: "manual", queue_name: "maintenance", msg_id: 42)
-      expect(task[:last_rollover_run]).to include(triggered_by: "rollover")
+      expect(task[:last_rollover_run]).to include(triggered_by: "rollover", run_at: now - (400 * 86_400))
     end
 
     it "is nil for an unknown id or an error" do
@@ -133,6 +138,14 @@ RSpec.describe Pgbus::Web::DataSource::DeployTaskList do
       expect(data_source.enqueue_deploy_task_now(7)).to eq(:failed)
     end
 
+    it "refuses a disabled task" do
+      allow(record).to receive(:enabled).and_return(false)
+      allow(runner).to receive(:enqueue)
+
+      expect(data_source.enqueue_deploy_task_now(7)).to eq(:failed)
+      expect(runner).not_to have_received(:enqueue)
+    end
+
     it "is :failed for an unknown id or an error" do
       allow(Pgbus::DeployTask).to receive(:find_by).with(id: 8).and_return(nil)
       expect(data_source.enqueue_deploy_task_now(8)).to eq(:failed)
@@ -163,7 +176,7 @@ RSpec.describe Pgbus::Web::DataSource::DeployTaskList do
       allow(Pgbus::Deploy::Revision).to receive(:current).and_return("rev-web")
       allow(Pgbus::Deploy::Rollover).to receive(:check).with(revision: "rev-web", now: now).and_return(status)
 
-      expect(data_source.deploy_rollover(now: now)).to include(scheduler: false)
+      expect(data_source.deploy_rollover(now: now)).to include(scheduler: false, revision: "rev-web")
     end
 
     it "is nil when the processes cannot be read" do

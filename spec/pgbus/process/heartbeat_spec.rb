@@ -45,6 +45,17 @@ RSpec.describe Pgbus::Process::Heartbeat do
       )
     end
 
+    it "resolves the revision from the owning process's configuration" do
+      config = Pgbus::Configuration.new
+      config.app_revision = "from-process-config"
+
+      described_class.new(kind: "worker", config: config).start
+
+      expect(Pgbus::ProcessEntry).to have_received(:create!).with(
+        hash_including(metadata: { revision: "from-process-config" })
+      )
+    end
+
     it "stores a nil revision rather than omitting the key" do
       allow(Pgbus::Deploy::Revision).to receive(:current).and_return(nil)
 

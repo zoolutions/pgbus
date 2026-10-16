@@ -59,8 +59,9 @@ module Pgbus
     end
 
     # config/deploy_tasks.yml (issue #536): same shape and loader as
-    # recurring.yml. Explicit deploy_tasks_files replace the default file.
-    initializer "pgbus.deploy_tasks" do |app|
+    # recurring.yml. Explicit deploy_tasks_files replace the default file, so
+    # this runs after the app's config/initializers set them.
+    initializer "pgbus.deploy_tasks", after: :load_config_initializers do |app|
       config = Pgbus.configuration
       next if config.deploy_tasks
 

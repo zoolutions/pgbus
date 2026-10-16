@@ -30,7 +30,8 @@ RSpec.describe Pgbus::Generators::AddDeployTasksGenerator do
     it "creates the pgbus_deploy_tasks table with the arm columns" do
       generate_migration(described_class, basename: basename) do |_path, content|
         expect(content).to match(/class AddPgbusDeployTasksTables < ActiveRecord::Migration\[\d+\.\d+\]/)
-        expect(content).to include("create_table :pgbus_deploy_tasks")
+        expect(content).to include("create_table :pgbus_deploy_tasks, if_not_exists: true")
+        expect(content).to include('name: "idx_pgbus_deploy_tasks_key", if_not_exists: true')
         expect(content).to include("t.string :key, null: false")
         expect(content).to include('t.string :version, null: false, default: "1"')
         expect(content).to include("t.boolean :every_deploy, null: false, default: false")

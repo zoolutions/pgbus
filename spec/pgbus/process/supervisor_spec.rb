@@ -312,6 +312,7 @@ RSpec.describe Pgbus::Process::Supervisor do
 
       expect(Pgbus::Process::Heartbeat).to have_received(:new).with(
         kind: "supervisor",
+        config: kind_of(Pgbus::Configuration),
         metadata: { pid: Process.pid, hostname: Socket.gethostname, started_at: a_value_within(5).of(Time.now.to_f) }
       )
     end
@@ -1290,7 +1291,8 @@ RSpec.describe Pgbus::Process::Supervisor do
     let(:supervisor) { described_class.new }
 
     around do |example|
-      saved = %i[recurring_tasks recurring_tasks_file recurring_enabled deploy_tasks deploy_tasks_enabled]
+      saved = %i[recurring_tasks recurring_tasks_file recurring_tasks_files recurring_enabled
+                 deploy_tasks deploy_tasks_files deploy_tasks_enabled]
               .to_h { |name| [name, config.public_send(name)] }
       example.run
     ensure
@@ -1300,6 +1302,8 @@ RSpec.describe Pgbus::Process::Supervisor do
     before do
       config.recurring_tasks = nil
       config.recurring_tasks_file = nil
+      config.recurring_tasks_files = nil
+      config.deploy_tasks_files = nil
       allow(supervisor).to receive(:fork_scheduler)
     end
 
@@ -1336,8 +1340,17 @@ RSpec.describe Pgbus::Process::Supervisor do
         config.deploy_tasks_files = [path]
 
         expect(supervisor.send(:deploy_tasks_configured?)).to be(true)
-      ensure
-        config.deploy_tasks_files = nil
+      end
+    end
+
+    it "does not fall back to the default file when deploy_tasks_files are set but missing" do
+      Dir.mktmpdir do |dir|
+        default = File.join(dir, "deploy_tasks.yml")
+        File.write(default, "backfill:\n  class: BackfillJob\n")
+        allow(supervisor).to receive(:default_deploy_tasks_path).and_return(default)
+        config.deploy_tasks_files = [File.join(dir, "missing.yml")]
+
+        expect(supervisor.send(:deploy_tasks_configured?)).to be(false)
       end
     end
 
@@ -1350,8 +1363,6 @@ RSpec.describe Pgbus::Process::Supervisor do
         supervisor.send(:load_deploy_tasks_config)
 
         expect(config.deploy_tasks).to eq("backfill" => { "class" => "BackfillJob" })
-      ensure
-        config.deploy_tasks_files = nil
       end
     end
   end

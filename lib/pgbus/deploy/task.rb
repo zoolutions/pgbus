@@ -10,7 +10,7 @@ module Pgbus
       DEFAULT_VERSION = "1"
 
       attr_reader :key, :class_name, :command, :version, :every_deploy, :queue_name,
-                  :arguments, :priority, :description, :warnings
+                  :arguments, :priority, :description
 
       def self.from_configuration(key, **options)
         options = options.transform_keys(&:to_sym)
@@ -22,7 +22,7 @@ module Pgbus
           explicit_version: options.key?(:version),
           every_deploy: options.fetch(:every_deploy, false),
           queue_name: options[:queue],
-          arguments: Array(options[:args]),
+          arguments: options[:args].is_a?(Hash) ? [options[:args]] : Array(options[:args]),
           priority: options.fetch(:priority, 0).to_i,
           description: options[:description]
         )
@@ -56,6 +56,11 @@ module Pgbus
         @errors
       end
 
+      def warnings
+        valid? unless @validated
+        @warnings
+      end
+
       # What an arm for this task is stamped with: its version, or the
       # revision it runs on for an every_deploy task.
       def armed_for(revision)
@@ -77,12 +82,23 @@ module Pgbus
 
       def validate!
         @validated = true
-        @errors << "Either class or command is required" if class_name.to_s.strip.empty? && command.to_s.strip.empty?
+        @errors << "Key must not be blank" if key.to_s.strip.empty?
+        validate_target!
         @errors << "Version must not be blank" if version.empty?
         @errors << "every_deploy must be true or false" unless [true, false].include?(every_deploy)
         return unless every_deploy == true && @explicit_version
 
         @warnings << "every_deploy is set, so version is ignored (it runs after every rollover)"
+      end
+
+      def validate_target!
+        { class: class_name, command: command }.each do |name, value|
+          @errors << "#{name} must be a String" unless value.nil? || value.is_a?(String)
+        end
+        has_class = !class_name.to_s.strip.empty?
+        has_command = !command.to_s.strip.empty?
+        @errors << "Either class or command is required" unless has_class || has_command
+        @errors << "Declare either class or command, not both" if has_class && has_command
       end
     end
   end

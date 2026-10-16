@@ -494,7 +494,8 @@ module Pgbus
 
       def deploy_tasks_configured?
         return true if config.deploy_tasks&.any?
-        return true if config.deploy_tasks_files&.any? { |f| File.exist?(f.to_s) }
+        # Explicit files replace the default file, as in load_deploy_tasks_config.
+        return config.deploy_tasks_files.any? { |f| File.exist?(f.to_s) } if config.deploy_tasks_files
 
         path = default_deploy_tasks_path
         path ? File.exist?(path.to_s) : false
@@ -933,6 +934,7 @@ module Pgbus
       def start_heartbeat
         @heartbeat = Heartbeat.new(
           kind: "supervisor",
+          config: @config,
           metadata: { pid: ::Process.pid, hostname: Socket.gethostname, started_at: Time.now.to_f }
         )
         @heartbeat.start

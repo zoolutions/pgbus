@@ -690,7 +690,7 @@ module Pgbus
         retention = config.deploy_task_run_retention
         return unless retention&.positive? && DeployTaskRun.table_exists?
 
-        deleted = DeployTaskRun.older_than(Time.current - retention).delete_all
+        deleted = DeployTaskRun.prunable_before(Time.current - retention).delete_all
         Pgbus.logger.debug { "[Pgbus] Cleaned up #{deleted} old deploy task runs" } if deleted.positive?
       rescue StandardError => e
         log_maintenance_failure("Deploy task run cleanup", e)
@@ -713,6 +713,7 @@ module Pgbus
       def start_heartbeat
         @heartbeat = Heartbeat.new(
           kind: "dispatcher",
+          config: @config,
           metadata: { pid: ::Process.pid, started_at: Time.now.to_f, supervisor_pid: ::Process.ppid },
           loop_tick_supplier: -> { @loop_tick_at.get }
         )

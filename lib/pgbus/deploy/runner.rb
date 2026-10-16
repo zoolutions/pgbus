@@ -32,6 +32,9 @@ module Pgbus
         @checked_at = nil
         @logged_wait = nil
         @failures = {}
+        @synced = nil
+        @sync_failures = 0
+        @sync_retry_at = nil
       end
 
       # The valid declared tasks, in key order. A class: that does not resolve
@@ -44,8 +47,10 @@ module Pgbus
         tasks.size
       end
 
+      # true once synced. A failure (a database blip at boot) is retried from
+      # tick with the enqueue backoff, so the scheduler keeps no unarmed tasks.
       def sync!(now: Time.current)
-        if revision.nil?
+        if revision.nil? && @synced.nil?
           Pgbus.logger.warn do
             "[Pgbus] No app revision configured (config.app_revision, PGBUS_REVISION, DASH_VERSION, KAMAL_VERSION " \
               "or a REVISION file): deploy tasks wait until one is set"
@@ -53,13 +58,20 @@ module Pgbus
         end
         DeployTask.sync_from_config!(tasks, revision: revision, now: now)
         Pgbus.logger.info { "[Pgbus] Synced #{tasks.size} deploy task(s) for revision #{revision.inspect}" }
+        @synced = true
       rescue StandardError => e
-        Pgbus.logger.error { "[Pgbus] Failed to sync deploy tasks: #{e.class}: #{e.message}" }
+        @sync_failures += 1
+        delay = retry_delay(@sync_failures)
+        @sync_retry_at = monotonic_now + delay
+        Pgbus.logger.error { "[Pgbus] Failed to sync deploy tasks (retrying in #{delay}s): #{e.class}: #{e.message}" }
         ErrorReporter.report(e, { action: "deploy_tasks_sync" })
+        @synced = false
       end
 
       def tick(now = Time.current)
-        return if tasks.empty? || !DeployTask.pending?
+        return if tasks.empty?
+        return if @synced == false && !retry_sync(now)
+        return unless DeployTask.pending?
 
         status = gate_status
         return log_waiting(status) unless status.rolled_over?
@@ -104,6 +116,10 @@ module Pgbus
 
         task.warnings.each { |warning| Pgbus.logger.warn { "[Pgbus] Deploy task '#{key}': #{warning}" } }
         task
+      rescue StandardError => e
+        # A malformed entry (a Hash where a scalar belongs) skips that task
+        # instead of crashing the scheduler at boot.
+        skip_task(key, "#{e.class}: #{e.message}")
       end
 
       def active_job?(klass)
@@ -119,8 +135,17 @@ module Pgbus
         at = monotonic_now
         return @status if @checked_at && at - @checked_at < ROLLOVER_CHECK_INTERVAL
 
-        @checked_at = at
+        # Stamped only after a successful check: a raising check must not
+        # leave a nil status cached for the next ticks.
         @status = Rollover.check(revision: revision)
+        @checked_at = at
+        @status
+      end
+
+      def retry_sync(now)
+        return false if monotonic_now < @sync_retry_at
+
+        sync!(now: now)
       end
 
       def log_waiting(status)

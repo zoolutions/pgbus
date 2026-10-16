@@ -68,27 +68,37 @@ module Pgbus
       self.class.armed.where(id: id, armed_for: self.armed_for).update_all(armed_for: armed_for, updated_at: now) == 1
     end
 
+    # Restores this caller's claimed arm after a failed enqueue. Compare-and-set:
+    # only while the arm is still cleared and still for +armed_for+, so a
+    # failed enqueue never overwrites an arm another scheduler set meanwhile.
     def rearm!(armed_for:, now: Time.current)
-      self.class.where(id: id).update_all(armed_at: now, armed_for: armed_for, updated_at: now)
+      self.class.where(id: id, armed_at: nil, armed_for: armed_for).update_all(armed_at: now, updated_at: now)
     end
 
     def armed?
       !armed_at.nil?
     end
 
+    # For display: a corrupt value shows as no arguments.
     def parsed_arguments
-      return [] if arguments.blank?
-
-      Array(JSON.parse(arguments))
+      decoded_arguments
     rescue JSON::ParserError
       []
     end
 
+    # For Run now: a corrupt value raises (the enqueue reports :failed and
+    # logs it) rather than running the job without its arguments.
     def to_task
       Deploy::Task.new(
         key: key, class_name: class_name, command: command, version: version, every_deploy: every_deploy,
-        queue_name: queue_name, arguments: parsed_arguments, priority: priority, description: description
+        queue_name: queue_name, arguments: decoded_arguments, priority: priority, description: description
       )
+    end
+
+    private
+
+    def decoded_arguments
+      arguments.blank? ? [] : Array(JSON.parse(arguments))
     end
   end
 end

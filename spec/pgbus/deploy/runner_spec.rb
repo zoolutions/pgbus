@@ -86,6 +86,14 @@ RSpec.describe Pgbus::Deploy::Runner do
       expect(warnings.join).to include("invalid", "plain", "not an ActiveJob")
     end
 
+    it "skips a malformed entry instead of raising" do
+      allow(Pgbus.logger).to receive(:warn)
+      config.deploy_tasks = { "bad" => { "command" => "A.run", "priority" => { "high" => true } },
+                              "ok" => { "command" => "B.run" } }
+
+      expect(runner.tasks.map(&:key)).to eq(%w[ok])
+    end
+
     it "logs a task's warnings" do
       warnings = []
       allow(Pgbus.logger).to receive(:warn) { |&blk| warnings << blk.call }
@@ -118,8 +126,27 @@ RSpec.describe Pgbus::Deploy::Runner do
     it "logs and swallows a sync failure" do
       allow(Pgbus::DeployTask).to receive(:sync_from_config!).and_raise(StandardError, "db down")
 
-      expect { runner.sync!(now: now) }.not_to raise_error
+      expect(runner.sync!(now: now)).to be(false)
       expect(Pgbus::ErrorReporter).to have_received(:report)
+    end
+
+    it "retries a failed sync from tick once its backoff has passed" do
+      clock = [1_000.0]
+      allow(runner).to receive(:monotonic_now) { clock.first }
+      calls = 0
+      allow(Pgbus::DeployTask).to receive(:sync_from_config!) do
+        calls += 1
+        raise StandardError, "db down" if calls == 1
+      end
+      runner.sync!(now: now)
+
+      runner.tick(now)
+      expect(calls).to eq(1)
+
+      clock[0] += described_class::RETRY_BACKOFF_BASE
+      runner.tick(now)
+      expect(calls).to eq(2)
+      expect(Pgbus::DeployTask).to have_received(:pending?).once
     end
   end
 
@@ -158,6 +185,22 @@ RSpec.describe Pgbus::Deploy::Runner do
       runner.tick(now)
 
       expect(Pgbus::Deploy::Rollover).not_to have_received(:check)
+    end
+
+    it "re-checks the gate on the next tick after a check raised" do
+      row("backfill")
+      calls = 0
+      allow(Pgbus::Deploy::Rollover).to receive(:check) do
+        calls += 1
+        raise StandardError, "db blip" if calls == 1
+
+        ready
+      end
+
+      expect { runner.tick(now) }.to raise_error(StandardError, "db blip")
+      runner.tick(now)
+
+      expect(adapter.jobs.size).to eq(1)
     end
 
     it "checks the gate at most every ROLLOVER_CHECK_INTERVAL seconds" do

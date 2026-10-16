@@ -180,6 +180,29 @@ RSpec.describe Pgbus::DeployTask, :integration do
     end
   end
 
+  describe "#rearm! after another scheduler re-armed" do
+    it "leaves the other arm alone" do
+      sync(task)
+      stale = row
+      stale.claim!(armed_for: "1")
+      described_class.where(id: stale.id).update_all(armed_at: now + 30, armed_for: "2")
+
+      stale.rearm!(armed_for: "1", now: now + 60)
+
+      expect(row).to have_attributes(armed_at: now + 30, armed_for: "2")
+    end
+  end
+
+  describe "#to_task with corrupt arguments" do
+    it "raises instead of dropping the arguments, while the display falls back to none" do
+      sync(task)
+      described_class.where(key: "backfill").update_all(arguments: "{not json")
+
+      expect(row.parsed_arguments).to eq([])
+      expect { row.to_task }.to raise_error(JSON::ParserError)
+    end
+  end
+
   describe "scopes" do
     it "selects armed and enabled rows" do
       sync(task("a"), task("b"), task("c"))

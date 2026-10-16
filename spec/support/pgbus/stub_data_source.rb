@@ -273,13 +273,20 @@ module Pgbus
 
       def enqueue_recurring_task_now(id) = record(:enqueue_recurring_task_now, id)
 
+      # Ordered by key, as DataSource#deploy_tasks pages them.
       def deploy_tasks(page: nil, per_page: nil)
         record(:deploy_tasks, { page: page, per_page: per_page })
-        per_page ? slice(@deploy_tasks_list, page || 1, per_page) : @deploy_tasks_list
+        rows = @deploy_tasks_list.sort_by { |t| t[:key].to_s }
+        per_page ? slice(rows, page || 1, per_page) : rows
       end
 
+      # A run without :task_key belongs to every task (fixture shorthand).
       def deploy_task(id)
-        @deploy_tasks_list.find { |t| t[:id].to_s == id.to_s }&.merge(arguments: [], runs: @deploy_task_runs_list)
+        task = @deploy_tasks_list.find { |t| t[:id].to_s == id.to_s }
+        return nil unless task
+
+        runs = @deploy_task_runs_list.select { |r| r.fetch(:task_key, task[:key]) == task[:key] }
+        task.merge(arguments: task.fetch(:arguments, []), runs: runs)
       end
 
       def toggle_deploy_task(id)

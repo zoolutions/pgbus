@@ -18,6 +18,14 @@ module Pgbus
     scope :recent, ->(limit = 25) { order(id: :desc).limit(limit) }
     scope :older_than, ->(time) { where(run_at: ...time) }
 
+    # Runs the dispatcher may prune: older than +time+, except the newest
+    # rollover run per (task_key, version). That run is what marks a version
+    # done (DeployTask.owed?); pruning it would re-arm the task on the next
+    # scheduler boot and run it again.
+    def self.prunable_before(time)
+      older_than(time).where.not(id: rollover.group(:task_key, :version).select("MAX(id)"))
+    end
+
     def self.last_rollover_for(key)
       rollover.for_task(key).order(id: :desc).first
     end

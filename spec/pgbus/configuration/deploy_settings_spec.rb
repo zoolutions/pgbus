@@ -64,6 +64,12 @@ RSpec.describe Pgbus::Configuration::DeploySettings do
       expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /deploy_tasks must be a Hash/)
     end
 
+    it "rejects a deploy_tasks_files that is not an Array" do
+      config.deploy_tasks_files = "config/deploy_tasks.yml"
+
+      expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /deploy_tasks_files must be an Array/)
+    end
+
     it "rejects a non-boolean deploy_tasks_enabled" do
       config.deploy_tasks_enabled = "yes"
 

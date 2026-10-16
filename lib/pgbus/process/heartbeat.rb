@@ -11,12 +11,14 @@ module Pgbus
 
       attr_reader :process_entry
 
-      def initialize(kind:, metadata: {}, on_beat: nil, loop_tick_supplier: nil, metadata_supplier: nil)
+      # config: the owning process's configuration, for the app revision.
+      def initialize(kind:, metadata: {}, on_beat: nil, loop_tick_supplier: nil, metadata_supplier: nil,
+                     config: Pgbus.configuration)
         @kind = kind
         # Every kind's row carries the app revision from its first
         # registration on, nil included: the deploy-task rollover gate reads
         # it (issue #536), and beat_metadata dups this hash so it survives.
-        @metadata = metadata.merge(revision: Deploy::Revision.current)
+        @metadata = metadata.merge(revision: Deploy::Revision.current(config))
         @on_beat = on_beat
         @loop_tick_supplier = loop_tick_supplier
         @metadata_supplier = metadata_supplier

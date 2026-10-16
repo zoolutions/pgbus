@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "fileutils"
+require "pathname"
 require "tmpdir"
 
 RSpec.describe Pgbus::Deploy::Revision do
@@ -95,6 +97,15 @@ RSpec.describe Pgbus::Deploy::Revision do
         ENV["KAMAL_VERSION"] = "kamal"
 
         expect(described_class.current(config)).to eq("kamal")
+      end
+
+      it "is nil, with a warning, when the file cannot be read" do
+        root.join("REVISION").write("deadbeef\n")
+        allow(File).to receive(:read).and_raise(Errno::EACCES, "REVISION")
+        allow(Pgbus.logger).to receive(:warn)
+
+        expect(described_class.current(config)).to be_nil
+        expect(Pgbus.logger).to have_received(:warn)
       end
 
       it "is nil when the file is missing or blank" do

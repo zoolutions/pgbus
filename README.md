@@ -2219,7 +2219,7 @@ The capsule name is the `:name` you passed to `c.capsule` in your initializer (o
 
 ### Deploy tasks
 
-One-time work owed by a release (a backfill, a data fix, a cache warm). A deploy task runs once per `(key, version)`, only after every live pgbus process reports the new app revision and at least one worker on that revision is alive. It never runs on old code during the deploy overlap window, never twice (multi-host, restarts), and is not forgotten.
+One-time work owed by a release (a backfill, a data fix, a cache warm). A deploy task runs once per `(key, version)`, only after every live pgbus process reports the new app revision and at least one worker on that revision is alive. It never runs on old code during the deploy overlap window, two schedulers (multi-host, overlap) never both fire it, and an owed task is not forgotten. It is not exactly-once: a failure between the enqueue and recording the run can repeat it after a restart, so keep deploy tasks idempotent.
 
 ```yaml
 # config/deploy_tasks.yml

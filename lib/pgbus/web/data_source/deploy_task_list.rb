@@ -31,9 +31,10 @@ module Pgbus
           record = DeployTask.find_by(id: id)
           return nil unless record
 
+          # The state reads the same unbounded latest-per-trigger runs as the
+          # list, so a run older than the 25 shown still counts.
           runs = DeployTaskRun.for_task(record.key).recent(RUN_HISTORY).to_a
-          latest = runs.group_by(&:triggered_by).transform_values(&:first).values
-          deploy_task_row(record, latest).merge(
+          deploy_task_row(record, DeployTaskRun.latest_for([record.key]).to_a).merge(
             arguments: record.parsed_arguments,
             runs: runs.map { |run| deploy_run_hash(run).merge(queue_name: run.queue_name, msg_id: run.msg_id) }
           )
@@ -59,6 +60,8 @@ module Pgbus
         def enqueue_deploy_task_now(id)
           record = DeployTask.find_by(id: id)
           return :failed unless record
+          # The hidden button is not the boundary: a disabled task is not run.
+          return disabled_enqueue(record) unless record.enabled
 
           Deploy::Runner.new(config: Pgbus.configuration).enqueue(record.to_task, triggered_by: Deploy::Runner::MANUAL)
         rescue StandardError => e
@@ -81,6 +84,11 @@ module Pgbus
         end
 
         private
+
+        def disabled_enqueue(record)
+          Pgbus.logger.warn { "[Pgbus::Web] Deploy task #{record.key} is disabled; Run now refused" }
+          :failed
+        end
 
         def deploy_task_row(record, latest_runs)
           by_trigger = latest_runs.index_by(&:triggered_by)

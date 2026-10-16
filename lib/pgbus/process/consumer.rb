@@ -615,6 +615,7 @@ module Pgbus
       def start_heartbeat
         @heartbeat = Heartbeat.new(
           kind: "consumer",
+          config: @config,
           metadata: {
             topics: topics, threads: threads, pid: ::Process.pid, execution_mode: @execution_mode,
             started_at: @started_at.to_f, supervisor_pid: ::Process.ppid

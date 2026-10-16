@@ -18,11 +18,13 @@ module Pgbus
         @shutting_down = false
         @last_runs = {}
         @loop_tick_at = Concurrent::AtomicReference.new(nil)
+        @deploy_error = nil
       end
 
-      # The order is load-bearing: this scheduler's own heartbeat row must
-      # exist before it arms deploy tasks, so an old-revision scheduler in the
-      # overlap window sees it as lagging and keeps its gate closed.
+      # The order is load-bearing: the heartbeat registers this scheduler's row
+      # before it arms deploy tasks, so an old-revision scheduler in the
+      # overlap window sees it as lagging. A failed registration is logged and
+      # sync still runs; the new release's workers keep the old gate closed.
       def run
         setup_signals
         start_heartbeat
@@ -110,10 +112,20 @@ module Pgbus
         end
       end
 
+      # A persistent failure (the tables missing, the database down) is logged
+      # and reported once per distinct error, then at debug, not every tick.
       def tick_deploy_tasks(now)
         deploy_runner&.tick(now)
+        @deploy_error = nil
       rescue StandardError => e
-        Pgbus.logger.error { "[Pgbus] Error running deploy tasks: #{e.class}: #{e.message}" }
+        signature = "#{e.class}: #{e.message}"
+        if signature == @deploy_error
+          Pgbus.logger.debug { "[Pgbus] Error running deploy tasks (repeated): #{signature}" }
+        else
+          @deploy_error = signature
+          Pgbus.logger.error { "[Pgbus] Error running deploy tasks: #{signature}" }
+          ErrorReporter.report(e, { action: "deploy_tasks_tick" })
+        end
       end
 
       def sync_recurring_tasks
@@ -138,6 +150,7 @@ module Pgbus
       def start_heartbeat
         @heartbeat = Process::Heartbeat.new(
           kind: "scheduler",
+          config: @config,
           metadata: { pid: ::Process.pid, tasks: schedule.tasks.size, started_at: Time.now.to_f,
                       supervisor_pid: ::Process.ppid }.merge(deploy_runner ? { deploy_tasks: deploy_task_count } : {}),
           loop_tick_supplier: -> { @loop_tick_at.get }

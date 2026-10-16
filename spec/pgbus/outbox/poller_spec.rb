@@ -131,6 +131,7 @@ RSpec.describe Pgbus::Outbox::Poller do
 
       expect(Pgbus::Process::Heartbeat).to have_received(:new).with(
         kind: "outbox_poller",
+        config: kind_of(Pgbus::Configuration),
         metadata: { pid: Process.pid, started_at: a_value_within(5).of(Time.now.to_f), supervisor_pid: Process.ppid }
       )
     end

@@ -59,6 +59,21 @@ RSpec.describe Pgbus::DeployTaskRun, :integration do
     end
   end
 
+  describe ".prunable_before" do
+    it "keeps the newest rollover run per (task_key, version) however old" do
+      cutoff = now - (90 * 86_400)
+      old = now - (100 * 86_400)
+      superseded = run("a", version: "1", run_at: old)
+      kept = run("a", version: "1", run_at: old)
+      other_version = run("a", version: "2", run_at: old)
+      manual = run("a", version: "2", triggered_by: "manual", run_at: old)
+      run("b", run_at: now)
+
+      expect(described_class.prunable_before(cutoff)).to contain_exactly(superseded, manual)
+      expect([kept, other_version]).to all(satisfy { |r| described_class.exists?(r.id) })
+    end
+  end
+
   describe ".recent" do
     it "returns the newest runs first, limited" do
       runs = Array.new(3) { |i| run("backfill", run_at: now + i) }

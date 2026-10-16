@@ -34,6 +34,9 @@ module Pgbus
         end
 
         raise Pgbus::ConfigurationError, "deploy_tasks must be a Hash or nil" unless deploy_tasks.nil? || deploy_tasks.is_a?(Hash)
+        unless deploy_tasks_files.nil? || deploy_tasks_files.is_a?(Array)
+          raise Pgbus::ConfigurationError, "deploy_tasks_files must be an Array of paths or nil"
+        end
         return if [true, false].include?(deploy_tasks_enabled)
 
         raise Pgbus::ConfigurationError, "deploy_tasks_enabled must be true or false"

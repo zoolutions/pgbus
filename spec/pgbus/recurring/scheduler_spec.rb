@@ -147,6 +147,7 @@ RSpec.describe Pgbus::Recurring::Scheduler do
 
       expect(Pgbus::Process::Heartbeat).to have_received(:new).with(
         kind: "scheduler",
+        config: kind_of(Pgbus::Configuration),
         metadata: { pid: Process.pid, tasks: 1, started_at: a_value_within(5).of(Time.now.to_f),
                     supervisor_pid: Process.ppid },
         loop_tick_supplier: kind_of(Proc)
@@ -232,12 +233,15 @@ RSpec.describe Pgbus::Recurring::Scheduler do
       expect(runner).to have_received(:tick)
     end
 
-    it "logs and survives a runner tick that raises" do
+    it "logs and reports a runner tick that raises once per distinct error" do
       allow(runner).to receive(:tick).and_raise(StandardError, "db down")
       allow(Pgbus.logger).to receive(:error)
+      allow(Pgbus::ErrorReporter).to receive(:report)
+      scheduler = described_class.new(config: config)
 
-      expect { described_class.new(config: config).tick(Time.current) }.not_to raise_error
-      expect(Pgbus.logger).to have_received(:error)
+      expect { 3.times { scheduler.tick(Time.current) } }.not_to raise_error
+      expect(Pgbus.logger).to have_received(:error).once
+      expect(Pgbus::ErrorReporter).to have_received(:report).once
     end
   end
 

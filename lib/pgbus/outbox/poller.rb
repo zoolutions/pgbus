@@ -139,6 +139,7 @@ module Pgbus
       def start_heartbeat
         @heartbeat = Process::Heartbeat.new(
           kind: "outbox_poller",
+          config: @config,
           metadata: { pid: ::Process.pid, started_at: Time.now.to_f, supervisor_pid: ::Process.ppid }
         )
         @heartbeat.start

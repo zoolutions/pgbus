@@ -836,6 +836,7 @@ module Pgbus
       def start_heartbeat
         @heartbeat = Heartbeat.new(
           kind: "worker",
+          config: @config,
           # capsule/process lead: the dashboard's metadata cell truncates.
           metadata: {
             capsule: @capsule, process: @process,

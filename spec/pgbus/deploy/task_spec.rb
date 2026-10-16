@@ -28,6 +28,12 @@ RSpec.describe Pgbus::Deploy::Task do
       expect(task).to have_attributes(version: "1", priority: 0, arguments: [])
     end
 
+    it "keeps a bare Hash as one argument" do
+      task = described_class.from_configuration("backfill", class: "BackfillJob", args: { "batch_size" => 500 })
+
+      expect(task.arguments).to eq([{ "batch_size" => 500 }])
+    end
+
     it "wraps a single argument in an Array" do
       task = described_class.from_configuration("backfill", class: "BackfillJob", args: 42)
 
@@ -58,6 +64,26 @@ RSpec.describe Pgbus::Deploy::Task do
       expect(task.errors).to include("Version must not be blank")
     end
 
+    it "rejects a task that declares both class and command" do
+      task = described_class.from_configuration("a", class: "BackfillJob", command: "Cache.warm!")
+
+      expect(task).not_to be_valid
+      expect(task.errors).to include("Declare either class or command, not both")
+    end
+
+    it "rejects a blank key" do
+      task = described_class.from_configuration(" ", class: "BackfillJob")
+
+      expect(task).not_to be_valid
+      expect(task.errors).to include("Key must not be blank")
+    end
+
+    it "rejects a class or command that is not a String" do
+      expect(described_class.from_configuration("a", class: { "name" => "X" })).not_to be_valid
+      expect(described_class.from_configuration("a", command: ["X.y"]).errors)
+        .to include("command must be a String")
+    end
+
     it "rejects a non-boolean every_deploy" do
       task = described_class.from_configuration("a", class: "BackfillJob", every_deploy: "yes")
 
@@ -74,8 +100,17 @@ RSpec.describe Pgbus::Deploy::Task do
       expect(task.warnings).to include(/version is ignored/)
     end
 
-    it "has none for a plain versioned task" do
-      expect(described_class.from_configuration("a", class: "BackfillJob", version: 3).warnings).to be_empty
+    it "has none for a plain versioned task, after validation" do
+      task = described_class.from_configuration("a", class: "BackfillJob", version: 3)
+
+      expect(task).to be_valid
+      expect(task.warnings).to be_empty
+    end
+
+    it "validates on first read" do
+      task = described_class.from_configuration("a", class: "BackfillJob", every_deploy: true, version: 3)
+
+      expect(task.warnings).to include(/version is ignored/)
     end
   end
 

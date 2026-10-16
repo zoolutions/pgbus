@@ -43,6 +43,11 @@ module Pgbus
 
         path = Rails.root.join("REVISION")
         File.exist?(path) ? presence(File.read(path)) : nil
+      rescue SystemCallError, IOError => e
+        # Read while every heartbeat initializes: an unreadable optional file
+        # must not stop a process from starting.
+        Pgbus.logger.warn { "[Pgbus] Could not read #{path}: #{e.class}: #{e.message}" }
+        nil
       end
 
       def presence(value)
