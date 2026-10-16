@@ -45,6 +45,13 @@ Pgbus::Engine.routes.draw do
     end
   end
 
+  resources :deploy_tasks, only: %i[index show] do
+    member do
+      post :toggle
+      post :enqueue
+    end
+  end
+
   resources :batches, only: %i[index show]
   resources :processes, only: [:index]
 

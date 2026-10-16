@@ -31,6 +31,7 @@ class Doc
   page "Routing & ordering",       group: "Guide", slug: "routing-ordering", view: "RoutingOrdering"
   page "Batches",                  group: "Guide"
   page "Recurring tasks",          group: "Guide", slug: "recurring-tasks", view: "RecurringTasks"
+  page "Deploy tasks",             group: "Guide", slug: "deploy-tasks", view: "DeployTasks"
   page "Transactional outbox",     group: "Guide", slug: "outbox", view: "Outbox"
   page "Real-time streams",        group: "Guide", slug: "streams", view: "Streams"
 

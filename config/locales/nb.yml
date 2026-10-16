@@ -236,6 +236,102 @@ nb:
         payload: Innhold
         retry: Prøv igjen
         title: 'DLQ-melding #%{id}'
+    deploy_tasks:
+      banner:
+        heading: Utrulling
+        lagging_html:
+          one: 'Venter på utrulling: 1 prosess kjører ennå ikke <code>%{revision}</code>.'
+          other: 'Venter på utrulling: %{count} prosesser kjører ennå ikke <code>%{revision}</code>.'
+        lagging_more: "…og %{count} til"
+        lagging_process: "%{kind}@%{hostname} pid %{pid} på %{revision}"
+        live_count: "%{count} på %{revision}"
+        live_heading: 'Aktive prosesser:'
+        no_revision_hint_html: Sett <code>config.app_revision</code>, eller en av <code>PGBUS_REVISION</code>, <code>DASH_VERSION</code> eller <code>KAMAL_VERSION</code>, eller lever en <code>REVISION</code>-fil. Kjør nå fungerer fortsatt.
+        no_revision_html: 'Appens revisjon er ikke konfigurert: deploy-oppgaver venter til den er det.'
+        no_revision_label: ingen revisjon
+        no_scheduler_html: 'Ingen planlegger kjører: deploy-oppgaver startes bare av planleggeren. Vurderingen bruker dashbordets egen revisjon.'
+        no_workers_html: 'Venter på utrulling: ingen worker på <code>%{revision}</code> ennå.'
+        ready_html: 'Utrullet: hver aktive prosess kjører <code>%{revision}</code>. Ventende oppgaver kjøres ved planleggerens neste tick.'
+        unavailable_html: Utrullingsstatusen kunne ikke leses.
+      default_queue: default
+      disable: Deaktiver
+      enable: Aktiver
+      enqueue:
+        enqueued: Deploy-oppgaven er lagt i kø
+        failed: 'Deploy-oppgaven ble ikke lagt i kø: se loggen for årsaken'
+      every_deploy: Ved hver deploy
+      index:
+        task_count:
+          one: "%{count} oppgave deklarert"
+          other: "%{count} oppgaver deklarert"
+        title: Deploy-oppgaver
+      not_found: Fant ikke deploy-oppgaven
+      reasons:
+        disabled_armed_html: 'Deaktivert med en ventende utrullingskjøring: aktiver den for å la den kjøre.'
+        disabled_html: 'Deaktivert: planleggeren hopper over den.'
+        due_html: 'Klar: kjøres ved planleggerens neste tick.'
+        manual_html: "· kjørte %{ago} (manuelt)"
+        never_html: Har aldri kjørt.
+        ran_html: Kjørte %{ago} på <code>%{revision}</code> (utrulling).
+        waiting_lagging_html:
+          one: 'Venter på utrulling: 1 prosess kjører ennå ikke <code>%{revision}</code>.'
+          other: 'Venter på utrulling: %{count} prosesser kjører ennå ikke <code>%{revision}</code>.'
+        waiting_no_revision_html: 'Venter: appens revisjon er ikke konfigurert.'
+        waiting_no_scheduler_html: 'Venter: ingen planlegger kjører.'
+        waiting_no_workers_html: Venter på en worker på <code>%{revision}</code>.
+        waiting_unknown_html: 'Venter: utrullingsstatusen kunne ikke leses.'
+      run_now: Kjør nå
+      show:
+        armed_html: Klargjort for <code>%{armed_for}</code> %{ago}
+        back: Tilbake
+        configuration: Konfigurasjon
+        labels:
+          arguments: Argumenter
+          armed: Ventende kjøring
+          command: Kommando
+          description: Beskrivelse
+          job_class: Jobbklasse
+          priority: Prioritet
+          queue: Kø
+          source: Kilde
+        last_run: Siste kjøring
+        no_runs: Ingen kjøringer registrert ennå
+        recent_runs: Siste kjøringer
+        run_headers:
+          enqueued_at: Lagt i kø
+          queue: Kø
+          revision: Revisjon
+          triggered_by: Startet av
+          version: Versjon
+        source_config: Konfigurasjonsfil
+        source_dynamic: Dynamisk
+        state: Tilstand
+        version: Versjon
+      states:
+        disabled: Deaktivert
+        due: Klar
+        never: Aldri kjørt
+        ran: Kjørt
+        waiting: Venter
+      tasks_table:
+        empty_hint_html: Deklarer engangsoppgaver i <code>config/deploy_tasks.yml</code>; <code>rails generate pgbus:add_deploy_tasks</code> skriver en startfil.
+        empty_title: Ingen deploy-oppgaver deklarert
+        headers:
+          actions: Handlinger
+          last_run: Siste kjøring
+          queue: Kø
+          state: Tilstand
+          task: Oppgave
+          version: Versjon
+        never: Aldri
+      toggle:
+        disabled: Deploy-oppgaven er deaktivert
+        enabled: Deploy-oppgaven er aktivert
+        failed: Kunne ikke veksle deploy-oppgaven
+      triggered_by:
+        manual: Manuelt
+        rollover: Utrulling
+      version: v%{version}
     dialogs:
       cancel: Avbryt
       confirm: Bekreft
@@ -617,6 +713,7 @@ nb:
       nav:
         batches: Grupper
         dashboard: Dashbord
+        deploy_tasks: Deploy
         dlq: DLQ
         events: Hendelser
         insights: Innsikter

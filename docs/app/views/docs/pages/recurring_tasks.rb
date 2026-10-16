@@ -33,7 +33,8 @@ class Views::Docs::Pages::RecurringTasks < DocsUI::Page
       md <<~'MD'
         The generator also writes a starter `config/recurring.yml`. A scheduler
         process (part of the supervisor) reads your tasks, syncs them to the
-        database, and enqueues each on its schedule.
+        database, and enqueues each on its schedule. For one-time work after a
+        deploy, see [Deploy tasks](/docs/deploy-tasks).
       MD
     end
   end

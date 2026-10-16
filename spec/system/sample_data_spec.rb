@@ -62,6 +62,18 @@ RSpec.describe "Dashboard sample data", type: :system do
     expect(page).to have_text("ProcessPaymentJob")
   end
 
+  it "shows deploy task runs and a deploy mid-rollover" do
+    visit "/pgbus/deploy_tasks/1"
+    expect(page).to have_no_text(I18n.t("pgbus.deploy_tasks.show.no_runs"))
+
+    visit "/pgbus/deploy_tasks"
+    expect(page).to have_text("worker@app-2 pid 4102 on 3f2a9c1")
+    expect(page).to have_css("tr[data-state=waiting]")
+    expect(page).to have_css("tr[data-state=ran]")
+    expect(page).to have_css("tr[data-state=never]")
+    expect(page).to have_css("tr[data-state=disabled]")
+  end
+
   it "shows recurring task executions" do
     visit "/pgbus/recurring_tasks/1"
     expect(page).to have_no_text(I18n.t("pgbus.recurring_tasks.show.no_executions"))

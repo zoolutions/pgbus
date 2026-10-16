@@ -165,6 +165,10 @@ class Views::Docs::Pages::RollingRestarts < DocsUI::Page
 
         "One scheduler per deployment" is a steady-state rule; a deploy window may
         briefly violate it without consequence.
+
+        [Deploy tasks](/docs/deploy-tasks) are the fleet-wide complement of the
+        container-local `/readyz` gate: they wait for the overlap window to close,
+        so one-time work never runs on old code.
       MD
     end
   end

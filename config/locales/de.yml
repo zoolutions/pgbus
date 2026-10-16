@@ -236,6 +236,102 @@ de:
         payload: Nutzlast
         retry: Erneut versuchen
         title: 'DLQ Nachricht #%{id}'
+    deploy_tasks:
+      banner:
+        heading: Rollover
+        lagging_html:
+          one: 'Warte auf Rollover: 1 Prozess läuft noch nicht auf <code>%{revision}</code>.'
+          other: 'Warte auf Rollover: %{count} Prozesse laufen noch nicht auf <code>%{revision}</code>.'
+        lagging_more: "…und %{count} weitere"
+        lagging_process: "%{kind}@%{hostname} PID %{pid} auf %{revision}"
+        live_count: "%{count} auf %{revision}"
+        live_heading: 'Aktive Prozesse:'
+        no_revision_hint_html: Setze <code>config.app_revision</code> oder eine von <code>PGBUS_REVISION</code>, <code>DASH_VERSION</code> oder <code>KAMAL_VERSION</code>, oder liefere eine <code>REVISION</code>-Datei aus. „Jetzt ausführen“ funktioniert weiterhin.
+        no_revision_html: 'App-Revision nicht konfiguriert: Deploy-Aufgaben warten, bis sie gesetzt ist.'
+        no_revision_label: keine Revision
+        no_scheduler_html: 'Kein Scheduler läuft: Deploy-Aufgaben werden nur vom Scheduler ausgelöst. Diese Bewertung nutzt die eigene Revision des Dashboards.'
+        no_workers_html: 'Warte auf Rollover: noch kein Worker auf <code>%{revision}</code>.'
+        ready_html: 'Rollover abgeschlossen: Jeder aktive Prozess läuft auf <code>%{revision}</code>. Vorgemerkte Aufgaben laufen beim nächsten Scheduler-Tick.'
+        unavailable_html: Der Rollover-Status konnte nicht gelesen werden.
+      default_queue: default
+      disable: Deaktivieren
+      enable: Aktivieren
+      enqueue:
+        enqueued: Deploy-Aufgabe eingereiht
+        failed: 'Die Deploy-Aufgabe wurde nicht eingereiht: Den Grund findest du im Log'
+      every_deploy: Bei jedem Deploy
+      index:
+        task_count:
+          one: "%{count} Aufgabe deklariert"
+          other: "%{count} Aufgaben deklariert"
+        title: Deploy-Aufgaben
+      not_found: Deploy-Aufgabe nicht gefunden
+      reasons:
+        disabled_armed_html: 'Deaktiviert mit ausstehendem Rollover-Lauf: Aktiviere sie, damit sie ausgelöst wird.'
+        disabled_html: 'Deaktiviert: Der Scheduler überspringt sie.'
+        due_html: 'Fällig: läuft beim nächsten Scheduler-Tick.'
+        manual_html: "· lief %{ago} (manuell)"
+        never_html: Nie gelaufen.
+        ran_html: Lief %{ago} auf <code>%{revision}</code> (Rollover).
+        waiting_lagging_html:
+          one: 'Warte auf Rollover: 1 Prozess läuft noch nicht auf <code>%{revision}</code>.'
+          other: 'Warte auf Rollover: %{count} Prozesse laufen noch nicht auf <code>%{revision}</code>.'
+        waiting_no_revision_html: 'Wartet: Die App-Revision ist nicht konfiguriert.'
+        waiting_no_scheduler_html: 'Wartet: Kein Scheduler läuft.'
+        waiting_no_workers_html: Wartet auf einen Worker auf <code>%{revision}</code>.
+        waiting_unknown_html: 'Wartet: Der Rollover-Status konnte nicht gelesen werden.'
+      run_now: Jetzt ausführen
+      show:
+        armed_html: Vorgemerkt für <code>%{armed_for}</code> %{ago}
+        back: Zurück
+        configuration: Konfiguration
+        labels:
+          arguments: Argumente
+          armed: Ausstehende Vormerkung
+          command: Befehl
+          description: Beschreibung
+          job_class: Job-Klasse
+          priority: Priorität
+          queue: Warteschlange
+          source: Quelle
+        last_run: Letzter Lauf
+        no_runs: Noch keine Läufe aufgezeichnet
+        recent_runs: Letzte Läufe
+        run_headers:
+          enqueued_at: Eingereiht am
+          queue: Warteschlange
+          revision: Revision
+          triggered_by: Ausgelöst durch
+          version: Version
+        source_config: Konfigurationsdatei
+        source_dynamic: Dynamisch
+        state: Zustand
+        version: Version
+      states:
+        disabled: Deaktiviert
+        due: Fällig
+        never: Nie gelaufen
+        ran: Gelaufen
+        waiting: Wartet
+      tasks_table:
+        empty_hint_html: Deklariere einmalige Aufgaben in <code>config/deploy_tasks.yml</code>; <code>rails generate pgbus:add_deploy_tasks</code> erzeugt eine Startdatei.
+        empty_title: Keine Deploy-Aufgaben deklariert
+        headers:
+          actions: Aktionen
+          last_run: Letzter Lauf
+          queue: Warteschlange
+          state: Zustand
+          task: Aufgabe
+          version: Version
+        never: Nie
+      toggle:
+        disabled: Deploy-Aufgabe deaktiviert
+        enabled: Deploy-Aufgabe aktiviert
+        failed: Umschalten der Deploy-Aufgabe fehlgeschlagen
+      triggered_by:
+        manual: Manuell
+        rollover: Rollover
+      version: v%{version}
     dialogs:
       cancel: Abbrechen
       confirm: Bestätigen
@@ -617,6 +713,7 @@ de:
       nav:
         batches: Stapel
         dashboard: Dashboard
+        deploy_tasks: Deploy
         dlq: DLQ
         events: Ereignisse
         insights: Einblicke

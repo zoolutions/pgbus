@@ -19,6 +19,8 @@
         "http://localhost:3003/pgbus/jobs/1",
         "http://localhost:3003/pgbus/recurring_tasks",
         "http://localhost:3003/pgbus/recurring_tasks/1",
+        "http://localhost:3003/pgbus/deploy_tasks",
+        "http://localhost:3003/pgbus/deploy_tasks/1",
         "http://localhost:3003/pgbus/processes",
         "http://localhost:3003/pgbus/events",
         "http://localhost:3003/pgbus/events/1",

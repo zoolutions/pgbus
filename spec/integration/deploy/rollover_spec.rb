@@ -44,6 +44,24 @@ RSpec.describe Pgbus::Deploy::Rollover, :integration do
     expect(described_class.check(revision: "rev-b", now: now)).to be_rolled_over
   end
 
+  describe ".scheduler_revision" do
+    it "reads the newest live scheduler's revision" do
+      Pgbus::ProcessEntry.create!(kind: "scheduler", hostname: "h", pid: 1, metadata: { revision: "rev-a" },
+                                  last_heartbeat_at: now, created_at: now - 600)
+      Pgbus::ProcessEntry.create!(kind: "scheduler", hostname: "h", pid: 2, metadata: { revision: "rev-b" },
+                                  last_heartbeat_at: now, created_at: now - 60)
+
+      expect(described_class.scheduler_revision(now: now)).to eq([true, "rev-b"])
+    end
+
+    it "reports no live scheduler" do
+      Pgbus::ProcessEntry.create!(kind: "scheduler", hostname: "h", pid: 1, metadata: { revision: "rev-a" },
+                                  last_heartbeat_at: now - 3600)
+
+      expect(described_class.scheduler_revision(now: now)).to eq([false, nil])
+    end
+  end
+
   it "reads the revision a real heartbeat registration stamps" do
     allow(Pgbus::Deploy::Revision).to receive(:current).and_return("rev-b")
     heartbeat = Pgbus::Process::Heartbeat.new(kind: "worker", metadata: { pid: Process.pid })

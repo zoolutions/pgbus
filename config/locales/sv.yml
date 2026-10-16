@@ -236,6 +236,102 @@ sv:
         payload: Innehåll
         retry: Försök igen
         title: 'DLQ-meddelande #%{id}'
+    deploy_tasks:
+      banner:
+        heading: Utrullning
+        lagging_html:
+          one: 'Väntar på utrullning: 1 process kör ännu inte <code>%{revision}</code>.'
+          other: 'Väntar på utrullning: %{count} processer kör ännu inte <code>%{revision}</code>.'
+        lagging_more: "…och %{count} till"
+        lagging_process: "%{kind}@%{hostname} pid %{pid} på %{revision}"
+        live_count: "%{count} på %{revision}"
+        live_heading: 'Aktiva processer:'
+        no_revision_hint_html: Sätt <code>config.app_revision</code>, eller någon av <code>PGBUS_REVISION</code>, <code>DASH_VERSION</code> eller <code>KAMAL_VERSION</code>, eller leverera en <code>REVISION</code>-fil. Kör nu fungerar fortfarande.
+        no_revision_html: 'Appens revision är inte konfigurerad: deploy-uppgifter väntar tills den är det.'
+        no_revision_label: ingen revision
+        no_scheduler_html: 'Ingen schemaläggare körs: deploy-uppgifter startas bara av schemaläggaren. Bedömningen använder instrumentpanelens egen revision.'
+        no_workers_html: 'Väntar på utrullning: ingen worker på <code>%{revision}</code> ännu.'
+        ready_html: 'Utrullad: varje aktiv process kör <code>%{revision}</code>. Väntande uppgifter körs vid schemaläggarens nästa tick.'
+        unavailable_html: Utrullningsstatusen kunde inte läsas.
+      default_queue: default
+      disable: Inaktivera
+      enable: Aktivera
+      enqueue:
+        enqueued: Deploy-uppgiften köad
+        failed: 'Deploy-uppgiften köades inte: se loggen för orsaken'
+      every_deploy: Vid varje deploy
+      index:
+        task_count:
+          one: "%{count} uppgift deklarerad"
+          other: "%{count} uppgifter deklarerade"
+        title: Deploy-uppgifter
+      not_found: Deploy-uppgiften hittades inte
+      reasons:
+        disabled_armed_html: 'Inaktiverad med en väntande utrullningskörning: aktivera den för att låta den köras.'
+        disabled_html: 'Inaktiverad: schemaläggaren hoppar över den.'
+        due_html: 'Redo: körs vid schemaläggarens nästa tick.'
+        manual_html: "· kördes %{ago} (manuellt)"
+        never_html: Har aldrig körts.
+        ran_html: Kördes %{ago} på <code>%{revision}</code> (utrullning).
+        waiting_lagging_html:
+          one: 'Väntar på utrullning: 1 process kör ännu inte <code>%{revision}</code>.'
+          other: 'Väntar på utrullning: %{count} processer kör ännu inte <code>%{revision}</code>.'
+        waiting_no_revision_html: 'Väntar: appens revision är inte konfigurerad.'
+        waiting_no_scheduler_html: 'Väntar: ingen schemaläggare körs.'
+        waiting_no_workers_html: Väntar på en worker på <code>%{revision}</code>.
+        waiting_unknown_html: 'Väntar: utrullningsstatusen kunde inte läsas.'
+      run_now: Kör nu
+      show:
+        armed_html: Förberedd för <code>%{armed_for}</code> %{ago}
+        back: Tillbaka
+        configuration: Konfiguration
+        labels:
+          arguments: Argument
+          armed: Väntande körning
+          command: Kommando
+          description: Beskrivning
+          job_class: Jobbklass
+          priority: Prioritet
+          queue: Kö
+          source: Källa
+        last_run: Senaste körning
+        no_runs: Inga körningar registrerade ännu
+        recent_runs: Senaste körningar
+        run_headers:
+          enqueued_at: Köad
+          queue: Kö
+          revision: Revision
+          triggered_by: Startad av
+          version: Version
+        source_config: Konfigurationsfil
+        source_dynamic: Dynamisk
+        state: Tillstånd
+        version: Version
+      states:
+        disabled: Inaktiverad
+        due: Redo
+        never: Aldrig körd
+        ran: Körd
+        waiting: Väntar
+      tasks_table:
+        empty_hint_html: Deklarera engångsuppgifter i <code>config/deploy_tasks.yml</code>; <code>rails generate pgbus:add_deploy_tasks</code> skapar en startfil.
+        empty_title: Inga deploy-uppgifter deklarerade
+        headers:
+          actions: Åtgärder
+          last_run: Senaste körning
+          queue: Kö
+          state: Tillstånd
+          task: Uppgift
+          version: Version
+        never: Aldrig
+      toggle:
+        disabled: Deploy-uppgiften inaktiverad
+        enabled: Deploy-uppgiften aktiverad
+        failed: Det gick inte att växla deploy-uppgiften
+      triggered_by:
+        manual: Manuellt
+        rollover: Utrullning
+      version: v%{version}
     dialogs:
       cancel: Avbryt
       confirm: Bekräfta
@@ -617,6 +713,7 @@ sv:
       nav:
         batches: Grupper
         dashboard: Instrumentpanel
+        deploy_tasks: Deploy
         dlq: DLQ
         events: Händelser
         insights: Insikter

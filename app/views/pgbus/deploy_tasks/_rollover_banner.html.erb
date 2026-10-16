@@ -1,0 +1,25 @@
+<%# The rollover the scheduler acts on (DataSource#deploy_rollover): the same
+    reason every waiting task's sentence names. %>
+<% key = pgbus_deploy_rollover_key(@rollover) %>
+<% lagging = Array(@rollover&.dig(:lagging)) %>
+<section aria-labelledby="deploy-rollover-heading" data-rollover="<%= key %>"
+         class="mb-6 rounded-lg p-4 ring-1 <%= Pgbus::DeployTasksHelper::BANNER_TONE_CSS.fetch(pgbus_deploy_rollover_tone(@rollover)) %>">
+  <h2 id="deploy-rollover-heading" class="text-sm font-semibold"><%= t("pgbus.deploy_tasks.banner.heading") %></h2>
+  <p class="mt-1 text-sm"><%= pgbus_deploy_rollover_sentence(@rollover) %></p>
+  <% if key == "no_revision" %>
+    <p class="mt-1 text-sm"><%= t("pgbus.deploy_tasks.banner.no_revision_hint_html") %></p>
+  <% end %>
+  <% if lagging.any? %>
+    <ul class="mt-2 list-disc pl-5 text-sm">
+      <% lagging.first(10).each do |process| %>
+        <li><%= pgbus_deploy_lagging_process(process) %></li>
+      <% end %>
+      <% if lagging.size > 10 %>
+        <li><%= t("pgbus.deploy_tasks.banner.lagging_more", count: lagging.size - 10) %></li>
+      <% end %>
+    </ul>
+  <% end %>
+  <% if @rollover&.dig(:live_by_revision).present? %>
+    <p class="mt-2 text-xs"><%= t("pgbus.deploy_tasks.banner.live_heading") %> <%= pgbus_deploy_live_counts(@rollover) %></p>
+  <% end %>
+</section>

@@ -236,6 +236,102 @@ es:
         payload: Carga útil
         retry: Reintentar
         title: 'Mensaje DLQ #%{id}'
+    deploy_tasks:
+      banner:
+        heading: Transición
+        lagging_html:
+          one: 'Esperando la transición: 1 proceso aún no ejecuta <code>%{revision}</code>.'
+          other: 'Esperando la transición: %{count} procesos aún no ejecutan <code>%{revision}</code>.'
+        lagging_more: "…y %{count} más"
+        lagging_process: "%{kind}@%{hostname} pid %{pid} en %{revision}"
+        live_count: "%{count} en %{revision}"
+        live_heading: 'Procesos activos:'
+        no_revision_hint_html: Define <code>config.app_revision</code>, o una de <code>PGBUS_REVISION</code>, <code>DASH_VERSION</code> o <code>KAMAL_VERSION</code>, o incluye un archivo <code>REVISION</code>. Ejecutar ahora sigue funcionando.
+        no_revision_html: 'Revisión de la aplicación no configurada: las tareas de despliegue esperan hasta que lo esté.'
+        no_revision_label: sin revisión
+        no_scheduler_html: 'No hay ningún planificador en ejecución: las tareas de despliegue solo las lanza el planificador. Este veredicto usa la revisión del propio panel.'
+        no_workers_html: 'Esperando la transición: aún no hay ningún worker en <code>%{revision}</code>.'
+        ready_html: 'Transición completa: cada proceso activo ejecuta <code>%{revision}</code>. Las tareas armadas se ejecutan en el siguiente tick del planificador.'
+        unavailable_html: No se pudo leer el estado de la transición.
+      default_queue: default
+      disable: Desactivar
+      enable: Activar
+      enqueue:
+        enqueued: Tarea de despliegue encolada
+        failed: 'La tarea de despliegue no se encoló: consulta el registro para ver el motivo'
+      every_deploy: En cada despliegue
+      index:
+        task_count:
+          one: "%{count} tarea declarada"
+          other: "%{count} tareas declaradas"
+        title: Tareas de despliegue
+      not_found: Tarea de despliegue no encontrada
+      reasons:
+        disabled_armed_html: 'Desactivada con una ejecución de transición pendiente: actívala para que se ejecute.'
+        disabled_html: 'Desactivada: el planificador la omite.'
+        due_html: 'Lista: se ejecuta en el siguiente tick del planificador.'
+        manual_html: "· se ejecutó %{ago} (manual)"
+        never_html: Nunca se ejecutó.
+        ran_html: Se ejecutó %{ago} en <code>%{revision}</code> (transición).
+        waiting_lagging_html:
+          one: 'Esperando la transición: 1 proceso aún no ejecuta <code>%{revision}</code>.'
+          other: 'Esperando la transición: %{count} procesos aún no ejecutan <code>%{revision}</code>.'
+        waiting_no_revision_html: 'Esperando: la revisión de la aplicación no está configurada.'
+        waiting_no_scheduler_html: 'Esperando: no hay ningún planificador en ejecución.'
+        waiting_no_workers_html: Esperando un worker en <code>%{revision}</code>.
+        waiting_unknown_html: 'Esperando: no se pudo leer el estado de la transición.'
+      run_now: Ejecutar ahora
+      show:
+        armed_html: Armada para <code>%{armed_for}</code> %{ago}
+        back: Volver
+        configuration: Configuración
+        labels:
+          arguments: Argumentos
+          armed: Ejecución pendiente
+          command: Comando
+          description: Descripción
+          job_class: Clase de trabajo
+          priority: Prioridad
+          queue: Cola
+          source: Origen
+        last_run: Última ejecución
+        no_runs: Aún no hay ejecuciones registradas
+        recent_runs: Ejecuciones recientes
+        run_headers:
+          enqueued_at: Encolada el
+          queue: Cola
+          revision: Revisión
+          triggered_by: Lanzada por
+          version: Versión
+        source_config: Archivo de configuración
+        source_dynamic: Dinámica
+        state: Estado
+        version: Versión
+      states:
+        disabled: Desactivada
+        due: Lista
+        never: Nunca ejecutada
+        ran: Ejecutada
+        waiting: Esperando
+      tasks_table:
+        empty_hint_html: Declara tareas puntuales en <code>config/deploy_tasks.yml</code>; <code>rails generate pgbus:add_deploy_tasks</code> crea un archivo inicial.
+        empty_title: No hay tareas de despliegue declaradas
+        headers:
+          actions: Acciones
+          last_run: Última ejecución
+          queue: Cola
+          state: Estado
+          task: Tarea
+          version: Versión
+        never: Nunca
+      toggle:
+        disabled: Tarea de despliegue desactivada
+        enabled: Tarea de despliegue activada
+        failed: No se pudo cambiar la tarea de despliegue
+      triggered_by:
+        manual: Manual
+        rollover: Transición
+      version: v%{version}
     dialogs:
       cancel: Cancelar
       confirm: Confirmar
@@ -617,6 +713,7 @@ es:
       nav:
         batches: Lotes
         dashboard: Panel de control
+        deploy_tasks: Despliegue
         dlq: DLQ
         events: Eventos
         insights: Perspectivas

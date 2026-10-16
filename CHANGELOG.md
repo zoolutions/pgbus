@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Added
+
+- **Deploy tasks: one-time work owed by a release, run once the fleet has rolled over.** Declare a backfill, data fix or cache warm in `config/deploy_tasks.yml` (the shape of `recurring.yml` minus `schedule:`, plus `version:` and `every_deploy:`) or `config.deploy_tasks`; the scheduler enqueues it once per `(key, version)` after every live pgbus process reports the new app revision and a worker on it is alive, so it never runs on old code during the overlap window and never twice. Every pgbus process stamps the revision (`config.app_revision`, `PGBUS_REVISION`, `DASH_VERSION`, `KAMAL_VERSION` or the `REVISION` file) into its heartbeat. The dashboard gets a "Deploy tasks" page with the rollover status, Run now and Enable/Disable; run history lives in `pgbus_deploy_task_runs` (`deploy_task_run_retention`, default 90 days); `pgbus.deploy_task.enqueue` is instrumented and the MCP server gains `pgbus_deploy_tasks`. Set up with `rails generate pgbus:add_deploy_tasks` (`pgbus:update` detects the missing tables). Refs #536.
+
 ## [0.19.0] - 2026-10-16
 
 ### Added

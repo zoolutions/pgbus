@@ -172,6 +172,7 @@ class Views::Docs::Pages::CliGenerators < DocsUI::Page
         [ "Generator", "Adds" ],
         [
           [ [ :code, "pgbus:add_recurring" ], [ :md, "Recurring-task tables + a starter `recurring.yml`." ] ],
+          [ [ :code, "pgbus:add_deploy_tasks" ], [ :md, "Deploy-task tables + a starter `deploy_tasks.yml`." ] ],
           [ [ :code, "pgbus:add_outbox" ], "The transactional-outbox table." ],
           [ [ :code, "pgbus:add_presence" ], "The stream-presence table." ],
           [ [ :code, "pgbus:add_presence_seats" ], "Per-connection presence seats (connection_id, seat, state) on an existing presence table. Included in fresh pgbus:add_presence." ],

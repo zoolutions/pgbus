@@ -52,6 +52,7 @@ module Pgbus
           @stats = @stats.merge(@concurrency_stats_hash.slice(:parked_total, :oldest_parked_age_sec,
                                                               :slots_held, :keys_at_limit))
           fill_sample_events!(now.utc)
+          fill_sample_deploy_tasks!(now)
           @outbox_entries_list = sample_outbox_entries(now)
           @outbox_stats_hash = { unpublished: @outbox_entries_list.count { |e| e.published_at.nil? },
                                  total: @outbox_entries_list.size, oldest_unpublished_age: 45 }

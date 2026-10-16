@@ -1217,6 +1217,7 @@ All tools are read-only — no tool mutates state, and there is no raw-SQL passt
 | `pgbus_dlq` / `pgbus_dlq_detail` | Dead-letter inspection. Paginated. |
 | `pgbus_locks` | Active uniqueness locks (the leaked-lock diagnostic). Paginated (`page`, `per_page` max 100; returns `total`, capped at 10,000, and `has_more`). |
 | `pgbus_throughput` / `pgbus_stats` | Recent throughput time series and status counts. |
+| `pgbus_deploy_tasks` | Deploy tasks, their state and the rollover status (read-only). |
 | `pgbus_recurring` | Recurring task schedule + last/next run times. All tasks unless `page` / `per_page` is given (then `total` is capped at 10,000); returns `total`, `has_more`. |
 
 #### Security
@@ -2216,6 +2217,42 @@ pgbus start --workers-only --capsule default
 
 The capsule name is the `:name` you passed to `c.capsule` in your initializer (or the first queue token when using the string DSL).
 
+### Deploy tasks
+
+One-time work owed by a release (a backfill, a data fix, a cache warm). A deploy task runs once per `(key, version)`, only after every live pgbus process reports the new app revision and at least one worker on that revision is alive. It never runs on old code during the deploy overlap window, never twice (multi-host, restarts), and is not forgotten.
+
+```yaml
+# config/deploy_tasks.yml
+production:
+  backfill_order_totals:
+    class: BackfillOrderTotalsJob      # or command: "Orders.backfill_totals!"
+    version: 2                          # bump to run again after the next rollover (default 1)
+    queue: maintenance
+    args: [{ batch_size: 500 }]
+    description: Recompute totals after the currency migration
+  warm_fragment_caches:
+    command: "FragmentCacheWarmer.run"
+    every_deploy: true                  # runs after every rollover, dedup'd on the app revision
+```
+
+The file has the shape of `config/recurring.yml` minus `schedule:`, plus `version:` and `every_deploy:`. It is environment-scoped or flat, ERB is allowed, and `config.deploy_tasks_files` lists several files (explicit files replace the default). A task is a `class:` (an ActiveJob class; anything else is skipped with a warning at scheduler boot) or a `command:` (`Const.method`, run by `Pgbus::Recurring::CommandJob`), with optional `queue`, `args`, `priority` and `description`.
+
+- **`version:`** (default `"1"`, compared as a string): bump it in the same commit as a new data fix to run the task again after that deploy.
+- **`every_deploy: true`**: runs after every rollover, dedup'd on the revision, so a rollback deploy re-fires it and a scheduler crash-restart does not. `version` is ignored (a warning is logged).
+- **Revision**, first non-blank wins: `config.app_revision` (a String or a callable) → `ENV["PGBUS_REVISION"]` → `ENV["DASH_VERSION"]` → `ENV["KAMAL_VERSION"]` → the `REVISION` file in `Rails.root` (Capistrano). dash and Kamal need no configuration. Every pgbus process stamps it into its heartbeat row (`metadata["revision"]`, shown in the Processes page's expanded row). Without a revision the gate stays closed: tasks wait, the scheduler warns once at boot, and only Run now enqueues.
+- **The gate** (checked by the scheduler at most every 5 s): live processes are those with a heartbeat in the last 5 minutes. It is closed while any live process reports another revision (a process with no revision, such as a pre-upgrade pgbus, counts as lagging) or while no live worker runs the new revision. A gracefully stopped process deletes its row at once, so a clean dash/Kamal deploy opens the gate within a scheduler tick after the last old container drains; a hard-killed old container keeps it closed until its row goes stale (5 minutes).
+- **Who runs it**: the scheduler that runs recurring tasks. The supervisor forks it when recurring or deploy tasks are configured (`config.deploy_tasks_enabled`, default `true`); `--scheduler-only` works as before. At boot it syncs the declared tasks into `pgbus_deploy_tasks` and arms the owed ones. A compare-and-set claim on the row means two schedulers never both fire.
+- **"Ran" means enqueued**, like recurring: the task goes through ActiveJob `perform_later`, so uniqueness, batches, concurrency, priority, retries and the DLQ apply, and the outcome is on the Jobs page. A failed enqueue re-arms the task, logs it, reports it to the error reporters and fires again on a later tick. Due tasks are enqueued in key order with no completion ordering between them.
+- **Dashboard**: the "Deploy tasks" page (`/pgbus/deploy_tasks`, plus a show page per task with its configuration and last 25 runs) shows whether the fleet has rolled over to the scheduler's revision, with live process counts per revision, and each task as ran, waiting (and why), due, disabled or never ran. **Run now** enqueues immediately, with no gate and no claim, and records a manual run; it does not cancel a pending rollover run (Disable the task for that). **Enable/Disable** is honoured on every tick.
+- **History**: `pgbus_deploy_task_runs`, kept for `config.deploy_task_run_retention` (default 90 days, `nil` keeps forever); the dispatcher prunes hourly. Each enqueue emits `pgbus.deploy_task.enqueue` (`task`, `version`, `revision`, `triggered_by`).
+
+```bash
+rails generate pgbus:add_deploy_tasks                  # migration + config/deploy_tasks.yml
+rails generate pgbus:add_deploy_tasks --database=pgbus # for a separate database
+```
+
+`rails generate pgbus:update` detects the missing tables; fresh installs (`pgbus:install`) already have them.
+
 ### Dashboard
 
 The dashboard is a mountable Rails engine at `/pgbus` with:
@@ -2290,6 +2327,8 @@ Pgbus uses these tables (created via PGMQ and migrations):
 | `pgbus_outbox_entries` | Transactional outbox entries pending publication |
 | `pgbus_recurring_tasks` | Recurring job definitions |
 | `pgbus_recurring_executions` | Recurring job execution history |
+| `pgbus_deploy_tasks` | Declared deploy tasks, their arm (`armed_at`/`armed_for`) and `enabled` flag |
+| `pgbus_deploy_task_runs` | Deploy task run history (task_key, version, revision, triggered_by, queue_name, msg_id, run_at) |
 | `pgbus_presence_members` | Stream presence tracking (who is subscribed) |
 | `pgbus_stream_stats` | Stream broadcast/connect/disconnect metrics (opt-in) |
 
@@ -2388,6 +2427,11 @@ Curated headline options for the README. The full operator reference (with types
 | `outbox_batch_size` | `100` | Max entries per outbox poll cycle |
 | `outbox_retention` | `1.day` | How long to keep published outbox entries. Accepts seconds, Duration, or `nil` to disable cleanup |
 | `idempotency_ttl` | `7.days` | How long to keep processed event records. Accepts seconds, Duration, or `nil` to disable cleanup |
+| `app_revision` | `nil` | App revision for deploy tasks: a String or a callable returning one. Falls back to `PGBUS_REVISION`, `DASH_VERSION`, `KAMAL_VERSION`, then the `REVISION` file |
+| `deploy_tasks` | `nil` | Hash of deploy tasks, same shape as `config/deploy_tasks.yml` |
+| `deploy_tasks_files` | `nil` | Array of deploy-task YAML files (replaces the default `config/deploy_tasks.yml`) |
+| `deploy_tasks_enabled` | `true` | Fork the scheduler for deploy tasks; set `false` to turn them off |
+| `deploy_task_run_retention` | `90.days` | How long to keep deploy task run history. Accepts seconds, Duration, or `nil` to keep forever |
 | `allowed_global_id_models` | `nil` | Allowlist of Class/Module models permitted as GlobalID **job arguments** and EventBus payloads. `nil` = allow-all (default). `[]` = deny-all. Apps with ActiveStorage should include `ActiveStorage::Blob` (and related models). |
 | `base_controller_class` | `"::ActionController::Base"` | Base class for dashboard controllers (string, constantized at load time) |
 | `return_to_app_url` | `nil` | URL for "back to app" button in dashboard nav (nil hides the button) |

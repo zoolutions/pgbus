@@ -26,7 +26,8 @@ module Pgbus
         Tools::ConcurrencyTool,
         Tools::ThroughputTool,
         Tools::StatsTool,
-        Tools::RecurringTool
+        Tools::RecurringTool,
+        Tools::DeployTasksTool
       ].freeze
 
       INSTRUCTIONS = <<~TEXT

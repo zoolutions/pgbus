@@ -28,6 +28,14 @@ module Pgbus
         evaluate(rows.map { |kind, hostname, pid, metadata| { kind:, hostname:, pid:, metadata: } }, revision: revision)
       end
 
+      # [live, revision] of the newest live scheduler row: the revision the
+      # dashboard judges the rollover against (the one the scheduler acts on).
+      def scheduler_revision(now: Time.current)
+        row = ProcessEntry.where(kind: "scheduler", last_heartbeat_at: (now - Process::Heartbeat::ALIVE_THRESHOLD)..)
+                          .order(created_at: :desc, id: :desc).first
+        row ? [true, revision_of(row.metadata)] : [false, nil]
+      end
+
       # rows – live process rows as { kind:, hostname:, pid:, metadata: }.
       def evaluate(rows, revision:)
         live = rows.map { |r| { kind: r[:kind], hostname: r[:hostname], pid: r[:pid], revision: revision_of(r[:metadata]) } }

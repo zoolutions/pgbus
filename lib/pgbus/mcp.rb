@@ -28,6 +28,7 @@ module Pgbus
       pgbus/mcp/tools/throughput_tool
       pgbus/mcp/tools/stats_tool
       pgbus/mcp/tools/recurring_tool
+      pgbus/mcp/tools/deploy_tasks_tool
       pgbus/mcp/server
       pgbus/mcp/runner
       pgbus/mcp/rack_app

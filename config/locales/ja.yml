@@ -236,6 +236,102 @@ ja:
         payload: ペイロード
         retry: 再試行
         title: 'DLQメッセージ #%{id}'
+    deploy_tasks:
+      banner:
+        heading: ロールオーバー
+        lagging_html:
+          one: 'ロールオーバー待ち: 1 個のプロセスがまだ <code>%{revision}</code> で動いていません。'
+          other: 'ロールオーバー待ち: %{count} 個のプロセスがまだ <code>%{revision}</code> で動いていません。'
+        lagging_more: "…ほか %{count} 件"
+        lagging_process: "%{kind}@%{hostname} pid %{pid}（%{revision}）"
+        live_count: "%{revision}: %{count}"
+        live_heading: '稼働中のプロセス:'
+        no_revision_hint_html: "<code>config.app_revision</code>、または <code>PGBUS_REVISION</code>・<code>DASH_VERSION</code>・<code>KAMAL_VERSION</code> のいずれかを設定するか、<code>REVISION</code> ファイルを同梱してください。「今すぐ実行」は引き続き使えます。"
+        no_revision_html: 'アプリのリビジョンが設定されていません: 設定されるまでデプロイタスクは待機します。'
+        no_revision_label: リビジョンなし
+        no_scheduler_html: 'スケジューラーが動いていません: デプロイタスクはスケジューラーからのみ実行されます。この判定はダッシュボード自身のリビジョンを使っています。'
+        no_workers_html: 'ロールオーバー待ち: <code>%{revision}</code> のワーカーがまだいません。'
+        ready_html: 'ロールオーバー完了: 稼働中のすべてのプロセスが <code>%{revision}</code> で動いています。待機中のタスクはスケジューラーの次のティックで実行されます。'
+        unavailable_html: ロールオーバーの状態を読み取れませんでした。
+      default_queue: default
+      disable: 無効にする
+      enable: 有効にする
+      enqueue:
+        enqueued: デプロイタスクをキューに追加しました
+        failed: 'デプロイタスクはキューに追加されませんでした: 理由はログを確認してください'
+      every_deploy: 毎回のデプロイ
+      index:
+        task_count:
+          one: "%{count} 件のタスクが宣言されています"
+          other: "%{count} 件のタスクが宣言されています"
+        title: デプロイタスク
+      not_found: デプロイタスクが見つかりません
+      reasons:
+        disabled_armed_html: '無効（ロールオーバー実行が保留中）: 実行させるには有効にしてください。'
+        disabled_html: '無効: スケジューラーはスキップします。'
+        due_html: '実行待ち: スケジューラーの次のティックで実行されます。'
+        manual_html: "· %{ago}に実行（手動）"
+        never_html: 未実行です。
+        ran_html: "%{ago}に <code>%{revision}</code> で実行（ロールオーバー）。"
+        waiting_lagging_html:
+          one: 'ロールオーバー待ち: 1 個のプロセスがまだ <code>%{revision}</code> で動いていません。'
+          other: 'ロールオーバー待ち: %{count} 個のプロセスがまだ <code>%{revision}</code> で動いていません。'
+        waiting_no_revision_html: '待機中: アプリのリビジョンが設定されていません。'
+        waiting_no_scheduler_html: '待機中: スケジューラーが動いていません。'
+        waiting_no_workers_html: "<code>%{revision}</code> のワーカーを待っています。"
+        waiting_unknown_html: '待機中: ロールオーバーの状態を読み取れませんでした。'
+      run_now: 今すぐ実行
+      show:
+        armed_html: "<code>%{armed_for}</code> 向けに準備済み（%{ago}）"
+        back: 戻る
+        configuration: 設定
+        labels:
+          arguments: 引数
+          armed: 保留中の実行
+          command: コマンド
+          description: 説明
+          job_class: ジョブクラス
+          priority: 優先度
+          queue: キュー
+          source: ソース
+        last_run: 最終実行
+        no_runs: まだ実行記録はありません
+        recent_runs: 最近の実行
+        run_headers:
+          enqueued_at: キュー追加日時
+          queue: キュー
+          revision: リビジョン
+          triggered_by: 実行契機
+          version: バージョン
+        source_config: 設定ファイル
+        source_dynamic: 動的
+        state: 状態
+        version: バージョン
+      states:
+        disabled: 無効
+        due: 実行待ち
+        never: 未実行
+        ran: 実行済み
+        waiting: 待機中
+      tasks_table:
+        empty_hint_html: 一度きりのタスクは <code>config/deploy_tasks.yml</code> で宣言します。<code>rails generate pgbus:add_deploy_tasks</code> でひな形が作成されます。
+        empty_title: 宣言されたデプロイタスクはありません
+        headers:
+          actions: アクション
+          last_run: 最終実行
+          queue: キュー
+          state: 状態
+          task: タスク
+          version: バージョン
+        never: なし
+      toggle:
+        disabled: デプロイタスクを無効にしました
+        enabled: デプロイタスクを有効にしました
+        failed: デプロイタスクの切り替えに失敗しました
+      triggered_by:
+        manual: 手動
+        rollover: ロールオーバー
+      version: v%{version}
     dialogs:
       cancel: キャンセル
       confirm: 確認
@@ -617,6 +713,7 @@ ja:
       nav:
         batches: バッチ
         dashboard: ダッシュボード
+        deploy_tasks: デプロイ
         dlq: DLQ
         events: イベント
         insights: インサイト

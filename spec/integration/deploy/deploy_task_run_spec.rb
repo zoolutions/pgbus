@@ -27,6 +27,18 @@ RSpec.describe Pgbus::DeployTaskRun, :integration do
     end
   end
 
+  describe ".latest_for" do
+    it "returns the newest run per key and trigger" do
+      run("a", revision: "old")
+      newest_rollover = run("a", revision: "new")
+      manual = run("a", triggered_by: "manual")
+      other = run("b")
+      run("c")
+
+      expect(described_class.latest_for(%w[a b]).to_a).to contain_exactly(newest_rollover, manual, other)
+    end
+  end
+
   describe ".rollover_run_for?" do
     it "is true only for a rollover run of that key and version" do
       run("backfill", version: "2")

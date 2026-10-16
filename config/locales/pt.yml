@@ -236,6 +236,102 @@ pt:
         payload: Carga útil
         retry: Tentar novamente
         title: 'Mensagem DLQ #%{id}'
+    deploy_tasks:
+      banner:
+        heading: Transição
+        lagging_html:
+          one: 'Aguardando a transição: 1 processo ainda não executa <code>%{revision}</code>.'
+          other: 'Aguardando a transição: %{count} processos ainda não executam <code>%{revision}</code>.'
+        lagging_more: "…e mais %{count}"
+        lagging_process: "%{kind}@%{hostname} pid %{pid} em %{revision}"
+        live_count: "%{count} em %{revision}"
+        live_heading: 'Processos ativos:'
+        no_revision_hint_html: Defina <code>config.app_revision</code>, ou uma de <code>PGBUS_REVISION</code>, <code>DASH_VERSION</code> ou <code>KAMAL_VERSION</code>, ou inclua um arquivo <code>REVISION</code>. Executar agora continua funcionando.
+        no_revision_html: 'Revisão da aplicação não configurada: as tarefas de deploy aguardam até que esteja.'
+        no_revision_label: sem revisão
+        no_scheduler_html: 'Nenhum agendador em execução: as tarefas de deploy só são disparadas pelo agendador. Este veredito usa a revisão do próprio painel.'
+        no_workers_html: 'Aguardando a transição: ainda nenhum worker em <code>%{revision}</code>.'
+        ready_html: 'Transição concluída: cada processo ativo executa <code>%{revision}</code>. Tarefas armadas executam no próximo tick do agendador.'
+        unavailable_html: Não foi possível ler o estado da transição.
+      default_queue: default
+      disable: Desativar
+      enable: Ativar
+      enqueue:
+        enqueued: Tarefa de deploy enfileirada
+        failed: 'A tarefa de deploy não foi enfileirada: veja o log para o motivo'
+      every_deploy: Em todo deploy
+      index:
+        task_count:
+          one: "%{count} tarefa declarada"
+          other: "%{count} tarefas declaradas"
+        title: Tarefas de deploy
+      not_found: Tarefa de deploy não encontrada
+      reasons:
+        disabled_armed_html: 'Desativada com uma execução de transição pendente: ative-a para deixá-la executar.'
+        disabled_html: 'Desativada: o agendador a ignora.'
+        due_html: 'Pronta: executa no próximo tick do agendador.'
+        manual_html: "· executada %{ago} (manual)"
+        never_html: Nunca executada.
+        ran_html: Executada %{ago} em <code>%{revision}</code> (transição).
+        waiting_lagging_html:
+          one: 'Aguardando a transição: 1 processo ainda não executa <code>%{revision}</code>.'
+          other: 'Aguardando a transição: %{count} processos ainda não executam <code>%{revision}</code>.'
+        waiting_no_revision_html: 'Aguardando: a revisão da aplicação não está configurada.'
+        waiting_no_scheduler_html: 'Aguardando: nenhum agendador em execução.'
+        waiting_no_workers_html: Aguardando um worker em <code>%{revision}</code>.
+        waiting_unknown_html: 'Aguardando: não foi possível ler o estado da transição.'
+      run_now: Executar agora
+      show:
+        armed_html: Armada para <code>%{armed_for}</code> %{ago}
+        back: Voltar
+        configuration: Configuração
+        labels:
+          arguments: Argumentos
+          armed: Execução pendente
+          command: Comando
+          description: Descrição
+          job_class: Classe do job
+          priority: Prioridade
+          queue: Fila
+          source: Origem
+        last_run: Última execução
+        no_runs: Nenhuma execução registrada ainda
+        recent_runs: Execuções recentes
+        run_headers:
+          enqueued_at: Enfileirada em
+          queue: Fila
+          revision: Revisão
+          triggered_by: Disparada por
+          version: Versão
+        source_config: Arquivo de configuração
+        source_dynamic: Dinâmica
+        state: Estado
+        version: Versão
+      states:
+        disabled: Desativada
+        due: Pronta
+        never: Nunca executada
+        ran: Executada
+        waiting: Aguardando
+      tasks_table:
+        empty_hint_html: Declare tarefas pontuais em <code>config/deploy_tasks.yml</code>; <code>rails generate pgbus:add_deploy_tasks</code> cria um arquivo inicial.
+        empty_title: Nenhuma tarefa de deploy declarada
+        headers:
+          actions: Ações
+          last_run: Última execução
+          queue: Fila
+          state: Estado
+          task: Tarefa
+          version: Versão
+        never: Nunca
+      toggle:
+        disabled: Tarefa de deploy desativada
+        enabled: Tarefa de deploy ativada
+        failed: Falha ao alternar a tarefa de deploy
+      triggered_by:
+        manual: Manual
+        rollover: Transição
+      version: v%{version}
     dialogs:
       cancel: Cancelar
       confirm: Confirmar
@@ -617,6 +713,7 @@ pt:
       nav:
         batches: Lotes
         dashboard: Painel
+        deploy_tasks: Deploy
         dlq: DLQ
         events: Eventos
         insights: Insights

@@ -3,6 +3,7 @@
 require_relative "stub_data_source/sample_data"
 require_relative "stub_data_source/sample_events"
 require_relative "stub_data_source/sample_processes"
+require_relative "stub_data_source/sample_deploy_tasks"
 require_relative "stub_data_source/dashboard_signals"
 
 module Pgbus
@@ -16,6 +17,7 @@ module Pgbus
       include SampleData
       include SampleEvents
       include SampleProcesses
+      include SampleDeployTasks
       include DashboardSignals
 
       attr_accessor :stats, :queues, :processes_list, :failed_events_list,
@@ -30,7 +32,8 @@ module Pgbus
                     :recurring_executions_list, :health_stats, :health_detail_hash, :live_stream_metrics_hash,
                     :capped_lists, :queue_pause_states, :queue_drainers_hash,
                     :event_rows_list, :events_ahead_hash, :event_context, :replay_states_hash,
-                    :process_thresholds_overrides, :dashboard_signals_overrides, :throughput_signal
+                    :process_thresholds_overrides, :dashboard_signals_overrides, :throughput_signal,
+                    :deploy_tasks_list, :deploy_task_runs_list, :deploy_rollover_hash, :deploy_enqueue_result
       attr_reader :calls
 
       def initialize
@@ -78,6 +81,10 @@ module Pgbus
         @process_thresholds_overrides = {}
         @dashboard_signals_overrides = {}
         @throughput_signal = { available: false, jobs_per_minute: nil, window_minutes: 5 }
+        @deploy_tasks_list = []
+        @deploy_task_runs_list = []
+        @deploy_rollover_hash = default_deploy_rollover
+        @deploy_enqueue_result = :enqueued
         @calls = Hash.new { |h, k| h[k] = [] }
       end
 
@@ -242,6 +249,7 @@ module Pgbus
       # capped_lists names the lists whose count reports "more than COUNT_CAP".
       def list_count(list)
         rows = { batches: @batches_list, job_locks: @locks_list, recurring_tasks: @recurring_tasks_list,
+                 deploy_tasks: @deploy_tasks_list,
                  outbox: @outbox_entries_list, processed_events: @events_list,
                  concurrency_keys: @concurrency_stats_hash[:keys] }.fetch(list)
         counts = Pgbus::Web::DataSource::ListCounts
@@ -264,6 +272,32 @@ module Pgbus
       end
 
       def enqueue_recurring_task_now(id) = record(:enqueue_recurring_task_now, id)
+
+      def deploy_tasks(page: nil, per_page: nil)
+        record(:deploy_tasks, { page: page, per_page: per_page })
+        per_page ? slice(@deploy_tasks_list, page || 1, per_page) : @deploy_tasks_list
+      end
+
+      def deploy_task(id)
+        @deploy_tasks_list.find { |t| t[:id].to_s == id.to_s }&.merge(arguments: [], runs: @deploy_task_runs_list)
+      end
+
+      def toggle_deploy_task(id)
+        task = @deploy_tasks_list.find { |t| t[:id].to_s == id.to_s }
+        return nil unless task
+
+        task[:enabled] = !task[:enabled]
+        record(:toggle_deploy_task, id)
+        task[:enabled] ? :enabled : :disabled
+      end
+
+      def enqueue_deploy_task_now(id)
+        record(:enqueue_deploy_task_now, id)
+        @deploy_enqueue_result
+      end
+
+      # The stub never derives the rollover; now is accepted for DataSource's signature.
+      def deploy_rollover(now: nil) = @deploy_rollover_hash
 
       def purge_queue(name)          = record(:purge_queue, name)
       def drop_queue(name)           = record(:drop_queue, name)
@@ -426,6 +460,11 @@ module Pgbus
             oldest_msg_age_sec: 3600, oldest_claimable_age_sec: 3600,
             newest_msg_age_sec: 1800, total_messages: 5 }
         ]
+      end
+
+      # No scheduler and no revision: what an install without deploy tasks shows.
+      def default_deploy_rollover
+        { revision: nil, reason: :no_revision, lagging: [], workers_live: 0, live_by_revision: {}, scheduler: false }
       end
 
       def default_processes

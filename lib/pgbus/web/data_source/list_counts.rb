@@ -34,13 +34,14 @@ module Pgbus
         # names rather than lambdas, so the constant is plain frozen data.
         LIST_MODELS = {
           batches: :BatchEntry,
+          deploy_tasks: :DeployTask,
           job_locks: :UniquenessKey,
           outbox: :OutboxEntry,
           processed_events: :ProcessedEvent,
           recurring_tasks: :RecurringTask
         }.freeze
 
-        # list – :batches, :job_locks, :concurrency_keys, :outbox, :processed_events or :recurring_tasks.
+        # list – :batches, :deploy_tasks, :job_locks, :concurrency_keys, :outbox, :processed_events or :recurring_tasks.
         def list_count(list)
           raise ArgumentError, "unknown list: #{list.inspect}" unless list == :concurrency_keys || LIST_MODELS.key?(list)
 
