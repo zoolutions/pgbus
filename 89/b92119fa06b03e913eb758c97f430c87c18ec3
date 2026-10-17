@@ -1,0 +1,41 @@
+spec/integration/workflow/signals_spec.rb
+  s_e3a487096d49a3::t_41fc6df83a4db7 141
+spec/integration/workflow/fan_out_spec.rb
+  s_e3a487096d49a3::t_41fc6df83a4db7 195-209
+lib/pgbus/workflow/outside_verbs.rb
+  s_e3a487096d49a3::t_a983c69deb2bc7 40,118-125
+lib/pgbus/workflow/fan_out.rb
+  s_e3a487096d49a3::t_a983c69deb2bc7 92-93,109-117
+lib/pgbus/workflow/sweep.rb
+  s_e3a487096d49a3::t_a983c69deb2bc7 20-22,48,83-86,91-92
+spec/pgbus/workflow/sweep_spec.rb
+  s_e3a487096d49a3::t_41fc6df83a4db7 37-42,48,53,77,90,93-95
+spec/pgbus/process/dispatcher_spec.rb
+  s_e3a487096d49a3::t_a983c69deb2bc7 353-354,358-359
+CHANGELOG.md
+  s_e3a487096d49a3::t_cf2a89954b6e1a 5
+lib/pgbus/workflow/waiting.rb
+  s_e3a487096d49a3::t_a983c69deb2bc7 41-42,44-50
+docs/app/views/docs/pages/workflows.rb
+  s_e3a487096d49a3::t_cf2a89954b6e1a 190-193,286-290,442-444
+spec/integration/workflow/wait_timeout_spec.rb
+  s_e3a487096d49a3::t_41fc6df83a4db7 148-161
+lib/pgbus/process/dispatcher.rb
+  s_e3a487096d49a3::t_a983c69deb2bc7 398,402
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "89b92119fa06b03e913eb758c97f430c87c18ec3",
+  "prompts": {},
+  "sessions": {
+    "s_e3a487096d49a3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "faf1faea-af65-4cb2-b526-81aed7772ead",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
