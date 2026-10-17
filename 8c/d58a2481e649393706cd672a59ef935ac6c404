@@ -1,0 +1,19 @@
+spec/system/workflow_insights_spec.rb
+  s_e3a487096d49a3::t_dbd4f13c1507ad 25-26,40-41,125-127
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "8cd58a2481e649393706cd672a59ef935ac6c404",
+  "prompts": {},
+  "sessions": {
+    "s_e3a487096d49a3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "faf1faea-af65-4cb2-b526-81aed7772ead",
+        "model": "unknown"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
