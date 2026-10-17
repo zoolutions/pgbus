@@ -1,0 +1,25 @@
+sig/pgbus/configuration.rbs
+  s_e3a487096d49a3::t_6cae9834b8eea2 323-336
+docs/app/models/config_reference.rb
+  s_e3a487096d49a3::t_012074af96971d 74-82
+spec/pgbus/configuration/workflow_settings_spec.rb
+  s_e3a487096d49a3::t_75063cc3a6d485 1-110
+lib/pgbus/configuration/workflow_settings.rb
+  s_e3a487096d49a3::t_212c937c37b660 1-75
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "f567c7bbd4afe90e2b54816ed395afff827e5f12",
+  "prompts": {},
+  "sessions": {
+    "s_e3a487096d49a3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "faf1faea-af65-4cb2-b526-81aed7772ead",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
