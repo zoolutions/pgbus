@@ -1,0 +1,19 @@
+AGENTS.md
+  s_0329b66527bb87::t_6dc355145a07a0 75
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "39a435980644ec138d82ba5b55d36be73c9c7e7e",
+  "prompts": {},
+  "sessions": {
+    "s_0329b66527bb87": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b11c3325-8240-4394-a4e9-87d468e62ed6",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
