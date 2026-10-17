@@ -9,7 +9,7 @@ RSpec.describe "Events", type: :system do
   include ActiveSupport::Testing::TimeHelpers
 
   # Relative times ("5m ago", "in 1h") are asserted: freeze the clock on a
-  # whole second (.claude/rules/dashboard.md).
+  # whole second (docs/dashboard.md).
   let(:now) { Time.utc(2026, 10, 10, 12, 0, 0) }
 
   around { |example| travel_to(now) { example.run } }
