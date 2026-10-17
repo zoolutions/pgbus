@@ -58,13 +58,16 @@ RSpec.describe Pgbus::Configuration do
     config.current_attributes = :auto
   end
 
-  # Each example works on a fresh global configuration; the suite's is put back.
+  # Each example works on a fresh global configuration; the suite's, and the
+  # snapshot it published, are put back.
   around do |example|
     original = Pgbus.configuration
+    published = Pgbus.configuration_snapshot
     Pgbus.instance_variable_set(:@configuration, described_class.new)
     example.run
   ensure
     Pgbus.instance_variable_set(:@configuration, original)
+    Pgbus.instance_variable_set(:@configuration_snapshot, published)
   end
 
   describe "Pgbus.finalize! with the defaults" do

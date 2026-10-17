@@ -53,6 +53,18 @@ RSpec.describe Pgbus::Shareable do
     end
   end
 
+  describe ".main_ractor?" do
+    it "is true on the main Ractor" do
+      expect(described_class.main_ractor?).to be(true)
+    end
+
+    it "is false inside a non-main Ractor", :ractor do
+      skip "needs Ruby 4.0+ (Ractor#value)" unless Ractor.method_defined?(:value)
+
+      expect(Ractor.new(described_class, &:main_ractor?).value).to be(false)
+    end
+  end
+
   # The fallback where the engine has no Ractor (JRuby, TruffleRuby).
   describe ".deep_freeze" do
     it "freezes copies of nested collections and strings" do

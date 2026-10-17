@@ -17,11 +17,12 @@ RSpec.describe "Booting pgbus" do # rubocop:disable RSpec/DescribeClass
     stdout.lines.filter_map { |line| line.chomp.split("=", 2) if line.include?("=") }.to_h
   end
 
-  # Frozen and shareable data; the app's callables, logger and proc-holding
+  # Frozen and shareable data, and the shareable snapshot non-main Ractors
+  # read published from it; the app's callables, logger and proc-holding
   # filter list are the very objects it configured, and they still work.
   let(:finalized_boot) do
-    { "FINALIZED" => "true", "SHAREABLE" => "true", "CALLABLES_KEPT" => "true", "AUTH_CALLED" => "true",
-      "LOGGER_KEPT" => "true", "FILTERS_KEPT" => "true" }
+    { "FINALIZED" => "true", "SHAREABLE" => "true", "SNAPSHOT" => "true", "CALLABLES_KEPT" => "true",
+      "AUTH_CALLED" => "true", "LOGGER_KEPT" => "true", "FILTERS_KEPT" => "true" }
   end
 
   it "finalizes a Rails app's configuration after its own after_initialize blocks" do
