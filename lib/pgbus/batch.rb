@@ -21,21 +21,54 @@ module Pgbus
     LOCK_QUEUE_PREFIX = "batch:"
     VALID_CONFLICTS = %i[reject discard log].freeze
 
+    # The callback slots, each mapped to the prefix of its pgbus_batches
+    # columns. on_complete keeps the on_finish_* columns until the 1.0 schema
+    # cleanup, so rows written before the rename still fire.
+    CALLBACK_COLUMNS = { on_complete: "on_finish", on_success: "on_success", on_failure: "on_failure" }.freeze
+
     attr_reader :batch_id, :properties, :description,
-                :on_finish, :on_success, :on_failure,
+                :on_complete, :on_success, :on_failure,
                 :uniqueness_key, :on_conflict
+
+    # Deprecated alias of #on_complete until 1.0.
+    def on_finish = on_complete
 
     def on_discard
       on_failure
     end
 
+    # Open a batch, yield a Pgbus::Batch::Builder, and start the batch when
+    # the block returns. Every job the block enqueues (through +b.add+ or a
+    # plain +perform_later+) joins the batch, which stays pending, and so
+    # cannot finish, until the block is done. Keywords go to Batch.new.
+    #
+    #   Pgbus::Batch.start(description: "Import") do |b|
+    #     b.on_complete ImportDoneJob
+    #     b.add(*rows.map { |row| ImportRowJob.new(row.id) })
+    #   end
+    def self.start(**, &block)
+      raise ArgumentError, "Pgbus.batch needs a block: Pgbus.batch { |b| b.add(...) }" unless block
+
+      batch = new(**)
+      builder = Builder.new(batch)
+      begin
+        batch.enqueue { yield builder }
+      ensure
+        builder.close
+      end
+      batch
+    end
+
+    # @param on_complete [Class, ActiveJob::Base, nil] fired when every job
+    #   reached a terminal state (+on_finish:+ is a deprecated alias)
     # @param uniqueness_key [String, nil] at most one unfinished batch with
     #   this key may exist; see #enqueue for what happens to the next one
     # @param on_conflict [Symbol] :reject (raise AlreadyRunning), :discard
     #   (skip the block silently) or :log (skip the block, warn)
-    def initialize(on_finish: nil, on_success: nil, on_discard: nil, on_failure: nil, description: nil, properties: {},
-                   uniqueness_key: nil, on_conflict: :reject)
+    def initialize(on_complete: nil, on_finish: nil, on_success: nil, on_discard: nil, on_failure: nil,
+                   description: nil, properties: {}, uniqueness_key: nil, on_conflict: :reject)
       raise ArgumentError, "pass on_failure: only — on_discard: is a deprecated alias" if on_discard && on_failure
+      raise ArgumentError, "pass on_complete: only — on_finish: is a deprecated alias" if on_finish && on_complete
       unless VALID_CONFLICTS.include?(on_conflict)
         raise ArgumentError, "on_conflict must be one of #{VALID_CONFLICTS.join(", ")}, got #{on_conflict.inspect}"
       end
@@ -45,9 +78,10 @@ module Pgbus
           "[Pgbus] Batch on_discard: is deprecated and will be removed in 1.0 — use on_failure: instead"
         end
       end
+      self.class.warn_on_finish_deprecated if on_finish
 
       @batch_id = SecureRandom.uuid
-      @on_finish = on_finish
+      @on_complete = on_complete || on_finish
       @on_success = on_success
       @on_failure = on_failure || on_discard
       @description = description
@@ -89,6 +123,23 @@ module Pgbus
       count_jobs(&)
       start_processing
       self
+    end
+
+    # Enqueue ActiveJob instances (and anything the block enqueues) into this
+    # batch: +enqueue { ActiveJob.perform_all_later(jobs) }+. Instances keep
+    # their own +.set(queue:, wait:, priority:)+ options. On a started batch
+    # this is an open-batch add, so a job running inside the batch can call
+    # +batch.add(NextJob.new(id))+. Returns the jobs; on a unique batch that
+    # another run discarded (#discarded?) nothing was sent.
+    def add(*jobs, &block)
+      jobs = Builder.job_instances(jobs)
+      return jobs if jobs.empty? && block.nil?
+
+      enqueue do
+        ::ActiveJob.perform_all_later(jobs) if jobs.any?
+        yield if block
+      end
+      jobs
     end
 
     # --- readers on a live batch ---------------------------------------
@@ -210,10 +261,21 @@ module Pgbus
     end
 
     # Schema-probe memos (a true answer is kept for the life of the process)
-    # and the warn-once flag, read and written under @schema_lock (issue
+    # and the warn-once flags, read and written under @schema_lock (issue
     # #527). The probes run outside it: a duplicate probe on a race is
     # harmless, a lock held across a query is not.
     @schema_lock = Mutex.new
+
+    # on_finish: is in most batch calls written before the rename (issue
+    # #538), so it warns once per process rather than on every batch.
+    def self.warn_on_finish_deprecated
+      first = @schema_lock.synchronize { @warned_on_finish ? false : (@warned_on_finish = true) }
+      return unless first
+
+      Pgbus.logger.warn do
+        "[Pgbus] Batch on_finish is deprecated and will be removed in 1.0 — use on_complete instead"
+      end
+    end
 
     def self.executions_migrated?
       return true if @schema_lock.synchronize { @executions_migrated }
@@ -243,6 +305,7 @@ module Pgbus
         @executions_migrated = nil
         @callback_jobs_migrated = nil
         @warned_callback_jobs_unmigrated = nil
+        @warned_on_finish = nil
       end
     end
 
@@ -521,7 +584,7 @@ module Pgbus
       @batch_id = record.batch_id
       @description = record.description
       @properties = parse_properties(record.properties)
-      @on_finish = nil
+      @on_complete = nil
       @on_success = nil
       @on_failure = nil
       @uniqueness_key = nil
@@ -572,18 +635,35 @@ module Pgbus
       attrs = {
         batch_id: batch_id,
         description: description,
-        on_finish_class: callback_class_name(on_finish),
-        on_success_class: callback_class_name(on_success),
         properties: JSON.generate(properties),
         status: "pending"
       }
-      if self.class.executions_migrated?
-        attrs[:on_failure_class] = callback_class_name(on_failure)
-      else
-        attrs[:on_discard_class] = callback_class_name(on_failure)
-      end
-      attrs.merge!(callback_job_attributes) if self.class.callback_jobs_migrated?
+      CALLBACK_COLUMNS.each_key { |slot| attrs.merge!(callback_attributes(slot, public_send(slot))) }
       @record = BatchEntry.create!(attrs)
+    end
+
+    # Replace one callback on a batch that has not finished yet (the
+    # builder's setters, inside the Pgbus.batch block, while the row is
+    # still pending and so cannot fire its callbacks).
+    def write_callback(slot, callback)
+      updated = BatchEntry.where(batch_id: batch_id, status: %w[pending processing])
+                          .update_all(callback_attributes(slot, callback))
+      raise AlreadyFinished, "Can't change the callbacks of an already finished batch" if updated.zero?
+
+      instance_variable_set(:"@#{slot}", callback)
+      reload
+    end
+
+    # The pgbus_batches columns for one callback slot. Before the
+    # add_batch_executions migration the failure class lives in
+    # on_discard_class; before add_batch_callback_jobs there is no *_job
+    # column, and a configured instance degrades to its class.
+    def callback_attributes(slot, callback)
+      prefix = CALLBACK_COLUMNS.fetch(slot)
+      class_column = slot == :on_failure && !self.class.executions_migrated? ? "on_discard" : prefix
+      attrs = { "#{class_column}_class": callback_class_name(callback) }
+      attrs[:"#{prefix}_job"] = serialize_callback(callback) if self.class.callback_jobs_migrated?
+      attrs
     end
 
     # A callback given as a bare class keeps the legacy *_class column; a
@@ -598,14 +678,6 @@ module Pgbus
 
       self.class.warn_callback_jobs_unmigrated
       callback.class.name
-    end
-
-    def callback_job_attributes
-      {
-        on_finish_job: serialize_callback(on_finish),
-        on_success_job: serialize_callback(on_success),
-        on_failure_job: serialize_callback(on_failure)
-      }
     end
 
     def serialize_callback(callback)

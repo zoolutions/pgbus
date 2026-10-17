@@ -49,6 +49,13 @@ module Pgbus
     end
   end
 
+  # Partial: only the types Pgbus.batch names. Batch's own methods are not
+  # covered by spec/pgbus/rbs_spec.rb yet.
+  class Batch
+    class Builder
+    end
+  end
+
   def self.configuration: () -> Configuration
   def self.configure: () { (Configuration) -> void } -> Configuration
   def self.finalize!: () -> Configuration
@@ -57,6 +64,8 @@ module Pgbus
   def self.stream_key: (*untyped parts, ?digest_bits: Integer) -> String
   def self.stream_key!: (String key) -> String
   def self.stream_name_budget: () -> Integer
+  # Keywords go to Pgbus::Batch.new (description:, properties:, on_complete:, uniqueness_key:, …).
+  def self.batch: (**untyped options) { (Batch::Builder) -> void } -> Batch
   # delay: seconds, as a Numeric or an ActiveSupport::Duration (1.hour).
   def self.publish: (String routing_key, untyped payload, ?headers: Hash[String, untyped]?, ?delay: Numeric | _ToI) -> untyped
   def self.publish_later: (String routing_key, untyped payload, delay: Numeric | _ToI, ?headers: Hash[String, untyped]?) -> untyped

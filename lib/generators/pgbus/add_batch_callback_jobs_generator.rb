@@ -33,7 +33,7 @@ module Pgbus
         say "  2. Restart pgbus: bin/pgbus start"
         say ""
         say "You can now pass a configured ActiveJob instance to a batch:"
-        say "  Pgbus::Batch.new(on_finish: ReportJob.new.set(queue: :critical, wait: 5.minutes))"
+        say "  Pgbus.batch { |b| b.on_complete ReportJob.new.set(queue: :critical, wait: 5.minutes) }"
         say ""
       end
 

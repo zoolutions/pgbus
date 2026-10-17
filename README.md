@@ -801,28 +801,27 @@ How Pgbus integrates with your application's transactions and tracks groups of r
 Coordinate groups of jobs with callbacks when all complete:
 
 ```ruby
-batch = Pgbus::Batch.new(
-  on_finish: BatchFinishedJob,
-  on_success: BatchSucceededJob,
-  on_discard: BatchFailedJob,
-  description: "Import users",
-  properties: { initiated_by: current_user.id }
-)
-
-batch.enqueue do
-  users.each { |user| ImportUserJob.perform_later(user.id) }
+batch = Pgbus.batch(description: "Import users", properties: { initiated_by: current_user.id }) do |b|
+  b.on_complete BatchFinishedJob
+  b.on_success  BatchSucceededJob
+  b.on_failure  BatchFailedJob
+  b.add(*users.map { |user| ImportUserJob.new(user.id) })
 end
 ```
+
+`b.add` takes job instances (each keeps its own `.set(wait:, queue:)`) and sends them in one bulk enqueue. The batch row exists before the block runs and stays pending until it returns, so a job that finishes while the block is still adding cannot finish the batch early. Set callbacks first: if the block raises after an `add`, the added jobs still run and the batch finishes later with only the callbacks set by then. A block that goes `config.batch_stall_threshold` (default 5 minutes) without adding a job is started by the stalled-batch sweep, so keep slow work outside it. Callbacks are job classes or configured instances, never blocks: they are stored on the batch row.
+
+Inside a job, `batch { |b| ... }` opens a new batch the same way, and a job that is already a member adds siblings with `batch.add(NextJob.new(id))`. `Pgbus::Batch.new(on_complete: ...)` plus `batch.enqueue { ... }` remains the lower-level form.
 
 #### Callbacks
 
 | Callback | Fired when |
 |----------|------------|
-| `on_finish` | All jobs completed (success or discard) |
-| `on_success` | All jobs completed successfully (zero discarded) |
-| `on_discard` | At least one job was dead-lettered |
+| `on_complete` | All jobs completed (success or failure). `on_finish` is a deprecated alias until 1.0 |
+| `on_success` | All jobs completed successfully (zero failed) |
+| `on_failure` | At least one job was dead-lettered. `on_discard` is a deprecated alias until 1.0 |
 
-Callback jobs receive the batch `properties` hash as their argument:
+Callback jobs given as a bare class receive the batch `properties` hash as their argument:
 
 ```ruby
 class BatchFinishedJob < ApplicationJob
@@ -838,23 +837,18 @@ end
 `ensures_uniqueness` protects one job. A multi-job run — a nightly import that fans out into hundreds of chunk jobs, a pipeline whose jobs enqueue the next stage — has no single job that lives for the whole run, so a lock on the entry job releases the moment that job finishes and the next scheduler tick starts a second run on top of the first. Give the batch the lock instead:
 
 ```ruby
-batch = Pgbus::Batch.new(
-  uniqueness_key: "perfecta-daily",
-  on_conflict: :discard,           # :reject (raise AlreadyRunning), :discard, :log
-  on_success: ExportPricesJob
-)
-
-batch.enqueue do
-  ImportChunkJob.perform_later("products", 0)
+Pgbus.batch(uniqueness_key: "perfecta-daily", on_conflict: :discard) do |b|   # :reject (raise AlreadyRunning), :discard, :log
+  b.on_success ExportPricesJob
+  b.add(ImportChunkJob.new("products", 0))
 end
 ```
 
-The lock is taken at `enqueue` and held until the batch finishes — through every open-batch `batch.enqueue` add from inside a running job — then released in the same single-winner finish that fires the callbacks, so completion, the stalled-batch sweep and cleanup all release it. While it is held, another `Pgbus::Batch.new(uniqueness_key: "perfecta-daily").enqueue { ... }` raises `Pgbus::Batch::AlreadyRunning` (`:reject`), or skips its block and returns a batch that answers `discarded?` (`:discard`, `:log`). The row lives in `pgbus_uniqueness_keys` as `batch:<key>`, so it never collides with a job's key and shows up in the dashboard like any other lock; the reaper judges it by the batch's status, never by queue contents.
+The lock is taken at the top of the block (or at `enqueue`) and held until the batch finishes — through every open-batch `batch.add` from inside a running job — then released in the same single-winner finish that fires the callbacks, so completion, the stalled-batch sweep and cleanup all release it. While it is held, another `Pgbus.batch(uniqueness_key: "perfecta-daily") { ... }` raises `Pgbus::Batch::AlreadyRunning` (`:reject`), or skips its block and returns a batch that answers `discarded?` (`:discard`, `:log`). The row lives in `pgbus_uniqueness_keys` as `batch:<key>`, so it never collides with a job's key and shows up in the dashboard like any other lock; the reaper judges it by the batch's status, never by queue contents.
 
 #### How batches work
 
-1. `Batch.new(...)` creates a tracking row in `pgbus_batches` with `status: "pending"`
-2. `batch.enqueue { ... }` tags each enqueued job with the `pgbus_batch_id` in its payload
+1. The top of the `Pgbus.batch` block (or the first `batch.enqueue`) creates a tracking row in `pgbus_batches` with `status: "pending"`
+2. Each job enqueued in the block is tagged with the `pgbus_batch_id` in its payload
 3. After each job completes or is dead-lettered, the executor atomically updates the batch counters
 4. When `completed_jobs + discarded_jobs == total_jobs`, the batch status flips to `"finished"` and callback jobs are enqueued
 5. The dispatcher cleans up finished batches older than 7 days

@@ -9,65 +9,105 @@ class Views::Docs::Pages::Batches < DocsUI::Page
 
   def content
     creating
+    inside_a_job
     open_batches
     callbacks
     configured_callbacks
+    lower_level_api
     how_it_works
   end
 
   private
 
   def creating
-    DocsUI::Section("Create and enqueue a batch") do
+    DocsUI::Section("Start a batch") do
       md <<~'MD'
-        A batch tracks a group of related jobs. Enqueue the jobs inside
-        `batch.enqueue` and each is tagged with the batch id:
+        A batch tracks a group of related jobs and fires a callback when they
+        have all finished. `Pgbus.batch` opens one, yields a builder, and
+        starts the batch when the block returns:
       MD
       DocsUI::Code(<<~RUBY)
-        batch = Pgbus::Batch.new(
-          on_finish: BatchFinishedJob,
-          on_success: BatchSucceededJob,
-          on_failure: BatchFailedJob,
-          description: "Import users",
-          properties: { initiated_by: current_user.id }
-        )
-
-        batch.enqueue do
-          users.each { |user| ImportUserJob.perform_later(user.id) }
+        batch = Pgbus.batch(description: "Import users", properties: { initiated_by: current_user.id }) do |b|
+          b.on_complete ImportFinishedJob
+          b.on_success  ImportSucceededJob
+          b.on_failure  ImportFailedJob
+          b.add(*users.map { |user| ImportUserJob.new(user.id) })
         end
       RUBY
+      md <<~'MD'
+        `b.add` takes job instances, or arrays of them, and sends them in one
+        bulk enqueue. Each instance keeps its own options, so
+        `ImportUserJob.new(id).set(wait: 5.minutes, queue: :low)` works.
+        `b.add { ... }` with a block also works, and any `perform_later` inside
+        the `Pgbus.batch` block joins the batch as well.
+
+        The batch row exists before the block runs and stays `pending` until
+        the block returns, so a job that finishes while the block is still
+        adding jobs cannot finish the batch early. Callbacks can be set at any
+        point in the block, but set them first: if the block raises after an
+        `add`, the jobs already added still run, and the batch finishes later
+        (through the dispatcher sweep) with only the callbacks set by then. A
+        block that goes `config.batch_stall_threshold` (default 5 minutes)
+        without adding a job is treated as stalled and started by that sweep,
+        so keep slow work outside the block. `b.add` must run in the block's
+        own thread or fiber; it raises anywhere else, since jobs sent from
+        there would not join the batch. `Pgbus.batch` returns the started `Pgbus::Batch`; its
+        keywords are the ones `Pgbus::Batch.new` takes (`description:`,
+        `properties:`, `uniqueness_key:`, `on_conflict:`, and the callbacks).
+        `Pgbus::Batch.start` is the same method.
+
+        A callback is an ActiveJob class or a configured instance, never a
+        block: it is stored on the batch row and enqueued later, from another
+        process. The builder only works inside its block. To add jobs later,
+        call `batch.add` on the batch `Pgbus.batch` returned.
+      MD
+    end
+  end
+
+  def inside_a_job
+    DocsUI::Section("Start a batch from a job") do
+      md <<~'MD'
+        Inside a job, `batch` with a block is `Pgbus.batch`. It opens a new
+        batch, independent of any batch the running job belongs to:
+      MD
+      DocsUI::Code(<<~'RUBY', filename: "app/jobs/import_job.rb")
+        class ImportJob < ApplicationJob
+          def perform(source_id)
+            source = Source.find(source_id)
+
+            batch(description: "Import #{source_id}") do |b|
+              b.on_complete ImportFinishedJob
+              b.add(*source.rows.map { |row| ImportRowJob.new(row.id) })
+            end
+          end
+        end
+      RUBY
+      md <<~'MD'
+        Without a block, `batch` reads the batch the job belongs to, or the
+        batch a callback job reports on.
+      MD
     end
   end
 
   def open_batches
     DocsUI::Section("Open batches") do
       md <<~'MD'
-        A batch stays open until it finishes. Call `enqueue` again to add
-        another stage — `total_jobs` grows and the callbacks wait for the new
-        jobs too:
-      MD
-      DocsUI::Code(<<~RUBY)
-        batch = Pgbus::Batch.new(on_finish: BatchFinishedJob)
-        batch.enqueue { ExtractJob.perform_later }
-        batch.enqueue { TransformJob.perform_later }  # same batch, total_jobs == 2
-      RUBY
-      md <<~'MD'
-        A job running inside a batch reaches its own batch through `batch` and
-        can add siblings the same way. Membership stays explicit: only jobs
-        enqueued inside an `enqueue` block join the batch, so a fan-out from a
-        batched job does not silently extend it.
+        A batch stays open until it finishes. A job running inside it reaches
+        its own batch through `batch` and can add siblings with `batch.add`.
+        `total_jobs` grows and the callbacks wait for the new jobs too:
       MD
       DocsUI::Code(<<~RUBY, filename: "app/jobs/extract_job.rb")
         class ExtractJob < ApplicationJob
           def perform
-            rows = extract
-            batch.enqueue do
-              rows.each { |row| TransformJob.perform_later(row.id) }
-            end
+            batch.add(*extract.map { |row| TransformJob.new(row.id) })
           end
         end
       RUBY
       md <<~'MD'
+        Membership stays explicit: only jobs passed to `add`, or enqueued
+        inside a batch block, join the batch. A job that merely runs as part of
+        a batch can enqueue unrelated work without extending it.
+
         `Pgbus::Batch.find(batch_id)` returns the same handle from anywhere —
         with `description`, `properties`, `status`, `total_jobs`,
         `completed_jobs`, `failed_jobs`, `pending_jobs`, `progress_percentage`
@@ -92,9 +132,10 @@ class Views::Docs::Pages::Batches < DocsUI::Page
         class, so it runs on the queue — and with the delay — you choose:
       MD
       DocsUI::Code(<<~RUBY)
-        Pgbus::Batch.new(
-          on_finish: BatchFinishedJob.new.set(queue: :critical, wait: 5.minutes)
-        )
+        Pgbus.batch do |b|
+          b.on_complete BatchFinishedJob.new.set(queue: :critical, wait: 5.minutes)
+          b.add(*jobs)
+        end
       RUBY
       md <<~'MD'
         `.set` options resolve when the batch is created, and the serialized job
@@ -132,11 +173,18 @@ class Views::Docs::Pages::Batches < DocsUI::Page
       DocsUI::Table(
         [ "Callback", "Fired when" ],
         [
-          [ [ :code, "on_finish" ], "The batch finished (no outstanding execution rows remain), including after a dispatcher sweep repair." ],
+          [ [ :code, "on_complete" ], "The batch finished (no outstanding execution rows remain), including after a dispatcher sweep repair. (`on_finish` is a deprecated alias until 1.0.)" ],
           [ [ :code, "on_success" ], "The batch finished with zero failed jobs." ],
           [ [ :code, "on_failure" ], "The batch finished with at least one dead-lettered job. (`on_discard:` is a deprecated alias until 1.0.)" ]
         ]
       )
+      md <<~'MD'
+        Each name works as a builder method (`b.on_complete MyJob`) and as a
+        `Pgbus::Batch.new` keyword (`on_complete: MyJob`). `on_finish` still
+        works in both places and logs a deprecation warning once per process.
+        The batch row keeps its `on_finish_class` and `on_finish_job` columns
+        until 1.0, so batches created before the rename still fire.
+      MD
       md <<~'MD'
         A callback job receives the batch `properties` hash as its argument:
       MD
@@ -151,12 +199,34 @@ class Views::Docs::Pages::Batches < DocsUI::Page
     end
   end
 
+  def lower_level_api
+    DocsUI::Section("Pgbus::Batch.new and enqueue") do
+      md <<~'MD'
+        `Pgbus.batch` is built on `Pgbus::Batch.new` plus `#enqueue`, which
+        stay available. Callbacks are keywords, and every job enqueued inside
+        the `enqueue` block joins the batch:
+      MD
+      DocsUI::Code(<<~RUBY)
+        batch = Pgbus::Batch.new(on_complete: ImportFinishedJob, description: "Import users")
+        batch.enqueue do
+          users.each { |user| ImportUserJob.perform_later(user.id) }
+        end
+      RUBY
+      md <<~'MD'
+        A second `enqueue` (or `add`) on the same handle adds to the batch
+        while it is unfinished.
+      MD
+    end
+  end
+
   def how_it_works
     DocsUI::Section("How batches work") do
       md <<~'MD'
-        1. `Batch.new(...)` creates a row in `pgbus_batches` with
-           `status: "pending"`.
-        2. `batch.enqueue { ... }` tags each enqueued job with the batch id and,
+        1. The top of the `Pgbus.batch` block (or the first `enqueue`) takes
+           the uniqueness key, if there is one, and creates a row in
+           `pgbus_batches` with `status: "pending"`. `Batch.new` alone writes
+           nothing.
+        2. Each job enqueued in the block is tagged with the batch id and,
            in one transaction *before* the message is sent, increments
            `total_jobs` and inserts a `pgbus_batch_executions` row (identity is
            the ActiveJob `job_id`). The increment is guarded on an unfinished
