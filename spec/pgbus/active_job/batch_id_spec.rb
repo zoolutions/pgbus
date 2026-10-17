@@ -70,4 +70,37 @@ RSpec.describe Pgbus::ActiveJob::BatchId do
       expect(job.batch).to be(handle)
     end
   end
+
+  describe "#batch with a block" do
+    it "opens a new batch through Pgbus.batch with the options and the block" do
+      started = instance_double(Pgbus::Batch)
+      received = nil
+      allow(Pgbus).to receive(:batch) do |**options, &block|
+        received = [options, block]
+        started
+      end
+      block = proc { |_b| }
+
+      expect(job_class.new.batch(description: "import", &block)).to be(started)
+      expect(received).to eq([{ description: "import" }, block])
+    end
+
+    it "leaves the job's own membership and its memoized batch alone" do
+      own = instance_double(Pgbus::Batch)
+      allow(Pgbus::Batch).to receive(:find).with("b-1").and_return(own)
+      allow(Pgbus).to receive(:batch).and_return(instance_double(Pgbus::Batch))
+      job = job_class.new
+      job.batch_id = "b-1"
+      job.batch
+
+      job.batch { |_b| nil }
+
+      expect(job.batch_id).to eq("b-1")
+      expect(job.batch).to be(own)
+    end
+
+    it "raises when options are given without a block" do
+      expect { job_class.new.batch(description: "import") }.to raise_error(ArgumentError, /block/)
+    end
+  end
 end
