@@ -99,7 +99,9 @@ module Pgbus
           # `batch` (and `batch.enqueue` for open batches) work inside a job.
           assign_batch_id(job, payload)
           Pgbus.logger.debug { "[Pgbus::Executor] running #{log_tag(message, queue_name)} job_class=#{job_class}" }
-          with_visibility_heartbeat(job, queue_name, msg_id, source_queue, payload) { execute_job(job) }
+          with_visibility_heartbeat(job, queue_name, msg_id, source_queue, payload) do
+            Delivery.with(msg_id: msg_id, read_ct: read_count, queue_name: queue_name) { execute_job(job) }
+          end
           # retry_on re-enqueues from inside perform_now and returns normally:
           # this attempt is done (archive it) but the job is not — the retry
           # message carries the batch tag and signals on its own outcome.

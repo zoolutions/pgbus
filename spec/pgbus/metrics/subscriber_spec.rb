@@ -247,6 +247,50 @@ RSpec.describe Pgbus::Metrics::Subscriber do
     end
   end
 
+  describe "workflow events (issue #540)" do
+    let(:base) { { workflow_class: "SignupWorkflow", workflow_id: "wf-1" } }
+
+    it "maps pgbus.workflow.step to a duration histogram and a step counter" do
+      ActiveSupport::Notifications.instrument(
+        "pgbus.workflow.step", **base, step_name: "welcome", attempt: 1, outcome: "completed", duration: 0.25, pickup_latency: 1.5
+      )
+
+      tags = { workflow_class: "SignupWorkflow", step: "welcome", outcome: "completed" }
+      expect(backend.histograms).to include(["pgbus_workflow_step_duration_seconds", 0.25, tags])
+      expect(backend.counters).to include(["pgbus_workflow_steps_total", 1, tags])
+    end
+
+    it "counts finished, paused (by error class), cancelled and stalled runs" do
+      ActiveSupport::Notifications.instrument("pgbus.workflow_finished", **base)
+      ActiveSupport::Notifications.instrument("pgbus.workflow_paused", **base, step_name: "charge", error_class: "Timeout::Error")
+      ActiveSupport::Notifications.instrument("pgbus.workflow_paused", **base, step_name: "review", error_class: nil)
+      ActiveSupport::Notifications.instrument("pgbus.workflow_cancelled", **base, step_name: "charge")
+      ActiveSupport::Notifications.instrument("pgbus.workflow.stall_detected", **base, step_name: "charge", attempt: 1,
+                                                                                       detection: "redelivery")
+
+      expect(backend.counters).to include(
+        ["pgbus_workflows_finished_total", 1, { workflow_class: "SignupWorkflow" }],
+        ["pgbus_workflows_paused_total", 1, { workflow_class: "SignupWorkflow", error_class: "Timeout::Error" }],
+        ["pgbus_workflows_paused_total", 1, { workflow_class: "SignupWorkflow" }],
+        ["pgbus_workflows_cancelled_total", 1, { workflow_class: "SignupWorkflow" }],
+        ["pgbus_workflow_stalls_total", 1, { workflow_class: "SignupWorkflow", step: "charge", detection: "redelivery" }]
+      )
+    end
+
+    it "maps pgbus.workflow.gauge to the status and stuck-reason gauges" do
+      ActiveSupport::Notifications.instrument(
+        "pgbus.workflow.gauge",
+        statuses: [{ workflow_class: "SignupWorkflow", status: "paused", count: 3 }],
+        stuck: [{ workflow_class: "SignupWorkflow", reason: "stalled", count: 2 }]
+      )
+
+      expect(backend.gauges).to include(
+        ["pgbus_workflows", 3, { workflow_class: "SignupWorkflow", status: "paused" }],
+        ["pgbus_workflows_stuck", 2, { workflow_class: "SignupWorkflow", reason: "stalled" }]
+      )
+    end
+  end
+
   describe "backend failure isolation" do
     it "rescues and logs when the backend raises, never into the producer" do
       allow(backend).to receive(:increment).and_raise(StandardError, "backend down")

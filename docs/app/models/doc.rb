@@ -30,6 +30,7 @@ class Doc
   page "Concurrency & uniqueness", group: "Guide", slug: "concurrency-uniqueness", view: "ConcurrencyUniqueness"
   page "Routing & ordering",       group: "Guide", slug: "routing-ordering", view: "RoutingOrdering"
   page "Batches",                  group: "Guide"
+  page "Workflows",                group: "Guide"
   page "Recurring tasks",          group: "Guide", slug: "recurring-tasks", view: "RecurringTasks"
   page "Deploy tasks",             group: "Guide", slug: "deploy-tasks", view: "DeployTasks"
   page "Transactional outbox",     group: "Guide", slug: "outbox", view: "Outbox"

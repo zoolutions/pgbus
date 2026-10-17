@@ -11,6 +11,10 @@ module Pgbus
       #   gauge     -> "name:value|g"
       #   histogram -> "name:value|ms"
       #
+      # StatsD reads |ms values as milliseconds, so a histogram named
+      # *_seconds (the Prometheus convention, e.g.
+      # pgbus_workflow_step_duration_seconds) is sent as *_ms, times 1000.
+      #
       # Tags are appended as DogStatsD `|#k:v,k:v`. No gem dependency — a plain
       # UDPSocket. UDP send is fire-and-forget; any socket error is logged and
       # swallowed so a metrics hiccup never propagates into the producer thread.
@@ -32,6 +36,8 @@ module Pgbus
         end
 
         def histogram(name, value, tags = {})
+          return emit("#{name.delete_suffix("_seconds")}_ms", value * 1000.0, "ms", tags) if name.end_with?("_seconds")
+
           emit(name, value, "ms", tags)
         end
 

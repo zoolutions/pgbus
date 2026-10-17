@@ -4,7 +4,7 @@
   ],
   "dashboard": {
     "title": "Pgbus",
-    "description": "PostgreSQL-native job processing and event bus built on PGMQ.\nMonitor job throughput, queue depth, latency, dead letter queues,\nworker processes, event handlers, and stream broadcasts.\n",
+    "description": "PostgreSQL-native job processing and event bus built on PGMQ.\nMonitor job throughput, queue depth, latency, dead letter queues,\nworker processes, event handlers, and stream broadcasts.\nWorkflow step outcomes and run times, and stuck workflows.\n",
     "visuals": [
       {
         "type": "timeseries",
@@ -391,6 +391,133 @@
               }
             ],
             "tags": []
+          }
+        ]
+      },
+      {
+        "type": "timeseries",
+        "display": "LINE",
+        "title": "Workflow steps per outcome",
+        "description": "Workflow step attempts by class, step and outcome (completed, reattempted, skipped, paused, cancelled, finished_early).",
+        "line_label": "%workflow_class% - %step% - %outcome%",
+        "format": "number",
+        "draw_null_as_zero": true,
+        "metrics": [
+          {
+            "name": "pgbus_workflow_steps_total",
+            "fields": [
+              {
+                "field": "COUNTER"
+              }
+            ],
+            "tags": [
+              {
+                "key": "workflow_class",
+                "value": "*"
+              },
+              {
+                "key": "step",
+                "value": "*"
+              },
+              {
+                "key": "outcome",
+                "value": "*"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "timeseries",
+        "display": "LINE",
+        "title": "Workflow step run time (seconds)",
+        "description": "Mean and p95 run time of each workflow step's body, in seconds.",
+        "line_label": "%workflow_class% - %step% - %outcome%",
+        "format": "number",
+        "draw_null_as_zero": true,
+        "metrics": [
+          {
+            "name": "pgbus_workflow_step_duration_seconds",
+            "fields": [
+              {
+                "field": "MEAN"
+              },
+              {
+                "field": "P95"
+              }
+            ],
+            "tags": [
+              {
+                "key": "workflow_class",
+                "value": "*"
+              },
+              {
+                "key": "step",
+                "value": "*"
+              },
+              {
+                "key": "outcome",
+                "value": "*"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "timeseries",
+        "display": "LINE",
+        "title": "Workflows by status",
+        "description": "Workflow runs per class and status, from each dispatcher sweep.",
+        "line_label": "%workflow_class% - %status%",
+        "format": "number",
+        "draw_null_as_zero": true,
+        "metrics": [
+          {
+            "name": "pgbus_workflows",
+            "fields": [
+              {
+                "field": "GAUGE"
+              }
+            ],
+            "tags": [
+              {
+                "key": "workflow_class",
+                "value": "*"
+              },
+              {
+                "key": "status",
+                "value": "*"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "timeseries",
+        "display": "LINE",
+        "title": "Stuck workflows",
+        "description": "Ongoing workflow runs that need a person, by class and reason (paused_error, stalled, paused_manual, overdue).",
+        "line_label": "%workflow_class% - %reason%",
+        "format": "number",
+        "draw_null_as_zero": true,
+        "metrics": [
+          {
+            "name": "pgbus_workflows_stuck",
+            "fields": [
+              {
+                "field": "GAUGE"
+              }
+            ],
+            "tags": [
+              {
+                "key": "workflow_class",
+                "value": "*"
+              },
+              {
+                "key": "reason",
+                "value": "*"
+              }
+            ]
           }
         ]
       }

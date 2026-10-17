@@ -37,6 +37,19 @@ RSpec.describe Pgbus::Generators::InstallGenerator do
       content = File.read(template_path)
       expect(content).to include("t.datetime :completed_at")
     end
+
+    # Same tables and indexes as pgbus:add_workflows (issue #540), and the
+    # rollback drops them children first.
+    it "creates the three workflow tables and drops them on rollback" do
+      content = File.read(template_path)
+      %w[pgbus_workflows pgbus_workflow_steps pgbus_workflow_events].each do |table|
+        expect(content).to include("create_table :#{table} do |t|")
+        expect(content).to include("drop_table :#{table}")
+      end
+      expect(content).to include('name: "idx_pgbus_workflows_one_ongoing"', 'name: "idx_pgbus_workflows_idempotency"')
+      expect(content.index("drop_table :pgbus_workflow_events")).to be < content.index("drop_table :pgbus_workflows\n")
+      expect(content.index("drop_table :pgbus_workflow_steps")).to be < content.index("drop_table :pgbus_workflows\n")
+    end
   end
 
   describe "initializer template" do

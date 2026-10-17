@@ -19,6 +19,7 @@ module Pgbus
       JOB_LOCK_CLEANUP_INTERVAL = 300 # Run job lock cleanup every 5 minutes
       STATS_CLEANUP_INTERVAL = 3600 # Run stats cleanup every hour
       ORPHAN_STREAM_SWEEP_INTERVAL = 3600 # Run orphan stream sweep every hour
+      WORKFLOW_CLEANUP_INTERVAL = 3600 # Delete finished/cancelled workflows past workflow_retention every hour
       TABLE_MAINTENANCE_INTERVAL = Pgbus::TableMaintenance::MAINTENANCE_INTERVAL
 
       # Page size for archive compaction. Each cycle deletes up to this
@@ -57,6 +58,7 @@ module Pgbus
         @last_stream_archive_compaction_at
         @last_outbox_cleanup_at @last_job_lock_cleanup_at @last_stats_cleanup_at
         @last_orphan_stream_sweep_at @last_table_maintenance_at
+        @last_workflow_sweep_at @last_workflow_cleanup_at
       ].freeze
 
       # Outcome of a single maintenance task in a cycle. Lets run_maintenance
@@ -247,6 +249,8 @@ module Pgbus
         sweep_interval = config.streams_orphan_sweep_interval
         results << run_if_due(now, :@last_orphan_stream_sweep_at, sweep_interval) { sweep_orphan_streams } if sweep_interval
         results << run_if_due(now, :@last_table_maintenance_at, TABLE_MAINTENANCE_INTERVAL) { run_table_maintenance }
+        results << run_if_due(now, :@last_workflow_sweep_at, config.workflow_sweep_interval) { sweep_workflows }
+        results << run_if_due(now, :@last_workflow_cleanup_at, WORKFLOW_CLEANUP_INTERVAL) { cleanup_workflows }
         results
       end
 
@@ -385,6 +389,27 @@ module Pgbus
         Batch.sweep_stalled
       rescue StandardError => e
         log_maintenance_failure("Batch sweep", e)
+        e
+      end
+
+      # Stalled and overdue workflow steps, and the workflow gauges.
+      def sweep_workflows
+        summary = Workflow::Sweep.repair(config: config)
+        return unless summary && (summary[:stalled].positive? || summary[:resent].positive?)
+
+        Pgbus.logger.info do
+          "[Pgbus] Workflow sweep: #{summary[:stalled]} stalled step(s) repaired, #{summary[:resent]} overdue step(s) re-sent"
+        end
+      rescue StandardError => e
+        log_maintenance_failure("Workflow sweep", e)
+        e
+      end
+
+      def cleanup_workflows
+        deleted = Workflow::Sweep.cleanup(retention: config.workflow_retention)
+        Pgbus.logger.debug { "[Pgbus] Cleaned up #{deleted} finished workflows" } if deleted.positive?
+      rescue StandardError => e
+        log_maintenance_failure("Workflow cleanup", e)
         e
       end
 

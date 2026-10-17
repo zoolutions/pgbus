@@ -313,6 +313,27 @@ RSpec.describe Pgbus::Generators::MigrationDetector do
       end
     end
 
+    context "with workflow tables detection" do
+      it "queues add_workflows when the workflow tables are missing" do
+        expect(detector.missing_migrations).to include(:add_workflows)
+      end
+
+      it "queues add_workflows when only some of the three tables exist" do
+        add_table("pgbus_workflows")
+        add_table("pgbus_workflow_steps")
+
+        expect(detector.missing_migrations).to include(:add_workflows)
+      end
+
+      it "does not queue add_workflows when all three tables exist" do
+        add_table("pgbus_workflows")
+        add_table("pgbus_workflow_steps")
+        add_table("pgbus_workflow_events")
+
+        expect(detector.missing_migrations).not_to include(:add_workflows)
+      end
+    end
+
     context "with failed events index detection" do
       it "queues add_failed_events_index when the table exists but the unique index does not" do
         stub_indexes("pgbus_failed_events", %w[idx_pgbus_failed_events_queue idx_pgbus_failed_events_time])
@@ -477,6 +498,7 @@ RSpec.describe Pgbus::Generators::MigrationDetector do
           :add_queue_states,
           :add_outbox,
           :add_deploy_tasks,
+          :add_workflows,
           :add_processed_event_completion,
           :add_batch_executions,
           :add_batch_callback_jobs,
@@ -512,6 +534,7 @@ RSpec.describe Pgbus::Generators::MigrationDetector do
         add_queue_states add_outbox add_recurring add_failed_events_index
         add_processed_event_completion add_batch_executions add_batch_callback_jobs
         add_stream_queues tune_autovacuum tune_fillfactor add_presence_seats add_deploy_tasks
+        add_workflows
       ]
 
       keys.each do |key|

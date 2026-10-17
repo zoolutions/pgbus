@@ -221,6 +221,102 @@ def bootstrap_integration_tables(conn)
     SQL
   end
 
+  # Workflows (issue #540) — mirrors lib/generators/pgbus/templates/
+  # add_workflows.rb.erb, including the two partial unique indexes
+  # (AlreadyRunning, idempotent start) and the cascading foreign keys
+  # (retention deletes steps and events with their run).
+  unless conn.table_exists?("pgbus_workflows")
+    conn.execute(<<~SQL)
+      CREATE TABLE pgbus_workflows (
+        id BIGSERIAL PRIMARY KEY,
+        workflow_id VARCHAR NOT NULL,
+        workflow_class VARCHAR NOT NULL,
+        subject_type VARCHAR,
+        subject_id VARCHAR,
+        subject_gid VARCHAR,
+        arguments JSONB NOT NULL DEFAULT '{}',
+        status VARCHAR NOT NULL DEFAULT 'ready',
+        current_step VARCHAR,
+        step_job_options JSONB NOT NULL DEFAULT '{}',
+        error_class VARCHAR,
+        error_message TEXT,
+        error_backtrace TEXT,
+        paused_at TIMESTAMP,
+        finished_at TIMESTAMP,
+        cancelled_at TIMESTAMP,
+        idempotency_key VARCHAR,
+        definition_digest VARCHAR NOT NULL,
+        rerun_of_workflow_id VARCHAR,
+        created_at TIMESTAMP NOT NULL,
+        updated_at TIMESTAMP NOT NULL
+      );
+      CREATE UNIQUE INDEX idx_pgbus_workflows_workflow_id ON pgbus_workflows (workflow_id);
+      CREATE UNIQUE INDEX idx_pgbus_workflows_one_ongoing
+        ON pgbus_workflows (workflow_class, subject_type, subject_id)
+        WHERE status IN ('ready','performing','waiting','paused');
+      CREATE UNIQUE INDEX idx_pgbus_workflows_idempotency
+        ON pgbus_workflows (workflow_class, idempotency_key) WHERE idempotency_key IS NOT NULL;
+      CREATE INDEX idx_pgbus_workflows_status ON pgbus_workflows (status, updated_at);
+      CREATE INDEX idx_pgbus_workflows_class_status ON pgbus_workflows (workflow_class, status, created_at);
+      CREATE INDEX idx_pgbus_workflows_subject ON pgbus_workflows (subject_type, subject_id);
+    SQL
+  end
+
+  unless conn.table_exists?("pgbus_workflow_steps")
+    conn.execute(<<~SQL)
+      CREATE TABLE pgbus_workflow_steps (
+        id BIGSERIAL PRIMARY KEY,
+        workflow_id VARCHAR NOT NULL
+          REFERENCES pgbus_workflows (workflow_id) ON DELETE CASCADE,
+        workflow_class VARCHAR NOT NULL,
+        step_name VARCHAR NOT NULL,
+        attempt INTEGER NOT NULL DEFAULT 1,
+        status VARCHAR NOT NULL DEFAULT 'scheduled',
+        job_id VARCHAR,
+        msg_id BIGINT,
+        scheduled_at TIMESTAMP NOT NULL,
+        enqueued_at TIMESTAMP,
+        started_at TIMESTAMP,
+        finished_at TIMESTAMP,
+        stall_at TIMESTAMP,
+        outcome VARCHAR,
+        output JSONB,
+        error_class VARCHAR,
+        error_message TEXT,
+        error_backtrace TEXT,
+        error_causes JSONB,
+        worker VARCHAR,
+        app_revision VARCHAR,
+        created_at TIMESTAMP NOT NULL
+      );
+      CREATE UNIQUE INDEX idx_pgbus_workflow_steps_attempt
+        ON pgbus_workflow_steps (workflow_id, step_name, attempt);
+      CREATE INDEX idx_pgbus_workflow_steps_scheduled ON pgbus_workflow_steps (status, scheduled_at);
+      CREATE INDEX idx_pgbus_workflow_steps_stall ON pgbus_workflow_steps (status, stall_at);
+      CREATE INDEX idx_pgbus_workflow_steps_insights
+        ON pgbus_workflow_steps (workflow_class, step_name, finished_at);
+    SQL
+  end
+
+  unless conn.table_exists?("pgbus_workflow_events")
+    conn.execute(<<~SQL)
+      CREATE TABLE pgbus_workflow_events (
+        id BIGSERIAL PRIMARY KEY,
+        workflow_id VARCHAR NOT NULL
+          REFERENCES pgbus_workflows (workflow_id) ON DELETE CASCADE,
+        step_id BIGINT,
+        step_name VARCHAR,
+        attempt INTEGER,
+        event VARCHAR NOT NULL,
+        actor VARCHAR NOT NULL,
+        reason TEXT,
+        details JSONB NOT NULL DEFAULT '{}',
+        created_at TIMESTAMP NOT NULL
+      );
+      CREATE INDEX idx_pgbus_workflow_events_workflow ON pgbus_workflow_events (workflow_id, id);
+    SQL
+  end
+
   if conn.table_exists?("pgbus_batches")
     cols = conn.columns("pgbus_batches").map(&:name)
     if cols.include?("on_discard_class") && !cols.include?("on_failure_class")
@@ -392,6 +488,7 @@ def cleanup_tables
     pgbus_presence_members pgbus_outbox_entries pgbus_processed_events
     pgbus_batch_executions pgbus_batches pgbus_stream_queues
     pgbus_deploy_tasks pgbus_deploy_task_runs
+    pgbus_workflow_events pgbus_workflow_steps pgbus_workflows
   ]
   tables.each do |table|
     conn.execute("DELETE FROM #{table}")

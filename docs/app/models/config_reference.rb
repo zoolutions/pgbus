@@ -71,6 +71,15 @@ module ConfigReference
       { name: "batch_stall_threshold", type: "Duration", default: "5.minutes", desc: "How long a pending batch may go without a new execution row, or an unsent row without a message, before the sweep repairs it." },
       { name: "idempotency_ttl", type: "Duration, nil", default: "7.days", desc: "How long processed-event records are kept for dedup." }
     ],
+    "Workflows" => [
+      { name: "workflow_queue", type: "String", default: "\"default\"", desc: "Queue the Pgbus::Workflow::StepJob messages go to; a class (set_step_job_options) or a step (job_options:) can override it." },
+      { name: "workflow_retention", type: "Duration, nil", default: "30.days", desc: "How long to keep finished and cancelled workflows (with their steps and events); nil disables cleanup." },
+      { name: "workflow_sweep_interval", type: "Duration", default: "5.minutes", desc: "How often the dispatcher repairs stuck workflow steps and emits the workflow gauges." },
+      { name: "workflow_stall_threshold", type: "Duration", default: "1.hour", desc: "Default deadline for an in_progress step (a step's own timeout: overrides it), and how long a scheduled step may be overdue and unsent before the sweep sends it again." },
+      { name: "workflow_stall_action", type: "Symbol", default: ":pause", desc: "What happens to a stalled step: :pause the workflow, :reattempt the step, or :cancel the workflow." },
+      { name: "workflow_max_payload_size", type: "Integer", default: "131_072", desc: "Byte cap on a workflow's serialized arguments and on each step's output; larger raises Pgbus::Workflow::PayloadTooLarge." },
+      { name: "workflow_error_backtrace_lines", type: "Integer", default: "50", desc: "Backtrace lines kept on a failed step row (cleaned through Rails.backtrace_cleaner when Rails is loaded)." }
+    ],
     "Outbox" => [
       { name: "outbox_enabled", type: "Boolean", default: "false", desc: "Enable the transactional outbox poller." },
       { name: "outbox_poll_interval", type: "Numeric", default: "1.0", desc: "Seconds between outbox poll cycles." },

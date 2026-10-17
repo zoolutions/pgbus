@@ -54,6 +54,30 @@ module Pgbus
   #   pgbus.batch_sweep            — dispatcher stalled-batch sweep
   #                                  payload: stalled_for, stale_executions, orphan_rows,
   #                                  started_batches, finished_batches
+  #   pgbus.workflow.step          — a workflow step attempt ended (body, guard, stall)
+  #                                  payload: workflow_class, workflow_id, step_name, attempt,
+  #                                  outcome (completed | reattempted | skipped | paused |
+  #                                  cancelled | finished_early), status (the step row's),
+  #                                  error_class (nil without an error), duration (seconds
+  #                                  the body ran; 0.0 for a guard; nil for a stall),
+  #                                  pickup_latency (seconds from scheduled_at to the claim)
+  #   pgbus.workflow_finished      — a workflow run finished
+  #                                  payload: workflow_class, workflow_id
+  #   pgbus.workflow_paused        — a workflow run paused (an exception, a stall, pause!)
+  #                                  payload: workflow_class, workflow_id, step_name,
+  #                                  error_class (nil for a manual pause)
+  #   pgbus.workflow_cancelled     — a workflow run was cancelled
+  #                                  payload: workflow_class, workflow_id, step_name
+  #   pgbus.workflow.stall_detected — a step was stalled on the redelivery of the message that
+  #                                  claimed it (detection: "redelivery": its worker died, or
+  #                                  its heartbeat lapsed) or after it outlived its stall_at
+  #                                  (detection: "sweep")
+  #                                  payload: workflow_class, workflow_id, step_name, attempt,
+  #                                  detection
+  #   pgbus.workflow.gauge         — emitted by each dispatcher workflow sweep
+  #                                  payload: statuses ([{ workflow_class:, status:, count: }]),
+  #                                  stuck ([{ workflow_class:, reason:, count: }]), zero-filled
+  #                                  across every known class
   #
   module Instrumentation
     module_function

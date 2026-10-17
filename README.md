@@ -35,6 +35,7 @@ PostgreSQL-native job processing and event bus for Rails, built on [PGMQ](https:
   - [Single active consumer](#single-active-consumer)
 - [Persistence and batching](#persistence-and-batching)
   - [Batches](#batches)
+  - [Workflows](#workflows)
   - [Transactional outbox](#transactional-outbox)
   - [Archive compaction](#archive-compaction)
 - [Observability](#observability)
@@ -853,6 +854,44 @@ The lock is taken at the top of the block (or at `enqueue`) and held until the b
 4. When `completed_jobs + discarded_jobs == total_jobs`, the batch status flips to `"finished"` and callback jobs are enqueued
 5. The dispatcher cleans up finished batches older than 7 days
 
+### Workflows
+
+Durable, sequential steps that span hours or days. Each step attempt is a row and one job; `wait:` delays a step after the one before; the run can be paused, resumed, rescheduled or cancelled from the console, and every change lands on an audit trail.
+
+```ruby
+class SignupWorkflow < Pgbus::Workflow
+  cancel_if { subject.nil? || subject.closed? }
+  on_exception Net::OpenTimeout, action: :reattempt!, wait: 15.seconds, max_reattempts: 5
+
+  step :welcome do
+    WelcomeMailer.with(user: subject).welcome.deliver_later
+  end
+
+  step :reminder, wait: 2.days, skip_if: -> { subject.onboarded? } do
+    ReminderMailer.with(user: subject).remind.deliver_later
+  end
+
+  step :complete, wait: 7.days do
+    subject.update!(onboarding_completed: true)
+  end
+end
+
+wf = SignupWorkflow.start!(user, plan: "pro")       # arguments[:plan] inside a step
+wf.pause!(actor: "alice", reason: "SMTP is down")   # every outside verb takes actor:/reason:
+wf.resume!                                          # a failed step runs again; a completed one is followed by the next
+wf.events.map(&:event)                              # ["started", "step_scheduled", "step_started", …]
+```
+
+- **Flow control** inside a step: `pause!`, `cancel!`, `reattempt!(wait:)`, `skip!`, `finished!`. Outside: `resume!`, `resume_at!(:step)`, `pause!`, `cancel!`, `run_now!`, `reschedule!(at:)`, `rerun!`. `Pgbus::Workflow::States` is the one table of which verb is legal in which state (`wf.available_actions`).
+- **Exceptions** never reach ActiveJob: the error is recorded on the step row and reported through `Pgbus::ErrorReporter`, and the run pauses unless an `on_exception` policy (step- or class-level, with `max_reattempts:`, `terminal_action:` and `report:`) says otherwise.
+- **Idempotent by contract**: `output(charge_id: …)` is durable once the step completes and later steps read it with `output_of(:charge)`; `step_idempotency_key` is the same on every attempt, for the external API; `start!(order, idempotency_key: "checkout-#{order.id}")` returns the existing run.
+- **One ongoing run per subject** and class: a second `start!` raises `Pgbus::Workflow::AlreadyRunning`. Subject-less runs are not limited.
+- **Housekeeping**: a worker that dies mid-step is noticed when its message comes back (the visibility heartbeat keeps a live one invisible); a hung step stalls after its `timeout:` or `workflow_stall_threshold`; the dispatcher re-sends lost steps and deletes finished runs after `workflow_retention` (30 days).
+- **Metrics** for Prometheus/StatsD and AppSignal: per-step duration histograms and counters, and gauges of runs by status and by stuck reason.
+- **Testing**: `include Pgbus::Workflow::TestHelpers`, then `perform_next_step(wf)`, `run_step_inline(wf, :reminder)` or `speedrun_workflow(wf)`.
+
+When the workflow tables share your application's database, the StepJob is sent after the step row commits, so `start!` inside your own transaction sends nothing until it commits; with a separate pgbus database (`connects_to`) the run commits and its first step is sent on their own, before your transaction commits. Generate and apply the migration with `rails generate pgbus:add_workflows` and `rails db:migrate` (`pgbus:update` detects the missing tables). The [Workflows guide](https://pgbus.zoolutions.llc/docs/workflows) covers policies, outputs, removing steps, the stall actions and the transition table.
+
 ### Transactional outbox
 
 Publish events atomically inside your database transactions. A background poller moves outbox entries to PGMQ.
@@ -1025,6 +1064,13 @@ c.metrics_backend = MyOpenTelemetryBackend.new
 | `pgbus_recurring_enqueued` | counter | `task`, `class_name` |
 | `pgbus_worker_recycled` | counter | `reason`, `kind` (`worker`/`consumer`) |
 | `pgbus_pool_size` / `pgbus_pool_available` | gauge | `hostname` |
+| `pgbus_workflow_step_duration_seconds` | histogram | `workflow_class`, `step`, `outcome` — StatsD receives it as `pgbus_workflow_step_duration_ms` |
+| `pgbus_workflow_steps_total` | counter | `workflow_class`, `step`, `outcome` |
+| `pgbus_workflows_finished_total` / `pgbus_workflows_cancelled_total` | counter | `workflow_class` |
+| `pgbus_workflows_paused_total` | counter | `workflow_class`, `error_class` (absent for a manual pause) |
+| `pgbus_workflow_stalls_total` | counter | `workflow_class`, `step`, `detection` (`redelivery`/`sweep`) |
+| `pgbus_workflows` | gauge | `workflow_class`, `status` |
+| `pgbus_workflows_stuck` | gauge | `workflow_class`, `reason` (`paused_error`/`stalled`/`paused_manual`/`overdue`) |
 
 A backend that raises (registry bug, StatsD socket down) is logged and swallowed — a metrics failure never propagates into the thread that emitted the event.
 
@@ -1052,7 +1098,7 @@ ActiveSupport::Notifications.subscribe(/^pgbus\./) do |name, start, finish, _id,
 end
 ```
 
-Metrics-relevant events emitted (the subset the metrics subscriber maps; see `lib/pgbus/instrumentation.rb` for the full `pgbus.*` catalog): `pgbus.executor.execute`, `pgbus.job_completed`, `pgbus.job_failed`, `pgbus.job_dead_lettered`, `pgbus.event_processed`, `pgbus.event_failed`, `pgbus.event_dead_lettered`, `pgbus.event_skipped`, `pgbus.job_visibility_extended`, `pgbus.client.send_message`, `pgbus.client.send_batch`, `pgbus.client.read_batch`, `pgbus.client.pool`, `pgbus.stream.broadcast`, `pgbus.outbox.publish`, `pgbus.recurring.enqueue`, `pgbus.worker.recycle`, `pgbus.consumer.recycle`. Payload keys are documented in `lib/pgbus/instrumentation.rb`.
+Metrics-relevant events emitted (the subset the metrics subscriber maps; see `lib/pgbus/instrumentation.rb` for the full `pgbus.*` catalog): `pgbus.executor.execute`, `pgbus.job_completed`, `pgbus.job_failed`, `pgbus.job_dead_lettered`, `pgbus.event_processed`, `pgbus.event_failed`, `pgbus.event_dead_lettered`, `pgbus.event_skipped`, `pgbus.job_visibility_extended`, `pgbus.client.send_message`, `pgbus.client.send_batch`, `pgbus.client.read_batch`, `pgbus.client.pool`, `pgbus.stream.broadcast`, `pgbus.outbox.publish`, `pgbus.recurring.enqueue`, `pgbus.worker.recycle`, `pgbus.consumer.recycle`, `pgbus.workflow.step`, `pgbus.workflow_finished`, `pgbus.workflow_paused`, `pgbus.workflow_cancelled`, `pgbus.workflow.stall_detected`, `pgbus.workflow.gauge`. Payload keys are documented in `lib/pgbus/instrumentation.rb`.
 
 ### Connection pool metrics
 
@@ -2321,6 +2367,9 @@ Pgbus uses these tables (created via PGMQ and migrations):
 | `pgbus_semaphores` | Concurrency control counting semaphores |
 | `pgbus_blocked_executions` | Jobs waiting for a concurrency semaphore slot |
 | `pgbus_batches` | Batch tracking with job counters and callback config |
+| `pgbus_workflows` | Workflow runs: class, subject, arguments, status, current step |
+| `pgbus_workflow_steps` | One row per workflow step attempt: timings, worker, output, error |
+| `pgbus_workflow_events` | Append-only workflow audit trail (event, actor, reason) |
 | `pgbus_uniqueness_keys` | Job uniqueness locks (lock_key, queue_name, msg_id) |
 | `pgbus_job_stats` | Job execution metrics (class, queue, status, duration) |
 | `pgbus_queue_states` | Queue pause/resume and circuit breaker state |

@@ -76,7 +76,8 @@ module Pgbus
               subscribe("pgbus.outbox.publish") { |event| on_outbox_publish(event) },
               subscribe("pgbus.recurring.enqueue") { |event| on_recurring_enqueue(event) },
               subscribe("pgbus.worker.recycle") { |event| on_worker_recycle(event) },
-              subscribe("pgbus.consumer.recycle") { |event| on_consumer_recycle(event) }
+              subscribe("pgbus.consumer.recycle") { |event| on_consumer_recycle(event) },
+              *Pgbus::Metrics::WorkflowMetrics::EVENTS.map { |name| subscribe(name) { |event| on_workflow(event) } }
               # pgbus.client.pool is deliberately NOT subscribed here — the
               # minutely Probe#track_pool already reports pgbus_pool_size /
               # pgbus_pool_available gauges for AppSignal (see probe.rb).
@@ -272,6 +273,20 @@ module Pgbus
               1,
               { reason: payload[:reason], kind: "consumer" }
             )
+          end
+
+          # ── Workflows (issue #540) ──────────────────────────────────────
+
+          # The same names and labels as Metrics::Subscriber
+          # (Pgbus::Metrics::WorkflowMetrics), as AppSignal custom metrics.
+          def on_workflow(event)
+            Pgbus::Metrics::WorkflowMetrics.samples(event.name, event.payload).each do |kind, name, value, tags|
+              case kind
+              when :histogram then ::Appsignal.add_distribution_value(name, value, tags)
+              when :counter then ::Appsignal.increment_counter(name, value, tags)
+              when :gauge then ::Appsignal.set_gauge(name, value, tags)
+              end
+            end
           end
         end
       end
