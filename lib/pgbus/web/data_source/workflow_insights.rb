@@ -63,13 +63,13 @@ module Pgbus
             window: window, since: since, now: now, ongoing: queries.ongoing(workflow_class: name),
             ended: queries.ended(since: since, until_time: now, workflow_class: name).first,
             attention: attention_by_class(workflow_class: name).fetch(name, 0),
-            stats: queries.step_stats(name, since: since),
+            stats: queries.step_stats(name, since: since, until_time: now),
             histogram: queries.duration_histogram(name, since: since, until_time: now),
             throughput: queries.throughput(name, since: since, until_time: now, bucket: window.bucket_seconds,
                                                  zone: zone.tzinfo.identifier),
             zone: zone,
             reached: queries.funnel_reached(name, since: since), stopped: queries.funnel_stopped(name, since: since),
-            revisions: queries.by_revision(name, since: since)
+            revisions: queries.by_revision(name, since: since, until_time: now)
           )
         end
 

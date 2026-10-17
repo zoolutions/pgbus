@@ -1279,7 +1279,7 @@ The server is built to be safe against a production datastore:
 
 - **Read-only by default.** No tool mutates state and no arbitrary-query tool exists.
 - **Payloads redacted.** Message bodies, headers, and job arguments are replaced with `[redacted]` unless payloads are explicitly allowed **and** `include_payloads: true` is passed on the call. Both gates must be open. Allow payloads with `PGBUS_MCP_ALLOW_PAYLOADS=1` (stdio) or `Pgbus::MCP.rack_app(allow_payloads: true)` (HTTP).
-- **Bounded queries.** Every list tool paginates with a row cap (`pgbus_jobs` / `pgbus_dlq` / `pgbus_locks` / `pgbus_concurrency` cap at 100 rows/page; time windows cap at 1440 minutes). The exceptions are `pgbus_recurring` called without `page`/`per_page`, which returns every task as it always has, and `pgbus_workflow_definitions`, which returns one row per workflow class.
+- **Bounded queries.** Every list tool paginates with a row cap (`pgbus_jobs` / `pgbus_dlq` / `pgbus_locks` / `pgbus_concurrency` cap at 100 rows/page; time windows cap at 1440 minutes). The exceptions are `pgbus_deploy_tasks` and `pgbus_recurring` called without `page`/`per_page`, which return every task as they always have, and `pgbus_workflow_definitions`, which returns one row per workflow class.
 - **Reuses your DB credentials.** No new privileged path — it reads through the app's existing connection config.
 - **Authentication.**
   - *HTTP:* set `token:` (clients send `Authorization: Bearer <token>`) or a custom `auth:` callable; unauthenticated requests get `401`.

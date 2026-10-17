@@ -113,14 +113,14 @@ module Pgbus
         "FLOOR(EXTRACT(EPOCH FROM (#{column} AT TIME ZONE 'UTC' AT TIME ZONE $4)) / $3)::bigint"
       end
 
-      # Per step: the attempts that finished since +since+.
-      def step_stats(workflow_class, since:)
+      # Per step: the attempts that finished between +since+ and +until_time+.
+      def step_stats(workflow_class, since:, until_time:)
         sql = <<~SQL
           SELECT step_name, #{stat_columns}, MIN(created_at)
           FROM (#{attempt_rows}) attempts
           GROUP BY step_name
         SQL
-        select(sql, "Steps", [workflow_class, since]).cast_values.to_h do |name, *stats, first_seen_at|
+        select(sql, "Steps", [workflow_class, since, until_time]).cast_values.to_h do |name, *stats, first_seen_at|
           [name, attempt_stats(stats).merge(first_seen_at: first_seen_at)]
         end
       end
@@ -157,12 +157,12 @@ module Pgbus
 
       # The step stats of the REVISIONS app revisions that finished an
       # attempt last, per (revision, step) and per revision (step nil).
-      def by_revision(workflow_class, since:)
+      def by_revision(workflow_class, since:, until_time:)
         sql = <<~SQL
           WITH revisions AS (
             SELECT app_revision, MIN(finished_at) AS first_seen_at, MAX(finished_at) AS last_seen_at
             FROM #{steps}
-            WHERE workflow_class = $1 AND finished_at >= $2 AND app_revision IS NOT NULL
+            WHERE workflow_class = $1 AND finished_at BETWEEN $2 AND $3 AND app_revision IS NOT NULL
             GROUP BY app_revision
             ORDER BY last_seen_at DESC
             LIMIT #{REVISIONS}
@@ -174,7 +174,7 @@ module Pgbus
                                   (attempts.app_revision, revisions.first_seen_at, revisions.last_seen_at))
           ORDER BY revisions.last_seen_at DESC, attempts.step_name NULLS FIRST
         SQL
-        select(sql, "Revisions", [workflow_class, since]).cast_values.map do |revision, first_seen, last_seen, name, *stats|
+        select(sql, "Revisions", [workflow_class, since, until_time]).cast_values.map do |revision, first_seen, last_seen, name, *stats|
           { revision: revision, first_seen_at: first_seen, last_seen_at: last_seen, step: name, stats: attempt_stats(stats) }
         end
       end
@@ -192,7 +192,8 @@ module Pgbus
         SQL
       end
 
-      # The attempts of class $1 that finished since $2. run_ms: completed or
+      # The attempts of class $1 that finished between $2 and $3 (never one
+      # dated after now). run_ms: completed or
       # failed attempts that started; pickup_ms (scheduled → started, never
       # negative): every attempt that started.
       def attempt_rows
@@ -203,7 +204,7 @@ module Pgbus
                  CASE WHEN started_at IS NOT NULL
                       THEN GREATEST(EXTRACT(EPOCH FROM (started_at - scheduled_at)) * 1000, 0) END AS pickup_ms
           FROM #{steps}
-          WHERE workflow_class = $1 AND finished_at >= $2
+          WHERE workflow_class = $1 AND finished_at BETWEEN $2 AND $3
         SQL
       end
 

@@ -174,6 +174,17 @@ RSpec.describe "Pgbus::Web::DataSource workflow insights", :integration do
       end
     end
 
+    it "does not count attempts dated after now (a skewed clock)" do
+      run = run!
+      attempt!(run, "capture", scheduled_at: now - 60, run_ms: 100, app_revision: "r1")
+      attempt!(run, "capture", scheduled_at: now + 3600, run_ms: 100, app_revision: "r2")
+
+      result = definition
+
+      expect(step_of(result, "capture")[:sample_size]).to eq(1)
+      expect(result[:by_revision].map { |r| r[:revision] }).to eq(["r1"])
+    end
+
     it "does not count runs dated after now (a skewed clock)" do
       run!(created_at: now - 600, finished_at: now + 3600)
       run!(created_at: now - 600, finished_at: now - 60)
