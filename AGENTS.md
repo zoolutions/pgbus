@@ -35,7 +35,7 @@ plugins (`.claude/settings.json`), which act on the facts in `## Workflow` below
 5. **Queue prefix**: All queues through `config.queue_name()`
 6. **Visibility timeout**: Always pass `vt:` parameter on reads
 7. **Performance**: Measure before/after for hot-path changes (`/ruby-gem:perf`); no speed claim without a same-machine baseline; see `docs/performance.md`
-8. **Coverage**: 80% overall, 100% for the ActiveJob adapter, event bus, process model, `Client`, `Configuration`, `Web::DataSource` and `Web::Authentication` (SimpleCov floors in `spec/spec_helper.rb`). Unit specs mock `Pgbus::Client`; a real PGMQ only in `spec/integration/`
+8. **Coverage**: target 80% overall, 100% for the ActiveJob adapter, event bus, process model, `Client`, `Configuration`, `Web::DataSource` and `Web::Authentication` (enforced SimpleCov floors today: 89% line, 75% branch, `spec/spec_helper.rb`). Unit specs mock `Pgbus::Client`; a real PGMQ only in `spec/integration/`
 
 ## Commands
 
@@ -68,9 +68,9 @@ hook-rewritable shapes: no `for`/subshell wrappers, no `| head` on rtk-handled c
 
 ## Workflow
 
-- **Verify:** `bundle exec rubocop app benchmarks config gemfiles lib spec Gemfile Rakefile pgbus.gemspec` · `bundle exec rbs -I sig validate` · `bun run lint:herb` · after JS / a new Tailwind class: `bundle exec rake frontend:js` / `frontend:css` · `docs/**`: `cd docs && bundle exec rake lint && bundle exec rspec`
+- **Verify:** `bundle exec rubocop app benchmarks config gemfiles lib spec Gemfile Rakefile pgbus.gemspec` · `bundle exec rbs -I sig validate` · `bun run lint:herb` · after JS / a new Tailwind class: `bundle exec rake frontend:js` / `frontend:css` · `docs/**`: `cd docs && bin/rails g rails_icons:sync --library=lucide --force --quiet && bun install && bun run build:css && bundle exec rake lint && bundle exec rspec`
 - **Specs:** fast loop `bundle exec rspec <file>`; full suite `bundle exec rspec spec/pgbus/ spec/generators/ spec/requests/ spec/rubocop/ spec/benchmarks/ spec/i18n_spec.rb spec/pgbus_spec.rb`, `spec/integration/` (`PGBUS_DATABASE_URL`), `spec/system/` (Playwright); two worktrees at once: yes, integration with a database each
-- **CI:** required `Lint`, `Lint (Ruby 3.3 floor)`, the five `Ruby … (Rails …)` legs, `Integration (PG 17|18)`, `System Tests`, both `conformance / …`, `cubic · AI code reviewer`; `Security`, `Benchmarks`, `kino smoke` report only; `Build & test` on `docs/**` only; full suite on the PR; failure report none
+- **CI:** required `Lint`, `Lint (Ruby 3.3 floor)`, the five `Ruby … (Rails …)` legs, `Integration (PG 17|18)`, `System Tests`, both `conformance / …`, `cubic · AI code reviewer`; `Security` (`bundle-audit`) fails the job but is not in the ruleset, so keep it green; `Benchmarks`, `kino smoke` report only; `Build & test` on `docs/**` only; full suite on the PR; failure report none
 - **Review bot:** cubic
 - **Merge:** squash — `gh pr merge <PR> --squash --delete-branch`
 - **PR contract:** `## Summary` (`Closes #N`), `## Test plan`; labels per `## Labels`; dashboard change: before/after screenshots, light + dark; hot-path change: the before/after bench
