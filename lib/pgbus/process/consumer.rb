@@ -289,9 +289,9 @@ module Pgbus
         @jobs_processed.increment
       end
 
-      # Order: read the last error, move with the dead-letter block, then
-      # clear the failed-event row. A move that raises keeps the row, so the
-      # next attempt still carries the reason.
+      # Order: read the last error, move with the dead-letter block, clear the
+      # failed-event row, then announce it. A move that raises keeps the row,
+      # so the next attempt still carries the reason, and announces nothing.
       def dead_letter(message, queue_name)
         last_error = FailedEventRecorder.last_error(queue_name: queue_name, msg_id: message.msg_id.to_i)
         headers = DeadLetterHeader.build(
@@ -301,6 +301,55 @@ module Pgbus
         )
         Pgbus.client.move_to_dead_letter(queue_name, message, headers: headers)
         FailedEventRecorder.clear!(queue_name: queue_name, msg_id: message.msg_id.to_i)
+        instrument_dead_lettered(message, queue_name, last_error)
+      end
+
+      # pgbus.event_dead_lettered, the event twin of the executor's
+      # pgbus.job_dead_lettered (issue #543). The dead-letter branch runs
+      # before handle_message parses the envelope, so it is parsed here: once
+      # per dead-lettered message, never on the success path. The move has
+      # already happened, so nothing here may turn the dead-letter into a
+      # failure (a failed stat, a circuit-breaker trip): the guard is the
+      # executor's instrument rescue, widened on purpose to cover building the
+      # payload as well as the subscribers, and logs at the same debug level.
+      def instrument_dead_lettered(message, queue_name, last_error)
+        envelope = dead_letter_envelope(message)
+        routing_key = envelope_routing_key(envelope)
+        Pgbus::Instrumentation.instrument(
+          "pgbus.event_dead_lettered",
+          queue_name: queue_name, routing_key: routing_key,
+          handler: owning_handler_name(routing_key, queue_name), event_id: envelope["event_id"],
+          read_ct: message.read_ct.to_i, msg_id: message.msg_id.to_i, error: last_error&.dig(:error_class)
+        )
+      rescue StandardError => e
+        Pgbus.logger.debug { "[Pgbus] Notification failure pgbus.event_dead_lettered: #{e.class}: #{e.message}" }
+      end
+
+      # The body that killed a message may not be a JSON object at all: PGMQ
+      # stores jsonb, so a producer writing straight to the queue can leave a
+      # scalar or an array, and the success path's dig raises on those every
+      # read. Any of them reads as an empty envelope, so the notification
+      # still fires.
+      def dead_letter_envelope(message)
+        raw = JSON.parse(message.message)
+        raw.is_a?(Hash) ? raw : {}
+      rescue JSON::ParserError, TypeError
+        {}
+      end
+
+      # The success path's lookup (headers first, then the top level),
+      # tolerating a headers value that is not an object.
+      def envelope_routing_key(envelope)
+        headers = envelope["headers"]
+        (headers["routing_key"] if headers.is_a?(Hash)) || envelope["routing_key"]
+      end
+
+      # The subscriber that owns +queue_name+ in this process (one owner per
+      # queue since #469), or nil when there is none or no usable routing key.
+      def owning_handler_name(routing_key, queue_name)
+        return unless routing_key.is_a?(String)
+
+        @registry.handlers_for(routing_key, queue_name: queue_name).first&.handler_class&.name
       end
 
       # The executor's handle_failure, for events (issue #494): one upsert per

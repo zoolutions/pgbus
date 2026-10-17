@@ -417,7 +417,7 @@ RSpec.describe Pgbus::Process::Consumer do
   describe "recycle counting in handle_message" do
     let(:consumer) { described_class.new(topics: ["orders.#"], queue_names: ["q_orders"]) }
     let(:handler_instance) { double("handler", process: nil) }
-    let(:handler_class) { double("HandlerClass", new: handler_instance) }
+    let(:handler_class) { double("HandlerClass", new: handler_instance, name: "OrdersHandler") }
     let(:matching_subscriber) { instance_double(Pgbus::EventBus::Subscriber, handler_class: handler_class) }
     let(:message_body) { JSON.generate("headers" => { "routing_key" => "orders.created" }) }
     let(:message) { build_message_double(msg_id: 7, message: message_body) }
@@ -459,6 +459,8 @@ RSpec.describe Pgbus::Process::Consumer do
     before do
       allow(consumer.config).to receive(:max_retries).and_return(5)
       allow(mock_client).to receive(:move_to_dead_letter) { |*, **kw| dlq_headers << kw[:headers] }
+      # pgbus.event_dead_lettered looks up the queue's owner (issue #543).
+      allow(registry).to receive(:handlers_for).and_return([])
     end
 
     def headers = JSON.parse(dlq_headers.last)
@@ -517,7 +519,8 @@ RSpec.describe Pgbus::Process::Consumer do
       message = build_message_double(msg_id: 11, message: message_body, read_ct: read_ct, headers: '{"trace_id":"t"}')
       handler = double("handler")
       raising ? allow(handler).to(receive(:process).and_raise(raising)) : allow(handler).to(receive(:process))
-      subscriber = instance_double(Pgbus::EventBus::Subscriber, handler_class: double("HandlerClass", new: handler))
+      subscriber = instance_double(Pgbus::EventBus::Subscriber,
+                                   handler_class: double("HandlerClass", new: handler, name: "OrdersHandler"))
       allow(registry).to receive(:handlers_for).with("orders.created", queue_name: "q_orders").and_return([subscriber])
       consumer.send(:handle_message, message, "q_orders")
       message
@@ -1200,7 +1203,7 @@ RSpec.describe Pgbus::Process::Consumer do
       build_message_double(msg_id: 7, message: JSON.generate("headers" => { "routing_key" => "orders.created" }))
     end
     let(:handler_instance) { double("handler", process: nil) }
-    let(:handler_class) { double("HandlerClass", new: handler_instance) }
+    let(:handler_class) { double("HandlerClass", new: handler_instance, name: "OrdersHandler") }
     let(:matching_subscriber) { instance_double(Pgbus::EventBus::Subscriber, handler_class: handler_class) }
     let(:stat_buffer) { instance_double(Pgbus::StatBuffer, push: nil, flush: nil, flush_if_due: nil, stop: nil) }
 

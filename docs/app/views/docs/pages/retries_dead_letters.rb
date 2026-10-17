@@ -14,6 +14,7 @@ class Views::Docs::Pages::RetriesDeadLetters < DocsUI::Page
     per_job
     dlq
     why_it_died
+    notified
   end
 
   private
@@ -135,6 +136,50 @@ class Views::Docs::Pages::RetriesDeadLetters < DocsUI::Page
         not recorded"; they retry and discard as before. An event's handler error is
         recorded once the consumer writes `pgbus_failed_events` rows; until then a
         dead event says "no handler error was recorded".
+      MD
+    end
+  end
+
+  def notified
+    DocsUI::Section("A notification per dead letter", description: "pgbus.job_dead_lettered and pgbus.event_dead_lettered.") do
+      md <<~'MD'
+        Every move emits one `ActiveSupport::Notifications` event, right after the
+        message is in the DLQ: `pgbus.job_dead_lettered` when the worker moved a job,
+        `pgbus.event_dead_lettered` when the event consumer moved an event. A move
+        that fails emits nothing, and the message stays for the next read. A
+        subscriber that raises is logged and does not change the outcome.
+
+        The bundled [AppSignal and metrics subscribers](/docs/observability) count
+        both: `pgbus_queue_job_count` and `pgbus_event_count` with
+        `status: "dead_lettered"`. For a pager or an error tracker, subscribe to
+        both families in one block:
+      MD
+      DocsUI::Code(<<~'RUBY', filename: "config/initializers/pgbus.rb")
+        ActiveSupport::Notifications.subscribe(/\Apgbus\.(job|event)_dead_lettered\z/) do |name, *, payload|
+          Pager.alert("#{name}: #{payload[:error] || "no recorded error"}", payload)
+        end
+      RUBY
+      md <<~'MD'
+        The event payload uses the event family's keys (`pgbus.event_failed`'s):
+      MD
+      DocsUI::Table(
+        [ "Key", "Value" ],
+        [
+          [ [ :code, "queue_name" ], [ :md, "The logical subscriber queue (`orders_handler`, not `pgbus_orders_handler`)." ] ],
+          [ [ :code, "routing_key" ], "From the envelope's headers, else its top level." ],
+          [ [ :code, "handler" ], "The handler class that owns the queue in this process; nil when none does." ],
+          [ [ :code, "event_id" ], "From the envelope." ],
+          [ [ :code, "read_ct" ], "The read that routed it." ],
+          [ [ :code, "msg_id" ], "The source message's id." ],
+          [ [ :code, "error" ], [ :md, "The last recorded handler error's class, from `pgbus_failed_events`; nil when none was recorded." ] ]
+        ]
+      )
+      md <<~'MD'
+        A body that is not a JSON object (a raw scalar written straight to the
+        queue, for example) is still dead-lettered; its `routing_key`, `handler`
+        and `event_id` are nil. There is no `exception_object`: nothing is raised
+        at move time, and the handler's error went out through `pgbus.event_failed`
+        on the attempt that raised.
       MD
     end
   end

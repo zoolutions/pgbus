@@ -60,6 +60,7 @@ module Pgbus
               subscribe("pgbus.job_dead_lettered") { |event| on_job_dead_lettered(event) },
               subscribe("pgbus.event_processed") { |event| on_event_processed(event) },
               subscribe("pgbus.event_failed") { |event| on_event_failed(event) },
+              subscribe("pgbus.event_dead_lettered") { |event| on_event_dead_lettered(event) },
               subscribe("pgbus.client.send_message") { |event| on_send_message(event) },
               subscribe("pgbus.client.send_batch") { |event| on_send_batch(event) },
               subscribe("pgbus.client.read_batch") { |event| on_read_batch(event) },
@@ -173,6 +174,18 @@ module Pgbus
             )
             err = payload[:exception_object]
             ::Appsignal.set_error(err) if err && ::Appsignal.respond_to?(:set_error)
+          end
+
+          # A counter only, like on_job_dead_lettered: nothing is raised at
+          # move time, and the handler's error already went out through
+          # pgbus.event_failed on the attempt that raised (issue #543).
+          def on_event_dead_lettered(event)
+            payload = event.payload
+            ::Appsignal.increment_counter(
+              "#{METRIC_PREFIX}event_count",
+              1,
+              { handler: payload[:handler], routing_key: payload[:routing_key], status: "dead_lettered" }
+            )
           end
 
           # ── Client (PGMQ wrapper) ───────────────────────────────────────

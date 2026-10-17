@@ -21,6 +21,12 @@ module Pgbus
   #                                  payload: queue, job_class, msg_id, vt, extensions
   #   pgbus.event_processed        — event handler succeeded
   #   pgbus.event_failed           — event handler raised; carries :exception_object
+  #   pgbus.event_dead_lettered    — a consumer moved an event that exceeded max_retries
+  #                                  to its DLQ; fires once, after the move
+  #                                  payload: queue_name, routing_key, handler, event_id,
+  #                                  read_ct, msg_id, error (the last recorded error
+  #                                  class, or nil); routing_key/handler/event_id are
+  #                                  nil when the body is not a JSON object
   #   pgbus.event_unrouted         — a consumer read an event from a queue no
   #                                  subscriber in this process owns (stale topic
   #                                  binding); the message is archived

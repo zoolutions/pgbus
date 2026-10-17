@@ -70,6 +70,7 @@ class Views::Docs::Pages::Observability < DocsUI::Page
           [ [ :code, "pgbus.job_dead_lettered" ], "A job exceeded max_retries." ],
           [ [ :code, "pgbus.event_processed" ], "An event handler ran." ],
           [ [ :code, "pgbus.event_failed" ], "An event handler raised." ],
+          [ [ :code, "pgbus.event_dead_lettered" ], "The consumer moved an event that exceeded max_retries to its DLQ." ],
           [ [ :code, "pgbus.event_skipped" ], "An idempotent handler skipped a delivery (already done, or the holder is still running)." ],
           [ [ :code, "pgbus.client.send_message" ], "A message was enqueued." ],
           [ [ :code, "pgbus.client.send_batch" ], "A batch was enqueued." ],
@@ -106,7 +107,8 @@ class Views::Docs::Pages::Observability < DocsUI::Page
       RUBY
       md <<~'MD'
         Emitted metrics are all `pgbus_`-prefixed with low-cardinality tags:
-        `pgbus_queue_job_count`, `pgbus_job_duration_ms`, `pgbus_event_count`,
+        `pgbus_queue_job_count`, `pgbus_job_duration_ms`, `pgbus_event_count`
+        (`status` `processed`, `failed`, `skipped` or `dead_lettered`),
         `pgbus_messages_sent` / `_read`, `pgbus_stream_broadcast_count`,
         `pgbus_outbox_published`, `pgbus_recurring_enqueued`,
         `pgbus_worker_recycled` (tagged `reason` and `kind` — `worker` or
