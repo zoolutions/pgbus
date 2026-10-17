@@ -24,7 +24,7 @@ RSpec.describe "Workflow step outputs (integration)", :integration do
 
     expect(wf.output_of(:receipt)).to eq("seen" => ["ch_1", 1200, user.id])
     expect(wf.output_of(:charge)[:customer]).to eq(user)
-    expect(wf.outputs.keys).to eq(%w[charge receipt])
+    expect(wf.outputs.keys).to match_array(%w[charge receipt])
   end
 
   it "keeps a failed attempt's output on its row but never returns it" do

@@ -137,7 +137,7 @@ RSpec.describe "Workflow start! and outside verbs (integration)", :integration d
   end
 
   describe "run_now!, reschedule!, rerun!" do
-    it "run_now! sends the waiting step now, leaving its delayed message a no-op" do
+    it "run_now! sends the waiting step now" do
       stub_const("WaitingWorkflow", Class.new(Pgbus::Workflow) { step(:later, wait: 3600) { output(ran: true) } })
       wf = WaitingWorkflow.start!
       expect(queue_depth).to eq(1)

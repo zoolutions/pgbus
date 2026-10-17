@@ -244,7 +244,7 @@ class CreatePgbusTables < ActiveRecord::Migration<%= migration_version %>
     add_index :pgbus_workflows, [:workflow_class, :idempotency_key],
       unique: true, where: "idempotency_key IS NOT NULL",
       name: "idx_pgbus_workflows_idempotency"
-    add_index :pgbus_workflows, :status,
+    add_index :pgbus_workflows, [:status, :updated_at],
       name: "idx_pgbus_workflows_status"
     add_index :pgbus_workflows, [:workflow_class, :status, :created_at],
       name: "idx_pgbus_workflows_class_status"

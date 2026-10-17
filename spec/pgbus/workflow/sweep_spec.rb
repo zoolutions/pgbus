@@ -73,12 +73,17 @@ RSpec.describe Pgbus::Workflow::Sweep do
     it "deletes stale runs in batches until none are left" do
       allow(described_class).to receive(:tables_ready?).and_return(true)
       batches = [[1, 2], [3], []]
+      now = Time.current
+      limited = double("limited")
+      allow(limited).to receive(:pluck).with(:id) { batches.shift }
+      ordered = double("ordered")
+      allow(ordered).to receive(:limit).with(2).and_return(limited)
       stale = double("stale")
-      allow(stale).to receive_message_chain(:order, :limit, :pluck) { batches.shift } # rubocop:disable RSpec/MessageChain
-      allow(Pgbus::WorkflowEntry).to receive(:stale).and_return(stale)
+      allow(stale).to receive(:order).with(:id).and_return(ordered)
+      allow(Pgbus::WorkflowEntry).to receive(:stale).with(before: now - 86_400).and_return(stale)
       allow(Pgbus::WorkflowEntry).to receive(:where) { |id:| double("rows", delete_all: id.size) }
 
-      expect(described_class.cleanup(retention: 86_400, batch_size: 2)).to eq(3)
+      expect(described_class.cleanup(retention: 86_400, now: now, batch_size: 2)).to eq(3)
     end
   end
 end

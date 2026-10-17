@@ -99,10 +99,13 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
         `start!` writes the run and its first step row in one transaction; the
         StepJob is sent by the step row's after-commit callback, so calling
         `start!` inside your own transaction sends nothing until it commits
-        (and nothing at all if it rolls back). On a separate pgbus database
-        the commit is the pgbus connection's: a step can then run before your
-        transaction commits the subject, which `cancel_if { subject.nil? }`
-        plus a `reattempt!` policy covers.
+        (and nothing at all if it rolls back) when the workflow tables share
+        your database. On a separate pgbus database (`connects_to`) the commit
+        is the pgbus connection's: the run is written and its first step sent
+        on their own, so a step can run before your transaction commits the
+        subject (and even if it rolls back). Wait for the subject in the step
+        body — `reattempt!(wait: 5) if subject.nil?` — rather than in
+        `cancel_if`, which cancels the run.
       MD
     end
   end
@@ -228,7 +231,9 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
           re-run a completed step; only `resume_at!` does, on purpose.
 
         The engine's own messages are idempotent too: the claim (scheduled →
-        in_progress, only once due) makes a duplicate StepJob a no-op, and the
+        in_progress, only once due) makes a duplicate StepJob a no-op — except
+        a redelivery of the very message that claimed a still-running step,
+        which applies the stall action (see Housekeeping) — and the
         unique `(workflow_id, step_name, attempt)` index makes a duplicate
         attempt impossible. A step still has to be idempotent: the key is how.
       MD
@@ -264,10 +269,14 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
       md <<~'MD'
         The dispatcher looks after workflows on its own:
 
-        - **A dead worker is noticed in seconds.** StepJob keeps the
-          visibility heartbeat; when the very message that claimed a step
-          comes back while the row is still in progress, its worker died, and
-          `config.workflow_stall_action` applies at once.
+        - **A dead worker is noticed in seconds**, while
+          `config.visibility_heartbeat` is on (the default). StepJob keeps the
+          heartbeat, so a live worker keeps its message invisible; when the
+          very message that claimed a step comes back while the row is still
+          in progress, its worker died (or its heartbeat lapsed, for example
+          through a long pause), and `config.workflow_stall_action` applies at
+          once. With the heartbeat off, only the sweep below catches a dead
+          worker.
         - **A hung step** (in progress past its `timeout:`, or past
           `config.workflow_stall_threshold`) gets the same stall action from
           the sweep, every `config.workflow_sweep_interval`. `:pause` (default)

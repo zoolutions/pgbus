@@ -75,6 +75,7 @@ module Pgbus
 
       def throw_outcome(outcome, verb: nil)
         raise NotInStep, "#{verb} can only be called inside a step body" if verb && !in_step?
+        raise NotInStep, "flow-control verbs end a step from its body or an on_exception block, not from cancel_if or skip_if" if @guarding
 
         throw THROW_TAG, outcome
       end

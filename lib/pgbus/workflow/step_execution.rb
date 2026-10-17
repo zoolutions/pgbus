@@ -45,7 +45,11 @@ module Pgbus
 
       attr_reader :config
 
+      # The worker tag and the app revision (which may call the app's
+      # app_revision callable or read a file) are resolved before the run's
+      # row lock is taken.
       def claim(step)
+        @stamp = { worker: Runner.worker_tag, app_revision: Deploy::Revision.current(config) }
         Runner.locked(step.workflow_id) do |record, notes|
           step = WorkflowStep.find_by(id: step.id) if record
           if record.nil? || step.nil?
@@ -82,7 +86,7 @@ module Pgbus
         klass = record.workflow_klass
         definition = klass&.workflow_steps&.fetch(step.step_name)
         attrs = { stall_at: now + (definition&.timeout || config.workflow_stall_threshold), msg_id: @delivery&.dig(:msg_id),
-                  worker: Runner.worker_tag, app_revision: Deploy::Revision.current(config) }
+                  **@stamp }
         return nil if WorkflowStep.claim!(step.id, now: now, **attrs).zero?
 
         step.assign_attributes(status: "in_progress", started_at: now, **attrs)
@@ -109,8 +113,12 @@ module Pgbus
         workflow.send(:enter_step, Instance::StepContext.new(step_id: step.id, step_name: step.step_name, attempt: step.attempt))
         claim = Claim.new(record: record, step: step, klass: klass, definition: definition, workflow: workflow, guard_error: nil)
         begin
-          return outcome!(record, step, notes, klass, FlowControl::Outcome.cancel) if cancel?(klass, workflow)
-          return outcome!(record, step, notes, klass, FlowControl::Outcome.skip) if definition.skip?(workflow)
+          verdict = workflow.send(:guarding) do
+            next FlowControl::Outcome.cancel if cancel?(klass, workflow)
+
+            FlowControl::Outcome.skip if definition.skip?(workflow)
+          end
+          return outcome!(record, step, notes, klass, verdict) if verdict
         rescue StandardError => e
           return claim.with(guard_error: e)
         end

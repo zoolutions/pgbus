@@ -192,12 +192,14 @@ RSpec.describe Pgbus::Process::Dispatcher do
     it "runs the workflow sweep on workflow_sweep_interval" do
       allow(dispatcher).to receive(:sweep_workflows)
       allow(dispatcher.config).to receive(:workflow_sweep_interval).and_return(300)
+      fixed = dispatcher.send(:monotonic_now)
+      allow(dispatcher).to receive(:monotonic_now).and_return(fixed)
 
-      dispatcher.set_maintenance_timestamp(:@last_workflow_sweep_at, past_monotonic(299))
+      dispatcher.set_maintenance_timestamp(:@last_workflow_sweep_at, fixed - 299)
       dispatcher.send(:run_maintenance)
       expect(dispatcher).not_to have_received(:sweep_workflows)
 
-      dispatcher.set_maintenance_timestamp(:@last_workflow_sweep_at, past_monotonic(301))
+      dispatcher.set_maintenance_timestamp(:@last_workflow_sweep_at, fixed - 301)
       dispatcher.send(:run_maintenance)
       expect(dispatcher).to have_received(:sweep_workflows).once
     end

@@ -24,7 +24,14 @@ module WorkflowIntegration
         allow(Pgbus::ErrorReporter).to receive(:report)
       end
 
-      after { Pgbus::VisibilityHeartbeat.stop }
+      let(:workflow_threads) { [] }
+
+      # A thread an example started but never joined (an assertion failed
+      # first) must not run into the next example's purge and cleanup.
+      after do
+        workflow_threads.each { |thread| thread.join(5) || thread.kill }
+        Pgbus::VisibilityHeartbeat.stop
+      end
     end
   end
 
@@ -86,9 +93,10 @@ module WorkflowIntegration
 
   def monotonic = ::Process.clock_gettime(::Process::CLOCK_MONOTONIC)
 
-  # A thread with its own connection checkout, returned to the pool after.
+  # A thread with its own connection checkout, returned to the pool after,
+  # and joined (or killed) by the after hook if the example did not.
   def in_thread(&block)
-    Thread.new { ActiveRecord::Base.connection_pool.with_connection(&block) }
+    Thread.new { ActiveRecord::Base.connection_pool.with_connection(&block) }.tap { |thread| workflow_threads << thread }
   end
 
   def wait_for(timeout: 5)

@@ -128,6 +128,16 @@ module Pgbus
         step_context || raise(NotInStep, "#{reader} can only be called inside a step body")
       end
 
+      # Used by the StepJob only: cancel_if and skip_if run inside this, where
+      # the flow-control verbs raise NotInStep (only the body and an
+      # on_exception block can end a step).
+      def guarding
+        @guarding = true
+        yield
+      ensure
+        @guarding = false
+      end
+
       # Used by the StepJob only.
       def enter_step(context)
         @step_context = context

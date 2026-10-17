@@ -23,8 +23,20 @@ module Pgbus
                   "unknown job_options: #{key.inspect} — accepted: #{JOB_OPTIONS.map(&:inspect).join(", ")}"
           end
 
-          [key, key == :queue ? value.to_s : value]
+          [key, job_option_value(key, value)]
         end.freeze
+      end
+
+      def self.job_option_value(key, value)
+        case key
+        when :queue then -value.to_s
+        when :wait then seconds(value, "job_options: wait", positive: false)
+        when :wait_until
+          return value if value.respond_to?(:to_time)
+
+          raise ArgumentError, "job_options: wait_until must be a Time, got #{value.inspect}"
+        else value
+        end
       end
 
       # Seconds as an Integer when whole, else a Float. Durations are
@@ -46,11 +58,11 @@ module Pgbus
       end
 
       def initialize(name:, body:, wait: nil, skip_if: nil, job_options: {}, timeout: nil, on_exception: nil)
-        @name = name.to_s
+        @name = -name.to_s
         @body = body
         @wait = self.class.seconds(wait, "wait", positive: false) || 0
         @skip_if = validate_skip_if(skip_if)
-        @job_options = self.class.validate_job_options!(job_options || {})
+        @job_options = self.class.validate_job_options!(job_options.nil? ? {} : job_options)
         @timeout = self.class.seconds(timeout, "timeout", positive: true)
         @exception_policies = ExceptionPolicy.coerce_all(on_exception)
         freeze

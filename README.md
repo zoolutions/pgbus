@@ -885,12 +885,12 @@ wf.events.map(&:event)                              # ["started", "step_schedule
 - **Flow control** inside a step: `pause!`, `cancel!`, `reattempt!(wait:)`, `skip!`, `finished!`. Outside: `resume!`, `resume_at!(:step)`, `pause!`, `cancel!`, `run_now!`, `reschedule!(at:)`, `rerun!`. `Pgbus::Workflow::States` is the one table of which verb is legal in which state (`wf.available_actions`).
 - **Exceptions** never reach ActiveJob: the error is recorded on the step row and reported through `Pgbus::ErrorReporter`, and the run pauses unless an `on_exception` policy (step- or class-level, with `max_reattempts:`, `terminal_action:` and `report:`) says otherwise.
 - **Idempotent by contract**: `output(charge_id: …)` is durable once the step completes and later steps read it with `output_of(:charge)`; `step_idempotency_key` is the same on every attempt, for the external API; `start!(order, idempotency_key: "checkout-#{order.id}")` returns the existing run.
-- **One ongoing run per subject** and class: a second `start!` raises `Pgbus::Workflow::AlreadyRunning`.
+- **One ongoing run per subject** and class: a second `start!` raises `Pgbus::Workflow::AlreadyRunning`. Subject-less runs are not limited.
 - **Housekeeping**: a worker that dies mid-step is noticed when its message comes back (the visibility heartbeat keeps a live one invisible); a hung step stalls after its `timeout:` or `workflow_stall_threshold`; the dispatcher re-sends lost steps and deletes finished runs after `workflow_retention` (30 days).
 - **Metrics** for Prometheus/StatsD and AppSignal: per-step duration histograms and counters, and gauges of runs by status and by stuck reason.
 - **Testing**: `include Pgbus::Workflow::TestHelpers`, then `perform_next_step(wf)`, `run_step_inline(wf, :reminder)` or `speedrun_workflow(wf)`.
 
-The StepJob is sent after the step row commits, so `start!` inside your own transaction sends nothing until it commits. Install the tables with `rails generate pgbus:add_workflows` (`pgbus:update` detects them). The [Workflows guide](https://pgbus.zoolutions.llc/docs/workflows) covers policies, outputs, removing steps, the stall actions and the transition table.
+When the workflow tables share your application's database, the StepJob is sent after the step row commits, so `start!` inside your own transaction sends nothing until it commits; with a separate pgbus database (`connects_to`) the run commits and its first step is sent on their own, before your transaction commits. Generate and apply the migration with `rails generate pgbus:add_workflows` and `rails db:migrate` (`pgbus:update` detects the missing tables). The [Workflows guide](https://pgbus.zoolutions.llc/docs/workflows) covers policies, outputs, removing steps, the stall actions and the transition table.
 
 ### Transactional outbox
 

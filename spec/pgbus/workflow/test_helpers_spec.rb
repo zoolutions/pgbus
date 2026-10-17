@@ -21,6 +21,16 @@ RSpec.describe Pgbus::Workflow::TestHelpers do
   end
 
   describe "#perform_next_step" do
+    before { statuses.replace(%w[ready]) }
+
+    it "refuses a run that is not ready, before touching its step" do
+      statuses.replace(%w[paused])
+      allow(described_class).to receive(:scheduled_step).and_return(scheduled)
+
+      expect { perform_next_step(workflow) }.to raise_error(described_class::Error, /is paused, not ready/)
+      expect(described_class).not_to have_received(:perform)
+    end
+
     it "runs the scheduled step and returns the reloaded workflow" do
       allow(described_class).to receive(:scheduled_step).with(workflow).and_return(scheduled)
 
@@ -36,7 +46,10 @@ RSpec.describe Pgbus::Workflow::TestHelpers do
   end
 
   describe "#run_step_inline" do
-    before { allow(described_class).to receive(:scheduled_step).and_return(scheduled) }
+    before do
+      statuses.replace(%w[ready])
+      allow(described_class).to receive(:scheduled_step).and_return(scheduled)
+    end
 
     it "runs the named step when it is the one scheduled" do
       run_step_inline(workflow, :welcome)
@@ -76,6 +89,12 @@ RSpec.describe Pgbus::Workflow::TestHelpers do
       expect { speedrun_workflow(workflow) }.to raise_error(described_class::Error, /is waiting/)
     end
 
+    it "returns a run that finishes on the last allowed step" do
+      statuses.replace(%w[ready ready finished])
+
+      expect(speedrun_workflow(workflow, max_steps: 2)).to be(workflow)
+    end
+
     it "raises when the run never settles" do
       allow(workflow).to receive(:status).and_return("ready")
 
@@ -95,6 +114,16 @@ RSpec.describe Pgbus::Workflow::TestHelpers do
 
       expect(scheduled).to have_received(:update_columns).with(scheduled_at: a_kind_of(Time))
       expect(job).to have_received(:perform_now)
+    end
+
+    it "leaves a step that is already due as it is" do
+      due = double("WorkflowStep", id: 8, scheduled_at: 1.minute.ago)
+      allow(due).to receive(:update_columns)
+      allow(Pgbus::Workflow::StepJob).to receive(:new).with(8).and_return(instance_double(Pgbus::Workflow::StepJob, perform_now: nil))
+
+      described_class.perform(due)
+
+      expect(due).not_to have_received(:update_columns)
     end
   end
 end

@@ -49,6 +49,15 @@ RSpec.describe Pgbus::Configuration::WorkflowSettings do
       expect { config.validate! }.not_to raise_error
     end
 
+    it "rejects an infinite sweep interval, stall threshold or retention" do
+      %i[workflow_sweep_interval workflow_stall_threshold workflow_retention].each do |setting|
+        fresh = Pgbus::Configuration.new
+        fresh.public_send("#{setting}=", Float::INFINITY)
+
+        expect { fresh.validate! }.to raise_error(Pgbus::ConfigurationError, /#{setting} must be a finite/)
+      end
+    end
+
     it "requires a sweep interval and a stall threshold" do
       config.instance_variable_set(:@workflow_sweep_interval, nil)
       expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /workflow_sweep_interval/)
@@ -81,6 +90,12 @@ RSpec.describe Pgbus::Configuration::WorkflowSettings do
       expect(config.workflow_queue).to eq("workflows")
     end
 
+    it "rejects a queue whose prefixed PGMQ name is too long, at validate!" do
+      config.workflow_queue = "w" * 60
+
+      expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /workflow_queue.*too long/)
+    end
+
     it "rejects a blank queue" do
       expect { config.workflow_queue = "" }.to raise_error(Pgbus::ConfigurationError, /workflow_queue/)
       expect { config.workflow_queue = nil }.to raise_error(Pgbus::ConfigurationError, /workflow_queue/)
@@ -104,7 +119,7 @@ RSpec.describe Pgbus::Configuration::WorkflowSettings do
       config.finalize!
 
       expect(config.workflow_queue).to be_frozen
-      expect(Ractor.shareable?(config.workflow_stall_action)).to be(true)
+      expect(Ractor.shareable?(config.workflow_queue)).to be(true)
     end
   end
 end

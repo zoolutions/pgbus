@@ -16,6 +16,10 @@ module Pgbus
     # class (never `pgbus_visibility_heartbeat false`): fast crash detection
     # depends on a live worker keeping its message invisible.
     class StepJob < ::ActiveJob::Base
+      # Always on, whatever ActiveJob::Base or the app set: the executor reads
+      # this, and a redelivery means a dead worker only while it is true.
+      def self.pgbus_visibility_heartbeat_enabled = true # rubocop:disable Naming/PredicateMethod -- JobMixin's reader
+
       def perform(step_id)
         StepExecution.new(step_id).call
       end

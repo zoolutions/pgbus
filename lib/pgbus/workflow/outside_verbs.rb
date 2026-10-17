@@ -77,7 +77,12 @@ module Pgbus
 
       def resume_after(record, notes, latest, resumed, actor:, reason:)
         klass = record.workflow_klass || raise(StepNotDefined, "#{record.workflow_class} is not a Pgbus::Workflow class any more")
-        following = latest ? klass.workflow_steps.next_after(latest.step_name) : klass.workflow_steps.first
+        steps = klass.workflow_steps
+        if latest && steps.entries.none? { |entry| entry.name == latest.step_name }
+          raise StepNotDefined, "#{klass.name} has no step #{latest.step_name} (declare `removed_step :#{latest.step_name}`)"
+        end
+
+        following = latest ? steps.next_after(latest.step_name) : steps.first
         if following.nil?
           Runner.transition!(record, :finish, finished_at: Time.current, **resumed)
           resumed_event(record, actor, reason, latest)

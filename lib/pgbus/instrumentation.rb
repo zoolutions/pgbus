@@ -68,8 +68,10 @@ module Pgbus
   #                                  error_class (nil for a manual pause)
   #   pgbus.workflow_cancelled     — a workflow run was cancelled
   #                                  payload: workflow_class, workflow_id, step_name
-  #   pgbus.workflow.stall_detected — a step's worker died (detection: "redelivery") or the
-  #                                  step outlived its stall_at (detection: "sweep")
+  #   pgbus.workflow.stall_detected — a step was stalled on the redelivery of the message that
+  #                                  claimed it (detection: "redelivery": its worker died, or
+  #                                  its heartbeat lapsed) or after it outlived its stall_at
+  #                                  (detection: "sweep")
   #                                  payload: workflow_class, workflow_id, step_name, attempt,
   #                                  detection
   #   pgbus.workflow.gauge         — emitted by each dispatcher workflow sweep

@@ -112,8 +112,10 @@ module Pgbus
           workflow.instance_exec(error, &handler)
           nil
         end
-        Decision.new(outcome: outcome || FlowControl::Outcome.pause, report: report != :never,
-                     terminal: !outcome&.reattempt?, handler_error: nil)
+        terminal = !outcome&.reattempt?
+        Decision.new(outcome: outcome || FlowControl::Outcome.pause,
+                     report: report == :always || (report == :terminal_only && terminal),
+                     terminal: terminal, handler_error: nil)
       rescue StandardError => e
         Decision.new(outcome: FlowControl::Outcome.pause, report: true, terminal: true, handler_error: e)
       end
@@ -129,7 +131,7 @@ module Pgbus
         return nil if matching.nil? || (matching.respond_to?(:empty?) && matching.empty?)
 
         Array(matching).map do |matcher|
-          next matcher.to_s if matcher.is_a?(String) || matcher.is_a?(Symbol)
+          next -matcher.to_s if matcher.is_a?(String) || matcher.is_a?(Symbol)
           next matcher if matcher.is_a?(Module)
 
           raise ArgumentError, "matching: takes exception classes or class names, got #{matcher.inspect}"

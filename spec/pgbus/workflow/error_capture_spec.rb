@@ -73,6 +73,22 @@ RSpec.describe Pgbus::Workflow::ErrorCapture do
     expect(causes.first).to eq("class" => "RuntimeError", "message" => "level 2")
   end
 
+  it "caps each cause's message at 1_000 characters" do
+    error = begin
+      begin
+        raise ArgumentError, "y" * 5_000
+      rescue ArgumentError
+        raise "outer"
+      end
+    rescue RuntimeError => e
+      e
+    end
+
+    cause = described_class.capture(error, backtrace_lines: 1)[:error_causes].first
+    expect(cause["message"].length).to eq(described_class::CAUSE_MESSAGE_LIMIT)
+    expect(cause["message"]).to end_with("…")
+  end
+
   it "stops a cyclic cause chain where it repeats" do
     outer = RuntimeError.new("outer")
     inner = RuntimeError.new("inner")

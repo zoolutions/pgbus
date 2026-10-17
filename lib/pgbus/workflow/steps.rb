@@ -39,7 +39,7 @@ module Pgbus
       # Replaces a live step with a gravestone at its position, or appends a
       # gravestone for a step that is already gone from the class.
       def remove(name)
-        name = name.to_s
+        name = -name.to_s
         raise ArgumentError, "#{name} is already a removed step" if removed?(name)
 
         list = entries.dup
@@ -78,8 +78,13 @@ module Pgbus
 
       def empty? = definitions.empty?
 
-      # Name for an anonymous `step { ... }`.
-      def anonymous_name = "step_#{entries.size + 1}"
+      # Name for an anonymous `step { ... }`: step_<n>, the first n from
+      # entries.size + 1 not taken by a step or a gravestone.
+      def anonymous_name
+        number = entries.size + 1
+        number += 1 while entries.any? { |entry| entry.name == "step_#{number}" }
+        "step_#{number}"
+      end
 
       # What definition_digest hashes: the ordered [name, kind] pairs.
       def digest_pairs = entries.map { |entry| [entry.name, entry.kind] }

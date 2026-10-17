@@ -21,6 +21,7 @@ module Pgbus
 
       # Runs the run's scheduled step now. Returns the reloaded workflow.
       def perform_next_step(workflow)
+        TestHelpers.ensure_ready!(workflow)
         step = TestHelpers.scheduled_step(workflow) || raise(Error, "#{workflow.inspect} has no scheduled step")
         TestHelpers.perform(step)
         workflow.reload
@@ -29,6 +30,7 @@ module Pgbus
       # Runs the run's scheduled step when it is +step_name+; raises when the
       # run is on another step.
       def run_step_inline(workflow, step_name)
+        TestHelpers.ensure_ready!(workflow)
         step = TestHelpers.scheduled_step(workflow)
         unless step&.step_name == step_name.to_s
           raise Error, "#{workflow.inspect} is not about to run #{step_name} (scheduled: #{step&.step_name || "nothing"})"
@@ -50,7 +52,16 @@ module Pgbus
           else return workflow
           end
         end
-        raise Error, "#{workflow.inspect} was still ready after #{max_steps} steps"
+        return workflow unless %w[ready waiting performing].include?(workflow.reload.status)
+
+        raise Error, "#{workflow.inspect} was still #{workflow.status} after #{max_steps} steps"
+      end
+
+      # A paused or finished run's scheduled step is not claimable: running
+      # it would silently do nothing (and pull its wait forward for resume!).
+      def self.ensure_ready!(workflow)
+        status = workflow.reload.status
+        raise Error, "#{workflow.inspect} is #{status}, not ready: resume! it first" unless status == "ready"
       end
 
       def self.scheduled_step(workflow)

@@ -61,11 +61,17 @@ RSpec.describe Pgbus::Workflow do
     end
 
     it "raises AlreadyRunning, naming the run that holds the slot, on the one-ongoing index" do
+      user = Struct.new(:id) do
+        def self.name = "SpecUser"
+        def to_global_id = "gid://pgbus-test/SpecUser/#{id}"
+      end.new(7)
       allow(Pgbus::WorkflowEntry).to receive(:insert_run!).and_raise(ActiveRecord::RecordNotUnique, "idx_pgbus_workflows_one_ongoing")
-      ongoing = double("ongoing scope", find_by: record)
+      ongoing = double("ongoing scope")
+      allow(ongoing).to receive(:find_by).with(workflow_class: "SpecOrderWorkflow", subject_type: "SpecUser", subject_id: "7")
+                                         .and_return(record)
       allow(Pgbus::WorkflowEntry).to receive(:ongoing).and_return(ongoing)
 
-      expect { klass.start! }.to raise_error(described_class::AlreadyRunning) { |error|
+      expect { klass.start!(user) }.to raise_error(described_class::AlreadyRunning) { |error|
         expect(error.workflow.workflow_id).to eq("wf-1")
       }
     end

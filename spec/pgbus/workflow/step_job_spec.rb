@@ -52,9 +52,7 @@ RSpec.describe Pgbus::Workflow::StepJob do
   end
 
   it "never opts out of the visibility heartbeat, which crash detection depends on" do
-    ActiveJob::Base.include(Pgbus::VisibilityHeartbeat::JobMixin) unless ActiveJob::Base < Pgbus::VisibilityHeartbeat::JobMixin
-
-    expect(described_class.pgbus_visibility_heartbeat_enabled).not_to be(false)
+    expect(described_class.pgbus_visibility_heartbeat_enabled).to be(true)
   end
 
   it "has no retry_on or discard_on: a step's failures belong to the exception policies" do

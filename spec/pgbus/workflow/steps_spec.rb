@@ -189,7 +189,7 @@ RSpec.describe "Pgbus::Workflow step declarations" do # rubocop:disable RSpec/De
       end
     end
 
-    it "is stable when the definition does not change" do
+    it "is stable when a step's options or body change" do
       same = workflow_class do
         step(:a, wait: 5) { :different_body }
         step(:b) { nil }

@@ -60,9 +60,18 @@ module Pgbus
       end
 
       def validate_workflow_settings!
-        { workflow_sweep_interval: workflow_sweep_interval,
-          workflow_stall_threshold: workflow_stall_threshold }.each do |name, value|
-          raise Pgbus::ConfigurationError, "#{name} must be > 0" unless value.is_a?(Numeric) && value.positive?
+        { workflow_sweep_interval: workflow_sweep_interval, workflow_stall_threshold: workflow_stall_threshold,
+          workflow_retention: workflow_retention }.each do |name, value|
+          next if value.nil? && name == :workflow_retention
+          next if value.is_a?(Numeric) && value.positive? && value.finite?
+
+          raise Pgbus::ConfigurationError, "#{name} must be a finite number of seconds > 0"
+        end
+
+        begin
+          QueueNameValidator.validate!(queue_name(workflow_queue))
+        rescue ArgumentError => e
+          raise Pgbus::ConfigurationError, "workflow_queue #{workflow_queue.inspect}: #{e.message}"
         end
 
         { workflow_max_payload_size: workflow_max_payload_size,
