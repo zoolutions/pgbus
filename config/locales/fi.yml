@@ -140,6 +140,11 @@ fi:
         throughput: Läpäisykyky
         throughput_detail: tehtäviä/min viimeisen %{minutes} min aikana
         throughput_unavailable: vaatii työtilastot (rails g pgbus:add_job_stats)
+        workflows: Työnkulut
+        workflows_attention:
+          one: "%{count} vaatii huomiota"
+          other: "%{count} vaatii huomiota"
+        workflows_detail: käynnissä (%{paused} keskeytetty)
       verdict:
         links:
           dlq: Dead letterit
@@ -723,6 +728,7 @@ fi:
         processes: Prosessit
         queues: Jonot
         recurring: Toistuva
+        workflows: Työnkulut
       return_to_app: Takaisin sovellukseen
       title: Pgbus-hallintapaneeli
       toggle_dark_mode: Vaihda tumma tila
@@ -1023,3 +1029,282 @@ fi:
         disabled: Tehtävä poistettu käytöstä
         enabled: Tehtävä otettu käyttöön
         failed: Tehtävän vaihto epäonnistui
+    workflows:
+      actions:
+        bulk_cancel: Peru kaikki
+        bulk_resume: Jatka kaikki
+        cancel: Peru
+        rerun: Uusi
+        resume: Jatka
+        resume_at: Jatka vaiheesta
+        run_now: Aja nyt
+        signal: Lähetä signaali
+        skip_step: Ohita vaihe
+      attempt: yritys %{attempt}
+      attention:
+        at_step_html: vaiheessa %{step}
+        back: "← Työnkulut"
+        cancel_all:
+          one: Peru kaikki %{count}
+          other: Peru kaikki %{count}
+        confirm:
+          cancel:
+            one: Perutaanko vaiheeseen %{step} jumittunut ajo?
+            other: Perutaanko kaikki %{count} vaiheeseen %{step} jumittunutta ajoa?
+          cancel_error:
+            one: 'Perutaanko vaiheeseen %{step} jumittunut ajo (virhe: %{error})?'
+            other: 'Perutaanko kaikki %{count} vaiheeseen %{step} jumittunutta ajoa (virhe: %{error})?'
+          resume:
+            one: Jatketaanko vaiheessa %{step} keskeytettyä ajoa?
+            other: Jatketaanko kaikkia %{count} vaiheessa %{step} keskeytettyä ajoa?
+          resume_error:
+            one: 'Jatketaanko vaiheessa %{step} keskeytettyä ajoa (virhe: %{error})?'
+            other: 'Jatketaanko kaikkia %{count} vaiheessa %{step} keskeytettyä ajoa (virhe: %{error})?'
+        description: Käynnissä olevat ajot, jotka odottavat ihmistä, ryhmiteltynä pysähtymisen syyn mukaan. Kun syy on korjattu, käsittele koko ryhmä kerralla.
+        empty_hint: Yksikään käynnissä oleva ajo ei ole keskeytetty, jumissa, myöhässä tai odota yli rajan workflow_waiting_visibility_threshold.
+        empty_title: Mikään ei vaadi huomiota.
+        first_seen_html: ensimmäinen %{time}
+        headers:
+          actions: Toiminnot
+          reason: Syy
+          runs: Ajot
+          seen: Nähty
+          workflow: Työnkulku
+        last_seen_html: viimeisin %{time}
+        reasons:
+          overdue: 'Myöhässä: erääntynyt, mutta ei otettu'
+          paused_error: Keskeytetty virheen vuoksi
+          paused_manual: Keskeytetty käsin
+          stalled: 'Jumissa: sen worker lakkasi vastaamasta'
+          waiting_overdue: Odottaa liian kauan
+        resume_all:
+          one: Jatka kaikki %{count}
+          other: Jatka kaikki %{count}
+        show_runs: Näytä ajot
+        title: Vaatii huomiota
+      audit:
+        by: "%{event}, tekijä %{actor}"
+        empty: Ei tallennettuja tapahtumia.
+        headers:
+          what: Mitä tapahtui
+          when: Milloin
+        title: Auditointiloki
+        with_reason: "%{sentence}: %{reason}"
+        with_step: "%{sentence} (%{step} #%{attempt})"
+      bad_request: 'Virheellinen pyyntö: %{reason}'
+      confirm:
+        cancel: Perutaanko tämä työnkulku? Sen avoimet vaiheet perutaan, eikä se aja enää uudelleen.
+        rerun: Käynnistetäänkö tämä työnkulku uudelleen uutena ajona samalla kohteella ja samoilla argumenteilla?
+        resume: Jatketaanko tätä työnkulkua?
+        resume_at: Jatketaanko tätä työnkulkua valitusta vaiheesta? Sen avoimet vaiheet perutaan ensin.
+        run_now: Ajetaanko ajastettu vaihe nyt odottamatta?
+        signal: Lähetetäänkö tämä signaali työnkulkuun?
+        skip_step: Ohitetaanko vaihe, jota tämä työnkulku odottaa, ja siirrytäänkö seuraavaan?
+      events:
+        cancelled: Peruttu
+        fan_out_finished: Fan-out päättynyt
+        fan_out_opened: Fan-out avattu
+        finished: Päättynyt
+        late_completion_ignored: Myöhäinen valmistuminen ohitettu
+        paused: Keskeytetty
+        rerun: Uusittu
+        rescheduled: Ajastettu uudelleen
+        resumed: Jatkettu
+        run_now: Aja nyt
+        signal_claimed: Signaali varattu
+        signal_received: Signaali vastaanotettu
+        stall_detected: Jumiutuminen havaittu
+        started: Aloitettu
+        step_completed: Vaihe valmis
+        step_failed: Vaihe epäonnistui
+        step_reattempted: Vaihe yritetty uudelleen
+        step_scheduled: Vaihe ajastettu
+        step_skipped: Vaihe ohitettu
+        step_started: Vaihe aloitettu
+        step_waiting: Vaihe odottaa
+        wait_timed_out: Odotus aikakatkaistu
+      filters:
+        apply: Käytä suodattimia
+        clear: Tyhjennä
+        created_from: Luotu alkaen
+        created_to: Luotu asti
+        error_class: Virheluokka
+        step: Nykyinen vaihe
+        subject_id: Kohteen ID
+        subject_type: Kohteen tyyppi
+        workflow_class: Työnkulun luokka
+        workflow_id: Työnkulun ID
+      flash:
+        bad_group: Ryhmä ei kelpaa.
+        bulk_cancel:
+          one: Peruttiin %{count}.
+          other: Peruttiin %{count}.
+        bulk_cancel_skipped: Peruttiin %{count}; %{skipped} oli jo edennyt.
+        bulk_failed: "%{count} ei voitu muuttaa: %{reason}"
+        bulk_more: 'Ajoja voi olla vielä jäljellä: paina uudelleen seuraavat %{cap} varten.'
+        bulk_resume:
+          one: Jatkettiin %{count}.
+          other: Jatkettiin %{count}.
+        bulk_resume_skipped: Jatkettiin %{count}; %{skipped} oli jo edennyt.
+        cancel: Työnkulku peruttu.
+        choose_step: Valitse vaihe, josta jatketaan.
+        failed:
+          not_allowed: 'Ei tehty: ajon tila on nyt %{status}.'
+          not_found: Työnkulkua ei enää ole.
+          other: "%{action} epäonnistui: %{reason}"
+        payload_not_object: 'Ei lähetetty: payload ei ole JSON-objekti.'
+        payload_too_large: 'Ei lähetetty: payload ylittää %{limit} tavua.'
+        rerun: Uusi ajo käynnistetty.
+        resume: Työnkulkua jatkettu.
+        resume_at: Työnkulkua jatkettu vaiheesta %{step}.
+        run_now: Ajastettu vaihe ajetaan nyt.
+        signal: Signaali %{name} lähetetty.
+        signal_duplicate: Signaali %{name} oli jo toimitettu tällä avaimella; mitään uutta ei lähetetty.
+        signal_name_missing: 'Ei lähetetty: signaali tarvitsee nimen.'
+        skip_step: Vaihe ohitettu.
+      headers:
+        current_step: Nykyinen vaihe
+        last_activity: Viimeisin toiminta
+        started: Aloitettu
+        status: Tila
+        subject: Kohde
+        workflow: Työnkulku
+      index:
+        attention_link:
+          one: Vaatii huomiota (%{count})
+          other: Vaatii huomiota (%{count})
+        description: 'Pitkäkestoiset monivaiheiset ajot: mitä kukin tekee ja mitä seuraavaksi tapahtuu.'
+        empty_hint: Valitse toinen tila tai tyhjennä suodattimet. Ajo alkaa komennolla YourWorkflow.start!(subject, **arguments).
+        empty_title: Ei työnkulkuja.
+        status_label: Suodata tilan mukaan
+        title: Työnkulut
+      next:
+        cancelled_html: Peruttu %{ago}.
+        due_html: 'Valmiina: %{step} erääntyi %{ago} ja odottaa workeria.'
+        finished_html: Päättyi %{ago}.
+        overdue_html: 'Myöhässä: %{step} erääntyi %{ago}; siivous lähettää sen uudelleen.'
+        paused_error_html: 'Keskeytetty vaiheessa %{step}: %{error} — jatka tai peru.'
+        paused_manual_html: Keskeytetty vaiheessa %{step} — jatka tai peru.
+        performing_attempt_html: Suoritetaan vaihetta %{step} (yritys %{attempt}).
+        performing_html: Suoritetaan vaihetta %{step}.
+        ready_html: 'Valmiina: %{step} ajetaan seuraavaksi.'
+        scheduled_html: 'Ajastettu: %{step} ajetaan %{time}.'
+        unknown_html: 'Tila: %{status}.'
+        waiting_batch_html: Odottaa erää %{batch} (%{done} / %{total} tehtävää valmis).
+        waiting_signal_html: Odottaa signaalia %{signal}, alkoi %{ago}.
+        waiting_signal_timeout_html: Odottaa signaalia %{signal}, alkoi %{ago}. Odotus aikakatkaistaan %{time}.
+        waiting_step_html: Odottaa vaihetta %{step}.
+      not_found:
+        hint: Se on ehkä päättynyt ja poistettu workflow_retentionin jälkeen, tai tietokantaa ei voitu lukea (katso loki).
+        title: Työnkulkua ei löytynyt
+      outcomes:
+        cancelled: peruttu
+        completed: valmistui
+        finished_early: päätti ajon etuajassa
+        paused: keskeytti ajon
+        reattempted: yritetty uudelleen
+        skipped: ohitettu
+      resume:
+        carry_on: 'Jatka: etene vaiheeseen %{step}'
+        continue: 'Jatka: siirry vaiheeseen %{step}'
+        finish: 'Jatka: päätä ajo'
+        resend: 'Jatka: lähetä %{step} uudelleen'
+        retry: 'Jatka: yritä vaihetta %{step} uudelleen'
+        rewait: 'Jatka: odota vaihetta %{step} uudelleen'
+      show:
+        actions: Toiminnot
+        arguments: Argumentit
+        back: "← Työnkulut"
+        cancelled_at: Peruttu
+        class_missing: "%{workflow_class} ei ole ladattuna tässä prosessissa: ajon voi yhä perua, mutta ei jatkaa."
+        definition_outdated: 'Tämä ajo alkoi luokan %{workflow_class} vanhemmalla määrityksellä: sen vaiheet ovat muuttuneet ajon alun jälkeen.'
+        details: Tiedot
+        finished_at: Päättynyt
+        no_arguments: Tällä ajolla ei ole argumentteja.
+        paused_at: Keskeytetty
+        reason_hint: Tallennetaan auditointilokiin tekijän viereen.
+        reason_label: Syy (valinnainen)
+        rerun_of: Uusinta ajosta
+        reruns: Uusittu ajona
+        resume_at_label: Jatka vaiheesta
+      signal:
+        hint: Sitä odottava vaihe herää heti; muuten signaali odottaa, kunnes jokin vaihe ottaa sen.
+        name: Signaalin nimi
+        payload: Payload (JSON)
+        send: Lähetä signaali
+        title: Lähetä signaali
+      signal_statuses:
+        claimed: Varattu
+        consumed: Käsitelty
+        pending: Odottaa
+      signals:
+        empty: Tälle ajolle ei ole toimitettu signaaleja.
+        headers:
+          claimed: Varattu
+          consumed: Käsitelty
+          idempotency_key: Idempotenssiavain
+          name: Signaali
+          received: Vastaanotettu
+          status: Tila
+        payload: Payload
+        title: Signaalit
+      statuses:
+        cancelled: Peruttu
+        finished: Päättynyt
+        gone: poistunut
+        paused: Keskeytetty
+        performing: Suoritetaan
+        ready: Valmiina
+        scheduled: Ajastettu
+        waiting: Odottaa
+      step_statuses:
+        cancelled: Peruttu
+        completed: Valmis
+        failed: Epäonnistui
+        in_progress: Käynnissä
+        scheduled: Ajastettu
+        skipped: Ohitettu
+        waiting: Odottaa
+      steps:
+        batch: erä %{batch}
+        caused_by: 'Aiheuttaja: %{error}'
+        empty: Ei vielä yrityksiä.
+        headers:
+          finished: Päättynyt
+          queued: Jonossa
+          ran: Ajettu
+          scheduled: Ajastettu
+          started: Aloitettu
+          status: Tila
+          step: Vaihe
+          waited: Odotettu
+          worker: Worker
+        revision: versio %{revision}
+        show_backtrace: Näytä backtrace
+        title: Yritykset
+        waiting_for: sen jälkeen odotus %{duration}
+        waits_for_html: odottaa signaalia %{signal}
+      tabs:
+        all: Kaikki
+        cancelled: Peruttu
+        finished: Päättynyt
+        ongoing: Käynnissä
+        paused: Keskeytetty
+        performing: Suoritetaan
+        ready: Valmiina
+        waiting: Odottaa
+      timeline:
+        caption: 'Jokainen yritys, vanhin ylimpänä: odotettu (sen odotus), jonossa (erääntynyt, ei vielä otettu), ajettu (väri kertoo lopputuloksen) ja odottaa (signaalia tai erää), keskeytykset omalla rivillään. Alla oleva yritystaulukko listaa samat kestot.'
+        empty: Ei vielä yrityksiä.
+        paused_period_html: Keskeytetty %{from} ajaksi %{duration}
+        paused_row: Keskeytetty
+        series:
+          paused: Keskeytetty
+          queued: Jonossa
+          ran_cancelled: Ajettu, peruttu
+          ran_failed: Ajettu, epäonnistui
+          ran_ok: Ajettu
+          ran_open: Käynnissä
+          waited: Odotettu
+          waiting: Odottaa
+        title: Aikajana

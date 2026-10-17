@@ -14,6 +14,7 @@ module Pgbus
     REQUIRES = %w[
       pgbus/mcp/redactor
       pgbus/mcp/base_tool
+      pgbus/mcp/serialization
       pgbus/mcp/health_analyzer
       pgbus/mcp/tools/health_tool
       pgbus/mcp/tools/queues_tool
@@ -29,6 +30,10 @@ module Pgbus
       pgbus/mcp/tools/stats_tool
       pgbus/mcp/tools/recurring_tool
       pgbus/mcp/tools/deploy_tasks_tool
+      pgbus/mcp/workflow_payloads
+      pgbus/mcp/tools/workflows_tool
+      pgbus/mcp/tools/workflow_detail_tool
+      pgbus/mcp/tools/workflows_attention_tool
       pgbus/mcp/server
       pgbus/mcp/runner
       pgbus/mcp/rack_app

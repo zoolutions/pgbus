@@ -265,7 +265,7 @@ This boots a supervisor that manages:
 mount Pgbus::Engine => "/pgbus"
 ```
 
-The dashboard shows queues, jobs, processes, failures, dead letter messages, and event subscribers. It auto-refreshes via Turbo Frames with no WebSocket dependency.
+The dashboard shows queues, jobs, processes, failures, dead letter messages, event subscribers and workflow runs. It auto-refreshes via Turbo Frames with no WebSocket dependency.
 
 Protect it in production with a simple auth lambda:
 
@@ -890,6 +890,7 @@ wf.events.map(&:event)                              # ["started", "step_schedule
 - **Signals**: `step :capture, wait_for: :payment_confirmed do … received_signal.payload["amount"] … end` parks until `wf.signal!(:payment_confirmed, payload: {…}, idempotency_key: event.id)`, or by subject, `OrderWorkflow.signal!(order, :payment_confirmed, …, missing: :ignore)`. Early signals are buffered, a redelivery with the same key is a no-op (`duplicate_delivery?`), and matchers (`Pgbus::Workflow::SignalMatcher.new(:shipped) { |payload| … }`) narrow what a step takes. `wait_timeout: 2.days, on_timeout: :pause!` (or `:cancel!`, `:skip!`, `:run`) puts a deadline on the wait, fired by the dispatcher's sweep.
 - **Housekeeping**: a worker that dies mid-step is noticed when its message comes back (the visibility heartbeat keeps a live one invisible); a hung step stalls after its `timeout:` or `workflow_stall_threshold`; the dispatcher re-sends lost steps and deletes finished runs after `workflow_retention` (30 days).
 - **Metrics** for Prometheus/StatsD and AppSignal: per-step duration histograms and counters, and gauges of runs by status and by stuck reason.
+- **Dashboard**: `/pgbus/workflows` lists runs with what each one does next, filters by state, class, step, error, subject, id and creation date, and shows a run's timeline, attempts, signals and audit trail with its actions (Resume, Resume at, Run now, Skip step, Send signal, Rerun, Cancel); `/pgbus/workflows/attention` groups the stuck runs for bulk Resume/Cancel. `config.web_actor = ->(request) { … }` names the operator on the audit trail and `config.workflow_subject_url = ->(type, id) { … }` links the subject. The MCP server reads the same through `pgbus_workflows`, `pgbus_workflow` and `pgbus_workflows_attention`.
 - **Testing**: `include Pgbus::Workflow::TestHelpers`, then `perform_next_step(wf)`, `run_step_inline(wf, :reminder)` or `speedrun_workflow(wf)` (which raises `Pgbus::Workflow::StepWaiting` at a waiting step), and `deliver_signal(wf, :shipped)`, `complete_fan_out(wf)` or `expire_wait(wf)` to move a waiting run on.
 
 When the workflow tables share your application's database, the StepJob is sent after the step row commits, so `start!` inside your own transaction sends nothing until it commits; with a separate pgbus database (`connects_to`) the run commits and its first step is sent on their own, before your transaction commits. Generate and apply the migration with `rails generate pgbus:add_workflows` and `rails db:migrate` (`pgbus:update` detects the missing tables); an install that added workflows before waiting steps adds them with `rails generate pgbus:add_workflow_signals`. The [Workflows guide](https://pgbus.zoolutions.llc/docs/workflows) covers policies, outputs, removing steps, the stall actions and the transition table.
@@ -1266,6 +1267,8 @@ All tools are read-only — no tool mutates state, and there is no raw-SQL passt
 | `pgbus_locks` | Active uniqueness locks (the leaked-lock diagnostic). Paginated (`page`, `per_page` max 100; returns `total`, capped at 10,000, and `has_more`). |
 | `pgbus_throughput` / `pgbus_stats` | Recent throughput time series and status counts. |
 | `pgbus_deploy_tasks` | Deploy tasks, their state and the rollover status (read-only). |
+| `pgbus_workflows` / `pgbus_workflow` | Workflow runs with the dashboard's filters (paginated, `total` capped at 10,000), and one run's attempts, durations, signals, audit trail and `available_actions`. Arguments, outputs, signal payloads and error text are redacted unless payloads are allowed and `include_payloads` is set. |
+| `pgbus_workflows_attention` | Stuck workflow runs grouped by class, step, reason and error class, with counts and first/last seen. |
 | `pgbus_recurring` | Recurring task schedule + last/next run times. All tasks unless `page` / `per_page` is given (then `total` is capped at 10,000); returns `total`, `has_more`. |
 
 #### Security
@@ -2314,6 +2317,7 @@ The dashboard is a mountable Rails engine at `/pgbus` with:
 - **Outbox** — transactional outbox entries pending publication
 - **Locks** — active job uniqueness locks with state (queued/executing), owner PID@hostname, age
 - **Insights** — throughput chart (jobs/min), status distribution donut, slowest job classes table
+- **Workflows** — every `Pgbus::Workflow` run with what it is doing and what happens next, filters, a per-run timeline chart with every attempt, its signals, its audit trail and the actions its state allows, and a needs-attention view that groups stuck runs for bulk Resume/Cancel
 
 All tables use Turbo Frames for periodic auto-refresh without page reloads. Destructive actions use styled confirmation dialogs (not browser `confirm()`), and flash messages appear as auto-dismissing toast notifications.
 

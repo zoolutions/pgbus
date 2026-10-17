@@ -140,6 +140,11 @@ nb:
         throughput: Gjennomstrømning
         throughput_detail: jobber/min de siste %{minutes} min
         throughput_unavailable: krever jobbstatistikk (rails g pgbus:add_job_stats)
+        workflows: Arbeidsflyter
+        workflows_attention:
+          one: "%{count} trenger oppmerksomhet"
+          other: "%{count} trenger oppmerksomhet"
+        workflows_detail: pågående (%{paused} satt på pause)
       verdict:
         links:
           dlq: Dead letters
@@ -723,6 +728,7 @@ nb:
         processes: Prosesser
         queues: Køer
         recurring: Gjentakende
+        workflows: Arbeidsflyter
       return_to_app: Tilbake til appen
       title: Pgbus-dashbord
       toggle_dark_mode: Bytt til mørk modus
@@ -1023,3 +1029,282 @@ nb:
         disabled: Oppgave deaktivert
         enabled: Oppgave aktivert
         failed: Kunne ikke endre oppgave
+    workflows:
+      actions:
+        bulk_cancel: Avbryt alle
+        bulk_resume: Gjenoppta alle
+        cancel: Avbryt
+        rerun: Kjør på nytt
+        resume: Gjenoppta
+        resume_at: Gjenoppta ved trinn
+        run_now: Kjør nå
+        signal: Send signal
+        skip_step: Hopp over trinn
+      attempt: forsøk %{attempt}
+      attention:
+        at_step_html: ved %{step}
+        back: "← Arbeidsflyter"
+        cancel_all:
+          one: Avbryt alle %{count}
+          other: Avbryt alle %{count}
+        confirm:
+          cancel:
+            one: Avbryte kjøringen som sitter fast ved %{step}?
+            other: Avbryte alle %{count} kjøringer som sitter fast ved %{step}?
+          cancel_error:
+            one: Avbryte kjøringen som sitter fast ved %{step} på grunn av %{error}?
+            other: Avbryte alle %{count} kjøringer som sitter fast ved %{step} på grunn av %{error}?
+          resume:
+            one: Gjenoppta kjøringen som er på pause ved %{step}?
+            other: Gjenoppta alle %{count} kjøringer som er på pause ved %{step}?
+          resume_error:
+            one: Gjenoppta kjøringen som er på pause ved %{step} på grunn av %{error}?
+            other: Gjenoppta alle %{count} kjøringer som er på pause ved %{step} på grunn av %{error}?
+        description: Pågående kjøringer som venter på et menneske, gruppert etter hva som stoppet dem. Når årsaken er rettet, handle på hele gruppen.
+        empty_hint: Ingen pågående kjøring er på pause, har stoppet, er forsinket eller har ventet lenger enn workflow_waiting_visibility_threshold.
+        empty_title: Ingenting trenger oppmerksomhet.
+        first_seen_html: første gang %{time}
+        headers:
+          actions: Handlinger
+          reason: Årsak
+          runs: Kjøringer
+          seen: Sett
+          workflow: Arbeidsflyt
+        last_seen_html: sist %{time}
+        reasons:
+          overdue: 'Forsinket: forfalt, men ikke hentet'
+          paused_error: På pause på grunn av en feil
+          paused_manual: Satt på pause for hånd
+          stalled: 'Har stoppet: workeren svarer ikke lenger'
+          waiting_overdue: Venter for lenge
+        resume_all:
+          one: Gjenoppta alle %{count}
+          other: Gjenoppta alle %{count}
+        show_runs: Vis kjøringer
+        title: Trenger oppmerksomhet
+      audit:
+        by: "%{event} av %{actor}"
+        empty: Ingen hendelser registrert.
+        headers:
+          what: Hva skjedde
+          when: Når
+        title: Revisjonslogg
+        with_reason: "%{sentence}: %{reason}"
+        with_step: "%{sentence} (%{step} #%{attempt})"
+      bad_request: 'Ugyldig forespørsel: %{reason}'
+      confirm:
+        cancel: Avbryte denne arbeidsflyten? De åpne trinnene avbrytes, og den kjører ikke igjen.
+        rerun: Starte denne arbeidsflyten på nytt som en ny kjøring, med samme emne og argumenter?
+        resume: Gjenoppta denne arbeidsflyten?
+        resume_at: Gjenoppta denne arbeidsflyten ved det valgte trinnet? De åpne trinnene avbrytes først.
+        run_now: Kjøre det planlagte trinnet nå i stedet for å vente?
+        signal: Sende dette signalet til arbeidsflyten?
+        skip_step: Hoppe over trinnet denne arbeidsflyten venter på og gå til neste?
+      events:
+        cancelled: Avbrutt
+        fan_out_finished: Fan-out fullført
+        fan_out_opened: Fan-out åpnet
+        finished: Fullført
+        late_completion_ignored: Sen fullføring ignorert
+        paused: På pause
+        rerun: Kjørt på nytt
+        rescheduled: Omplanlagt
+        resumed: Gjenopptatt
+        run_now: Kjør nå
+        signal_claimed: Signal tatt
+        signal_received: Signal mottatt
+        stall_detected: Stopp oppdaget
+        started: Startet
+        step_completed: Trinn fullført
+        step_failed: Trinn mislyktes
+        step_reattempted: Trinn forsøkt på nytt
+        step_scheduled: Trinn planlagt
+        step_skipped: Trinn hoppet over
+        step_started: Trinn startet
+        step_waiting: Trinn venter
+        wait_timed_out: Ventetid utløpt
+      filters:
+        apply: Bruk filtre
+        clear: Fjern
+        created_from: Opprettet fra
+        created_to: Opprettet til
+        error_class: Feilklasse
+        step: Gjeldende trinn
+        subject_id: Emne-ID
+        subject_type: Emnetype
+        workflow_class: Arbeidsflytklasse
+        workflow_id: Arbeidsflyt-ID
+      flash:
+        bad_group: Den gruppen er ikke gyldig.
+        bulk_cancel:
+          one: Avbrøt %{count}.
+          other: Avbrøt %{count}.
+        bulk_cancel_skipped: Avbrøt %{count}; %{skipped} hadde allerede gått videre.
+        bulk_failed: "%{count} kunne ikke endres: %{reason}"
+        bulk_more: 'Flere kjøringer kan vente: trykk igjen for de neste %{cap}.'
+        bulk_resume:
+          one: Gjenopptok %{count}.
+          other: Gjenopptok %{count}.
+        bulk_resume_skipped: Gjenopptok %{count}; %{skipped} hadde allerede gått videre.
+        cancel: Arbeidsflyten ble avbrutt.
+        choose_step: Velg et trinn å gjenoppta ved.
+        failed:
+          not_allowed: 'Ikke utført: kjøringen er nå %{status}.'
+          not_found: Den arbeidsflyten finnes ikke lenger.
+          other: "%{action} mislyktes: %{reason}"
+        payload_not_object: 'Ikke sendt: payload er ikke et JSON-objekt.'
+        payload_too_large: 'Ikke sendt: payload er over %{limit} byte.'
+        rerun: En ny kjøring ble startet.
+        resume: Arbeidsflyten ble gjenopptatt.
+        resume_at: Arbeidsflyten ble gjenopptatt ved %{step}.
+        run_now: Det planlagte trinnet kjører nå.
+        signal: Signalet %{name} ble sendt.
+        signal_duplicate: Signalet %{name} er allerede levert med denne nøkkelen; ingenting nytt ble sendt.
+        signal_name_missing: 'Ikke sendt: signalet trenger et navn.'
+        skip_step: Trinnet ble hoppet over.
+      headers:
+        current_step: Gjeldende trinn
+        last_activity: Siste aktivitet
+        started: Startet
+        status: Status
+        subject: Emne
+        workflow: Arbeidsflyt
+      index:
+        attention_link:
+          one: Trenger oppmerksomhet (%{count})
+          other: Trenger oppmerksomhet (%{count})
+        description: 'Varige kjøringer i flere trinn: hva hver enkelt gjør og hva som skjer videre.'
+        empty_hint: Velg en annen status eller fjern filtrene. En kjøring starter med YourWorkflow.start!(subject, **arguments).
+        empty_title: Ingen arbeidsflyter samsvarer.
+        status_label: Filtrer på status
+        title: Arbeidsflyter
+      next:
+        cancelled_html: Avbrutt %{ago}.
+        due_html: 'Klar: %{step} skulle kjørt %{ago} og venter på en worker.'
+        finished_html: Fullført %{ago}.
+        overdue_html: 'Forsinket: %{step} skulle kjørt %{ago}; opprydningen sender det på nytt.'
+        paused_error_html: 'På pause ved %{step}: %{error} — gjenoppta eller avbryt.'
+        paused_manual_html: På pause ved %{step} — gjenoppta eller avbryt.
+        performing_attempt_html: Kjører %{step} (forsøk %{attempt}).
+        performing_html: Kjører %{step}.
+        ready_html: 'Klar: %{step} kjører neste gang.'
+        scheduled_html: 'Planlagt: %{step} kjører %{time}.'
+        unknown_html: 'Status: %{status}.'
+        waiting_batch_html: Venter på gruppen %{batch} (%{done} av %{total} jobber ferdige).
+        waiting_signal_html: Venter på signalet %{signal} siden %{ago}.
+        waiting_signal_timeout_html: Venter på signalet %{signal} siden %{ago}. Ventetiden utløper %{time}.
+        waiting_step_html: Venter på %{step}.
+      not_found:
+        hint: Den kan ha blitt fullført og fjernet etter workflow_retention, eller databasen kunne ikke leses (se loggen).
+        title: Arbeidsflyten ble ikke funnet
+      outcomes:
+        cancelled: avbrutt
+        completed: fullført
+        finished_early: avsluttet kjøringen tidlig
+        paused: satte kjøringen på pause
+        reattempted: forsøkt på nytt
+        skipped: hoppet over
+      resume:
+        carry_on: 'Gjenoppta: fortsett med %{step}'
+        continue: 'Gjenoppta: fortsett med %{step}'
+        finish: 'Gjenoppta: avslutt kjøringen'
+        resend: 'Gjenoppta: send %{step} på nytt'
+        retry: 'Gjenoppta: prøv %{step} på nytt'
+        rewait: 'Gjenoppta: vent på %{step} igjen'
+      show:
+        actions: Handlinger
+        arguments: Argumenter
+        back: "← Arbeidsflyter"
+        cancelled_at: Avbrutt
+        class_missing: "%{workflow_class} er ikke lastet i denne prosessen: kjøringen kan fortsatt avbrytes, men ikke gjenopptas."
+        definition_outdated: 'Denne kjøringen startet på en eldre definisjon av %{workflow_class}: trinnene har endret seg siden start.'
+        details: Detaljer
+        finished_at: Fullført
+        no_arguments: Denne kjøringen har ingen argumenter.
+        paused_at: På pause
+        reason_hint: Lagres i revisjonsloggen, ved siden av hvem som gjorde det.
+        reason_label: Årsak (valgfri)
+        rerun_of: Omkjøring av
+        reruns: Kjørt på nytt som
+        resume_at_label: Trinn å gjenoppta ved
+      signal:
+        hint: Et trinn som venter på det våkner med en gang; ellers blir det liggende ventende til et trinn tar det.
+        name: Signalnavn
+        payload: Payload (JSON)
+        send: Send signal
+        title: Send et signal
+      signal_statuses:
+        claimed: Tatt
+        consumed: Brukt
+        pending: Venter
+      signals:
+        empty: Ingen signaler er levert til denne kjøringen.
+        headers:
+          claimed: Tatt
+          consumed: Brukt
+          idempotency_key: Idempotensnøkkel
+          name: Signal
+          received: Mottatt
+          status: Status
+        payload: Payload
+        title: Signaler
+      statuses:
+        cancelled: Avbrutt
+        finished: Fullført
+        gone: borte
+        paused: På pause
+        performing: Kjører
+        ready: Klar
+        scheduled: Planlagt
+        waiting: Venter
+      step_statuses:
+        cancelled: Avbrutt
+        completed: Fullført
+        failed: Mislyktes
+        in_progress: Kjører
+        scheduled: Planlagt
+        skipped: Hoppet over
+        waiting: Venter
+      steps:
+        batch: gruppe %{batch}
+        caused_by: Forårsaket av %{error}
+        empty: Ingen forsøk ennå.
+        headers:
+          finished: Fullført
+          queued: I kø
+          ran: Kjørte
+          scheduled: Planlagt
+          started: Startet
+          status: Status
+          step: Trinn
+          waited: Ventet
+          worker: Worker
+        revision: revisjon %{revision}
+        show_backtrace: Vis backtrace
+        title: Forsøk
+        waiting_for: venter deretter %{duration}
+        waits_for_html: venter på %{signal}
+      tabs:
+        all: Alle
+        cancelled: Avbrutt
+        finished: Fullført
+        ongoing: Pågående
+        paused: På pause
+        performing: Kjører
+        ready: Klare
+        waiting: Venter
+      timeline:
+        caption: 'Hvert forsøk, eldst øverst: ventet (ventetiden), i kø (forfalt, ikke hentet ennå), kjørte (farget etter utfall) og venter (på et signal eller sin gruppe), med pausene på en egen rad. Forsøkstabellen under viser de samme varighetene.'
+        empty: Ingen forsøk ennå.
+        paused_period_html: Satt på pause %{from} i %{duration}
+        paused_row: På pause
+        series:
+          paused: På pause
+          queued: I kø
+          ran_cancelled: Kjørte, avbrutt
+          ran_failed: Kjørte, mislyktes
+          ran_ok: Kjørte
+          ran_open: Kjører
+          waited: Ventet
+          waiting: Venter
+        title: Tidslinje

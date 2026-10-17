@@ -70,7 +70,8 @@ RSpec.describe "Dashboard accessibility", type: :system do
     end
 
     %w[/pgbus /pgbus/queues /pgbus/jobs /pgbus/recurring_tasks /pgbus/deploy_tasks /pgbus/processes /pgbus/events
-       /pgbus/batches /pgbus/dlq /pgbus/outbox /pgbus/locks /pgbus/insights].each do |path|
+       /pgbus/batches /pgbus/workflows /pgbus/workflows/attention /pgbus/dlq /pgbus/outbox /pgbus/locks
+       /pgbus/insights].each do |path|
       it_behaves_like "an accessible page", path, :light
       it_behaves_like "an accessible page", path, :dark
     end

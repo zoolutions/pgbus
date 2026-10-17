@@ -140,6 +140,11 @@ de:
         throughput: Durchsatz
         throughput_detail: Aufträge/Min in den letzten %{minutes} Min
         throughput_unavailable: benötigt Job-Statistiken (rails g pgbus:add_job_stats)
+        workflows: Workflows
+        workflows_attention:
+          one: "%{count} braucht Aufmerksamkeit"
+          other: "%{count} brauchen Aufmerksamkeit"
+        workflows_detail: laufend (%{paused} pausiert)
       verdict:
         links:
           dlq: Dead Letters
@@ -723,6 +728,7 @@ de:
         processes: Prozesse
         queues: Warteschlangen
         recurring: Wiederkehrend
+        workflows: Workflows
       return_to_app: Zurück zur App
       title: Pgbus Dashboard
       toggle_dark_mode: Dunkelmodus umschalten
@@ -1023,3 +1029,282 @@ de:
         disabled: Aufgabe deaktiviert
         enabled: Aufgabe aktiviert
         failed: Aufgabe konnte nicht umgeschaltet werden
+    workflows:
+      actions:
+        bulk_cancel: Alle abbrechen
+        bulk_resume: Alle fortsetzen
+        cancel: Abbrechen
+        rerun: Wiederholen
+        resume: Fortsetzen
+        resume_at: Bei Schritt fortsetzen
+        run_now: Jetzt ausführen
+        signal: Signal senden
+        skip_step: Schritt überspringen
+      attempt: Versuch %{attempt}
+      attention:
+        at_step_html: bei %{step}
+        back: "← Workflows"
+        cancel_all:
+          one: Alle %{count} abbrechen
+          other: Alle %{count} abbrechen
+        confirm:
+          cancel:
+            one: Den bei %{step} festhängenden Lauf abbrechen?
+            other: Alle %{count} bei %{step} festhängenden Läufe abbrechen?
+          cancel_error:
+            one: Den bei %{step} wegen %{error} festhängenden Lauf abbrechen?
+            other: Alle %{count} bei %{step} wegen %{error} festhängenden Läufe abbrechen?
+          resume:
+            one: Den bei %{step} pausierten Lauf fortsetzen?
+            other: Alle %{count} bei %{step} pausierten Läufe fortsetzen?
+          resume_error:
+            one: Den bei %{step} wegen %{error} pausierten Lauf fortsetzen?
+            other: Alle %{count} bei %{step} wegen %{error} pausierten Läufe fortsetzen?
+        description: Laufende Läufe, die auf einen Menschen warten, gruppiert nach dem Grund des Stopps. Ist die Ursache behoben, handle für die ganze Gruppe.
+        empty_hint: Kein laufender Lauf ist pausiert, im Stillstand, überfällig oder wartet länger als workflow_waiting_visibility_threshold.
+        empty_title: Nichts braucht Aufmerksamkeit.
+        first_seen_html: erstmals %{time}
+        headers:
+          actions: Aktionen
+          reason: Grund
+          runs: Läufe
+          seen: Gesehen
+          workflow: Workflow
+        last_seen_html: zuletzt %{time}
+        reasons:
+          overdue: 'Überfällig: fällig, aber nicht abgeholt'
+          paused_error: Wegen eines Fehlers pausiert
+          paused_manual: Von Hand pausiert
+          stalled: 'Stillstand: Der Worker antwortet nicht mehr'
+          waiting_overdue: Wartet zu lange
+        resume_all:
+          one: Alle %{count} fortsetzen
+          other: Alle %{count} fortsetzen
+        show_runs: Läufe anzeigen
+        title: Braucht Aufmerksamkeit
+      audit:
+        by: "%{event} durch %{actor}"
+        empty: Keine Ereignisse aufgezeichnet.
+        headers:
+          what: Was geschah
+          when: Wann
+        title: Audit-Protokoll
+        with_reason: "%{sentence}: %{reason}"
+        with_step: "%{sentence} (%{step} #%{attempt})"
+      bad_request: 'Ungültige Anfrage: %{reason}'
+      confirm:
+        cancel: Diesen Workflow abbrechen? Die offenen Schritte werden abgebrochen und er läuft nicht mehr.
+        rerun: Diesen Workflow als neuen Lauf mit demselben Subjekt und denselben Argumenten erneut starten?
+        resume: Diesen Workflow fortsetzen?
+        resume_at: Diesen Workflow beim gewählten Schritt fortsetzen? Die offenen Schritte werden zuvor abgebrochen.
+        run_now: Den geplanten Schritt jetzt ausführen, statt zu warten?
+        signal: Dieses Signal an den Workflow senden?
+        skip_step: Den Schritt, auf den dieser Workflow wartet, überspringen und zum nächsten gehen?
+      events:
+        cancelled: Abgebrochen
+        fan_out_finished: Fan-out abgeschlossen
+        fan_out_opened: Fan-out geöffnet
+        finished: Abgeschlossen
+        late_completion_ignored: Späte Fertigmeldung ignoriert
+        paused: Pausiert
+        rerun: Wiederholt
+        rescheduled: Neu geplant
+        resumed: Fortgesetzt
+        run_now: Jetzt ausführen
+        signal_claimed: Signal übernommen
+        signal_received: Signal empfangen
+        stall_detected: Stillstand erkannt
+        started: Gestartet
+        step_completed: Schritt abgeschlossen
+        step_failed: Schritt fehlgeschlagen
+        step_reattempted: Schritt erneut versucht
+        step_scheduled: Schritt geplant
+        step_skipped: Schritt übersprungen
+        step_started: Schritt gestartet
+        step_waiting: Schritt wartet
+        wait_timed_out: Wartezeit abgelaufen
+      filters:
+        apply: Filter anwenden
+        clear: Zurücksetzen
+        created_from: Erstellt ab
+        created_to: Erstellt bis
+        error_class: Fehlerklasse
+        step: Aktueller Schritt
+        subject_id: Subjekt-ID
+        subject_type: Subjekttyp
+        workflow_class: Workflow-Klasse
+        workflow_id: Workflow-ID
+      flash:
+        bad_group: Diese Gruppe ist ungültig.
+        bulk_cancel:
+          one: "%{count} abgebrochen."
+          other: "%{count} abgebrochen."
+        bulk_cancel_skipped: "%{count} abgebrochen; %{skipped} waren bereits weitergelaufen."
+        bulk_failed: "%{count} konnten nicht geändert werden: %{reason}"
+        bulk_more: 'Es warten möglicherweise weitere Läufe: Erneut drücken für die nächsten %{cap}.'
+        bulk_resume:
+          one: "%{count} fortgesetzt."
+          other: "%{count} fortgesetzt."
+        bulk_resume_skipped: "%{count} fortgesetzt; %{skipped} waren bereits weitergelaufen."
+        cancel: Workflow abgebrochen.
+        choose_step: Wähle einen Schritt zum Fortsetzen.
+        failed:
+          not_allowed: 'Nicht ausgeführt: Der Lauf ist jetzt %{status}.'
+          not_found: Dieser Workflow existiert nicht mehr.
+          other: "%{action} fehlgeschlagen: %{reason}"
+        payload_not_object: 'Nicht gesendet: Die Payload ist kein JSON-Objekt.'
+        payload_too_large: 'Nicht gesendet: Die Payload ist größer als %{limit} Bytes.'
+        rerun: Neuer Lauf gestartet.
+        resume: Workflow fortgesetzt.
+        resume_at: Workflow bei %{step} fortgesetzt.
+        run_now: Der geplante Schritt läuft jetzt.
+        signal: Signal %{name} gesendet.
+        signal_duplicate: Signal %{name} wurde mit diesem Schlüssel bereits zugestellt; es wurde nichts Neues gesendet.
+        signal_name_missing: 'Nicht gesendet: Das Signal braucht einen Namen.'
+        skip_step: Schritt übersprungen.
+      headers:
+        current_step: Aktueller Schritt
+        last_activity: Letzte Aktivität
+        started: Gestartet
+        status: Status
+        subject: Subjekt
+        workflow: Workflow
+      index:
+        attention_link:
+          one: Braucht Aufmerksamkeit (%{count})
+          other: Braucht Aufmerksamkeit (%{count})
+        description: 'Dauerhafte mehrstufige Läufe: was jeder gerade tut und was als Nächstes passiert.'
+        empty_hint: Wähle einen anderen Status oder entferne die Filter. Ein Lauf startet mit YourWorkflow.start!(subject, **arguments).
+        empty_title: Keine passenden Workflows.
+        status_label: Nach Status filtern
+        title: Workflows
+      next:
+        cancelled_html: Abgebrochen %{ago}.
+        due_html: 'Bereit: %{step} war fällig %{ago} und wartet auf einen Worker.'
+        finished_html: Abgeschlossen %{ago}.
+        overdue_html: 'Überfällig: %{step} war fällig %{ago}; der Sweep sendet es erneut.'
+        paused_error_html: 'Pausiert bei %{step}: %{error} — fortsetzen oder abbrechen.'
+        paused_manual_html: Pausiert bei %{step} — fortsetzen oder abbrechen.
+        performing_attempt_html: "%{step} wird ausgeführt (Versuch %{attempt})."
+        performing_html: "%{step} wird ausgeführt."
+        ready_html: 'Bereit: %{step} läuft als Nächstes.'
+        scheduled_html: 'Geplant: %{step} läuft %{time}.'
+        unknown_html: 'Status: %{status}.'
+        waiting_batch_html: Wartet auf Stapel %{batch} (%{done} von %{total} Jobs erledigt).
+        waiting_signal_html: Wartet auf Signal %{signal} seit %{ago}.
+        waiting_signal_timeout_html: Wartet auf Signal %{signal} seit %{ago}. Das Warten läuft ab %{time}.
+        waiting_step_html: Wartet auf %{step}.
+      not_found:
+        hint: Er ist eventuell abgeschlossen und nach workflow_retention entfernt worden, oder die Datenbank konnte nicht gelesen werden (siehe Log).
+        title: Workflow nicht gefunden
+      outcomes:
+        cancelled: abgebrochen
+        completed: abgeschlossen
+        finished_early: hat den Lauf vorzeitig beendet
+        paused: hat den Lauf pausiert
+        reattempted: erneut versucht
+        skipped: übersprungen
+      resume:
+        carry_on: 'Fortsetzen: mit %{step} weitermachen'
+        continue: 'Fortsetzen: weiter mit %{step}'
+        finish: 'Fortsetzen: Lauf beenden'
+        resend: 'Fortsetzen: %{step} erneut senden'
+        retry: 'Fortsetzen: %{step} wiederholen'
+        rewait: 'Fortsetzen: erneut auf %{step} warten'
+      show:
+        actions: Aktionen
+        arguments: Argumente
+        back: "← Workflows"
+        cancelled_at: Abgebrochen
+        class_missing: "%{workflow_class} ist in diesem Prozess nicht geladen: Der Lauf kann noch abgebrochen, aber nicht fortgesetzt werden."
+        definition_outdated: 'Dieser Lauf wurde mit einer älteren Definition von %{workflow_class} gestartet: Die Schritte haben sich seitdem geändert.'
+        details: Details
+        finished_at: Abgeschlossen
+        no_arguments: Dieser Lauf hat keine Argumente.
+        paused_at: Pausiert
+        reason_hint: Wird im Audit-Protokoll festgehalten, neben der ausführenden Person.
+        reason_label: Grund (optional)
+        rerun_of: Wiederholung von
+        reruns: Wiederholt als
+        resume_at_label: Schritt zum Fortsetzen
+      signal:
+        hint: Ein darauf wartender Schritt wird sofort geweckt; sonst bleibt es ausstehend, bis ein Schritt es übernimmt.
+        name: Signalname
+        payload: Payload (JSON)
+        send: Signal senden
+        title: Signal senden
+      signal_statuses:
+        claimed: Übernommen
+        consumed: Verbraucht
+        pending: Ausstehend
+      signals:
+        empty: Diesem Lauf wurden keine Signale zugestellt.
+        headers:
+          claimed: Übernommen
+          consumed: Verbraucht
+          idempotency_key: Idempotenzschlüssel
+          name: Signal
+          received: Empfangen
+          status: Status
+        payload: Payload
+        title: Signale
+      statuses:
+        cancelled: Abgebrochen
+        finished: Abgeschlossen
+        gone: entfernt
+        paused: Pausiert
+        performing: In Ausführung
+        ready: Bereit
+        scheduled: Geplant
+        waiting: Wartend
+      step_statuses:
+        cancelled: Abgebrochen
+        completed: Abgeschlossen
+        failed: Fehlgeschlagen
+        in_progress: Läuft
+        scheduled: Geplant
+        skipped: Übersprungen
+        waiting: Wartend
+      steps:
+        batch: Stapel %{batch}
+        caused_by: Verursacht durch %{error}
+        empty: Noch keine Versuche.
+        headers:
+          finished: Abgeschlossen
+          queued: Eingereiht
+          ran: Gelaufen
+          scheduled: Geplant
+          started: Gestartet
+          status: Status
+          step: Schritt
+          waited: Gewartet
+          worker: Worker
+        revision: Revision %{revision}
+        show_backtrace: Backtrace anzeigen
+        title: Versuche
+        waiting_for: danach Wartezeit %{duration}
+        waits_for_html: wartet auf %{signal}
+      tabs:
+        all: Alle
+        cancelled: Abgebrochen
+        finished: Abgeschlossen
+        ongoing: Laufend
+        paused: Pausiert
+        performing: In Ausführung
+        ready: Bereit
+        waiting: Wartend
+      timeline:
+        caption: 'Jeder Versuch, der älteste oben: gewartet (seine Wartezeit), eingereiht (fällig, noch nicht abgeholt), gelaufen (nach Ausgang eingefärbt) und wartend (auf ein Signal oder seinen Stapel), die Pausen in einer eigenen Zeile. Die Versuchstabelle darunter listet dieselben Dauern.'
+        empty: Noch keine Versuche.
+        paused_period_html: Pausiert ab %{from} für %{duration}
+        paused_row: Pausiert
+        series:
+          paused: Pausiert
+          queued: Eingereiht
+          ran_cancelled: Gelaufen, abgebrochen
+          ran_failed: Gelaufen, fehlgeschlagen
+          ran_ok: Gelaufen
+          ran_open: Läuft
+          waited: Gewartet
+          waiting: Wartend
+        title: Zeitachse

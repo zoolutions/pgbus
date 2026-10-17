@@ -1,0 +1,12 @@
+<%# The status tabs (issue #542): ongoing by default, each state, all. A tab
+    keeps the filters and goes back to page 1. %>
+<nav class="mb-4 flex flex-wrap gap-2" aria-label="<%= t("pgbus.workflows.index.status_label") %>" data-testid="workflow-status-tabs">
+  <% Pgbus::Web::DataSource::WorkflowList::STATUSES.each do |status| %>
+    <% active = status == @query.status %>
+    <a href="<%= pgbus_workflows_path_with(@query, status: status) %>"
+       data-status="<%= status %>" aria-current="<%= active ? "page" : "false" %>"
+       class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium <%= active ? 'bg-gray-800 text-white dark:bg-gray-700' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white' %>">
+      <%= t("pgbus.workflows.tabs.#{status}") %>
+    </a>
+  <% end %>
+</nav>

@@ -69,16 +69,7 @@ module Pgbus
         end
         private_class_method :task_hash
 
-        # Times as ISO 8601 UTC, symbols as strings, string keys throughout.
-        def self.serialize(value)
-          case value
-          when Hash then value.to_h { |key, val| [key.to_s, serialize(val)] }
-          when Array then value.map { |val| serialize(val) }
-          when Symbol then value.to_s
-          when Time, DateTime, ActiveSupport::TimeWithZone then value.utc.iso8601
-          else value
-          end
-        end
+        def self.serialize(value) = Serialization.serialize(value)
         private_class_method :serialize
       end
     end

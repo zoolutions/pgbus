@@ -1,0 +1,59 @@
+<%# The operator actions (issue #542). Which buttons show is
+    available_actions (Workflow::States), never view logic; every button
+    submits the one form, to its own formaction, so the reason typed once
+    goes with whichever is pressed. %>
+<% actions = pgbus_workflow_dashboard_actions(@workflow) %>
+<% if actions.any? %>
+  <% id = @workflow[:workflow_id] %>
+  <%# The form's own action is the first button's, so Enter in the reason box
+      does what the first button does (and asks to confirm it). %>
+  <% paths = { resume: pgbus.resume_workflow_path(id), run_now: pgbus.run_now_workflow_path(id),
+               skip: pgbus.skip_step_workflow_path(id), rerun: pgbus.rerun_workflow_path(id),
+               cancel: pgbus.cancel_workflow_path(id), resume_at: pgbus.resume_at_workflow_path(id) } %>
+  <% default_path = paths.fetch(paths.keys.find { |action| actions.include?(action) }) %>
+  <section class="mb-8 rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700" aria-labelledby="workflow-actions-title" data-testid="workflow-actions">
+    <h2 id="workflow-actions-title" class="text-lg font-medium text-gray-900 dark:text-white"><%= t("pgbus.workflows.show.actions") %></h2>
+    <form action="<%= default_path %>" method="post" data-turbo-frame="_top" class="mt-3">
+      <%= hidden_field_tag :authenticity_token, form_authenticity_token, id: nil %>
+      <div class="max-w-xl">
+        <label for="workflow-action-reason" class="block text-sm font-medium text-gray-700 dark:text-gray-300"><%= t("pgbus.workflows.show.reason_label") %></label>
+        <input type="text" autocomplete="off" id="workflow-action-reason" name="reason" maxlength="1000" aria-describedby="workflow-action-reason-hint" class="<%= Pgbus::WorkflowsHelper::INPUT_CSS %>">
+        <p id="workflow-action-reason-hint" class="mt-1 text-xs text-gray-600 dark:text-gray-300"><%= t("pgbus.workflows.show.reason_hint") %></p>
+      </div>
+      <div class="mt-4 flex flex-wrap items-end gap-2">
+        <% if actions.include?(:resume) %>
+          <%= pgbus_button_tag pgbus_workflow_resume_label(@workflow), variant: :success, formaction: pgbus.resume_workflow_path(id),
+                confirm: t("pgbus.workflows.confirm.resume") %>
+        <% end %>
+        <% if actions.include?(:run_now) %>
+          <%= pgbus_button_tag t("pgbus.workflows.actions.run_now"), variant: :primary, formaction: pgbus.run_now_workflow_path(id),
+                confirm: t("pgbus.workflows.confirm.run_now") %>
+        <% end %>
+        <% if actions.include?(:skip) %>
+          <%= pgbus_button_tag t("pgbus.workflows.actions.skip_step"), variant: :warning, formaction: pgbus.skip_step_workflow_path(id),
+                confirm: t("pgbus.workflows.confirm.skip_step") %>
+        <% end %>
+        <% if actions.include?(:rerun) %>
+          <%= pgbus_button_tag t("pgbus.workflows.actions.rerun"), variant: :primary, formaction: pgbus.rerun_workflow_path(id),
+                confirm: t("pgbus.workflows.confirm.rerun") %>
+        <% end %>
+        <% if actions.include?(:cancel) %>
+          <%= pgbus_button_tag t("pgbus.workflows.actions.cancel"), variant: :danger, formaction: pgbus.cancel_workflow_path(id),
+                confirm: t("pgbus.workflows.confirm.cancel") %>
+        <% end %>
+      </div>
+      <% if actions.include?(:resume_at) && @workflow[:step_names].any? %>
+        <div class="mt-4 flex flex-wrap items-end gap-2">
+          <div>
+            <label for="workflow-resume-step" class="block text-sm font-medium text-gray-700 dark:text-gray-300"><%= t("pgbus.workflows.show.resume_at_label") %></label>
+            <select id="workflow-resume-step" name="step" class="<%= Pgbus::WorkflowsHelper::INPUT_CSS %>">
+              <%= options_for_select(@workflow[:step_names], @workflow[:current_step]) %>
+            </select>
+          </div>
+          <%= pgbus_button_tag t("pgbus.workflows.actions.resume_at"), variant: :secondary, formaction: pgbus.resume_at_workflow_path(id),
+                confirm: t("pgbus.workflows.confirm.resume_at") %>
+        </div>
+      <% end %>
+    </form>
+  </section>
+<% end %>

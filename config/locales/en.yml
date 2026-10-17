@@ -140,6 +140,11 @@ en:
         throughput: Throughput
         throughput_detail: jobs/min over the last %{minutes} min
         throughput_unavailable: needs job stats (rails g pgbus:add_job_stats)
+        workflows: Workflows
+        workflows_attention:
+          one: "%{count} needs attention"
+          other: "%{count} need attention"
+        workflows_detail: ongoing (%{paused} paused)
       verdict:
         links:
           dlq: Dead letters
@@ -723,6 +728,7 @@ en:
         processes: Processes
         queues: Queues
         recurring: Recurring
+        workflows: Workflows
       return_to_app: Back to app
       title: Pgbus Dashboard
       toggle_dark_mode: Toggle dark mode
@@ -1023,3 +1029,282 @@ en:
         disabled: Task disabled
         enabled: Task enabled
         failed: Failed to toggle task
+    workflows:
+      actions:
+        bulk_cancel: Cancel all
+        bulk_resume: Resume all
+        cancel: Cancel
+        rerun: Rerun
+        resume: Resume
+        resume_at: Resume at step
+        run_now: Run now
+        signal: Send signal
+        skip_step: Skip step
+      attempt: attempt %{attempt}
+      attention:
+        at_step_html: at %{step}
+        back: "← Workflows"
+        cancel_all:
+          one: Cancel all %{count}
+          other: Cancel all %{count}
+        confirm:
+          cancel:
+            one: Cancel the run stuck at %{step}?
+            other: Cancel all %{count} runs stuck at %{step}?
+          cancel_error:
+            one: Cancel the run stuck at %{step} on %{error}?
+            other: Cancel all %{count} runs stuck at %{step} on %{error}?
+          resume:
+            one: Resume the run paused at %{step}?
+            other: Resume all %{count} runs paused at %{step}?
+          resume_error:
+            one: Resume the run paused at %{step} on %{error}?
+            other: Resume all %{count} runs paused at %{step} on %{error}?
+        description: Ongoing runs that wait on a person, grouped by what stopped them. Once the cause is fixed, act on the whole group.
+        empty_hint: No ongoing run is paused, stalled, overdue or waiting past workflow_waiting_visibility_threshold.
+        empty_title: Nothing needs attention.
+        first_seen_html: first %{time}
+        headers:
+          actions: Actions
+          reason: Reason
+          runs: Runs
+          seen: Seen
+          workflow: Workflow
+        last_seen_html: last %{time}
+        reasons:
+          overdue: 'Overdue: due, but not picked up'
+          paused_error: Paused on an error
+          paused_manual: Paused by hand
+          stalled: 'Stalled: its worker stopped responding'
+          waiting_overdue: Waiting too long
+        resume_all:
+          one: Resume all %{count}
+          other: Resume all %{count}
+        show_runs: Show runs
+        title: Needs attention
+      audit:
+        by: "%{event} by %{actor}"
+        empty: No events recorded.
+        headers:
+          what: What happened
+          when: When
+        title: Audit trail
+        with_reason: "%{sentence}: %{reason}"
+        with_step: "%{sentence} (%{step} #%{attempt})"
+      bad_request: 'Bad request: %{reason}'
+      confirm:
+        cancel: Cancel this workflow? Its open steps are cancelled and it does not run again.
+        rerun: Start this workflow again as a new run, with the same subject and arguments?
+        resume: Resume this workflow?
+        resume_at: Resume this workflow at the chosen step? Its open steps are cancelled first.
+        run_now: Run the scheduled step now instead of waiting?
+        signal: Send this signal to the workflow?
+        skip_step: Skip the step this workflow waits on and move to the next one?
+      events:
+        cancelled: Cancelled
+        fan_out_finished: Fan-out finished
+        fan_out_opened: Fan-out opened
+        finished: Finished
+        late_completion_ignored: Late completion ignored
+        paused: Paused
+        rerun: Rerun
+        rescheduled: Rescheduled
+        resumed: Resumed
+        run_now: Run now
+        signal_claimed: Signal claimed
+        signal_received: Signal received
+        stall_detected: Stall detected
+        started: Started
+        step_completed: Step completed
+        step_failed: Step failed
+        step_reattempted: Step reattempted
+        step_scheduled: Step scheduled
+        step_skipped: Step skipped
+        step_started: Step started
+        step_waiting: Step waiting
+        wait_timed_out: Wait timed out
+      filters:
+        apply: Apply filters
+        clear: Clear
+        created_from: Created from
+        created_to: Created to
+        error_class: Error class
+        step: Current step
+        subject_id: Subject ID
+        subject_type: Subject type
+        workflow_class: Workflow class
+        workflow_id: Workflow ID
+      flash:
+        bad_group: That group is not valid.
+        bulk_cancel:
+          one: Cancelled %{count}.
+          other: Cancelled %{count}.
+        bulk_cancel_skipped: Cancelled %{count}; %{skipped} had already moved on.
+        bulk_failed: "%{count} could not be changed: %{reason}"
+        bulk_more: 'More runs may be waiting: press again for the next %{cap}.'
+        bulk_resume:
+          one: Resumed %{count}.
+          other: Resumed %{count}.
+        bulk_resume_skipped: Resumed %{count}; %{skipped} had already moved on.
+        cancel: Workflow cancelled.
+        choose_step: Choose a step to resume at.
+        failed:
+          not_allowed: 'Not done: the run is %{status} now.'
+          not_found: That workflow no longer exists.
+          other: "%{action} failed: %{reason}"
+        payload_not_object: 'Not sent: the payload is not a JSON object.'
+        payload_too_large: 'Not sent: the payload is over %{limit} bytes.'
+        rerun: Started a new run.
+        resume: Workflow resumed.
+        resume_at: Workflow resumed at %{step}.
+        run_now: The scheduled step runs now.
+        signal: Signal %{name} sent.
+        signal_duplicate: Signal %{name} was already delivered with this key; nothing new was sent.
+        signal_name_missing: 'Not sent: the signal needs a name.'
+        skip_step: Step skipped.
+      headers:
+        current_step: Current step
+        last_activity: Last activity
+        started: Started
+        status: Status
+        subject: Subject
+        workflow: Workflow
+      index:
+        attention_link:
+          one: Needs attention (%{count})
+          other: Needs attention (%{count})
+        description: 'Durable multi-step runs: what each one is doing and what happens next.'
+        empty_hint: Pick another status or clear the filters. A run starts with YourWorkflow.start!(subject, **arguments).
+        empty_title: No workflows match.
+        status_label: Filter by status
+        title: Workflows
+      next:
+        cancelled_html: Cancelled %{ago}.
+        due_html: 'Ready: %{step} was due %{ago} and waits for a worker.'
+        finished_html: Finished %{ago}.
+        overdue_html: 'Overdue: %{step} was due %{ago}; the sweep sends it again.'
+        paused_error_html: 'Paused on %{step}: %{error} — resume or cancel.'
+        paused_manual_html: Paused on %{step} — resume or cancel.
+        performing_attempt_html: Performing %{step} (attempt %{attempt}).
+        performing_html: Performing %{step}.
+        ready_html: 'Ready: %{step} runs next.'
+        scheduled_html: 'Scheduled: %{step} runs %{time}.'
+        unknown_html: 'Status: %{status}.'
+        waiting_batch_html: Waiting for batch %{batch} (%{done} of %{total} jobs done).
+        waiting_signal_html: Waiting for signal %{signal} since %{ago}.
+        waiting_signal_timeout_html: Waiting for signal %{signal} since %{ago}. The wait times out %{time}.
+        waiting_step_html: Waiting on %{step}.
+      not_found:
+        hint: It may have finished and been removed after workflow_retention, or the database could not be read (see the log).
+        title: Workflow not found
+      outcomes:
+        cancelled: cancelled
+        completed: completed
+        finished_early: finished the run early
+        paused: paused the run
+        reattempted: reattempted
+        skipped: skipped
+      resume:
+        carry_on: 'Resume: carry on with %{step}'
+        continue: 'Resume: continue with %{step}'
+        finish: 'Resume: finish the run'
+        resend: 'Resume: send %{step} again'
+        retry: 'Resume: retry %{step}'
+        rewait: 'Resume: wait again on %{step}'
+      show:
+        actions: Actions
+        arguments: Arguments
+        back: "← Workflows"
+        cancelled_at: Cancelled
+        class_missing: "%{workflow_class} is not loaded in this process: the run can still be cancelled, but not resumed."
+        definition_outdated: 'This run started on an older definition of %{workflow_class}: its steps have changed since it started.'
+        details: Details
+        finished_at: Finished
+        no_arguments: This run has no arguments.
+        paused_at: Paused
+        reason_hint: Recorded on the audit trail, next to who did it.
+        reason_label: Reason (optional)
+        rerun_of: Rerun of
+        reruns: Rerun as
+        resume_at_label: Step to resume at
+      signal:
+        hint: A step waiting for it wakes at once; otherwise it waits, pending, until a step takes it.
+        name: Signal name
+        payload: Payload (JSON)
+        send: Send signal
+        title: Send a signal
+      signal_statuses:
+        claimed: Claimed
+        consumed: Consumed
+        pending: Pending
+      signals:
+        empty: No signals delivered to this run.
+        headers:
+          claimed: Claimed
+          consumed: Consumed
+          idempotency_key: Idempotency key
+          name: Signal
+          received: Received
+          status: Status
+        payload: Payload
+        title: Signals
+      statuses:
+        cancelled: Cancelled
+        finished: Finished
+        gone: gone
+        paused: Paused
+        performing: Performing
+        ready: Ready
+        scheduled: Scheduled
+        waiting: Waiting
+      step_statuses:
+        cancelled: Cancelled
+        completed: Completed
+        failed: Failed
+        in_progress: Running
+        scheduled: Scheduled
+        skipped: Skipped
+        waiting: Waiting
+      steps:
+        batch: batch %{batch}
+        caused_by: Caused by %{error}
+        empty: No attempts yet.
+        headers:
+          finished: Finished
+          queued: Queued
+          ran: Ran
+          scheduled: Scheduled
+          started: Started
+          status: Status
+          step: Step
+          waited: Waited
+          worker: Worker
+        revision: revision %{revision}
+        show_backtrace: Show backtrace
+        title: Attempts
+        waiting_for: then waiting %{duration}
+        waits_for_html: waits for %{signal}
+      tabs:
+        all: All
+        cancelled: Cancelled
+        finished: Finished
+        ongoing: Ongoing
+        paused: Paused
+        performing: Performing
+        ready: Ready
+        waiting: Waiting
+      timeline:
+        caption: 'Each attempt, oldest at the top: waited (its wait), queued (due, not yet picked up), ran (coloured by how it ended) and waiting (for a signal or its batch), with the pauses on their own row. The attempts table below lists the same durations.'
+        empty: No attempts yet.
+        paused_period_html: Paused at %{from} for %{duration}
+        paused_row: Paused
+        series:
+          paused: Paused
+          queued: Queued
+          ran_cancelled: Ran, cancelled
+          ran_failed: Ran, failed
+          ran_ok: Ran
+          ran_open: Running
+          waited: Waited
+          waiting: Waiting
+        title: Timeline

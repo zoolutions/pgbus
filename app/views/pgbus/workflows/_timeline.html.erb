@@ -1,0 +1,39 @@
+<%# The timeline (issue #542): one range-bar row per attempt, split into
+    waited, queued and ran (ran coloured by how the attempt ended), with the
+    waits and pauses as their own segments. charts.js renderTimeline draws
+    it from the payload embedded once below; the attempts table under it is
+    the full text alternative. %>
+<% timeline = @workflow[:timeline] %>
+<section class="mb-8 rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700" aria-labelledby="workflow-timeline-title">
+  <h2 id="workflow-timeline-title" class="text-lg font-medium text-gray-900 dark:text-white"><%= t("pgbus.workflows.timeline.title") %></h2>
+  <% if timeline[:rows].empty? %>
+    <p class="py-8 text-center text-sm text-gray-500 dark:text-gray-400"><%= t("pgbus.workflows.timeline.empty") %></p>
+  <% else %>
+    <% rows = timeline[:rows].size + (timeline[:paused].any? ? 1 : 0) %>
+    <figure class="mt-3">
+      <div id="workflow-timeline-chart" role="img" aria-label="<%= t("pgbus.workflows.timeline.caption") %>"
+           style="min-height: <%= [160, (rows * 36) + 90].max %>px;"></div>
+      <figcaption class="mt-3 text-sm text-gray-700 dark:text-gray-300"><%= t("pgbus.workflows.timeline.caption") %></figcaption>
+    </figure>
+    <%# The pauses as text: the chart's paused row, for those who cannot see it. %>
+    <% if timeline[:paused].any? %>
+      <ul class="mt-2 space-y-1 text-sm text-gray-700 dark:text-gray-300" data-testid="workflow-pauses">
+        <% timeline[:paused].each do |period| %>
+          <li><%= t("pgbus.workflows.timeline.paused_period_html", from: pgbus_absolute_time(Time.at(period[:from] / 1000.0)),
+                    duration: period[:duration]) %></li>
+        <% end %>
+      </ul>
+    <% end %>
+    <%# json_escape keeps a value from closing the tag; a data block needs no nonce. %>
+    <%= tag.script(json_escape(timeline.to_json).html_safe, type: "application/json", id: "pgbus-workflow-timeline-data") %> <%# herb:disable erb-no-unsafe-raw %>
+    <script type="module" nonce="<%= content_security_policy_nonce %>">
+      import { renderTimeline, observeThemeChanges } from "charts";
+
+      const i18n = <%= json_escape(pgbus_workflow_chart_i18n.to_json).html_safe %>;
+      const data = JSON.parse(document.getElementById("pgbus-workflow-timeline-data").textContent);
+
+      renderTimeline(data, i18n);
+      observeThemeChanges(() => data, i18n, renderTimeline);
+    </script>
+  <% end %>
+</section>

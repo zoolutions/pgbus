@@ -140,6 +140,11 @@ sv:
         throughput: Genomströmning
         throughput_detail: jobb/min under de senaste %{minutes} min
         throughput_unavailable: kräver jobbstatistik (rails g pgbus:add_job_stats)
+        workflows: Arbetsflöden
+        workflows_attention:
+          one: "%{count} behöver uppmärksamhet"
+          other: "%{count} behöver uppmärksamhet"
+        workflows_detail: pågående (%{paused} pausade)
       verdict:
         links:
           dlq: Dead letters
@@ -723,6 +728,7 @@ sv:
         processes: Processer
         queues: Köer
         recurring: Återkommande
+        workflows: Arbetsflöden
       return_to_app: Tillbaka till appen
       title: Pgbus-instrumentpanel
       toggle_dark_mode: Växla mörkt läge
@@ -1023,3 +1029,282 @@ sv:
         disabled: Uppgift inaktiverad
         enabled: Uppgift aktiverad
         failed: Kunde inte ändra uppgift
+    workflows:
+      actions:
+        bulk_cancel: Avbryt alla
+        bulk_resume: Återuppta alla
+        cancel: Avbryt
+        rerun: Kör om
+        resume: Återuppta
+        resume_at: Återuppta vid steg
+        run_now: Kör nu
+        signal: Skicka signal
+        skip_step: Hoppa över steg
+      attempt: försök %{attempt}
+      attention:
+        at_step_html: vid %{step}
+        back: "← Arbetsflöden"
+        cancel_all:
+          one: Avbryt alla %{count}
+          other: Avbryt alla %{count}
+        confirm:
+          cancel:
+            one: Avbryta körningen som har fastnat vid %{step}?
+            other: Avbryta alla %{count} körningar som har fastnat vid %{step}?
+          cancel_error:
+            one: Avbryta körningen som har fastnat vid %{step} på grund av %{error}?
+            other: Avbryta alla %{count} körningar som har fastnat vid %{step} på grund av %{error}?
+          resume:
+            one: Återuppta körningen som är pausad vid %{step}?
+            other: Återuppta alla %{count} körningar som är pausade vid %{step}?
+          resume_error:
+            one: Återuppta körningen som är pausad vid %{step} på grund av %{error}?
+            other: Återuppta alla %{count} körningar som är pausade vid %{step} på grund av %{error}?
+        description: Pågående körningar som väntar på en person, grupperade efter vad som stoppade dem. När orsaken är åtgärdad, agera på hela gruppen.
+        empty_hint: Ingen pågående körning är pausad, har fastnat, är försenad eller har väntat längre än workflow_waiting_visibility_threshold.
+        empty_title: Inget behöver uppmärksamhet.
+        first_seen_html: första gången %{time}
+        headers:
+          actions: Åtgärder
+          reason: Orsak
+          runs: Körningar
+          seen: Sedd
+          workflow: Arbetsflöde
+        last_seen_html: senast %{time}
+        reasons:
+          overdue: 'Försenad: förfallen men inte hämtad'
+          paused_error: Pausad på grund av ett fel
+          paused_manual: Pausad för hand
+          stalled: 'Har fastnat: dess worker svarar inte längre'
+          waiting_overdue: Väntar för länge
+        resume_all:
+          one: Återuppta alla %{count}
+          other: Återuppta alla %{count}
+        show_runs: Visa körningar
+        title: Behöver uppmärksamhet
+      audit:
+        by: "%{event} av %{actor}"
+        empty: Inga händelser registrerade.
+        headers:
+          what: Vad hände
+          when: När
+        title: Granskningslogg
+        with_reason: "%{sentence}: %{reason}"
+        with_step: "%{sentence} (%{step} #%{attempt})"
+      bad_request: 'Ogiltig förfrågan: %{reason}'
+      confirm:
+        cancel: Avbryta det här arbetsflödet? Dess öppna steg avbryts och det körs inte igen.
+        rerun: Starta det här arbetsflödet igen som en ny körning, med samma ämne och argument?
+        resume: Återuppta det här arbetsflödet?
+        resume_at: Återuppta det här arbetsflödet vid det valda steget? Dess öppna steg avbryts först.
+        run_now: Köra det schemalagda steget nu i stället för att vänta?
+        signal: Skicka den här signalen till arbetsflödet?
+        skip_step: Hoppa över steget som det här arbetsflödet väntar på och gå till nästa?
+      events:
+        cancelled: Avbruten
+        fan_out_finished: Fan-out slutförd
+        fan_out_opened: Fan-out öppnad
+        finished: Slutförd
+        late_completion_ignored: Sen slutförning ignorerad
+        paused: Pausad
+        rerun: Omkörd
+        rescheduled: Omschemalagd
+        resumed: Återupptagen
+        run_now: Kör nu
+        signal_claimed: Signal upptagen
+        signal_received: Signal mottagen
+        stall_detected: Stopp upptäckt
+        started: Startad
+        step_completed: Steg slutfört
+        step_failed: Steg misslyckades
+        step_reattempted: Steg försökt igen
+        step_scheduled: Steg schemalagt
+        step_skipped: Steg överhoppat
+        step_started: Steg startat
+        step_waiting: Steg väntar
+        wait_timed_out: Väntan tog slut
+      filters:
+        apply: Använd filter
+        clear: Rensa
+        created_from: Skapad från
+        created_to: Skapad till
+        error_class: Felklass
+        step: Aktuellt steg
+        subject_id: Ämnes-ID
+        subject_type: Ämnestyp
+        workflow_class: Arbetsflödesklass
+        workflow_id: Arbetsflödes-ID
+      flash:
+        bad_group: Den gruppen är inte giltig.
+        bulk_cancel:
+          one: Avbröt %{count}.
+          other: Avbröt %{count}.
+        bulk_cancel_skipped: Avbröt %{count}; %{skipped} hade redan gått vidare.
+        bulk_failed: "%{count} kunde inte ändras: %{reason}"
+        bulk_more: 'Fler körningar kan vänta: tryck igen för nästa %{cap}.'
+        bulk_resume:
+          one: Återupptog %{count}.
+          other: Återupptog %{count}.
+        bulk_resume_skipped: Återupptog %{count}; %{skipped} hade redan gått vidare.
+        cancel: Arbetsflödet avbröts.
+        choose_step: Välj ett steg att återuppta vid.
+        failed:
+          not_allowed: 'Inte utfört: körningen är nu %{status}.'
+          not_found: Det arbetsflödet finns inte längre.
+          other: "%{action} misslyckades: %{reason}"
+        payload_not_object: 'Inte skickad: payload är inte ett JSON-objekt.'
+        payload_too_large: 'Inte skickad: payload är över %{limit} byte.'
+        rerun: En ny körning startades.
+        resume: Arbetsflödet återupptogs.
+        resume_at: Arbetsflödet återupptogs vid %{step}.
+        run_now: Det schemalagda steget körs nu.
+        signal: Signalen %{name} skickades.
+        signal_duplicate: Signalen %{name} har redan levererats med den här nyckeln; inget nytt skickades.
+        signal_name_missing: 'Inte skickad: signalen behöver ett namn.'
+        skip_step: Steget hoppades över.
+      headers:
+        current_step: Aktuellt steg
+        last_activity: Senaste aktivitet
+        started: Startad
+        status: Status
+        subject: Ämne
+        workflow: Arbetsflöde
+      index:
+        attention_link:
+          one: Behöver uppmärksamhet (%{count})
+          other: Behöver uppmärksamhet (%{count})
+        description: 'Varaktiga körningar i flera steg: vad var och en gör och vad som händer härnäst.'
+        empty_hint: Välj en annan status eller rensa filtren. En körning startar med YourWorkflow.start!(subject, **arguments).
+        empty_title: Inga arbetsflöden matchar.
+        status_label: Filtrera på status
+        title: Arbetsflöden
+      next:
+        cancelled_html: Avbruten %{ago}.
+        due_html: 'Redo: %{step} skulle ha körts %{ago} och väntar på en worker.'
+        finished_html: Slutförd %{ago}.
+        overdue_html: 'Försenad: %{step} skulle ha körts %{ago}; städningen skickar det igen.'
+        paused_error_html: 'Pausad vid %{step}: %{error} — återuppta eller avbryt.'
+        paused_manual_html: Pausad vid %{step} — återuppta eller avbryt.
+        performing_attempt_html: Kör %{step} (försök %{attempt}).
+        performing_html: Kör %{step}.
+        ready_html: 'Redo: %{step} körs härnäst.'
+        scheduled_html: 'Schemalagd: %{step} körs %{time}.'
+        unknown_html: 'Status: %{status}.'
+        waiting_batch_html: Väntar på gruppen %{batch} (%{done} av %{total} jobb klara).
+        waiting_signal_html: Väntar på signalen %{signal} sedan %{ago}.
+        waiting_signal_timeout_html: Väntar på signalen %{signal} sedan %{ago}. Väntan tar slut %{time}.
+        waiting_step_html: Väntar på %{step}.
+      not_found:
+        hint: Det kan ha avslutats och tagits bort efter workflow_retention, eller så kunde databasen inte läsas (se loggen).
+        title: Arbetsflödet hittades inte
+      outcomes:
+        cancelled: avbrutet
+        completed: slutfört
+        finished_early: avslutade körningen i förtid
+        paused: pausade körningen
+        reattempted: försökt igen
+        skipped: hoppat över
+      resume:
+        carry_on: 'Återuppta: fortsätt med %{step}'
+        continue: 'Återuppta: fortsätt med %{step}'
+        finish: 'Återuppta: avsluta körningen'
+        resend: 'Återuppta: skicka %{step} igen'
+        retry: 'Återuppta: försök %{step} igen'
+        rewait: 'Återuppta: vänta på %{step} igen'
+      show:
+        actions: Åtgärder
+        arguments: Argument
+        back: "← Arbetsflöden"
+        cancelled_at: Avbruten
+        class_missing: "%{workflow_class} är inte laddad i den här processen: körningen kan fortfarande avbrytas, men inte återupptas."
+        definition_outdated: 'Den här körningen startade på en äldre definition av %{workflow_class}: dess steg har ändrats sedan start.'
+        details: Detaljer
+        finished_at: Slutförd
+        no_arguments: Den här körningen har inga argument.
+        paused_at: Pausad
+        reason_hint: Sparas i granskningsloggen, bredvid vem som gjorde det.
+        reason_label: Orsak (valfri)
+        rerun_of: Omkörning av
+        reruns: Omkörd som
+        resume_at_label: Steg att återuppta vid
+      signal:
+        hint: Ett steg som väntar på den vaknar direkt; annars ligger den väntande tills ett steg tar den.
+        name: Signalnamn
+        payload: Payload (JSON)
+        send: Skicka signal
+        title: Skicka en signal
+      signal_statuses:
+        claimed: Upptagen
+        consumed: Förbrukad
+        pending: Väntande
+      signals:
+        empty: Inga signaler har levererats till den här körningen.
+        headers:
+          claimed: Upptagen
+          consumed: Förbrukad
+          idempotency_key: Idempotensnyckel
+          name: Signal
+          received: Mottagen
+          status: Status
+        payload: Payload
+        title: Signaler
+      statuses:
+        cancelled: Avbruten
+        finished: Slutförd
+        gone: borta
+        paused: Pausad
+        performing: Körs
+        ready: Redo
+        scheduled: Schemalagd
+        waiting: Väntar
+      step_statuses:
+        cancelled: Avbrutet
+        completed: Slutfört
+        failed: Misslyckat
+        in_progress: Körs
+        scheduled: Schemalagt
+        skipped: Hoppat över
+        waiting: Väntar
+      steps:
+        batch: grupp %{batch}
+        caused_by: Orsakad av %{error}
+        empty: Inga försök ännu.
+        headers:
+          finished: Slutförd
+          queued: Köad
+          ran: Körde
+          scheduled: Schemalagd
+          started: Startad
+          status: Status
+          step: Steg
+          waited: Väntade
+          worker: Worker
+        revision: revision %{revision}
+        show_backtrace: Visa backtrace
+        title: Försök
+        waiting_for: väntar sedan %{duration}
+        waits_for_html: väntar på %{signal}
+      tabs:
+        all: Alla
+        cancelled: Avbrutna
+        finished: Slutförda
+        ongoing: Pågående
+        paused: Pausade
+        performing: Körs
+        ready: Redo
+        waiting: Väntar
+      timeline:
+        caption: 'Varje försök, äldst överst: väntade (dess väntetid), köad (förfallen, ännu inte hämtad), körde (färgad efter utfall) och väntar (på en signal eller sin grupp), med pauserna på en egen rad. Försökstabellen nedan visar samma tider.'
+        empty: Inga försök ännu.
+        paused_period_html: Pausad %{from} i %{duration}
+        paused_row: Pausad
+        series:
+          paused: Pausad
+          queued: Köad
+          ran_cancelled: Körde, avbröts
+          ran_failed: Körde, misslyckades
+          ran_ok: Körde
+          ran_open: Körs
+          waited: Väntade
+          waiting: Väntar
+        title: Tidslinje

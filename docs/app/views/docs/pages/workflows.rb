@@ -17,6 +17,7 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
     idempotency
     removing_steps
     housekeeping
+    operating
     observability
     testing
     how_it_works
@@ -469,6 +470,68 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
             [ :md, "A wait without a `wait_timeout:` this long counts as stuck (`waiting_overdue`)." ] ]
         ]
       )
+    end
+  end
+
+  def operating
+    DocsUI::Section("Operating") do
+      md <<~'MD'
+        The dashboard's **Workflows** page (`/pgbus/workflows`) lists every
+        run, newest first: the ongoing ones by default, or one state, or all.
+        Each row says in words what the run is doing and what happens next:
+        "Performing `capture` (attempt 2)", "Waiting for signal `shipped`
+        since 3h ago", "Waiting for batch `OrderWorkflow#notify_vendors` (7 of
+        12 jobs done)", "Paused on `capture`: Timeout::Error — resume or
+        cancel", "Scheduled: `reminder` runs in 2d". Filter by class, current
+        step, error class, subject, workflow id and a created-at range; the
+        filters combine and survive paging.
+
+        A run's page shows its arguments, a **timeline** (one range bar per
+        attempt, split into waited, queued and ran, coloured by how it ended,
+        with waits and pauses as their own segments; zoom for runs that span
+        days), its newest 100 attempts with the same durations as text, its worker, app
+        revision, error, backtrace and cause chain, the signals it received,
+        and the audit trail ("Resumed by dashboard:alice: SMTP fixed"). A run
+        that started on an older step list says so.
+
+        **Actions** show only when `available_actions` allows them: Resume
+        (its label says whether it retries the failed step or continues with
+        the next), Resume at a chosen step, Run now (a scheduled step's wait
+        cut short), Skip step (a waiting step), Send signal (a JSON object;
+        the form's idempotency key makes a double submit send one signal),
+        Rerun (finished or cancelled runs; the new run links back) and Cancel.
+        Each takes an optional reason and reports the real outcome: when the
+        run moved on first, the flash says where it is now.
+
+        **Needs attention** (`/pgbus/workflows/attention`) groups every stuck
+        run by class, step, stuck reason and error class, with a count, when
+        the group was first and last seen and the newest error message (the
+        200 biggest groups; past that the page is not exhaustive). Once
+        the cause is fixed, Resume or Cancel the whole group (at most 500 runs
+        per press, each through its own guarded transition): "Resumed 212; 2
+        had already moved on". The home page counts ongoing, paused and stuck
+        runs.
+
+        Two settings connect the page to your app:
+      MD
+      DocsUI::Code(<<~'RUBY', filename: "config/initializers/pgbus.rb")
+        Pgbus.configure do |config|
+          # Who a dashboard action is recorded as on the audit trail:
+          # "dashboard:<name>", or "dashboard" when this returns nil.
+          config.web_actor = ->(request) { request.env["warden"]&.user&.email }
+
+          # Where the subject links to. Only an http(s) URL or a path on this
+          # site is linked; anything else, or a lambda that raises, is text.
+          config.workflow_subject_url = ->(type, id) { "/admin/#{type.underscore.pluralize}/#{id}" }
+        end
+      RUBY
+      md <<~'MD'
+        The read-only MCP server has the same views: `pgbus_workflows` (the
+        list, with the page's filters), `pgbus_workflow` (one run, with
+        `available_actions`) and `pgbus_workflows_attention`. Arguments, step
+        outputs, signal payloads and error text are redacted unless the server
+        allows payloads and the call sets `include_payloads`.
+      MD
     end
   end
 

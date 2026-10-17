@@ -1,0 +1,59 @@
+<%# The workflow list (issue #542). Each row says, in words, what the run is
+    doing and what happens next (Web::WorkflowState). Auto-refreshes; the
+    pager keeps the status and the filters. %>
+<turbo-frame id="workflows-list" data-auto-refresh data-turbo-action="advance"
+             data-src="<%= pgbus_workflows_path_with(@query, page: (@page if @page > 1), frame: "list") %>">
+  <div class="rounded-lg bg-white dark:bg-gray-800 shadow ring-1 ring-gray-200 dark:ring-gray-700">
+    <table class="pgbus-table min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+      <thead class="bg-gray-50 dark:bg-gray-900">
+        <tr>
+          <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.workflows.headers.workflow") %></th>
+          <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.workflows.headers.subject") %></th>
+          <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.workflows.headers.status") %></th>
+          <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.workflows.headers.current_step") %></th>
+          <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.workflows.headers.started") %></th>
+          <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.workflows.headers.last_activity") %></th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+        <% @workflows.each do |row| %>
+          <% result = pgbus_workflow_state(row) %>
+          <tr data-workflow-id="<%= row[:workflow_id] %>" data-status="<%= row[:status] %>" class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+            <td data-label="<%= t("pgbus.workflows.headers.workflow") %>" class="px-4 py-3 text-sm">
+              <div><%= pgbus_link_to row[:workflow_class], pgbus.workflow_path(row[:workflow_id]), data: { turbo_frame: "_top" } %></div>
+              <div class="font-mono text-xs text-gray-500 dark:text-gray-400"><%= row[:workflow_id][0, 8] %></div>
+            </td>
+            <td data-label="<%= t("pgbus.workflows.headers.subject") %>" class="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
+              <%= pgbus_workflow_subject(row) %>
+            </td>
+            <td data-label="<%= t("pgbus.workflows.headers.status") %>" class="px-4 py-3 max-w-md">
+              <%= pgbus_workflow_badge(result) %>
+              <p class="mt-1 text-xs text-gray-600 dark:text-gray-300"><%= pgbus_workflow_next(row, result) %></p>
+            </td>
+            <td data-label="<%= t("pgbus.workflows.headers.current_step") %>" class="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
+              <code class="font-mono"><%= row[:current_step] || Pgbus::Web::TimeFormat::NONE %></code>
+              <% if row[:current_attempt].to_i > 1 %>
+                <span class="block text-xs text-gray-500 dark:text-gray-400"><%= t("pgbus.workflows.attempt", attempt: row[:current_attempt]) %></span>
+              <% end %>
+            </td>
+            <td data-label="<%= t("pgbus.workflows.headers.started") %>" class="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
+              <%= pgbus_time(row[:created_at]) %>
+            </td>
+            <td data-label="<%= t("pgbus.workflows.headers.last_activity") %>" class="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
+              <%= pgbus_time(row[:updated_at]) %>
+            </td>
+          </tr>
+        <% end %>
+        <% if @workflows.empty? %>
+          <%= render "pgbus/shared/empty_row", colspan: 6,
+                message: safe_join([content_tag(:p, t("pgbus.workflows.index.empty_title"), class: "text-lg font-medium"),
+                                    content_tag(:p, t("pgbus.workflows.index.empty_hint"), class: "mt-1")]) %>
+        <% end %>
+      </tbody>
+    </table>
+    <%= render "pgbus/shared/pager", page: @page, per_page: @per_page, shown: @workflows.size,
+          total_count: @workflows_count.total,
+          has_more: @workflows_count.capped? && @workflows.size == @per_page,
+          page_path: ->(n) { pgbus_workflows_path_with(@query, page: n) } %>
+  </div>
+</turbo-frame>

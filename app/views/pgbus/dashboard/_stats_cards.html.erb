@@ -77,6 +77,23 @@
       <p class="text-xs text-gray-600 dark:text-gray-300"><%= throughput[:available] ? t("pgbus.dashboard.stats_cards.throughput_detail", minutes: throughput[:window_minutes]) : t("pgbus.dashboard.stats_cards.throughput_unavailable") %></p>
     <% end %>
 
+    <%# Two links in one card (the list and the attention view), so the card
+        is a div; its title and number link to the list. %>
+    <% workflows = @workflow_counts %>
+    <div data-testid="workflows-card" class="<%= card %>">
+      <%= link_to pgbus.workflows_path, data: { turbo_frame: "_top" }, class: "block" do %>
+        <p class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.stats_cards.workflows") %></p>
+        <p class="<%= number %>"><%= number_with_delimiter(workflows[:ongoing]) %></p>
+      <% end %>
+      <p class="text-xs text-gray-600 dark:text-gray-300">
+        <%= t("pgbus.dashboard.stats_cards.workflows_detail", paused: workflows[:paused]) %>
+        <% if workflows[:attention].positive? %>
+          · <%= pgbus_link_to t("pgbus.dashboard.stats_cards.workflows_attention", count: workflows[:attention]),
+                  pgbus.attention_workflows_path, size: :sm, tone: :yellow, data: { turbo_frame: "_top" } %>
+        <% end %>
+      </p>
+    </div>
+
     <%= link_to pgbus.locks_path, data: { turbo_frame: "_top" }, class: card do %>
       <p class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.dashboard.stats_cards.parked_jobs") %></p>
       <p class="mt-1 text-3xl font-semibold <%= @stats[:parked_total].to_i > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-900 dark:text-white' %>">

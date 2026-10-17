@@ -140,6 +140,11 @@ ja:
         throughput: スループット
         throughput_detail: 過去 %{minutes} 分のジョブ/分
         throughput_unavailable: ジョブ統計が必要です (rails g pgbus:add_job_stats)
+        workflows: ワークフロー
+        workflows_attention:
+          one: "%{count} 件が要対応"
+          other: "%{count} 件が要対応"
+        workflows_detail: 進行中（一時停止 %{paused} 件）
       verdict:
         links:
           dlq: デッドレター
@@ -723,6 +728,7 @@ ja:
         processes: プロセス
         queues: キュー
         recurring: 定期実行
+        workflows: ワークフロー
       return_to_app: アプリに戻る
       title: Pgbus ダッシュボード
       toggle_dark_mode: ダークモード切替
@@ -1023,3 +1029,282 @@ ja:
         disabled: タスクが無効になりました
         enabled: タスクが有効になりました
         failed: タスクの切り替えに失敗しました
+    workflows:
+      actions:
+        bulk_cancel: すべてキャンセル
+        bulk_resume: すべて再開
+        cancel: キャンセル
+        rerun: 再実行
+        resume: 再開
+        resume_at: ステップから再開
+        run_now: 今すぐ実行
+        signal: シグナルを送信
+        skip_step: ステップをスキップ
+      attempt: 試行 %{attempt}
+      attention:
+        at_step_html: "%{step} で"
+        back: "← ワークフロー"
+        cancel_all:
+          one: "%{count} 件すべてキャンセル"
+          other: "%{count} 件すべてキャンセル"
+        confirm:
+          cancel:
+            one: "%{step} で止まっている実行をキャンセルしますか？"
+            other: "%{step} で止まっている %{count} 件の実行をすべてキャンセルしますか？"
+          cancel_error:
+            one: "%{error} により %{step} で止まっている実行をキャンセルしますか？"
+            other: "%{error} により %{step} で止まっている %{count} 件の実行をすべてキャンセルしますか？"
+          resume:
+            one: "%{step} で一時停止している実行を再開しますか？"
+            other: "%{step} で一時停止している %{count} 件の実行をすべて再開しますか？"
+          resume_error:
+            one: "%{error} により %{step} で一時停止している実行を再開しますか？"
+            other: "%{error} により %{step} で一時停止している %{count} 件の実行をすべて再開しますか？"
+        description: 人の対応を待っている進行中の実行を、停止した原因ごとにまとめています。原因を解消したら、グループ全体を一括で操作できます。
+        empty_hint: 一時停止、停滞、期限超過、または workflow_waiting_visibility_threshold を超えて待機している進行中の実行はありません。
+        empty_title: 要対応の項目はありません。
+        first_seen_html: 初回 %{time}
+        headers:
+          actions: アクション
+          reason: 理由
+          runs: 実行数
+          seen: 検出
+          workflow: ワークフロー
+        last_seen_html: 最終 %{time}
+        reasons:
+          overdue: '期限超過: 期限は到来したが未取得'
+          paused_error: エラーで一時停止
+          paused_manual: 手動で一時停止
+          stalled: '停滞: ワーカーが応答しなくなりました'
+          waiting_overdue: 待機が長すぎます
+        resume_all:
+          one: "%{count} 件すべて再開"
+          other: "%{count} 件すべて再開"
+        show_runs: 実行を表示
+        title: 要対応
+      audit:
+        by: "%{event}（%{actor}）"
+        empty: 記録されたイベントはありません。
+        headers:
+          what: 内容
+          when: 日時
+        title: 監査ログ
+        with_reason: "%{sentence}: %{reason}"
+        with_step: "%{sentence}（%{step} #%{attempt}）"
+      bad_request: '不正なリクエスト: %{reason}'
+      confirm:
+        cancel: このワークフローをキャンセルしますか？未完了のステップはキャンセルされ、再び実行されることはありません。
+        rerun: 同じ対象と引数で、このワークフローを新しい実行として開始しますか？
+        resume: このワークフローを再開しますか？
+        resume_at: このワークフローを選択したステップから再開しますか？未完了のステップは先にキャンセルされます。
+        run_now: 待たずに予約済みのステップを今すぐ実行しますか？
+        signal: このシグナルをワークフローに送信しますか？
+        skip_step: このワークフローが待機しているステップをスキップして次へ進みますか？
+      events:
+        cancelled: キャンセル
+        fan_out_finished: ファンアウトが完了
+        fan_out_opened: ファンアウトを開始
+        finished: 完了
+        late_completion_ignored: 遅延した完了を無視
+        paused: 一時停止
+        rerun: 再実行
+        rescheduled: 再予約
+        resumed: 再開
+        run_now: 今すぐ実行
+        signal_claimed: シグナルを取得
+        signal_received: シグナルを受信
+        stall_detected: 停滞を検出
+        started: 開始
+        step_completed: ステップが完了
+        step_failed: ステップが失敗
+        step_reattempted: ステップを再試行
+        step_scheduled: ステップを予約
+        step_skipped: ステップをスキップ
+        step_started: ステップを開始
+        step_waiting: ステップが待機中
+        wait_timed_out: 待機がタイムアウト
+      filters:
+        apply: フィルターを適用
+        clear: クリア
+        created_from: 作成日（開始）
+        created_to: 作成日（終了）
+        error_class: エラークラス
+        step: 現在のステップ
+        subject_id: 対象ID
+        subject_type: 対象タイプ
+        workflow_class: ワークフロークラス
+        workflow_id: ワークフローID
+      flash:
+        bad_group: そのグループは無効です。
+        bulk_cancel:
+          one: "%{count} 件をキャンセルしました。"
+          other: "%{count} 件をキャンセルしました。"
+        bulk_cancel_skipped: "%{count} 件をキャンセルしました。%{skipped} 件はすでに先へ進んでいました。"
+        bulk_failed: "%{count} 件は変更できませんでした: %{reason}"
+        bulk_more: ほかにも実行が残っている可能性があります。もう一度押すと次の %{cap} 件を処理します。
+        bulk_resume:
+          one: "%{count} 件を再開しました。"
+          other: "%{count} 件を再開しました。"
+        bulk_resume_skipped: "%{count} 件を再開しました。%{skipped} 件はすでに先へ進んでいました。"
+        cancel: ワークフローをキャンセルしました。
+        choose_step: 再開するステップを選択してください。
+        failed:
+          not_allowed: '実行できません: この実行は現在 %{status} です。'
+          not_found: そのワークフローはもう存在しません。
+          other: "%{action} に失敗しました: %{reason}"
+        payload_not_object: '未送信: ペイロードが JSON オブジェクトではありません。'
+        payload_too_large: '未送信: ペイロードが %{limit} バイトを超えています。'
+        rerun: 新しい実行を開始しました。
+        resume: ワークフローを再開しました。
+        resume_at: ワークフローを %{step} から再開しました。
+        run_now: 予約済みのステップを今すぐ実行します。
+        signal: シグナル %{name} を送信しました。
+        signal_duplicate: シグナル %{name} はこのキーで配信済みです。新たな送信は行われませんでした。
+        signal_name_missing: '未送信: シグナルには名前が必要です。'
+        skip_step: ステップをスキップしました。
+      headers:
+        current_step: 現在のステップ
+        last_activity: 最終アクティビティ
+        started: 開始
+        status: ステータス
+        subject: 対象
+        workflow: ワークフロー
+      index:
+        attention_link:
+          one: 要対応（%{count}）
+          other: 要対応（%{count}）
+        description: '永続的な複数ステップの実行: 各実行の現在の処理と次に起きることを表示します。'
+        empty_hint: 別のステータスを選ぶか、フィルターをクリアしてください。実行は YourWorkflow.start!(subject, **arguments) で開始します。
+        empty_title: 該当するワークフローはありません。
+        status_label: ステータスで絞り込み
+        title: ワークフロー
+      next:
+        cancelled_html: "%{ago} にキャンセルされました。"
+        due_html: '実行待ち: %{step} は %{ago} が期限で、ワーカーを待っています。'
+        finished_html: "%{ago} に完了しました。"
+        overdue_html: '期限超過: %{step} は %{ago} が期限でした。スイープが再送します。'
+        paused_error_html: "%{step} で一時停止: %{error} — 再開またはキャンセルしてください。"
+        paused_manual_html: "%{step} で一時停止 — 再開またはキャンセルしてください。"
+        performing_attempt_html: "%{step} を実行中です（試行 %{attempt}）。"
+        performing_html: "%{step} を実行中です。"
+        ready_html: '実行待ち: 次に %{step} が実行されます。'
+        scheduled_html: '予約済み: %{step} は %{time} に実行されます。'
+        unknown_html: 'ステータス: %{status}。'
+        waiting_batch_html: バッチ %{batch} を待機中です（%{total} 件中 %{done} 件のジョブが完了）。
+        waiting_signal_html: シグナル %{signal} を %{ago} から待機中です。
+        waiting_signal_timeout_html: シグナル %{signal} を %{ago} から待機中です。待機は %{time} にタイムアウトします。
+        waiting_step_html: "%{step} を待機中です。"
+      not_found:
+        hint: 完了して workflow_retention 経過後に削除されたか、データベースを読み取れなかった可能性があります（ログを確認してください）。
+        title: ワークフローが見つかりません
+      outcomes:
+        cancelled: キャンセル
+        completed: 完了
+        finished_early: 実行を早期終了
+        paused: 実行を一時停止
+        reattempted: 再試行
+        skipped: スキップ
+      resume:
+        carry_on: '再開: %{step} から続行'
+        continue: '再開: %{step} に進む'
+        finish: '再開: 実行を完了する'
+        resend: '再開: %{step} を再送'
+        retry: '再開: %{step} をリトライ'
+        rewait: '再開: %{step} を再び待機'
+      show:
+        actions: アクション
+        arguments: 引数
+        back: "← ワークフロー"
+        cancelled_at: キャンセル日時
+        class_missing: "%{workflow_class} はこのプロセスに読み込まれていません。この実行のキャンセルはできますが、再開はできません。"
+        definition_outdated: この実行は %{workflow_class} の古い定義で開始されました。開始後にステップが変更されています。
+        details: 詳細
+        finished_at: 完了日時
+        no_arguments: この実行には引数がありません。
+        paused_at: 一時停止日時
+        reason_hint: 操作した人とともに監査ログに記録されます。
+        reason_label: 理由（任意）
+        rerun_of: 再実行元
+        reruns: 再実行先
+        resume_at_label: 再開するステップ
+      signal:
+        hint: 待機中のステップがあれば即座に再開します。なければ、ステップが受け取るまで保留されます。
+        name: シグナル名
+        payload: ペイロード（JSON）
+        send: シグナルを送信
+        title: シグナルを送信
+      signal_statuses:
+        claimed: 取得済み
+        consumed: 消費済み
+        pending: 保留中
+      signals:
+        empty: この実行に配信されたシグナルはありません。
+        headers:
+          claimed: 取得
+          consumed: 消費
+          idempotency_key: 冪等キー
+          name: シグナル
+          received: 受信
+          status: ステータス
+        payload: ペイロード
+        title: シグナル
+      statuses:
+        cancelled: キャンセル済み
+        finished: 完了
+        gone: 削除済み
+        paused: 一時停止
+        performing: 実行中
+        ready: 実行待ち
+        scheduled: 予約済み
+        waiting: 待機中
+      step_statuses:
+        cancelled: キャンセル済み
+        completed: 完了
+        failed: 失敗
+        in_progress: 実行中
+        scheduled: 予約済み
+        skipped: スキップ
+        waiting: 待機中
+      steps:
+        batch: バッチ %{batch}
+        caused_by: '原因: %{error}'
+        empty: 試行はまだありません。
+        headers:
+          finished: 完了
+          queued: キュー
+          ran: 実行
+          scheduled: 予約
+          started: 開始
+          status: ステータス
+          step: ステップ
+          waited: 待機
+          worker: ワーカー
+        revision: リビジョン %{revision}
+        show_backtrace: バックトレースを表示
+        title: 試行
+        waiting_for: その後 %{duration} 待機
+        waits_for_html: "%{signal} を待機"
+      tabs:
+        all: すべて
+        cancelled: キャンセル済み
+        finished: 完了
+        ongoing: 進行中
+        paused: 一時停止
+        performing: 実行中
+        ready: 実行待ち
+        waiting: 待機中
+      timeline:
+        caption: 各試行を古い順に表示します。待機（待ち時間）、キュー（期限到来、未取得）、実行（終了状態で色分け）、待機中（シグナルまたはバッチ待ち）で、一時停止は別の行に表示します。下の試行テーブルにも同じ時間が載っています。
+        empty: 試行はまだありません。
+        paused_period_html: "%{from} から %{duration} 一時停止"
+        paused_row: 一時停止
+        series:
+          paused: 一時停止
+          queued: キュー
+          ran_cancelled: 実行、キャンセル
+          ran_failed: 実行、失敗
+          ran_ok: 実行
+          ran_open: 実行中
+          waited: 待機済み
+          waiting: 待機中
+        title: タイムライン

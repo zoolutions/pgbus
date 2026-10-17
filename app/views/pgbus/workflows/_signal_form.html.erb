@@ -1,0 +1,31 @@
+<%# Send a signal (issue #542). The payload must be a JSON object; the
+    idempotency key is generated per render, so a double submit sends one
+    signal. The name is a select of what the waiting step takes, or free text. %>
+<% id = @workflow[:workflow_id] %>
+<section class="mb-8 rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700" aria-labelledby="workflow-signal-title" data-testid="workflow-signal">
+  <h2 id="workflow-signal-title" class="text-lg font-medium text-gray-900 dark:text-white"><%= t("pgbus.workflows.signal.title") %></h2>
+  <p class="mt-1 text-sm text-gray-600 dark:text-gray-300"><%= t("pgbus.workflows.signal.hint") %></p>
+  <form action="<%= pgbus.signal_workflow_path(id) %>" method="post" data-turbo-frame="_top" class="mt-3 grid max-w-xl grid-cols-1 gap-3">
+    <%= hidden_field_tag :authenticity_token, form_authenticity_token, id: nil %>
+    <input type="hidden" name="idempotency_key" value="<%= SecureRandom.uuid %>">
+    <div>
+      <label for="workflow-signal-name" class="block text-sm font-medium text-gray-700 dark:text-gray-300"><%= t("pgbus.workflows.signal.name") %></label>
+      <% if @workflow[:signal_names].any? %>
+        <select id="workflow-signal-name" name="name" class="<%= Pgbus::WorkflowsHelper::INPUT_CSS %>">
+          <% @workflow[:signal_names].each do |name| %>
+            <option value="<%= name %>"><%= name %></option>
+          <% end %>
+        </select>
+      <% else %>
+        <input type="text" autocomplete="off" id="workflow-signal-name" name="name" required class="<%= Pgbus::WorkflowsHelper::INPUT_CSS %>">
+      <% end %>
+    </div>
+    <div>
+      <label for="workflow-signal-payload" class="block text-sm font-medium text-gray-700 dark:text-gray-300"><%= t("pgbus.workflows.signal.payload") %></label>
+      <textarea id="workflow-signal-payload" name="payload" rows="4" class="<%= Pgbus::WorkflowsHelper::INPUT_CSS %> font-mono">{}</textarea>
+    </div>
+    <div>
+      <%= pgbus_button_tag t("pgbus.workflows.signal.send"), variant: :primary, confirm: t("pgbus.workflows.confirm.signal") %>
+    </div>
+  </form>
+</section>

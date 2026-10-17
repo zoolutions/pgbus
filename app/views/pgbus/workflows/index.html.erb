@@ -1,0 +1,12 @@
+<div class="flex flex-wrap items-start justify-between gap-4 mb-6">
+  <div>
+    <h1 class="text-2xl font-bold text-gray-900 dark:text-white"><%= t("pgbus.workflows.index.title") %></h1>
+    <p class="mt-1 text-sm text-gray-500 dark:text-gray-400"><%= t("pgbus.workflows.index.description") %></p>
+  </div>
+  <%= pgbus_link_to t("pgbus.workflows.index.attention_link", count: @attention_count), pgbus.attention_workflows_path,
+        variant: @attention_count.positive? ? :warning : :secondary %>
+</div>
+
+<%= render "pgbus/workflows/status_filter" %>
+<%= render "pgbus/workflows/filters" %>
+<%= render "pgbus/workflows/workflows_table" %>

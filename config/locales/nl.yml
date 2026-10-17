@@ -140,6 +140,11 @@ nl:
         throughput: Doorvoer
         throughput_detail: jobs/min over de laatste %{minutes} min
         throughput_unavailable: vereist jobstatistieken (rails g pgbus:add_job_stats)
+        workflows: Workflows
+        workflows_attention:
+          one: "%{count} heeft aandacht nodig"
+          other: "%{count} hebben aandacht nodig"
+        workflows_detail: lopend (%{paused} gepauzeerd)
       verdict:
         links:
           dlq: Dead letters
@@ -723,6 +728,7 @@ nl:
         processes: Processen
         queues: Wachtrijen
         recurring: Terugkerend
+        workflows: Workflows
       return_to_app: Terug naar app
       title: Pgbus Dashboard
       toggle_dark_mode: Donkere modus schakelen
@@ -1023,3 +1029,282 @@ nl:
         disabled: Taak uitgeschakeld
         enabled: Taak ingeschakeld
         failed: Kon taak niet omschakelen
+    workflows:
+      actions:
+        bulk_cancel: Alles annuleren
+        bulk_resume: Alles hervatten
+        cancel: Annuleren
+        rerun: Herhalen
+        resume: Hervatten
+        resume_at: Hervatten bij stap
+        run_now: Nu uitvoeren
+        signal: Signaal versturen
+        skip_step: Stap overslaan
+      attempt: poging %{attempt}
+      attention:
+        at_step_html: bij %{step}
+        back: "← Workflows"
+        cancel_all:
+          one: Annuleer alles (%{count})
+          other: Annuleer alles (%{count})
+        confirm:
+          cancel:
+            one: De run annuleren die bij %{step} vastzit?
+            other: Alle %{count} runs annuleren die bij %{step} vastzitten?
+          cancel_error:
+            one: De run annuleren die bij %{step} vastzit door %{error}?
+            other: Alle %{count} runs annuleren die bij %{step} vastzitten door %{error}?
+          resume:
+            one: De run hervatten die bij %{step} is gepauzeerd?
+            other: Alle %{count} runs hervatten die bij %{step} zijn gepauzeerd?
+          resume_error:
+            one: De run hervatten die bij %{step} is gepauzeerd door %{error}?
+            other: Alle %{count} runs hervatten die bij %{step} zijn gepauzeerd door %{error}?
+        description: Lopende runs die op een persoon wachten, gegroepeerd naar wat ze stillegde. Is de oorzaak verholpen, handel dan de hele groep af.
+        empty_hint: Geen lopende run is gepauzeerd, vastgelopen, achterstallig of wacht langer dan workflow_waiting_visibility_threshold.
+        empty_title: Niets heeft aandacht nodig.
+        first_seen_html: eerste %{time}
+        headers:
+          actions: Acties
+          reason: Reden
+          runs: Runs
+          seen: Gezien
+          workflow: Workflow
+        last_seen_html: laatste %{time}
+        reasons:
+          overdue: 'Achterstallig: aan de beurt, maar niet opgepakt'
+          paused_error: Gepauzeerd door een fout
+          paused_manual: Handmatig gepauzeerd
+          stalled: 'Vastgelopen: de worker reageert niet meer'
+          waiting_overdue: Wacht te lang
+        resume_all:
+          one: Hervat alles (%{count})
+          other: Hervat alles (%{count})
+        show_runs: Runs tonen
+        title: Aandacht nodig
+      audit:
+        by: "%{event} door %{actor}"
+        empty: Geen gebeurtenissen vastgelegd.
+        headers:
+          what: Wat er gebeurde
+          when: Wanneer
+        title: Auditlog
+        with_reason: "%{sentence}: %{reason}"
+        with_step: "%{sentence} (%{step} #%{attempt})"
+      bad_request: 'Ongeldig verzoek: %{reason}'
+      confirm:
+        cancel: Deze workflow annuleren? De openstaande stappen worden geannuleerd en de workflow draait niet opnieuw.
+        rerun: Deze workflow opnieuw starten als nieuwe run, met hetzelfde onderwerp en dezelfde argumenten?
+        resume: Deze workflow hervatten?
+        resume_at: Deze workflow hervatten bij de gekozen stap? De openstaande stappen worden eerst geannuleerd.
+        run_now: De geplande stap nu uitvoeren in plaats van te wachten?
+        signal: Dit signaal naar de workflow versturen?
+        skip_step: De stap overslaan waarop deze workflow wacht en doorgaan naar de volgende?
+      events:
+        cancelled: Geannuleerd
+        fan_out_finished: Fan-out afgerond
+        fan_out_opened: Fan-out geopend
+        finished: Afgerond
+        late_completion_ignored: Late voltooiing genegeerd
+        paused: Gepauzeerd
+        rerun: Herhaald
+        rescheduled: Opnieuw gepland
+        resumed: Hervat
+        run_now: Nu uitvoeren
+        signal_claimed: Signaal geclaimd
+        signal_received: Signaal ontvangen
+        stall_detected: Vastloper gedetecteerd
+        started: Gestart
+        step_completed: Stap voltooid
+        step_failed: Stap mislukt
+        step_reattempted: Stap opnieuw geprobeerd
+        step_scheduled: Stap gepland
+        step_skipped: Stap overgeslagen
+        step_started: Stap gestart
+        step_waiting: Stap wacht
+        wait_timed_out: Wachttijd verlopen
+      filters:
+        apply: Filters toepassen
+        clear: Wissen
+        created_from: Aangemaakt vanaf
+        created_to: Aangemaakt tot
+        error_class: Foutklasse
+        step: Huidige stap
+        subject_id: Onderwerp-ID
+        subject_type: Onderwerptype
+        workflow_class: Workflow-klasse
+        workflow_id: Workflow-ID
+      flash:
+        bad_group: Die groep is ongeldig.
+        bulk_cancel:
+          one: "%{count} geannuleerd."
+          other: "%{count} geannuleerd."
+        bulk_cancel_skipped: "%{count} geannuleerd; %{skipped} waren al verder."
+        bulk_failed: "%{count} konden niet worden gewijzigd: %{reason}"
+        bulk_more: 'Er wachten mogelijk meer runs: druk nogmaals voor de volgende %{cap}.'
+        bulk_resume:
+          one: "%{count} hervat."
+          other: "%{count} hervat."
+        bulk_resume_skipped: "%{count} hervat; %{skipped} waren al verder."
+        cancel: Workflow geannuleerd.
+        choose_step: Kies een stap om te hervatten.
+        failed:
+          not_allowed: 'Niet uitgevoerd: de run is nu %{status}.'
+          not_found: Die workflow bestaat niet meer.
+          other: "%{action} mislukt: %{reason}"
+        payload_not_object: 'Niet verstuurd: de payload is geen JSON-object.'
+        payload_too_large: 'Niet verstuurd: de payload is groter dan %{limit} bytes.'
+        rerun: Nieuwe run gestart.
+        resume: Workflow hervat.
+        resume_at: Workflow hervat bij %{step}.
+        run_now: De geplande stap draait nu.
+        signal: Signaal %{name} verstuurd.
+        signal_duplicate: Signaal %{name} was al afgeleverd met deze sleutel; er is niets nieuws verstuurd.
+        signal_name_missing: 'Niet verstuurd: het signaal heeft een naam nodig.'
+        skip_step: Stap overgeslagen.
+      headers:
+        current_step: Huidige stap
+        last_activity: Laatste activiteit
+        started: Gestart
+        status: Status
+        subject: Onderwerp
+        workflow: Workflow
+      index:
+        attention_link:
+          one: Aandacht nodig (%{count})
+          other: Aandacht nodig (%{count})
+        description: 'Duurzame runs met meerdere stappen: wat elke run doet en wat er hierna gebeurt.'
+        empty_hint: Kies een andere status of wis de filters. Een run start met YourWorkflow.start!(subject, **arguments).
+        empty_title: Geen workflows gevonden.
+        status_label: Filteren op status
+        title: Workflows
+      next:
+        cancelled_html: Geannuleerd %{ago}.
+        due_html: 'Klaar: %{step} was %{ago} aan de beurt en wacht op een worker.'
+        finished_html: Afgerond %{ago}.
+        overdue_html: 'Achterstallig: %{step} was %{ago} aan de beurt; de sweep verstuurt hem opnieuw.'
+        paused_error_html: 'Gepauzeerd bij %{step}: %{error} — hervat of annuleer.'
+        paused_manual_html: Gepauzeerd bij %{step} — hervat of annuleer.
+        performing_attempt_html: "%{step} wordt uitgevoerd (poging %{attempt})."
+        performing_html: "%{step} wordt uitgevoerd."
+        ready_html: 'Klaar: %{step} draait als volgende.'
+        scheduled_html: 'Gepland: %{step} draait %{time}.'
+        unknown_html: 'Status: %{status}.'
+        waiting_batch_html: Wacht op groep %{batch} (%{done} van %{total} taken klaar).
+        waiting_signal_html: Wacht op signaal %{signal}, gestart %{ago}.
+        waiting_signal_timeout_html: Wacht op signaal %{signal}, gestart %{ago}. De wachttijd verloopt %{time}.
+        waiting_step_html: Wacht op %{step}.
+      not_found:
+        hint: Hij is mogelijk voltooid en verwijderd na workflow_retention, of de database kon niet worden gelezen (zie het log).
+        title: Workflow niet gevonden
+      outcomes:
+        cancelled: geannuleerd
+        completed: voltooid
+        finished_early: rondde de run vroegtijdig af
+        paused: pauzeerde de run
+        reattempted: opnieuw geprobeerd
+        skipped: overgeslagen
+      resume:
+        carry_on: 'Hervatten: verdergaan met %{step}'
+        continue: 'Hervatten: doorgaan met %{step}'
+        finish: 'Hervatten: de run afronden'
+        resend: 'Hervatten: %{step} opnieuw versturen'
+        retry: 'Hervatten: %{step} opnieuw proberen'
+        rewait: 'Hervatten: opnieuw wachten op %{step}'
+      show:
+        actions: Acties
+        arguments: Argumenten
+        back: "← Workflows"
+        cancelled_at: Geannuleerd
+        class_missing: "%{workflow_class} is niet geladen in dit proces: de run kan nog wel worden geannuleerd, maar niet hervat."
+        definition_outdated: 'Deze run is gestart met een oudere definitie van %{workflow_class}: de stappen zijn sindsdien gewijzigd.'
+        details: Details
+        finished_at: Afgerond
+        no_arguments: Deze run heeft geen argumenten.
+        paused_at: Gepauzeerd
+        reason_hint: Wordt vastgelegd in het auditlog, naast wie het deed.
+        reason_label: Reden (optioneel)
+        rerun_of: Herhaling van
+        reruns: Herhaald als
+        resume_at_label: Hervatten bij stap
+      signal:
+        hint: Een stap die erop wacht, gaat direct verder; anders blijft het signaal in afwachting tot een stap het oppakt.
+        name: Signaalnaam
+        payload: Payload (JSON)
+        send: Signaal versturen
+        title: Een signaal versturen
+      signal_statuses:
+        claimed: Geclaimd
+        consumed: Verwerkt
+        pending: In afwachting
+      signals:
+        empty: Geen signalen afgeleverd aan deze run.
+        headers:
+          claimed: Geclaimd
+          consumed: Verwerkt
+          idempotency_key: Idempotentiesleutel
+          name: Signaal
+          received: Ontvangen
+          status: Status
+        payload: Payload
+        title: Signalen
+      statuses:
+        cancelled: Geannuleerd
+        finished: Afgerond
+        gone: verdwenen
+        paused: Gepauzeerd
+        performing: Wordt uitgevoerd
+        ready: Klaar
+        scheduled: Gepland
+        waiting: Wachtend
+      step_statuses:
+        cancelled: Geannuleerd
+        completed: Voltooid
+        failed: Mislukt
+        in_progress: Actief
+        scheduled: Gepland
+        skipped: Overgeslagen
+        waiting: Wachtend
+      steps:
+        batch: groep %{batch}
+        caused_by: Veroorzaakt door %{error}
+        empty: Nog geen pogingen.
+        headers:
+          finished: Afgerond
+          queued: In wachtrij
+          ran: Uitgevoerd
+          scheduled: Gepland
+          started: Gestart
+          status: Status
+          step: Stap
+          waited: Gewacht
+          worker: Worker
+        revision: revisie %{revision}
+        show_backtrace: Backtrace tonen
+        title: Pogingen
+        waiting_for: daarna %{duration} wachten
+        waits_for_html: wacht op %{signal}
+      tabs:
+        all: Alle
+        cancelled: Geannuleerd
+        finished: Afgerond
+        ongoing: Lopend
+        paused: Gepauzeerd
+        performing: Wordt uitgevoerd
+        ready: Klaar
+        waiting: Wachtend
+      timeline:
+        caption: 'Elke poging, oudste bovenaan: gewacht (de wachttijd), in wachtrij (aan de beurt, nog niet opgepakt), uitgevoerd (gekleurd naar hoe het afliep) en wachtend (op een signaal of de groep), met de pauzes op een eigen rij. De pogingentabel hieronder toont dezelfde duren.'
+        empty: Nog geen pogingen.
+        paused_period_html: Gepauzeerd op %{from} gedurende %{duration}
+        paused_row: Gepauzeerd
+        series:
+          paused: Gepauzeerd
+          queued: In wachtrij
+          ran_cancelled: Uitgevoerd, geannuleerd
+          ran_failed: Uitgevoerd, mislukt
+          ran_ok: Uitgevoerd
+          ran_open: Actief
+          waited: Gewacht
+          waiting: Wachtend
+        title: Tijdlijn

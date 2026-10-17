@@ -140,6 +140,11 @@ da:
         throughput: Gennemløb
         throughput_detail: job/min de seneste %{minutes} min
         throughput_unavailable: kræver jobstatistik (rails g pgbus:add_job_stats)
+        workflows: Workflows
+        workflows_attention:
+          one: "%{count} kræver opmærksomhed"
+          other: "%{count} kræver opmærksomhed"
+        workflows_detail: i gang (%{paused} sat på pause)
       verdict:
         links:
           dlq: Dead letters
@@ -723,6 +728,7 @@ da:
         processes: Processer
         queues: Køer
         recurring: Gentagende
+        workflows: Workflows
       return_to_app: Tilbage til app
       title: Pgbus Dashboard
       toggle_dark_mode: Skift til mørk tilstand
@@ -1023,3 +1029,282 @@ da:
         disabled: Opgave deaktiveret
         enabled: Opgave aktiveret
         failed: Kunne ikke ændre opgave
+    workflows:
+      actions:
+        bulk_cancel: Annullér alle
+        bulk_resume: Genoptag alle
+        cancel: Annullér
+        rerun: Kør igen
+        resume: Genoptag
+        resume_at: Genoptag ved trin
+        run_now: Kør nu
+        signal: Send signal
+        skip_step: Spring trin over
+      attempt: forsøg %{attempt}
+      attention:
+        at_step_html: ved %{step}
+        back: "← Workflows"
+        cancel_all:
+          one: Annullér alle %{count}
+          other: Annullér alle %{count}
+        confirm:
+          cancel:
+            one: Annullér kørslen, der sidder fast ved %{step}?
+            other: Annullér alle %{count} kørsler, der sidder fast ved %{step}?
+          cancel_error:
+            one: Annullér kørslen, der sidder fast ved %{step} pga. %{error}?
+            other: Annullér alle %{count} kørsler, der sidder fast ved %{step} pga. %{error}?
+          resume:
+            one: Genoptag kørslen, der er sat på pause ved %{step}?
+            other: Genoptag alle %{count} kørsler, der er sat på pause ved %{step}?
+          resume_error:
+            one: Genoptag kørslen, der er sat på pause ved %{step} pga. %{error}?
+            other: Genoptag alle %{count} kørsler, der er sat på pause ved %{step} pga. %{error}?
+        description: Igangværende kørsler, der venter på et menneske, grupperet efter hvad der stoppede dem. Når årsagen er rettet, handl på hele gruppen.
+        empty_hint: Ingen igangværende kørsel er på pause, gået i stå, forsinket eller har ventet længere end workflow_waiting_visibility_threshold.
+        empty_title: Intet kræver opmærksomhed.
+        first_seen_html: første gang %{time}
+        headers:
+          actions: Handlinger
+          reason: Årsag
+          runs: Kørsler
+          seen: Set
+          workflow: Workflow
+        last_seen_html: senest %{time}
+        reasons:
+          overdue: 'Forsinket: forfalden, men ikke hentet'
+          paused_error: På pause pga. en fejl
+          paused_manual: Sat på pause manuelt
+          stalled: 'Gået i stå: dens worker svarer ikke længere'
+          waiting_overdue: Venter for længe
+        resume_all:
+          one: Genoptag alle %{count}
+          other: Genoptag alle %{count}
+        show_runs: Vis kørsler
+        title: Kræver opmærksomhed
+      audit:
+        by: "%{event} af %{actor}"
+        empty: Ingen hændelser registreret.
+        headers:
+          what: Hvad skete der
+          when: Hvornår
+        title: Revisionslog
+        with_reason: "%{sentence}: %{reason}"
+        with_step: "%{sentence} (%{step} #%{attempt})"
+      bad_request: 'Ugyldig forespørgsel: %{reason}'
+      confirm:
+        cancel: Annullér denne workflow? Dens åbne trin annulleres, og den kører ikke igen.
+        rerun: Start denne workflow igen som en ny kørsel med samme emne og argumenter?
+        resume: Genoptag denne workflow?
+        resume_at: Genoptag denne workflow ved det valgte trin? Dens åbne trin annulleres først.
+        run_now: Kør det planlagte trin nu i stedet for at vente?
+        signal: Send dette signal til workflowen?
+        skip_step: Spring det trin over, som denne workflow venter på, og gå til det næste?
+      events:
+        cancelled: Annulleret
+        fan_out_finished: Fan-out afsluttet
+        fan_out_opened: Fan-out åbnet
+        finished: Afsluttet
+        late_completion_ignored: Sen fuldførelse ignoreret
+        paused: På pause
+        rerun: Kørt igen
+        rescheduled: Omplanlagt
+        resumed: Genoptaget
+        run_now: Kør nu
+        signal_claimed: Signal taget
+        signal_received: Signal modtaget
+        stall_detected: Gennemløbsstop registreret
+        started: Startet
+        step_completed: Trin fuldført
+        step_failed: Trin mislykkedes
+        step_reattempted: Trin forsøgt igen
+        step_scheduled: Trin planlagt
+        step_skipped: Trin sprunget over
+        step_started: Trin startet
+        step_waiting: Trin venter
+        wait_timed_out: Ventetid udløbet
+      filters:
+        apply: Anvend filtre
+        clear: Ryd
+        created_from: Oprettet fra
+        created_to: Oprettet til
+        error_class: Fejlklasse
+        step: Nuværende trin
+        subject_id: Emne-ID
+        subject_type: Emnetype
+        workflow_class: Workflow-klasse
+        workflow_id: Workflow-ID
+      flash:
+        bad_group: Den gruppe er ikke gyldig.
+        bulk_cancel:
+          one: Annullerede %{count}.
+          other: Annullerede %{count}.
+        bulk_cancel_skipped: Annullerede %{count}; %{skipped} var allerede kørt videre.
+        bulk_failed: "%{count} kunne ikke ændres: %{reason}"
+        bulk_more: 'Der kan vente flere kørsler: tryk igen for de næste %{cap}.'
+        bulk_resume:
+          one: Genoptog %{count}.
+          other: Genoptog %{count}.
+        bulk_resume_skipped: Genoptog %{count}; %{skipped} var allerede kørt videre.
+        cancel: Workflow annulleret.
+        choose_step: Vælg et trin at genoptage ved.
+        failed:
+          not_allowed: 'Ikke udført: kørslen er nu %{status}.'
+          not_found: Den workflow findes ikke længere.
+          other: "%{action} mislykkedes: %{reason}"
+        payload_not_object: 'Ikke sendt: payload er ikke et JSON-objekt.'
+        payload_too_large: 'Ikke sendt: payload er over %{limit} bytes.'
+        rerun: Ny kørsel startet.
+        resume: Workflow genoptaget.
+        resume_at: Workflow genoptaget ved %{step}.
+        run_now: Det planlagte trin kører nu.
+        signal: Signalet %{name} er sendt.
+        signal_duplicate: Signalet %{name} er allerede leveret med denne nøgle; intet nyt blev sendt.
+        signal_name_missing: 'Ikke sendt: signalet skal have et navn.'
+        skip_step: Trin sprunget over.
+      headers:
+        current_step: Nuværende trin
+        last_activity: Seneste aktivitet
+        started: Startet
+        status: Status
+        subject: Emne
+        workflow: Workflow
+      index:
+        attention_link:
+          one: Kræver opmærksomhed (%{count})
+          other: Kræver opmærksomhed (%{count})
+        description: 'Varige kørsler i flere trin: hvad hver enkelt gør, og hvad der sker derefter.'
+        empty_hint: Vælg en anden status, eller ryd filtrene. En kørsel starter med YourWorkflow.start!(subject, **arguments).
+        empty_title: Ingen workflows matcher.
+        status_label: Filtrér efter status
+        title: Workflows
+      next:
+        cancelled_html: Annulleret %{ago}.
+        due_html: 'Klar: %{step} skulle køre %{ago} og venter på en worker.'
+        finished_html: Afsluttet %{ago}.
+        overdue_html: 'Forsinket: %{step} skulle køre %{ago}; oprydningen sender det igen.'
+        paused_error_html: 'På pause ved %{step}: %{error} — genoptag eller annullér.'
+        paused_manual_html: På pause ved %{step} — genoptag eller annullér.
+        performing_attempt_html: Kører %{step} (forsøg %{attempt}).
+        performing_html: Kører %{step}.
+        ready_html: 'Klar: %{step} kører næste gang.'
+        scheduled_html: 'Planlagt: %{step} kører %{time}.'
+        unknown_html: 'Status: %{status}.'
+        waiting_batch_html: Venter på batch %{batch} (%{done} af %{total} jobs færdige).
+        waiting_signal_html: Venter på signalet %{signal} siden %{ago}.
+        waiting_signal_timeout_html: Venter på signalet %{signal} siden %{ago}. Ventetiden udløber %{time}.
+        waiting_step_html: Venter på %{step}.
+      not_found:
+        hint: Det kan være afsluttet og fjernet efter workflow_retention, eller databasen kunne ikke læses (se loggen).
+        title: Workflow ikke fundet
+      outcomes:
+        cancelled: annulleret
+        completed: fuldført
+        finished_early: afsluttede kørslen tidligt
+        paused: satte kørslen på pause
+        reattempted: forsøgt igen
+        skipped: sprunget over
+      resume:
+        carry_on: 'Genoptag: fortsæt med %{step}'
+        continue: 'Genoptag: fortsæt med %{step}'
+        finish: 'Genoptag: afslut kørslen'
+        resend: 'Genoptag: send %{step} igen'
+        retry: 'Genoptag: forsøg %{step} igen'
+        rewait: 'Genoptag: vent igen på %{step}'
+      show:
+        actions: Handlinger
+        arguments: Argumenter
+        back: "← Workflows"
+        cancelled_at: Annulleret
+        class_missing: "%{workflow_class} er ikke indlæst i denne proces: kørslen kan stadig annulleres, men ikke genoptages."
+        definition_outdated: 'Denne kørsel startede på en ældre definition af %{workflow_class}: dens trin er ændret siden start.'
+        details: Detaljer
+        finished_at: Afsluttet
+        no_arguments: Denne kørsel har ingen argumenter.
+        paused_at: På pause
+        reason_hint: Registreres i revisionsloggen sammen med, hvem der gjorde det.
+        reason_label: Årsag (valgfri)
+        rerun_of: Genkørsel af
+        reruns: Kørt igen som
+        resume_at_label: Trin der genoptages ved
+      signal:
+        hint: Et trin, der venter på det, vågner med det samme; ellers afventer det, indtil et trin tager det.
+        name: Signalnavn
+        payload: Payload (JSON)
+        send: Send signal
+        title: Send et signal
+      signal_statuses:
+        claimed: Taget
+        consumed: Brugt
+        pending: Afventer
+      signals:
+        empty: Ingen signaler leveret til denne kørsel.
+        headers:
+          claimed: Taget
+          consumed: Brugt
+          idempotency_key: Idempotensnøgle
+          name: Signal
+          received: Modtaget
+          status: Status
+        payload: Payload
+        title: Signaler
+      statuses:
+        cancelled: Annulleret
+        finished: Afsluttet
+        gone: væk
+        paused: På pause
+        performing: Kører
+        ready: Klar
+        scheduled: Planlagt
+        waiting: Venter
+      step_statuses:
+        cancelled: Annulleret
+        completed: Fuldført
+        failed: Mislykket
+        in_progress: Kører
+        scheduled: Planlagt
+        skipped: Sprunget over
+        waiting: Venter
+      steps:
+        batch: batch %{batch}
+        caused_by: Forårsaget af %{error}
+        empty: Ingen forsøg endnu.
+        headers:
+          finished: Afsluttet
+          queued: I kø
+          ran: Kørte
+          scheduled: Planlagt
+          started: Startet
+          status: Status
+          step: Trin
+          waited: Ventede
+          worker: Worker
+        revision: revision %{revision}
+        show_backtrace: Vis backtrace
+        title: Forsøg
+        waiting_for: venter derefter %{duration}
+        waits_for_html: venter på %{signal}
+      tabs:
+        all: Alle
+        cancelled: Annulleret
+        finished: Afsluttet
+        ongoing: I gang
+        paused: På pause
+        performing: Kører
+        ready: Klar
+        waiting: Venter
+      timeline:
+        caption: 'Hvert forsøg, ældste øverst: ventede (dets ventetid), i kø (forfalden, endnu ikke hentet), kørte (farvet efter udfald) og venter (på et signal eller sin batch), med pauserne i en egen række. Forsøgstabellen nedenfor viser de samme varigheder.'
+        empty: Ingen forsøg endnu.
+        paused_period_html: Sat på pause %{from} i %{duration}
+        paused_row: På pause
+        series:
+          paused: På pause
+          queued: I kø
+          ran_cancelled: Kørte, annulleret
+          ran_failed: Kørte, mislykkedes
+          ran_ok: Kørte
+          ran_open: Kører
+          waited: Ventede
+          waiting: Venter
+        title: Tidslinje
