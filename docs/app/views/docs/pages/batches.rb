@@ -49,16 +49,23 @@ class Views::Docs::Pages::Batches < DocsUI::Page
         (through the dispatcher sweep) with only the callbacks set by then. A
         block that goes `config.batch_stall_threshold` (default 5 minutes)
         without adding a job is treated as stalled and started by that sweep,
-        so keep slow work outside the block. `b.add` must run in the block's
-        own thread or fiber; it raises anywhere else, since jobs sent from
-        there would not join the batch. `Pgbus.batch` returns the started `Pgbus::Batch`; its
+        so keep slow work outside the block. Membership follows the block's
+        own thread or fiber: `b.add` raises anywhere else, and a plain
+        `perform_later` from a thread or fiber the block spawns does not join
+        the batch, so the batch can finish before that job runs. Enqueue from
+        the block itself.
+
+        `Pgbus.batch` returns the `Pgbus::Batch` handle. Usually it is
+        started; when `on_conflict: :discard` or `:log` finds the
+        `uniqueness_key` held, the block never runs and the handle answers
+        `discarded?`. Its
         keywords are the ones `Pgbus::Batch.new` takes (`description:`,
         `properties:`, `uniqueness_key:`, `on_conflict:`, and the callbacks).
         `Pgbus::Batch.start` is the same method.
 
         A callback is an ActiveJob class or a configured instance, never a
-        block: it is stored on the batch row and enqueued later, from another
-        process. The builder only works inside its block. To add jobs later,
+        block: it is stored on the batch row and enqueued by whichever process
+        finishes the batch. The builder only works inside its block. To add jobs later,
         call `batch.add` on the batch `Pgbus.batch` returned.
       MD
     end

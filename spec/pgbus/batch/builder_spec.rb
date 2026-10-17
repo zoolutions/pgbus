@@ -211,7 +211,7 @@ RSpec.describe Pgbus::Batch::Builder do
 
     it "refuses an add from a thread that does not carry the batch tag" do
       adder = lambda do |b|
-        Thread.new do # rubocop:disable ThreadSafety/NewThread -- joined at once; models a fan-out thread inside the block
+        Thread.new do
           Thread.current.report_on_exception = false
           b.add(work_job.new)
         end.join

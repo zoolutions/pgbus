@@ -41,6 +41,9 @@ module Pgbus
     # the block returns. Every job the block enqueues (through +b.add+ or a
     # plain +perform_later+) joins the batch, which stays pending, and so
     # cannot finish, until the block is done. Keywords go to Batch.new.
+    # Membership is the block's own thread or fiber (the tag lives in
+    # Thread.current): b.add raises anywhere else, and a plain perform_later
+    # from a thread or fiber the block spawns does not join the batch.
     #
     #   Pgbus::Batch.start(description: "Import") do |b|
     #     b.on_complete ImportDoneJob
