@@ -1,0 +1,27 @@
+spec/integration/workflow/attention_spec.rb
+  s_e3a487096d49a3::t_454631c7a9561e 55-62
+benchmarks/workflow_insights_bench.rb
+  s_e3a487096d49a3::t_4a266328406f91 1-183
+lib/pgbus/web/data_source/workflow_insights.rb
+  s_e3a487096d49a3::t_10206c31998a5e 64-65,86-90
+Rakefile
+  s_e3a487096d49a3::t_3782d524a1a98b 29,69-71
+app/models/pgbus/workflow_entry.rb
+  s_e3a487096d49a3::t_10206c31998a5e 60-64,67,71,120-122,146
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "e7204e44a14714553bfc8121f11d48905d762428",
+  "prompts": {},
+  "sessions": {
+    "s_e3a487096d49a3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "faf1faea-af65-4cb2-b526-81aed7772ead",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
