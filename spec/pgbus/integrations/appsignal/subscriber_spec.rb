@@ -4,60 +4,14 @@ require "spec_helper"
 
 RSpec.describe "Pgbus::Integrations::Appsignal::Subscriber" do
   # We stub the entire ::Appsignal module so the spec can run without the
-  # real appsignal gem on the load path. The integration only references
-  # public Appsignal API: Transaction, Probes, set_gauge, increment_counter,
-  # add_distribution_value, set_error.
-
-  let(:appsignal_class) do
-    # A spec double: built per example and driven from the example's thread.
-    # rubocop:disable-next ThreadSafety/ClassAndModuleAttributes
-    Class.new do
-      class << self
-        attr_accessor :counters, :gauges, :distributions, :errors
-      end
-      self.counters = []
-      self.gauges = []
-      self.distributions = []
-      self.errors = []
-
-      def self.increment_counter(name, value, tags = {})
-        counters << [name, value, tags]
-      end
-
-      def self.set_gauge(name, value, tags = {})
-        gauges << [name, value, tags]
-      end
-
-      def self.add_distribution_value(name, value, tags = {})
-        distributions << [name, value, tags]
-      end
-
-      def self.set_error(err) # rubocop:disable Naming/AccessorMethodName
-        errors << err
-      end
-    end
-  end
-
-  let(:transaction_double) do
-    double("Appsignal::Transaction").tap do |dbl|
-      allow(dbl).to receive(:set_action_if_nil)
-      allow(dbl).to receive(:add_tags)
-      allow(dbl).to receive(:set_queue_start)
-      allow(dbl).to receive(:set_error)
-      allow(dbl).to receive(:add_params_if_nil).and_yield
-    end
-  end
-
-  let(:completed_counter) { [0] }
-  let(:transaction_class) do
-    txn = transaction_double
-    counter = completed_counter
-    klass = Class.new
-    klass.define_singleton_method(:create) { |_kind| txn }
-    klass.define_singleton_method(:complete_current!) { counter[0] += 1 }
-    klass.define_singleton_method(:completed_count) { counter[0] }
-    klass
-  end
+  # real appsignal gem on the load path. The double (spec/support/
+  # appsignal_double.rb) keeps a current transaction and the real gem's
+  # set_error guard, so a "reports the error" example cannot pass through a
+  # call the real gem drops (issue #552).
+  let(:double_pair) { AppsignalDouble.build }
+  let(:appsignal_class) { double_pair.appsignal }
+  let(:transaction_class) { double_pair.transaction_class }
+  let(:transactions) { transaction_class.all }
 
   before do
     stub_const("Appsignal", appsignal_class)
@@ -70,6 +24,17 @@ RSpec.describe "Pgbus::Integrations::Appsignal::Subscriber" do
 
   after do
     Pgbus::Integrations::Appsignal::Subscriber.reset!
+    AppsignalDouble.reset!
+  end
+
+  def instrument_execute(payload = {}, &)
+    ActiveSupport::Notifications.instrument("pgbus.executor.execute", { queue: "default", job_class: "TestJob" }.merge(payload), &)
+  end
+
+  def instrument_event_processed(payload = {}, &)
+    ActiveSupport::Notifications.instrument(
+      "pgbus.event_processed", { handler: "MyHandler", routing_key: "orders.created" }.merge(payload), &
+    )
   end
 
   describe ".install!" do
@@ -84,39 +49,113 @@ RSpec.describe "Pgbus::Integrations::Appsignal::Subscriber" do
   end
 
   describe "pgbus.executor.execute" do
-    it "creates a background-job transaction with action and tags" do
-      ActiveSupport::Notifications.instrument(
-        "pgbus.executor.execute",
-        queue: "default",
-        job_class: "TestJob",
-        job_id: "abc-123",
-        provider_job_id: "42",
-        arguments: [1, "hi"],
-        enqueued_at: "2026-05-05T10:00:00Z",
-        read_ct: 1,
-        msg_id: 9
+    it "creates a background-job transaction with action, queue start, tags and arguments" do
+      instrument_execute(
+        job_id: "abc-123", provider_job_id: "42", arguments: [1, "hi"],
+        enqueued_at: "2026-05-05T10:00:00Z", read_ct: 1, msg_id: 9
       ) { :ok }
 
-      expect(transaction_double).to have_received(:set_action_if_nil).with("TestJob#perform")
-      expect(transaction_double).to have_received(:set_queue_start)
-      expect(transaction_double).to have_received(:add_tags).with(
-        hash_including("queue" => "default", "job_class" => "TestJob", "active_job_id" => "abc-123")
+      transaction = transactions.sole
+      expect(transaction).to have_attributes(
+        namespace: "background_job", action: "TestJob#perform", queue_start: (Time.utc(2026, 5, 5, 10).to_f * 1000).to_i,
+        params: { arguments: [1, "hi"] }, errors: [], completed?: true
       )
-      expect(transaction_class.completed_count).to eq(1)
-      distribution_names = appsignal_class.distributions.map(&:first)
-      expect(distribution_names).to include("pgbus_job_duration_ms")
+      expect(transaction.tags).to include("queue" => "default", "job_class" => "TestJob", "active_job_id" => "abc-123")
+      expect(appsignal_class.distributions.map(&:first)).to eq(["pgbus_job_duration_ms"])
     end
 
-    it "completes the transaction even when the inner block raises" do
-      expect do
-        ActiveSupport::Notifications.instrument(
-          "pgbus.executor.execute",
-          queue: "default",
-          job_class: "BoomJob"
-        ) { raise "boom" }
-      end.to raise_error("boom")
+    it "makes the transaction current while the block runs, and only then" do
+      seen = []
 
-      expect(transaction_class.completed_count).to eq(1)
+      instrument_execute { seen << [transaction_class.current?, transaction_class.current.action] }
+
+      expect(seen).to eq([[true, "TestJob#perform"]])
+      expect(transaction_class.current?).to be(false)
+    end
+
+    it "records an error raised inside the block on the job's transaction, and still completes it once" do
+      error = RuntimeError.new("boom")
+
+      expect { instrument_execute { raise error } }.to raise_error(error)
+
+      expect(transactions.sole).to have_attributes(action: "TestJob#perform", errors: [error], completed?: true)
+      expect(transaction_class.current?).to be(false)
+      expect(appsignal_class.distributions.map(&:first)).to eq(["pgbus_job_duration_ms"])
+    end
+
+    it "keeps one error sample when the Rails error reporter already reported it on the current transaction" do
+      error = RuntimeError.new("boom")
+
+      reported_then_raised = lambda do
+        instrument_execute do
+          appsignal_class.report_error(error)
+          raise error
+        end
+      end
+
+      expect(&reported_then_raised).to raise_error(error)
+      expect(transactions.sole.errors).to eq([error])
+    end
+
+    it "times the block with a monotonic clock" do
+      instrument_execute { sleep 0.02 }
+
+      _name, duration, tags = appsignal_class.distributions.sole
+      expect(duration).to be >= 20
+      expect(tags).to eq(queue: "default", job_class: "TestJob")
+    end
+
+    it "reuses a transaction that is already current and leaves it to its owner to complete" do
+      host = transaction_class.create("http_request")
+
+      instrument_execute { :ok }
+
+      expect(transactions).to eq([host])
+      expect(host.completed?).to be(false)
+      expect(transaction_class.current).to be(host)
+    end
+
+    it "still completes its own transaction when a span of the same kind runs inside it" do
+      instrument_execute(job_class: "OuterJob") { instrument_execute(job_class: "InnerJob") { :ok } }
+
+      expect(transactions.sole).to have_attributes(action: "OuterJob#perform", completed?: true)
+      expect(transaction_class.current?).to be(false)
+      expect(appsignal_class.distributions.map { |_name, _value, tags| tags[:job_class] }).to eq(%w[InnerJob OuterJob])
+    end
+
+    it "keeps each fiber's transaction to itself when two jobs interleave (execution_mode: :async)" do
+      seen = {}
+      first = Fiber.new do
+        instrument_execute(job_class: "FirstJob") do
+          Fiber.yield
+          seen[:first] = transaction_class.current
+        end
+      end
+      first.resume
+      instrument_execute(job_class: "SecondJob") { seen[:second] = transaction_class.current }
+      first.resume
+
+      expect(seen.transform_values(&:action)).to eq(first: "FirstJob#perform", second: "SecondJob#perform")
+      expect(transactions).to all(be_completed)
+      expect(appsignal_class.distributions.map { |_name, _value, tags| tags[:job_class] }).to contain_exactly("FirstJob", "SecondJob")
+    end
+
+    it "never lets an AppSignal failure reach the job, and never leaves a transaction current" do
+      allow(appsignal_class).to receive(:add_distribution_value).and_raise(StandardError, "agent down")
+      allow(Pgbus.logger).to receive(:warn).and_call_original
+
+      expect(instrument_execute { :ran }).to eq(:ran)
+
+      expect(transactions.sole.completed?).to be(true)
+      expect(transaction_class.current?).to be(false)
+      expect(Pgbus.logger).to have_received(:warn)
+    end
+
+    it "still runs the job when the transaction cannot be created" do
+      allow(transaction_class).to receive(:create).and_raise(StandardError, "agent down")
+
+      expect(instrument_execute { :ran }).to eq(:ran)
+      expect(transaction_class.current?).to be(false)
     end
   end
 
@@ -133,19 +172,61 @@ RSpec.describe "Pgbus::Integrations::Appsignal::Subscriber" do
   describe "pgbus.job_failed" do
     let(:err) { StandardError.new("nope") }
 
-    it "increments the failed counter and reports the error" do
+    def instrument_job_failed
       ActiveSupport::Notifications.instrument(
         "pgbus.job_failed",
-        queue: "default",
-        job_class: "TestJob",
-        error: "StandardError",
-        exception_object: err
+        queue: "default", job_class: "TestJob", job_id: "abc-123", read_ct: 2, msg_id: 9,
+        error: "StandardError", exception_object: err
       )
+    end
 
-      expect(appsignal_class.counters).to include(
-        ["pgbus_queue_job_count", 1, hash_including(status: "failed")]
+    it "increments the failed counter" do
+      instrument_job_failed
+
+      expect(appsignal_class.counters).to include(["pgbus_queue_job_count", 1, hash_including(status: "failed")])
+    end
+
+    it "still reports the error when the failed counter raises" do
+      allow(appsignal_class).to receive(:increment_counter).and_raise(RuntimeError, "agent down")
+
+      instrument_job_failed
+
+      expect(transactions.sole).to have_attributes(action: "TestJob#perform", errors: [err])
+    end
+
+    it "reports an error raised outside the execute span on a background-job transaction of its own" do
+      instrument_job_failed
+
+      expect(transactions.sole).to have_attributes(
+        namespace: "background_job", action: "TestJob#perform", errors: [err], completed?: true
       )
-      expect(appsignal_class.errors).to include(err)
+      expect(transactions.sole.tags).to include("queue" => "default", "job_class" => "TestJob", "attempts" => 2)
+    end
+
+    it "adds an error raised outside the span to a host transaction without renaming it" do
+      host = transaction_class.create("http_request")
+
+      instrument_job_failed
+
+      expect(transactions).to eq([host])
+      expect(host).to have_attributes(namespace: "http_request", action: nil, tags: {}, errors: [err], completed?: false)
+    end
+
+    it "reports nothing more for the error the execute span already recorded" do
+      expect { instrument_execute { raise err } }.to raise_error(err)
+
+      instrument_job_failed
+
+      expect(transactions.sole).to have_attributes(action: "TestJob#perform", errors: [err])
+    end
+
+    it "reports a later error outside the span even after a span recorded another one" do
+      earlier = RuntimeError.new("earlier")
+      expect { instrument_execute { raise earlier } }.to raise_error(earlier)
+
+      instrument_job_failed
+
+      expect(transactions.map(&:errors)).to eq([[earlier], [err]])
     end
   end
 
@@ -161,38 +242,78 @@ RSpec.describe "Pgbus::Integrations::Appsignal::Subscriber" do
 
   describe "pgbus.event_processed" do
     it "creates a transaction and increments the processed counter" do
-      ActiveSupport::Notifications.instrument(
-        "pgbus.event_processed",
-        event_id: "ev-1",
-        handler: "MyHandler",
-        routing_key: "orders.created",
-        published_at: Time.utc(2026, 5, 5, 10, 0, 0),
-        read_ct: 1,
-        msg_id: 7
-      ) { :ok }
+      instrument_event_processed(event_id: "ev-1", published_at: Time.utc(2026, 5, 5, 10, 0, 0), read_ct: 1, msg_id: 7) { :ok }
 
-      expect(transaction_double).to have_received(:set_action_if_nil).with("MyHandler#handle")
+      expect(transactions.sole).to have_attributes(
+        namespace: "background_job", action: "MyHandler#handle", queue_start: (Time.utc(2026, 5, 5, 10).to_f * 1000).to_i, completed?: true
+      )
+      expect(transactions.sole.tags).to eq("handler" => "MyHandler", "routing_key" => "orders.created", "attempts" => 1)
       expect(appsignal_class.counters).to include(
         ["pgbus_event_count", 1, hash_including(handler: "MyHandler", status: "processed")]
       )
+      expect(appsignal_class.distributions.map(&:first)).to eq(["pgbus_event_duration_ms"])
+    end
+
+    it "makes the transaction current while the handler runs" do
+      seen = nil
+
+      instrument_event_processed { seen = transaction_class.current.action }
+
+      expect(seen).to eq("MyHandler#handle")
+      expect(transaction_class.current?).to be(false)
+    end
+
+    it "records an error raised inside the handler on the handler's transaction" do
+      error = RuntimeError.new("handler bug")
+
+      expect { instrument_event_processed { raise error } }.to raise_error(error)
+
+      expect(transactions.sole).to have_attributes(action: "MyHandler#handle", errors: [error], completed?: true)
+      # Unchanged, and the same in Metrics::Subscriber: the processed count is
+      # taken at finish, so a raised handler also counts as processed.
+      expect(appsignal_class.counters.map { |_name, _value, tags| tags[:status] }).to eq(["processed"])
     end
   end
 
   describe "pgbus.event_failed" do
     let(:err) { StandardError.new("handler bug") }
 
-    it "increments the failed counter and reports the error" do
+    def instrument_event_failed
       ActiveSupport::Notifications.instrument(
         "pgbus.event_failed",
-        handler: "MyHandler",
-        routing_key: "orders.created",
-        exception_object: err
+        event_id: nil, handler: "MyHandler", routing_key: "orders.created", error: "StandardError", exception_object: err
       )
+    end
 
-      expect(appsignal_class.counters).to include(
-        ["pgbus_event_count", 1, hash_including(status: "failed")]
+    it "increments the failed counter" do
+      instrument_event_failed
+
+      expect(appsignal_class.counters).to include(["pgbus_event_count", 1, hash_including(status: "failed")])
+    end
+
+    it "still reports the error when the failed counter raises" do
+      allow(appsignal_class).to receive(:increment_counter).and_raise(RuntimeError, "agent down")
+
+      instrument_event_failed
+
+      expect(transactions.sole).to have_attributes(action: "MyHandler#handle", errors: [err])
+    end
+
+    it "reports an error raised before the handler ran (building the event) on a <Handler>#handle transaction" do
+      instrument_event_failed
+
+      expect(transactions.sole).to have_attributes(
+        namespace: "background_job", action: "MyHandler#handle", errors: [err], completed?: true
       )
-      expect(appsignal_class.errors).to include(err)
+      expect(transactions.sole.tags).to eq("handler" => "MyHandler", "routing_key" => "orders.created")
+    end
+
+    it "reports nothing more for the error the handler span already recorded" do
+      expect { instrument_event_processed { raise err } }.to raise_error(err)
+
+      instrument_event_failed
+
+      expect(transactions.sole.errors).to eq([err])
     end
   end
 
@@ -223,8 +344,7 @@ RSpec.describe "Pgbus::Integrations::Appsignal::Subscriber" do
         "pgbus.event_dead_lettered", handler: "NotifyHandler", routing_key: "orders.placed", error: "RuntimeError"
       )
 
-      expect(appsignal_class.errors).to be_empty
-      expect(transaction_class.completed_count).to eq(0)
+      expect(transactions).to be_empty
     end
   end
 
@@ -335,6 +455,17 @@ RSpec.describe "Pgbus::Integrations::Appsignal::Subscriber" do
       end.not_to raise_error
 
       expect(Pgbus.logger).to have_received(:warn)
+    end
+  end
+
+  describe ".reset!" do
+    it "detaches the span subscribers too" do
+      Pgbus::Integrations::Appsignal::Subscriber.reset!
+
+      instrument_execute { :ok }
+      instrument_event_processed { :ok }
+
+      expect(transactions).to be_empty
     end
   end
 
