@@ -1,0 +1,166 @@
+spec/generators/pgbus/add_workflow_signals_generator_spec.rb
+  s_e3a487096d49a3::t_ec30dd696861e6 26,41-43
+  s_e3a487096d49a3::t_e0733b8f75548d 1-25,27-40,44-55
+lib/pgbus/workflow/step_execution.rb
+  s_e3a487096d49a3::t_4665c7b2f90866 124-137
+  s_e3a487096d49a3::t_0abd36314414b6 185,194-195
+  s_e3a487096d49a3::t_b0e00725332ad6 198-200
+README.md
+  s_e3a487096d49a3::t_fb81b80991c5be 885,889-890,893,895,1075,2375
+lib/pgbus/workflow/step_definition.rb
+  s_e3a487096d49a3::t_d5d09ae446d7a6 73,108
+  s_e3a487096d49a3::t_f6da616c4ad631 9-11,16-17,72,81,87-89,107,109-122
+lib/pgbus/workflow/flow_control.rb
+  s_e3a487096d49a3::t_d555d695c08999 12,16-19,24,27-28,67-73
+lib/generators/pgbus/templates/add_workflows.rb.erb
+  s_e3a487096d49a3::t_049eea2a90981a 3-5,70-75,87-90,112-133,137
+lib/pgbus/workflow/step_outcome.rb
+  s_e3a487096d49a3::t_4665c7b2f90866 37,125
+app/models/pgbus/workflow_step.rb
+  s_e3a487096d49a3::t_9f381a3c1efe86 45-64
+lib/pgbus/workflow/fan_out_definition.rb
+  s_e3a487096d49a3::t_be15c5beb91472 1-38
+spec/pgbus/workflow/waiting_declarations_spec.rb
+  s_e3a487096d49a3::t_6ff19b0eb42bc5 1-91,93-144
+  s_e3a487096d49a3::t_d5d09ae446d7a6 92
+spec/pgbus/workflow/fan_out_spec.rb
+  s_e3a487096d49a3::t_c475b83e412889 1-146
+spec/pgbus/workflow/batch_finished_job_spec.rb
+  s_e3a487096d49a3::t_05002b9a289c50 1-75
+docs/app/views/docs/pages/cli_generators.rb
+  s_e3a487096d49a3::t_8de641e809c976 176-177
+lib/pgbus/workflow/signal_matcher.rb
+  s_e3a487096d49a3::t_77fbbe387d04fa 1-53
+spec/generators/pgbus/install_generator_spec.rb
+  s_e3a487096d49a3::t_e0733b8f75548d 53-60
+lib/pgbus/workflow/states.rb
+  s_e3a487096d49a3::t_fc0f4798510c10 24,36,47-53,74-86
+spec/pgbus/process/dispatcher_spec.rb
+  s_e3a487096d49a3::t_2742330a1259a9 349-359
+app/models/pgbus/workflow_signal.rb
+  s_e3a487096d49a3::t_4881eb34425ee2 1-65,67,69-71,73-76
+  s_e3a487096d49a3::t_ec30dd696861e6 66,68,72
+spec/pgbus/workflow/signal_gate_spec.rb
+  s_e3a487096d49a3::t_00462aaf44a6cb 74-75
+  s_e3a487096d49a3::t_8b2f6188fe0b7d 1-73,76-84
+spec/integration_helper.rb
+  s_e3a487096d49a3::t_4f136b7ab75f17 526
+  s_e3a487096d49a3::t_b70b1b31c80402 320-354
+app/models/pgbus/workflow_event.rb
+  s_e3a487096d49a3::t_4665c7b2f90866 21
+spec/pgbus/workflow/states_spec.rb
+  s_e3a487096d49a3::t_03d615a74910f6 16-18,40,57-60,95-105,109-110
+lib/pgbus/workflow/runner.rb
+  s_e3a487096d49a3::t_4665c7b2f90866 100-101
+lib/pgbus/workflow/sweep.rb
+  s_e3a487096d49a3::t_324f1fd738bcc8 17-19,21-22,35,43-45,77-93,96-99,128,130
+lib/generators/pgbus/templates/add_workflow_signals.rb.erb
+  s_e3a487096d49a3::t_049eea2a90981a 1-49
+AGENTS.md
+  s_e3a487096d49a3::t_464c632933678a 95,120
+spec/integration/workflow/wait_timeout_spec.rb
+  s_e3a487096d49a3::t_e2a1c96213429f 1-157
+docs/app/models/config_reference.rb
+  s_e3a487096d49a3::t_39ae826ad6f004 81-82
+spec/integration/workflow/example_spec.rb
+  s_e3a487096d49a3::t_909059e414342e 45
+  s_e3a487096d49a3::t_4250be90921578 1-44,46-178
+lib/pgbus/instrumentation.rb
+  s_e3a487096d49a3::t_fb81b80991c5be 77-84,88
+spec/pgbus/workflow/test_helpers_spec.rb
+  s_e3a487096d49a3::t_ea0fb5bb5bd385 152-153
+  s_e3a487096d49a3::t_b3d3b05639a9db 134,145-151,154-157
+  s_e3a487096d49a3::t_3a8126ef88ecd3 88-89,93-95,98-99,114-133,135-144,158-171
+  s_e3a487096d49a3::t_ec30dd696861e6 90-91,96-97
+spec/pgbus/generators/migration_detector_spec.rb
+  s_e3a487096d49a3::t_e0733b8f75548d 328-356,566
+lib/pgbus/workflow/batch_finished_job.rb
+  s_e3a487096d49a3::t_f3fc304b51e0ca 1-21
+lib/pgbus/workflow/fan_out.rb
+  s_e3a487096d49a3::t_f3fc304b51e0ca 1-77,81-82,84-98,102-134
+  s_e3a487096d49a3::t_da60e7f6b6b34c 78-80,83
+  s_e3a487096d49a3::t_9f381a3c1efe86 99-101
+lib/pgbus/workflow.rb
+  s_e3a487096d49a3::t_09ff30d90463a9 135-163
+  s_e3a487096d49a3::t_329c5e89f44679 62-63,66-85
+lib/pgbus/workflow/dsl.rb
+  s_e3a487096d49a3::t_be15c5beb91472 18,25-49,94-101
+spec/pgbus/workflow/sweep_spec.rb
+  s_e3a487096d49a3::t_d92149a4186a5f 36-56,73-75,85-104,106
+app/models/pgbus/workflow_entry.rb
+  s_e3a487096d49a3::t_9f381a3c1efe86 57-61,71,75,78,83-84
+lib/pgbus/configuration/workflow_settings.rb
+  s_e3a487096d49a3::t_39ae826ad6f004 14-15,20,42-45,66,71
+lib/pgbus/generators/migration_detector.rb
+  s_e3a487096d49a3::t_049eea2a90981a 63-66,89,114,243-246,248-250,252-255
+spec/pgbus/configuration/workflow_settings_spec.rb
+  s_e3a487096d49a3::t_6fb50a7225fb82 18-19,37-38,42-43,56-58,73-76
+spec/integration/workflow/sweep_spec.rb
+  s_e3a487096d49a3::t_ef1f1bdcd6ed23 134-162
+docs/app/views/docs/pages/workflows.rb
+  s_e3a487096d49a3::t_ce8a4b7b6f0298 3,14-15,31,39-45,96-97,139-140,151-152,162-294,435-436,454-456,472-477,502-504,514-515,539-547,552-557,575-577,586-589,610-611
+docs/app/models/workflow_states_reference.rb
+  s_e3a487096d49a3::t_fc0f4798510c10 14,20-24,37-44,50
+CHANGELOG.md
+  s_e3a487096d49a3::t_f23cff51576f28 5
+lib/pgbus/workflow/test_helpers.rb
+  s_e3a487096d49a3::t_b3d3b05639a9db 82-87
+  s_e3a487096d49a3::t_8bb333ee26182e 15-18,48-50,55-57,66-81,88-104,110,121-132
+lib/pgbus/workflow/wait_timeout.rb
+  s_e3a487096d49a3::t_f3fc304b51e0ca 1-61
+lib/pgbus/workflow/outside_verbs.rb
+  s_e3a487096d49a3::t_4665c7b2f90866 30-31,39-42,45,55-65
+spec/integration/workflow/fan_out_spec.rb
+  s_e3a487096d49a3::t_708f4889e0be23 1-38,40-41,43-57,61,65-91,93-98,100,102-122,124-135,137-168,195-207
+  s_e3a487096d49a3::t_1c92020a174228 39,42,92,136
+  s_e3a487096d49a3::t_65fa1a3cad5580 58-60,62-64,99,101,123
+  s_e3a487096d49a3::t_96542d7497a7c4 169-194
+spec/pgbus/selective_loading_spec.rb
+  s_e3a487096d49a3::t_b3d3b05639a9db 39-40
+lib/pgbus/workflow/waiting.rb
+  s_e3a487096d49a3::t_960e0b9b844903 1-26,29,31-46,48-51,54-75
+  s_e3a487096d49a3::t_da60e7f6b6b34c 27-28,30,52-53
+  s_e3a487096d49a3::t_ec30dd696861e6 47
+spec/integration/workflow/signals_spec.rb
+  s_e3a487096d49a3::t_d51fb3c1fd2816 1-289
+spec/pgbus/workflow/flow_control_spec.rb
+  s_e3a487096d49a3::t_1200e663ca5a15 74,85,89-90
+lib/pgbus/workflow/instance.rb
+  s_e3a487096d49a3::t_4665c7b2f90866 83-110,172-179
+lib/pgbus/process/dispatcher.rb
+  s_e3a487096d49a3::t_324f1fd738bcc8 395,398,401-402
+lib/generators/pgbus/templates/migration.rb.erb
+  s_e3a487096d49a3::t_049eea2a90981a 275-279,291-294,315-334,369
+lib/pgbus/workflow/signals.rb
+  s_e3a487096d49a3::t_960e0b9b844903 1-88,90-117,119-131
+  s_e3a487096d49a3::t_ec30dd696861e6 89,118
+sig/pgbus/configuration.rbs
+  s_e3a487096d49a3::t_39ae826ad6f004 337-338
+spec/integration/workflow/verbs_spec.rb
+  s_e3a487096d49a3::t_3407a1e6d74173 218,221
+lib/generators/pgbus/add_workflow_signals_generator.rb
+  s_e3a487096d49a3::t_049eea2a90981a 1-56
+spec/pgbus/workflow/signal_matcher_spec.rb
+  s_e3a487096d49a3::t_e868cd5a00739f 1-65
+spec/generators/pgbus/add_workflows_generator_spec.rb
+  s_e3a487096d49a3::t_e0733b8f75548d 67-79
+spec/integration/workflow/support.rb
+  s_e3a487096d49a3::t_a464164155e8bc 19-20,22,60-68,75-80,99-101
+  s_e3a487096d49a3::t_48091a63279848 69-74
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "67bc027323dcd3b7dbcef17e64b3d4c638eb930c",
+  "prompts": {},
+  "sessions": {
+    "s_e3a487096d49a3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "faf1faea-af65-4cb2-b526-81aed7772ead",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
