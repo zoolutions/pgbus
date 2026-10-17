@@ -1,0 +1,6 @@
+<div class="flex items-center justify-between mb-6">
+  <h1 class="text-2xl font-bold text-gray-900 dark:text-white"><%= t("pgbus.deploy_tasks.index.title") %></h1>
+  <span class="text-sm text-gray-500 dark:text-gray-400"><%= t("pgbus.deploy_tasks.index.task_count", count: @deploy_tasks_count.total) %></span>
+</div>
+
+<%= render "pgbus/deploy_tasks/tasks_table" %>

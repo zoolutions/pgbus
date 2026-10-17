@@ -7,6 +7,8 @@ module Pgbus
   class Configuration
     def allowed_global_id_models: () -> untyped
     def allowed_global_id_models=: (untyped) -> untyped
+    def app_revision: () -> untyped
+    def app_revision=: (untyped) -> untyped
     def apply_log_format!: () -> void
     def appsignal_enabled: () -> bool
     def appsignal_enabled=: (untyped) -> untyped
@@ -46,6 +48,14 @@ module Pgbus
     def default_priority=: (untyped) -> untyped
     def default_queue: () -> String
     def default_queue=: (untyped) -> untyped
+    def deploy_task_run_retention: () -> Numeric?
+    def deploy_task_run_retention=: (untyped value) -> untyped
+    def deploy_tasks: () -> untyped
+    def deploy_tasks=: (untyped) -> untyped
+    def deploy_tasks_enabled: () -> bool
+    def deploy_tasks_enabled=: (untyped) -> untyped
+    def deploy_tasks_files: () -> untyped
+    def deploy_tasks_files=: (untyped) -> untyped
     def dispatch_interval: () -> Float
     def dispatch_interval=: (untyped) -> untyped
     def doctor_on_boot: () -> untyped

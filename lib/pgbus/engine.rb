@@ -58,6 +58,23 @@ module Pgbus
       end
     end
 
+    # config/deploy_tasks.yml (issue #536): same shape and loader as
+    # recurring.yml. Explicit deploy_tasks_files replace the default file, so
+    # this runs after the app's config/initializers set them.
+    initializer "pgbus.deploy_tasks", after: :load_config_initializers do |app|
+      config = Pgbus.configuration
+      next if config.deploy_tasks
+
+      files = config.deploy_tasks_files
+      default_path = app.root.join("config", "deploy_tasks.yml")
+      tasks = if files
+                Pgbus::Recurring::ConfigLoader.load_all(files)
+              elsif default_path.exist?
+                Pgbus::Recurring::ConfigLoader.load(default_path)
+              end
+      config.deploy_tasks = tasks if tasks.present?
+    end
+
     initializer "pgbus.db" do
       ActiveSupport.on_load(:active_record) do
         Pgbus::BusRecord.connects_to(**Pgbus.configuration.connects_to) if Pgbus.configuration.connects_to

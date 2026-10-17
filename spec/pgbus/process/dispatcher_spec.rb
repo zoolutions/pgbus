@@ -557,6 +557,45 @@ RSpec.describe Pgbus::Process::Dispatcher do
     end
   end
 
+  describe "#cleanup_deploy_task_runs (private)" do
+    before { allow(Pgbus::DeployTaskRun).to receive(:table_exists?).and_return(true) }
+
+    # Deploy tasks default on, so an install that bumps the gem without
+    # running pgbus:add_deploy_tasks must not warn every hour.
+    it "skips an install without the deploy task tables" do
+      allow(Pgbus::DeployTaskRun).to receive_messages(table_exists?: false, prunable_before: nil)
+
+      expect(dispatcher.send(:cleanup_deploy_task_runs)).to be_nil
+      expect(Pgbus::DeployTaskRun).not_to have_received(:prunable_before)
+    end
+
+    it "deletes run rows older than the retention" do
+      relation = instance_double(ActiveRecord::Relation, delete_all: 3)
+      allow(Pgbus::DeployTaskRun).to receive(:prunable_before).and_return(relation)
+
+      dispatcher.send(:cleanup_deploy_task_runs)
+
+      expect(Pgbus::DeployTaskRun).to have_received(:prunable_before)
+        .with(a_value_within(5).of(Time.current - (90 * 86_400)))
+      expect(relation).to have_received(:delete_all)
+    end
+
+    it "skips when the retention is nil" do
+      allow(Pgbus.configuration).to receive(:deploy_task_run_retention).and_return(nil)
+      allow(Pgbus::DeployTaskRun).to receive(:prunable_before)
+
+      dispatcher.send(:cleanup_deploy_task_runs)
+
+      expect(Pgbus::DeployTaskRun).not_to have_received(:prunable_before)
+    end
+
+    it "returns the error instead of raising" do
+      allow(Pgbus::DeployTaskRun).to receive(:prunable_before).and_raise(StandardError, "db error")
+
+      expect(dispatcher.send(:cleanup_deploy_task_runs)).to be_a(StandardError)
+    end
+  end
+
   describe "#cleanup_stats (private)" do
     before do
       stub_const("Pgbus::JobStat", Class.new)
@@ -654,6 +693,7 @@ RSpec.describe Pgbus::Process::Dispatcher do
       dispatcher.send(:start_heartbeat)
       expect(Pgbus::Process::Heartbeat).to have_received(:new).with(
         kind: "dispatcher",
+        config: kind_of(Pgbus::Configuration),
         metadata: { pid: Process.pid, started_at: a_value_within(5).of(Time.now.to_f), supervisor_pid: Process.ppid },
         loop_tick_supplier: kind_of(Proc)
       )
@@ -702,6 +742,7 @@ RSpec.describe Pgbus::Process::Dispatcher do
         "@last_batch_cleanup_at": :cleanup_batches,
         "@last_batch_sweep_at": :sweep_stalled_batches,
         "@last_recurring_cleanup_at": :cleanup_recurring_executions,
+        "@last_deploy_run_cleanup_at": :cleanup_deploy_task_runs,
         "@last_archive_compaction_at": :compact_archives,
         "@last_stream_archive_compaction_at": :prune_stream_archives,
         "@last_outbox_cleanup_at": :cleanup_outbox,

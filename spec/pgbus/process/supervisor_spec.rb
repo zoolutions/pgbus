@@ -312,6 +312,7 @@ RSpec.describe Pgbus::Process::Supervisor do
 
       expect(Pgbus::Process::Heartbeat).to have_received(:new).with(
         kind: "supervisor",
+        config: kind_of(Pgbus::Configuration),
         metadata: { pid: Process.pid, hostname: Socket.gethostname, started_at: a_value_within(5).of(Time.now.to_f) }
       )
     end
@@ -1283,6 +1284,86 @@ RSpec.describe Pgbus::Process::Supervisor do
       config.recurring_tasks = nil
       config.recurring_tasks_file = nil
       expect(supervisor.send(:recurring_tasks_configured?)).to be false
+    end
+  end
+
+  describe "boot_scheduler with deploy tasks (issue #536, private)" do
+    let(:supervisor) { described_class.new }
+
+    around do |example|
+      saved = %i[recurring_tasks recurring_tasks_file recurring_tasks_files recurring_enabled
+                 deploy_tasks deploy_tasks_files deploy_tasks_enabled]
+              .to_h { |name| [name, config.public_send(name)] }
+      example.run
+    ensure
+      saved.each { |name, value| config.public_send("#{name}=", value) }
+    end
+
+    before do
+      config.recurring_tasks = nil
+      config.recurring_tasks_file = nil
+      config.recurring_tasks_files = nil
+      config.deploy_tasks_files = nil
+      allow(supervisor).to receive(:fork_scheduler)
+    end
+
+    it "forks the scheduler with deploy tasks only" do
+      config.deploy_tasks = { "backfill" => { "class" => "BackfillJob" } }
+
+      supervisor.send(:boot_scheduler)
+
+      expect(supervisor).to have_received(:fork_scheduler)
+    end
+
+    it "forks the scheduler for deploy tasks even when recurring is disabled" do
+      config.recurring_enabled = false
+      config.deploy_tasks = { "backfill" => { "class" => "BackfillJob" } }
+
+      supervisor.send(:boot_scheduler)
+
+      expect(supervisor).to have_received(:fork_scheduler)
+    end
+
+    it "does not fork when deploy tasks are disabled and no recurring tasks are configured" do
+      config.deploy_tasks = { "backfill" => { "class" => "BackfillJob" } }
+      config.deploy_tasks_enabled = false
+
+      supervisor.send(:boot_scheduler)
+
+      expect(supervisor).not_to have_received(:fork_scheduler)
+    end
+
+    it "detects deploy_tasks_files that exist" do
+      Dir.mktmpdir do |dir|
+        path = File.join(dir, "deploy_tasks.yml")
+        File.write(path, "backfill:\n  class: BackfillJob\n")
+        config.deploy_tasks_files = [path]
+
+        expect(supervisor.send(:deploy_tasks_configured?)).to be(true)
+      end
+    end
+
+    it "does not fall back to the default file when deploy_tasks_files are set but missing" do
+      Dir.mktmpdir do |dir|
+        default = File.join(dir, "deploy_tasks.yml")
+        File.write(default, "backfill:\n  class: BackfillJob\n")
+        allow(supervisor).to receive(:default_deploy_tasks_path).and_return(default)
+        config.deploy_tasks_files = [File.join(dir, "missing.yml")]
+
+        expect(supervisor.send(:deploy_tasks_configured?)).to be(false)
+      end
+    end
+
+    it "loads deploy_tasks_files into the configuration in the scheduler fork" do
+      Dir.mktmpdir do |dir|
+        path = File.join(dir, "deploy_tasks.yml")
+        File.write(path, "backfill:\n  class: BackfillJob\n")
+        config.deploy_tasks_files = [path]
+
+        supervisor.send(:load_deploy_tasks_config)
+
+        expect(config.deploy_tasks).to eq("backfill" => { "class" => "BackfillJob" })
+      end
     end
   end
 

@@ -137,6 +137,15 @@ RSpec.describe Pgbus::ProcessesHelper do
         .to eq(%w[execution_mode memory_mb jobs_processed jobs_failed consumer_priority])
     end
 
+    # Every row carries "revision" since deploy tasks (issue #536), nil until
+    # one is configured: an empty "revision: " chip says nothing.
+    it "leaves out keys without a value and keeps the revision" do
+      raw = helper.pgbus_process_raw_metadata("revision" => nil, "execution_mode" => "threads")
+      expect(raw.keys).to eq(%w[execution_mode])
+
+      expect(helper.pgbus_process_raw_metadata("revision" => "8d41b07")).to eq("revision" => "8d41b07")
+    end
+
     it "is empty for non-Hash metadata" do
       expect(helper.pgbus_process_raw_metadata(nil)).to eq({})
     end

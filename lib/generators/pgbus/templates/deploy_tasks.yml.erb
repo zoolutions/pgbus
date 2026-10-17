@@ -1,0 +1,42 @@
+# Pgbus Deploy Tasks Configuration
+#
+# One-time jobs that run once the whole fleet has rolled over to a new app
+# revision: a backfill, a data fix, a cache warm. Same shape as
+# config/recurring.yml, without schedule:. Supports environment-scoped or
+# flat configuration.
+#
+# The scheduler enqueues a task only when every live pgbus process reports
+# the scheduler's own app revision and at least one worker on it is alive,
+# so a task never runs on old code during the deploy overlap window. The
+# revision comes from config.app_revision, then PGBUS_REVISION, DASH_VERSION,
+# KAMAL_VERSION, then the REVISION file at Rails.root. Without one, deploy
+# tasks wait (the dashboard says so) and only "Run now" enqueues them.
+#
+# Format:
+#   task_key:
+#     class: JobClassName      # ActiveJob class to run (or use command:)
+#     version: 1               # Runs once per version; bump it to run again after the next deploy
+#     every_deploy: false      # true: run after every rollover instead (version is ignored)
+#     queue: default           # Optional: queue name (default: pgbus default queue)
+#     args: [arg1, arg2]       # Optional: job arguments
+#     priority: 0              # Optional: numeric priority
+#     description: "text"      # Optional: human-readable description
+#
+# Command-based tasks (no job class needed):
+#   warm_fragment_caches:
+#     command: "FragmentCacheWarmer.run"
+#     every_deploy: true
+#
+# Examples:
+#
+# production:
+#   backfill_order_totals:
+#     class: BackfillOrderTotalsJob
+#     version: 2
+#     queue: maintenance
+#     args: [{ batch_size: 500 }]
+#     description: Recompute totals after the currency migration
+#
+#   warm_fragment_caches:
+#     command: "FragmentCacheWarmer.run"
+#     every_deploy: true

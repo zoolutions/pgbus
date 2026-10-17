@@ -39,6 +39,8 @@ ignore_unused:
   - "pgbus.dashboard.queue_health.words.*"
   - "pgbus.insights.show.charts.series_name"
   - "pgbus.recurring_tasks.index.task_count.*"
+  - "pgbus.deploy_tasks.banner.lagging_html.*"
+  - "pgbus.deploy_tasks.reasons.waiting_lagging_html.*"
   - "pgbus.processes.state.activity.schedule.*"
   - "pgbus.processes.state.activity.slots.*"
   - "pgbus.processes.state.activity.threads.*"

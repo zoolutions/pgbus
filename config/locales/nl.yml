@@ -236,6 +236,102 @@ nl:
         payload: Inhoud
         retry: Opnieuw proberen
         title: 'DLQ Bericht #%{id}'
+    deploy_tasks:
+      banner:
+        heading: Uitrol
+        lagging_html:
+          one: 'Wacht op uitrol: 1 proces draait nog niet op <code>%{revision}</code>.'
+          other: 'Wacht op uitrol: %{count} processen draaien nog niet op <code>%{revision}</code>.'
+        lagging_more: "…en nog %{count}"
+        lagging_process: "%{kind}@%{hostname} pid %{pid} op %{revision}"
+        live_count: "%{count} op %{revision}"
+        live_heading: 'Actieve processen:'
+        no_revision_hint_html: Stel <code>config.app_revision</code> in, of een van <code>PGBUS_REVISION</code>, <code>DASH_VERSION</code> of <code>KAMAL_VERSION</code>, of lever een <code>REVISION</code>-bestand mee. Nu uitvoeren werkt nog steeds.
+        no_revision_html: 'App-revisie niet geconfigureerd: deploy-taken wachten tot die er is.'
+        no_revision_label: geen revisie
+        no_scheduler_html: 'Er draait geen scheduler: deploy-taken worden alleen door de scheduler gestart. Dit oordeel gebruikt de eigen revisie van het dashboard.'
+        no_workers_html: 'Wacht op uitrol: nog geen worker op <code>%{revision}</code>.'
+        ready_html: 'Uitgerold: elk actief proces draait <code>%{revision}</code>. Klaargezette taken draaien bij de volgende tick van de scheduler.'
+        unavailable_html: De uitrolstatus kon niet worden gelezen.
+      default_queue: default
+      disable: Uitschakelen
+      enable: Inschakelen
+      enqueue:
+        enqueued: Deploy-taak in de wachtrij gezet
+        failed: 'De deploy-taak is niet in de wachtrij gezet: zie het log voor de reden'
+      every_deploy: Bij elke deploy
+      index:
+        task_count:
+          one: "%{count} taak gedeclareerd"
+          other: "%{count} taken gedeclareerd"
+        title: Deploy-taken
+      not_found: Deploy-taak niet gevonden
+      reasons:
+        disabled_armed_html: 'Uitgeschakeld met een uitrolrun in afwachting: schakel hem in om hem te laten draaien.'
+        disabled_html: 'Uitgeschakeld: de scheduler slaat hem over.'
+        due_html: 'Klaar: draait bij de volgende tick van de scheduler.'
+        manual_html: "· draaide %{ago} (handmatig)"
+        never_html: Nooit gedraaid na een uitrol.
+        ran_html: Draaide %{ago} op <code>%{revision}</code> (uitrol).
+        waiting_lagging_html:
+          one: 'Wacht op uitrol: 1 proces draait nog niet op <code>%{revision}</code>.'
+          other: 'Wacht op uitrol: %{count} processen draaien nog niet op <code>%{revision}</code>.'
+        waiting_no_revision_html: 'Wacht: de app-revisie is niet geconfigureerd.'
+        waiting_no_scheduler_html: 'Wacht: er draait geen scheduler.'
+        waiting_no_workers_html: Wacht op een worker op <code>%{revision}</code>.
+        waiting_unknown_html: 'Wacht: de uitrolstatus kon niet worden gelezen.'
+      run_now: Nu uitvoeren
+      show:
+        armed_html: "%{armed_for}, klaargezet %{ago}"
+        back: Terug
+        configuration: Configuratie
+        labels:
+          arguments: Argumenten
+          armed: Openstaande run
+          command: Commando
+          description: Beschrijving
+          job_class: Jobklasse
+          priority: Prioriteit
+          queue: Wachtrij
+          source: Bron
+        last_run: Laatste run
+        no_runs: Nog geen runs vastgelegd
+        recent_runs: Recente runs
+        run_headers:
+          enqueued_at: In wachtrij gezet
+          queue: Wachtrij
+          revision: Revisie
+          triggered_by: Gestart door
+          version: Versie
+        source_config: Configuratiebestand
+        source_dynamic: Dynamisch
+        state: Status
+        version: Versie
+      states:
+        disabled: Uitgeschakeld
+        due: Klaar
+        never: Nooit gedraaid
+        ran: Gedraaid
+        waiting: Wacht
+      tasks_table:
+        empty_hint_html: Declareer eenmalige taken in <code>config/deploy_tasks.yml</code>; <code>rails generate pgbus:add_deploy_tasks</code> schrijft een startbestand.
+        empty_title: Geen deploy-taken gedeclareerd
+        headers:
+          actions: Acties
+          last_run: Laatste run
+          queue: Wachtrij
+          state: Status
+          task: Taak
+          version: Versie
+        never: Nooit
+      toggle:
+        disabled: Deploy-taak uitgeschakeld
+        enabled: Deploy-taak ingeschakeld
+        failed: Omschakelen van de deploy-taak mislukt
+      triggered_by:
+        manual: Handmatig
+        rollover: Uitrol
+      version: v%{version}
     dialogs:
       cancel: Annuleren
       confirm: Bevestigen
@@ -617,6 +713,7 @@ nl:
       nav:
         batches: Groepen
         dashboard: Dashboard
+        deploy_tasks: Deploy
         dlq: DLQ
         events: Evenementen
         insights: Inzichten

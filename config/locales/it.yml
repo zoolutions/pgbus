@@ -236,6 +236,102 @@ it:
         payload: Payload
         retry: Riprova
         title: 'Messaggio DLQ #%{id}'
+    deploy_tasks:
+      banner:
+        heading: Passaggio di versione
+        lagging_html:
+          one: 'In attesa del passaggio: 1 processo non esegue ancora <code>%{revision}</code>.'
+          other: 'In attesa del passaggio: %{count} processi non eseguono ancora <code>%{revision}</code>.'
+        lagging_more: "…e altri %{count}"
+        lagging_process: "%{kind}@%{hostname} pid %{pid} su %{revision}"
+        live_count: "%{count} su %{revision}"
+        live_heading: 'Processi attivi:'
+        no_revision_hint_html: Imposta <code>config.app_revision</code>, oppure una tra <code>PGBUS_REVISION</code>, <code>DASH_VERSION</code> o <code>KAMAL_VERSION</code>, oppure distribuisci un file <code>REVISION</code>. Esegui ora funziona comunque.
+        no_revision_html: 'Revisione dell''app non configurata: le attività di deploy attendono finché non lo è.'
+        no_revision_label: nessuna revisione
+        no_scheduler_html: 'Nessuno scheduler in esecuzione: le attività di deploy partono solo dallo scheduler. Questo verdetto usa la revisione della dashboard stessa.'
+        no_workers_html: 'In attesa del passaggio: ancora nessun worker su <code>%{revision}</code>.'
+        ready_html: 'Passaggio completato: ogni processo attivo esegue <code>%{revision}</code>. Le attività armate partono al prossimo tick dello scheduler.'
+        unavailable_html: Impossibile leggere lo stato del passaggio.
+      default_queue: default
+      disable: Disattiva
+      enable: Attiva
+      enqueue:
+        enqueued: Attività di deploy accodata
+        failed: 'L''attività di deploy non è stata accodata: vedi il log per il motivo'
+      every_deploy: A ogni deploy
+      index:
+        task_count:
+          one: "%{count} attività dichiarata"
+          other: "%{count} attività dichiarate"
+        title: Attività di deploy
+      not_found: Attività di deploy non trovata
+      reasons:
+        disabled_armed_html: 'Disattivata con un''esecuzione di passaggio in sospeso: attivala per farla partire.'
+        disabled_html: 'Disattivata: lo scheduler la salta.'
+        due_html: 'Pronta: parte al prossimo tick dello scheduler.'
+        manual_html: "· eseguita %{ago} (manuale)"
+        never_html: Mai eseguita dopo un passaggio.
+        ran_html: Eseguita %{ago} su <code>%{revision}</code> (passaggio).
+        waiting_lagging_html:
+          one: 'In attesa del passaggio: 1 processo non esegue ancora <code>%{revision}</code>.'
+          other: 'In attesa del passaggio: %{count} processi non eseguono ancora <code>%{revision}</code>.'
+        waiting_no_revision_html: 'In attesa: la revisione dell''app non è configurata.'
+        waiting_no_scheduler_html: 'In attesa: nessuno scheduler in esecuzione.'
+        waiting_no_workers_html: In attesa di un worker su <code>%{revision}</code>.
+        waiting_unknown_html: 'In attesa: impossibile leggere lo stato del passaggio.'
+      run_now: Esegui ora
+      show:
+        armed_html: "%{armed_for}, armata %{ago}"
+        back: Indietro
+        configuration: Configurazione
+        labels:
+          arguments: Argomenti
+          armed: Esecuzione in sospeso
+          command: Comando
+          description: Descrizione
+          job_class: Classe del job
+          priority: Priorità
+          queue: Coda
+          source: Origine
+        last_run: Ultima esecuzione
+        no_runs: Nessuna esecuzione registrata
+        recent_runs: Esecuzioni recenti
+        run_headers:
+          enqueued_at: Accodata il
+          queue: Coda
+          revision: Revisione
+          triggered_by: Avviata da
+          version: Versione
+        source_config: File di configurazione
+        source_dynamic: Dinamica
+        state: Stato
+        version: Versione
+      states:
+        disabled: Disattivata
+        due: Pronta
+        never: Mai eseguita
+        ran: Eseguita
+        waiting: In attesa
+      tasks_table:
+        empty_hint_html: Dichiara le attività una tantum in <code>config/deploy_tasks.yml</code>; <code>rails generate pgbus:add_deploy_tasks</code> scrive un file di partenza.
+        empty_title: Nessuna attività di deploy dichiarata
+        headers:
+          actions: Azioni
+          last_run: Ultima esecuzione
+          queue: Coda
+          state: Stato
+          task: Attività
+          version: Versione
+        never: Mai
+      toggle:
+        disabled: Attività di deploy disattivata
+        enabled: Attività di deploy attivata
+        failed: Impossibile cambiare lo stato dell'attività di deploy
+      triggered_by:
+        manual: Manuale
+        rollover: Passaggio
+      version: v%{version}
     dialogs:
       cancel: Annulla
       confirm: Conferma
@@ -617,6 +713,7 @@ it:
       nav:
         batches: Lotti
         dashboard: Cruscotto
+        deploy_tasks: Deploy
         dlq: DLQ
         events: Eventi
         insights: Approfondimenti

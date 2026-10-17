@@ -236,6 +236,102 @@ fi:
         payload: Kuorma
         retry: Yritä uudelleen
         title: 'DLQ-viesti #%{id}'
+    deploy_tasks:
+      banner:
+        heading: Käyttöönotto
+        lagging_html:
+          one: 'Odotetaan käyttöönottoa: 1 prosessi ei vielä aja versiota <code>%{revision}</code>.'
+          other: 'Odotetaan käyttöönottoa: %{count} prosessia ei vielä aja versiota <code>%{revision}</code>.'
+        lagging_more: "…ja %{count} muuta"
+        lagging_process: "%{kind}@%{hostname} pid %{pid} versiossa %{revision}"
+        live_count: "%{count} versiossa %{revision}"
+        live_heading: 'Elävät prosessit:'
+        no_revision_hint_html: Aseta <code>config.app_revision</code>, tai jokin muuttujista <code>PGBUS_REVISION</code>, <code>DASH_VERSION</code> tai <code>KAMAL_VERSION</code>, tai toimita <code>REVISION</code>-tiedosto. Suorita nyt toimii edelleen.
+        no_revision_html: 'Sovelluksen versiota ei ole määritetty: deploy-tehtävät odottavat, kunnes se on.'
+        no_revision_label: ei versiota
+        no_scheduler_html: 'Ajastinta ei ole käynnissä: deploy-tehtävät käynnistyvät vain ajastimesta. Arvio käyttää hallintapaneelin omaa versiota.'
+        no_workers_html: 'Odotetaan käyttöönottoa: versiossa <code>%{revision}</code> ei ole vielä workeria.'
+        ready_html: 'Käyttöönotto valmis: jokainen elävä prosessi ajaa versiota <code>%{revision}</code>. Odottavat tehtävät ajetaan ajastimen seuraavalla kierroksella.'
+        unavailable_html: Käyttöönoton tilaa ei voitu lukea.
+      default_queue: default
+      disable: Poista käytöstä
+      enable: Ota käyttöön
+      enqueue:
+        enqueued: Deploy-tehtävä lisätty jonoon
+        failed: 'Deploy-tehtävää ei lisätty jonoon: syy löytyy lokista'
+      every_deploy: Jokaisessa deployssa
+      index:
+        task_count:
+          one: "%{count} tehtävä määritelty"
+          other: "%{count} tehtävää määritelty"
+        title: Deploy-tehtävät
+      not_found: Deploy-tehtävää ei löytynyt
+      reasons:
+        disabled_armed_html: 'Poistettu käytöstä, käyttöönottoajo odottaa: ota se käyttöön, jotta se ajetaan.'
+        disabled_html: 'Poistettu käytöstä: ajastin ohittaa sen.'
+        due_html: 'Valmis: ajetaan ajastimen seuraavalla kierroksella.'
+        manual_html: "· ajettu %{ago} (manuaalisesti)"
+        never_html: Ei koskaan ajettu käyttöönoton jälkeen.
+        ran_html: Ajettu %{ago} versiossa <code>%{revision}</code> (käyttöönotto).
+        waiting_lagging_html:
+          one: 'Odotetaan käyttöönottoa: 1 prosessi ei vielä aja versiota <code>%{revision}</code>.'
+          other: 'Odotetaan käyttöönottoa: %{count} prosessia ei vielä aja versiota <code>%{revision}</code>.'
+        waiting_no_revision_html: 'Odottaa: sovelluksen versiota ei ole määritetty.'
+        waiting_no_scheduler_html: 'Odottaa: ajastinta ei ole käynnissä.'
+        waiting_no_workers_html: Odottaa workeria versiossa <code>%{revision}</code>.
+        waiting_unknown_html: 'Odottaa: käyttöönoton tilaa ei voitu lukea.'
+      run_now: Suorita nyt
+      show:
+        armed_html: "%{armed_for}, valmisteltu %{ago}"
+        back: Takaisin
+        configuration: Asetukset
+        labels:
+          arguments: Argumentit
+          armed: Odottava ajo
+          command: Komento
+          description: Kuvaus
+          job_class: Työluokka
+          priority: Prioriteetti
+          queue: Jono
+          source: Lähde
+        last_run: Viimeisin ajo
+        no_runs: Ajoja ei ole vielä kirjattu
+        recent_runs: Viimeisimmät ajot
+        run_headers:
+          enqueued_at: Lisätty jonoon
+          queue: Jono
+          revision: Versio
+          triggered_by: Käynnistäjä
+          version: Versio
+        source_config: Asetustiedosto
+        source_dynamic: Dynaaminen
+        state: Tila
+        version: Versio
+      states:
+        disabled: Pois käytöstä
+        due: Valmis
+        never: Ei koskaan ajettu
+        ran: Ajettu
+        waiting: Odottaa
+      tasks_table:
+        empty_hint_html: Määrittele kertaluonteiset tehtävät tiedostossa <code>config/deploy_tasks.yml</code>; <code>rails generate pgbus:add_deploy_tasks</code> luo aloitustiedoston.
+        empty_title: Deploy-tehtäviä ei ole määritelty
+        headers:
+          actions: Toiminnot
+          last_run: Viimeisin ajo
+          queue: Jono
+          state: Tila
+          task: Tehtävä
+          version: Versio
+        never: Ei koskaan
+      toggle:
+        disabled: Deploy-tehtävä poistettu käytöstä
+        enabled: Deploy-tehtävä otettu käyttöön
+        failed: Deploy-tehtävän vaihto epäonnistui
+      triggered_by:
+        manual: Manuaalinen
+        rollover: Käyttöönotto
+      version: v%{version}
     dialogs:
       cancel: Peruuta
       confirm: Vahvista
@@ -617,6 +713,7 @@ fi:
       nav:
         batches: Erät
         dashboard: Hallintapaneeli
+        deploy_tasks: Deploy
         dlq: DLQ
         events: Tapahtumat
         insights: Oivallukset

@@ -16,7 +16,7 @@ RSpec.describe "Pgbus::DashboardController" do
     expect(stdout).to include("no supervisor to restart it")
     helpers = stdout.lines.map(&:strip).grep(/\APgbus::\w+Helper\z/)
     expect(helpers).to eq(%w[
-      Pgbus::ApplicationHelper Pgbus::ButtonHelper Pgbus::DashboardHelper
+      Pgbus::ApplicationHelper Pgbus::ButtonHelper Pgbus::DashboardHelper Pgbus::DeployTasksHelper
       Pgbus::EventsHelper Pgbus::InsightsHelper Pgbus::ProcessesHelper Pgbus::StreamsHelper
     ].sort)
   end

@@ -158,6 +158,7 @@ ThreadSafety/NewThread:
     - spec/integration/concurrency_block_durability_spec.rb
     - spec/integration/concurrency_spec.rb
     - spec/integration/connection_failure_spec.rb
+    - spec/integration/deploy_tasks_spec.rb
     - spec/integration/fair_share_read_spec.rb
     - spec/integration/job_uniqueness_spec.rb
     - spec/integration/read_ahead_spec.rb

@@ -32,6 +32,40 @@ RSpec.describe Pgbus::Process::Heartbeat do
       expect(Concurrent::TimerTask).to have_received(:new).with(execution_interval: described_class::INTERVAL)
       expect(timer).to have_received(:execute)
     end
+
+    # The deploy-task rollover gate reads metadata["revision"] off every live
+    # row (issue #536), so every kind stamps it from its first registration.
+    it "stamps the app revision into the registered metadata" do
+      allow(Pgbus::Deploy::Revision).to receive(:current).and_return("abc123")
+
+      heartbeat.start
+
+      expect(Pgbus::ProcessEntry).to have_received(:create!).with(
+        hash_including(metadata: { queues: %w[default], revision: "abc123" })
+      )
+    end
+
+    it "resolves the revision from the owning process's configuration" do
+      config = Pgbus::Configuration.new
+      config.app_revision = "from-process-config"
+
+      described_class.new(kind: "worker", config: config).start
+
+      expect(Pgbus::ProcessEntry).to have_received(:create!).with(
+        hash_including(metadata: { revision: "from-process-config" })
+      )
+    end
+
+    it "stores a nil revision rather than omitting the key" do
+      allow(Pgbus::Deploy::Revision).to receive(:current).and_return(nil)
+
+      heartbeat.start
+
+      expect(Pgbus::ProcessEntry).to have_received(:create!) do |attrs|
+        expect(attrs[:metadata]).to have_key(:revision)
+        expect(attrs[:metadata][:revision]).to be_nil
+      end
+    end
   end
 
   describe "#beat" do
@@ -183,6 +217,20 @@ RSpec.describe Pgbus::Process::Heartbeat do
             queues: %w[default],
             "rates" => { "processed" => 12.4 }
           )
+        end
+      end
+
+      it "keeps the revision on every beat" do
+        allow(Pgbus::Deploy::Revision).to receive(:current).and_return("abc123")
+        heartbeat = described_class.new(
+          kind: "worker", metadata: { queues: %w[default] },
+          metadata_supplier: -> { { "rates" => { "processed" => 1.0 } } }
+        )
+        heartbeat.start
+        heartbeat.beat
+
+        expect(scope).to have_received(:update_all) do |args|
+          expect(args[:metadata]).to include(revision: "abc123", "rates" => { "processed" => 1.0 })
         end
       end
 

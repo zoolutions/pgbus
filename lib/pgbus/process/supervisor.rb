@@ -425,9 +425,12 @@ module Pgbus
         ErrorReporter.report(e, { action: "fork_dispatcher" })
       end
 
+      # The scheduler runs recurring tasks and deploy tasks (issue #536);
+      # either one being enabled and configured forks it.
       def boot_scheduler
-        return unless config.recurring_enabled
-        return unless recurring_tasks_configured?
+        recurring = config.recurring_enabled && recurring_tasks_configured?
+        deploy = config.deploy_tasks_enabled && deploy_tasks_configured?
+        return unless recurring || deploy
 
         fork_scheduler
       end
@@ -438,7 +441,8 @@ module Pgbus
           restore_signals
           setup_child_process
           load_rails_app
-          load_recurring_config
+          load_recurring_config if config.recurring_enabled
+          load_deploy_tasks_config if config.deploy_tasks_enabled
           bootstrap_queues!
           scheduler = Recurring::Scheduler.new(config: config)
           scheduler.run
@@ -486,6 +490,33 @@ module Pgbus
         return unless path && File.exist?(path.to_s)
 
         config.recurring_tasks = Recurring::ConfigLoader.load(path)
+      end
+
+      def deploy_tasks_configured?
+        return true if config.deploy_tasks&.any?
+        # Explicit files replace the default file, as in load_deploy_tasks_config.
+        return config.deploy_tasks_files.any? { |f| File.exist?(f.to_s) } if config.deploy_tasks_files
+
+        path = default_deploy_tasks_path
+        path ? File.exist?(path.to_s) : false
+      end
+
+      # The engine initializer loads config/deploy_tasks.yml in a Rails boot;
+      # this covers a scheduler fork whose config was not loaded that way.
+      def load_deploy_tasks_config
+        return if config.deploy_tasks&.any?
+
+        files = config.deploy_tasks_files
+        tasks = if files
+                  Recurring::ConfigLoader.load_all(files)
+                elsif (path = default_deploy_tasks_path) && File.exist?(path.to_s)
+                  Recurring::ConfigLoader.load(path)
+                end
+        config.deploy_tasks = tasks if tasks&.any?
+      end
+
+      def default_deploy_tasks_path
+        Rails.root.join("config", "deploy_tasks.yml") if defined?(Rails) && Rails.respond_to?(:root) && Rails.root
       end
 
       def boot_consumers
@@ -903,6 +934,7 @@ module Pgbus
       def start_heartbeat
         @heartbeat = Heartbeat.new(
           kind: "supervisor",
+          config: @config,
           metadata: { pid: ::Process.pid, hostname: Socket.gethostname, started_at: Time.now.to_f }
         )
         @heartbeat.start

@@ -13,6 +13,7 @@ module Pgbus
       CONCURRENCY_INTERVAL = 300            # Run concurrency cleanup every 5 minutes
       BATCH_CLEANUP_INTERVAL = 3600         # Run batch cleanup every hour
       RECURRING_CLEANUP_INTERVAL = 3600     # Run recurring execution cleanup every hour
+      DEPLOY_RUN_CLEANUP_INTERVAL = 3600    # Run deploy task run cleanup every hour
       ARCHIVE_COMPACTION_INTERVAL = 3600    # Run archive compaction every hour
       OUTBOX_CLEANUP_INTERVAL = 3600 # Run outbox cleanup every hour
       JOB_LOCK_CLEANUP_INTERVAL = 300 # Run job lock cleanup every 5 minutes
@@ -52,7 +53,8 @@ module Pgbus
       MAINTENANCE_TIMESTAMPS = %i[
         @last_cleanup_at @last_reap_at @last_concurrency_at @last_batch_cleanup_at
         @last_batch_sweep_at
-        @last_recurring_cleanup_at @last_archive_compaction_at @last_stream_archive_compaction_at
+        @last_recurring_cleanup_at @last_deploy_run_cleanup_at @last_archive_compaction_at
+        @last_stream_archive_compaction_at
         @last_outbox_cleanup_at @last_job_lock_cleanup_at @last_stats_cleanup_at
         @last_orphan_stream_sweep_at @last_table_maintenance_at
       ].freeze
@@ -236,6 +238,7 @@ module Pgbus
         results << run_if_due(now, :@last_batch_cleanup_at, BATCH_CLEANUP_INTERVAL) { cleanup_batches }
         results << run_if_due(now, :@last_batch_sweep_at, config.batch_sweep_interval) { sweep_stalled_batches }
         results << run_if_due(now, :@last_recurring_cleanup_at, RECURRING_CLEANUP_INTERVAL) { cleanup_recurring_executions }
+        results << run_if_due(now, :@last_deploy_run_cleanup_at, DEPLOY_RUN_CLEANUP_INTERVAL) { cleanup_deploy_task_runs }
         results << run_if_due(now, :@last_archive_compaction_at, ARCHIVE_COMPACTION_INTERVAL) { compact_archives }
         results << run_if_due(now, :@last_stream_archive_compaction_at, ARCHIVE_COMPACTION_INTERVAL) { prune_stream_archives }
         results << run_if_due(now, :@last_outbox_cleanup_at, OUTBOX_CLEANUP_INTERVAL) { cleanup_outbox }
@@ -681,6 +684,19 @@ module Pgbus
         e
       end
 
+      # Guarded on the table: deploy tasks default on, and an install that has
+      # not run pgbus:add_deploy_tasks must not warn every hour.
+      def cleanup_deploy_task_runs
+        retention = config.deploy_task_run_retention
+        return unless retention&.positive? && DeployTaskRun.table_exists?
+
+        deleted = DeployTaskRun.prunable_before(Time.current - retention).delete_all
+        Pgbus.logger.debug { "[Pgbus] Cleaned up #{deleted} old deploy task runs" } if deleted.positive?
+      rescue StandardError => e
+        log_maintenance_failure("Deploy task run cleanup", e)
+        e
+      end
+
       def monotonic_now
         ::Process.clock_gettime(::Process::CLOCK_MONOTONIC)
       end
@@ -697,6 +713,7 @@ module Pgbus
       def start_heartbeat
         @heartbeat = Heartbeat.new(
           kind: "dispatcher",
+          config: @config,
           metadata: { pid: ::Process.pid, started_at: Time.now.to_f, supervisor_pid: ::Process.ppid },
           loop_tick_supplier: -> { @loop_tick_at.get }
         )

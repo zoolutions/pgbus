@@ -176,6 +176,51 @@ def bootstrap_integration_tables(conn)
     SQL
   end
 
+  # Deploy tasks (issue #536) — mirrors lib/generators/pgbus/templates/
+  # add_deploy_tasks_tables.rb.erb.
+  unless conn.table_exists?("pgbus_deploy_tasks")
+    conn.execute(<<~SQL)
+      CREATE TABLE pgbus_deploy_tasks (
+        id BIGSERIAL PRIMARY KEY,
+        key VARCHAR NOT NULL,
+        class_name VARCHAR,
+        command VARCHAR(2048),
+        arguments TEXT,
+        queue_name VARCHAR,
+        priority INTEGER DEFAULT 0,
+        version VARCHAR NOT NULL DEFAULT '1',
+        every_deploy BOOLEAN NOT NULL DEFAULT FALSE,
+        static BOOLEAN NOT NULL DEFAULT TRUE,
+        enabled BOOLEAN NOT NULL DEFAULT TRUE,
+        description TEXT,
+        armed_at TIMESTAMP,
+        armed_for VARCHAR,
+        created_at TIMESTAMP NOT NULL,
+        updated_at TIMESTAMP NOT NULL
+      );
+      CREATE UNIQUE INDEX idx_pgbus_deploy_tasks_key ON pgbus_deploy_tasks (key);
+      CREATE INDEX idx_pgbus_deploy_tasks_armed ON pgbus_deploy_tasks (armed_at) WHERE armed_at IS NOT NULL;
+    SQL
+  end
+
+  unless conn.table_exists?("pgbus_deploy_task_runs")
+    conn.execute(<<~SQL)
+      CREATE TABLE pgbus_deploy_task_runs (
+        id BIGSERIAL PRIMARY KEY,
+        task_key VARCHAR NOT NULL,
+        version VARCHAR NOT NULL,
+        revision VARCHAR,
+        triggered_by VARCHAR NOT NULL,
+        queue_name VARCHAR,
+        msg_id BIGINT,
+        run_at TIMESTAMP NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX idx_pgbus_deploy_task_runs_task ON pgbus_deploy_task_runs (task_key, run_at);
+      CREATE INDEX idx_pgbus_deploy_task_runs_cleanup ON pgbus_deploy_task_runs (run_at);
+    SQL
+  end
+
   if conn.table_exists?("pgbus_batches")
     cols = conn.columns("pgbus_batches").map(&:name)
     if cols.include?("on_discard_class") && !cols.include?("on_failure_class")
@@ -346,6 +391,7 @@ def cleanup_tables
     pgbus_processes pgbus_recurring_executions pgbus_failed_events
     pgbus_presence_members pgbus_outbox_entries pgbus_processed_events
     pgbus_batch_executions pgbus_batches pgbus_stream_queues
+    pgbus_deploy_tasks pgbus_deploy_task_runs
   ]
   tables.each do |table|
     conn.execute("DELETE FROM #{table}")

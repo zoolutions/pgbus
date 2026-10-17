@@ -84,6 +84,13 @@ module ConfigReference
       { name: "recurring_execution_retention", type: "Duration, nil", default: "7.days", desc: "How long to keep recurring execution history." },
       { name: "recurring_enabled", type: "Boolean", default: "true", desc: "Run the recurring scheduler (set false to disable it entirely). Replaces the deprecated skip_recurring." }
     ],
+    "Deploy tasks" => [
+      { name: "app_revision", type: "String, Callable, nil", default: "nil", desc: "The app revision every pgbus process reports in its heartbeat. Falls back to PGBUS_REVISION, DASH_VERSION, KAMAL_VERSION, then the REVISION file at Rails.root." },
+      { name: "deploy_tasks", type: "Hash, nil", default: "nil", desc: "Deploy task definitions as a hash (loaded from config/deploy_tasks.yml when nil)." },
+      { name: "deploy_tasks_files", type: "Array, nil", default: "nil", desc: "Paths to deploy_tasks.yml files, merged in order." },
+      { name: "deploy_tasks_enabled", type: "Boolean", default: "true", desc: "Run deploy tasks from the scheduler once the fleet has rolled over to a new revision." },
+      { name: "deploy_task_run_retention", type: "Duration, nil", default: "90.days", desc: "How long to keep deploy task run history (nil keeps it forever)." }
+    ],
     "Job stats" => [
       { name: "stats_enabled", type: "Boolean", default: "true", desc: "Record job execution stats for insights." },
       { name: "stats_retention", type: "Duration, nil", default: "30.days", desc: "How long to keep job stats." },

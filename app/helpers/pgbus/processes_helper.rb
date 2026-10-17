@@ -51,7 +51,7 @@ module Pgbus
     def pgbus_process_raw_metadata(metadata)
       return {} unless metadata.is_a?(Hash)
 
-      metadata.reject { |k, _| RENDERED_METADATA_KEYS.include?(k.to_s) }
+      metadata.reject { |k, v| v.nil? || RENDERED_METADATA_KEYS.include?(k.to_s) }
     end
 
     private

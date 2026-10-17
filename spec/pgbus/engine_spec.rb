@@ -209,6 +209,65 @@ RSpec.describe Pgbus::Engine do
     end
   end
 
+  describe "pgbus.deploy_tasks initializer" do
+    subject(:block) { initializer_block("pgbus.deploy_tasks") }
+
+    let(:tmpdir) { Dir.mktmpdir }
+    let(:app) { instance_double(Rails::Application, root: Pathname.new(tmpdir)) }
+    let(:default_path) { File.join(tmpdir, "config", "deploy_tasks.yml") }
+    let(:task_yaml) do
+      <<~YAML
+        backfill:
+          class: BackfillJob
+          version: 2
+      YAML
+    end
+
+    before do
+      FileUtils.mkdir_p(File.join(tmpdir, "config"))
+      restore_baseline_config
+    end
+
+    after do
+      FileUtils.remove_entry(tmpdir)
+      restore_baseline_config
+    end
+
+    it "auto-loads config/deploy_tasks.yml" do
+      File.write(default_path, task_yaml)
+
+      block.call(app)
+
+      expect(Pgbus.configuration.deploy_tasks).to eq("backfill" => { "class" => "BackfillJob", "version" => 2 })
+    end
+
+    it "loads explicit deploy_tasks_files instead of the default" do
+      File.write(default_path, task_yaml)
+      explicit = File.join(tmpdir, "config", "explicit.yml")
+      File.write(explicit, "warm:\n  command: Cache.warm!\n  every_deploy: true\n")
+      Pgbus.configuration.deploy_tasks_files = [explicit]
+
+      block.call(app)
+
+      expect(Pgbus.configuration.deploy_tasks.keys).to eq(["warm"])
+    end
+
+    it "leaves deploy_tasks set in Ruby alone" do
+      File.write(default_path, task_yaml)
+      Pgbus.configuration.deploy_tasks = { "existing" => { "class" => "X" } }
+
+      block.call(app)
+
+      expect(Pgbus.configuration.deploy_tasks).to eq("existing" => { "class" => "X" })
+    end
+
+    it "is a no-op when no file exists" do
+      block.call(app)
+
+      expect(Pgbus.configuration.deploy_tasks).to be_nil
+    end
+  end
+
   describe "pgbus.db initializer" do
     after { restore_baseline_config }
 

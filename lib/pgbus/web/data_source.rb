@@ -12,6 +12,7 @@ module Pgbus
       include EventList
       include ProcessList
       include DashboardSignals
+      include DeployTaskList
 
       # pgbus_failed_events rows outside the EventBus handler queues; binds
       # handler_queue_names_literal as $1.

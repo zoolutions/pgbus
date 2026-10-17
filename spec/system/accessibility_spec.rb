@@ -57,7 +57,7 @@ RSpec.describe "Dashboard accessibility", type: :system do
       @stub_data_source.stats = @stub_data_source.stats.transform_values { |v| v.is_a?(Numeric) ? 0 : v }
     end
 
-    %w[/pgbus /pgbus/queues /pgbus/jobs /pgbus/recurring_tasks /pgbus/processes /pgbus/events
+    %w[/pgbus /pgbus/queues /pgbus/jobs /pgbus/recurring_tasks /pgbus/deploy_tasks /pgbus/processes /pgbus/events
        /pgbus/batches /pgbus/dlq /pgbus/outbox /pgbus/locks /pgbus/insights].each do |path|
       it_behaves_like "an accessible page", path, :light
       it_behaves_like "an accessible page", path, :dark

@@ -236,6 +236,102 @@ en:
         payload: Payload
         retry: Retry
         title: 'DLQ Message #%{id}'
+    deploy_tasks:
+      banner:
+        heading: Rollover
+        lagging_html:
+          one: 'Waiting for rollover: 1 process is not on <code>%{revision}</code> yet.'
+          other: 'Waiting for rollover: %{count} processes are not on <code>%{revision}</code> yet.'
+        lagging_more: "…and %{count} more"
+        lagging_process: "%{kind}@%{hostname} pid %{pid} on %{revision}"
+        live_count: "%{count} on %{revision}"
+        live_heading: 'Live processes:'
+        no_revision_hint_html: Set <code>config.app_revision</code>, or one of <code>PGBUS_REVISION</code>, <code>DASH_VERSION</code> or <code>KAMAL_VERSION</code>, or ship a <code>REVISION</code> file. Run now still works.
+        no_revision_html: 'App revision not configured: deploy tasks wait until it is.'
+        no_revision_label: no revision
+        no_scheduler_html: 'No scheduler is running: deploy tasks fire only from the scheduler. This verdict uses the dashboard''s own revision.'
+        no_workers_html: 'Waiting for rollover: no worker on <code>%{revision}</code> yet.'
+        ready_html: 'Rolled over: every live process runs <code>%{revision}</code>. Armed tasks run on the scheduler''s next tick.'
+        unavailable_html: The rollover status could not be read.
+      default_queue: default
+      disable: Disable
+      enable: Enable
+      enqueue:
+        enqueued: Deploy task enqueued
+        failed: 'The deploy task was not enqueued: see the log for the reason'
+      every_deploy: Every deploy
+      index:
+        task_count:
+          one: "%{count} task declared"
+          other: "%{count} tasks declared"
+        title: Deploy Tasks
+      not_found: Deploy task not found
+      reasons:
+        disabled_armed_html: 'Disabled with a rollover run pending: enable it to let it fire.'
+        disabled_html: 'Disabled: the scheduler skips it.'
+        due_html: 'Due: runs on the scheduler''s next tick.'
+        manual_html: "· ran %{ago} (manual)"
+        never_html: Never ran after a rollover.
+        ran_html: Ran %{ago} on <code>%{revision}</code> (rollover).
+        waiting_lagging_html:
+          one: 'Waiting for rollover: 1 process is not on <code>%{revision}</code> yet.'
+          other: 'Waiting for rollover: %{count} processes are not on <code>%{revision}</code> yet.'
+        waiting_no_revision_html: 'Waiting: the app revision is not configured.'
+        waiting_no_scheduler_html: 'Waiting: no scheduler is running.'
+        waiting_no_workers_html: Waiting for a worker on <code>%{revision}</code>.
+        waiting_unknown_html: 'Waiting: the rollover status could not be read.'
+      run_now: Run Now
+      show:
+        armed_html: "%{armed_for}, armed %{ago}"
+        back: Back
+        configuration: Configuration
+        labels:
+          arguments: Arguments
+          armed: Pending arm
+          command: Command
+          description: Description
+          job_class: Job Class
+          priority: Priority
+          queue: Queue
+          source: Source
+        last_run: Last Run
+        no_runs: No runs recorded yet
+        recent_runs: Recent Runs
+        run_headers:
+          enqueued_at: Enqueued At
+          queue: Queue
+          revision: Revision
+          triggered_by: Triggered By
+          version: Version
+        source_config: Config file
+        source_dynamic: Dynamic
+        state: State
+        version: Version
+      states:
+        disabled: Disabled
+        due: Due
+        never: Never ran
+        ran: Ran
+        waiting: Waiting
+      tasks_table:
+        empty_hint_html: Declare one-time tasks in <code>config/deploy_tasks.yml</code>; <code>rails generate pgbus:add_deploy_tasks</code> writes a starter file.
+        empty_title: No deploy tasks declared
+        headers:
+          actions: Actions
+          last_run: Last Run
+          queue: Queue
+          state: State
+          task: Task
+          version: Version
+        never: Never
+      toggle:
+        disabled: Deploy task disabled
+        enabled: Deploy task enabled
+        failed: Failed to toggle the deploy task
+      triggered_by:
+        manual: Manual
+        rollover: Rollover
+      version: v%{version}
     dialogs:
       cancel: Cancel
       confirm: Confirm
@@ -617,6 +713,7 @@ en:
       nav:
         batches: Batches
         dashboard: Dashboard
+        deploy_tasks: Deploy
         dlq: DLQ
         events: Events
         insights: Insights

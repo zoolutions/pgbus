@@ -236,6 +236,102 @@ fr:
         payload: Charge utile
         retry: Réessayer
         title: Message DLQ n°%{id}
+    deploy_tasks:
+      banner:
+        heading: Bascule
+        lagging_html:
+          one: 'En attente de bascule : 1 processus n''exécute pas encore <code>%{revision}</code>.'
+          other: 'En attente de bascule : %{count} processus n''exécutent pas encore <code>%{revision}</code>.'
+        lagging_more: "…et %{count} de plus"
+        lagging_process: "%{kind}@%{hostname} pid %{pid} sur %{revision}"
+        live_count: "%{count} sur %{revision}"
+        live_heading: 'Processus actifs :'
+        no_revision_hint_html: Définissez <code>config.app_revision</code>, ou l'une de <code>PGBUS_REVISION</code>, <code>DASH_VERSION</code> ou <code>KAMAL_VERSION</code>, ou livrez un fichier <code>REVISION</code>. Exécuter maintenant fonctionne toujours.
+        no_revision_html: 'Révision de l''application non configurée : les tâches de déploiement attendent qu''elle le soit.'
+        no_revision_label: aucune révision
+        no_scheduler_html: 'Aucun planificateur ne tourne : les tâches de déploiement ne sont lancées que par le planificateur. Ce verdict utilise la révision du tableau de bord.'
+        no_workers_html: 'En attente de bascule : aucun worker sur <code>%{revision}</code> pour l''instant.'
+        ready_html: 'Bascule terminée : chaque processus actif exécute <code>%{revision}</code>. Les tâches armées s''exécutent au prochain tick du planificateur.'
+        unavailable_html: L'état de la bascule n'a pas pu être lu.
+      default_queue: default
+      disable: Désactiver
+      enable: Activer
+      enqueue:
+        enqueued: Tâche de déploiement mise en file
+        failed: 'La tâche de déploiement n''a pas été mise en file : consultez le journal pour la raison'
+      every_deploy: À chaque déploiement
+      index:
+        task_count:
+          one: "%{count} tâche déclarée"
+          other: "%{count} tâches déclarées"
+        title: Tâches de déploiement
+      not_found: Tâche de déploiement introuvable
+      reasons:
+        disabled_armed_html: 'Désactivée avec une exécution de bascule en attente : activez-la pour la laisser s''exécuter.'
+        disabled_html: 'Désactivée : le planificateur l''ignore.'
+        due_html: 'Prête : s''exécute au prochain tick du planificateur.'
+        manual_html: "· exécutée %{ago} (manuel)"
+        never_html: Jamais exécutée après une bascule.
+        ran_html: Exécutée %{ago} sur <code>%{revision}</code> (bascule).
+        waiting_lagging_html:
+          one: 'En attente de bascule : 1 processus n''exécute pas encore <code>%{revision}</code>.'
+          other: 'En attente de bascule : %{count} processus n''exécutent pas encore <code>%{revision}</code>.'
+        waiting_no_revision_html: 'En attente : la révision de l''application n''est pas configurée.'
+        waiting_no_scheduler_html: 'En attente : aucun planificateur ne tourne.'
+        waiting_no_workers_html: En attente d'un worker sur <code>%{revision}</code>.
+        waiting_unknown_html: 'En attente : l''état de la bascule n''a pas pu être lu.'
+      run_now: Exécuter maintenant
+      show:
+        armed_html: "%{armed_for}, armée %{ago}"
+        back: Retour
+        configuration: Configuration
+        labels:
+          arguments: Arguments
+          armed: Exécution en attente
+          command: Commande
+          description: Description
+          job_class: Classe de tâche
+          priority: Priorité
+          queue: File d'attente
+          source: Source
+        last_run: Dernière exécution
+        no_runs: Aucune exécution enregistrée
+        recent_runs: Exécutions récentes
+        run_headers:
+          enqueued_at: Mise en file le
+          queue: File d'attente
+          revision: Révision
+          triggered_by: Déclenchée par
+          version: Version
+        source_config: Fichier de configuration
+        source_dynamic: Dynamique
+        state: État
+        version: Version
+      states:
+        disabled: Désactivée
+        due: Prête
+        never: Jamais exécutée
+        ran: Exécutée
+        waiting: En attente
+      tasks_table:
+        empty_hint_html: Déclarez les tâches ponctuelles dans <code>config/deploy_tasks.yml</code> ; <code>rails generate pgbus:add_deploy_tasks</code> écrit un fichier de départ.
+        empty_title: Aucune tâche de déploiement déclarée
+        headers:
+          actions: Actions
+          last_run: Dernière exécution
+          queue: File d'attente
+          state: État
+          task: Tâche
+          version: Version
+        never: Jamais
+      toggle:
+        disabled: Tâche de déploiement désactivée
+        enabled: Tâche de déploiement activée
+        failed: Échec du basculement de la tâche de déploiement
+      triggered_by:
+        manual: Manuel
+        rollover: Bascule
+      version: v%{version}
     dialogs:
       cancel: Annuler
       confirm: Confirmer
@@ -617,6 +713,7 @@ fr:
       nav:
         batches: Lots
         dashboard: Tableau de bord
+        deploy_tasks: Déploiement
         dlq: DLQ
         events: Événements
         insights: Analyses
