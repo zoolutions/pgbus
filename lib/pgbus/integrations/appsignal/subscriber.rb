@@ -115,13 +115,17 @@ module Pgbus
             )
           end
 
+          # The counter has its own guard so a raise there cannot keep the
+          # error from being reported.
           def on_job_failed(event)
             payload = event.payload
-            ::Appsignal.increment_counter(
-              "#{METRIC_PREFIX}queue_job_count",
-              1,
-              { queue: payload[:queue], job_class: payload[:job_class], status: "failed" }
-            )
+            safely do
+              ::Appsignal.increment_counter(
+                "#{METRIC_PREFIX}queue_job_count",
+                1,
+                { queue: payload[:queue], job_class: payload[:job_class], status: "failed" }
+              )
+            end
             JOB_SPAN.report_unattached(payload[:exception_object], payload)
           end
 
@@ -136,13 +140,17 @@ module Pgbus
 
           # ── Event handler ───────────────────────────────────────────────
 
+          # The counter has its own guard so a raise there cannot keep the
+          # error from being reported.
           def on_event_failed(event)
             payload = event.payload
-            ::Appsignal.increment_counter(
-              "#{METRIC_PREFIX}event_count",
-              1,
-              { handler: payload[:handler], routing_key: payload[:routing_key], status: "failed" }
-            )
+            safely do
+              ::Appsignal.increment_counter(
+                "#{METRIC_PREFIX}event_count",
+                1,
+                { handler: payload[:handler], routing_key: payload[:routing_key], status: "failed" }
+              )
+            end
             EVENT_SPAN.report_unattached(payload[:exception_object], payload)
           end
 

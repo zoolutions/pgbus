@@ -918,7 +918,7 @@ By default, Pgbus logs caught exceptions and continues. To route them to your AP
 Pgbus.configure do |c|
   c.error_reporters << ->(ex, ctx) {
     Appsignal.report_error(ex) do |t|
-      t.set_namespace("background_job")
+      t.set_namespace("background_job") if ctx[:job_class]
       t.set_action("#{ctx[:job_class]}#perform") if ctx[:job_class]
       t.add_tags(ctx)
     end
@@ -928,7 +928,7 @@ end
 
 Each reporter receives `(exception, context_hash)`. The context hash includes keys like `action`, `queue`, `job_class`, and `msg_id` depending on the call site. Reporters that accept a third argument also receive the Pgbus configuration object.
 
-Use `Appsignal.report_error`, not `Appsignal.set_error`: a reporter runs from a rescue, where no AppSignal transaction is current, and `set_error` does nothing without one. With the [AppSignal integration](#appsignal-integration) installed, job and handler errors already reach AppSignal on their own transaction, so a reporter like the one above is only needed for the other rescue paths; AppSignal reports an exception once, whichever reports it first.
+Use `Appsignal.report_error`, not `Appsignal.set_error`: a reporter may run from a rescue where no AppSignal transaction is current, and there `set_error` does nothing. `report_error` works whether a transaction is current or not. With the [AppSignal integration](#appsignal-integration) installed, job and handler errors already reach AppSignal on their own transaction, so a reporter like the one above is only needed for the other rescue paths; AppSignal reports an exception once, whichever reports it first.
 
 Reporters are wired into all critical rescue paths: job execution failures, worker fetch/process errors, dispatcher maintenance, supervisor fork failures, circuit breaker trips, outbox publish errors, and failed event recording. Non-critical paths (dashboard queries, stat recording) remain log-only.
 

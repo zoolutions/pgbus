@@ -186,6 +186,14 @@ RSpec.describe "Pgbus::Integrations::Appsignal::Subscriber" do
       expect(appsignal_class.counters).to include(["pgbus_queue_job_count", 1, hash_including(status: "failed")])
     end
 
+    it "still reports the error when the failed counter raises" do
+      allow(appsignal_class).to receive(:increment_counter).and_raise(RuntimeError, "agent down")
+
+      instrument_job_failed
+
+      expect(transactions.sole).to have_attributes(action: "TestJob#perform", errors: [err])
+    end
+
     it "reports an error raised outside the execute span on a background-job transaction of its own" do
       instrument_job_failed
 
@@ -213,11 +221,12 @@ RSpec.describe "Pgbus::Integrations::Appsignal::Subscriber" do
     end
 
     it "reports a later error outside the span even after a span recorded another one" do
-      expect { instrument_execute { raise "earlier" } }.to raise_error("earlier")
+      earlier = RuntimeError.new("earlier")
+      expect { instrument_execute { raise earlier } }.to raise_error(earlier)
 
       instrument_job_failed
 
-      expect(transactions.map(&:errors)).to eq([[transactions.first.errors.sole], [err]])
+      expect(transactions.map(&:errors)).to eq([[earlier], [err]])
     end
   end
 
@@ -280,6 +289,14 @@ RSpec.describe "Pgbus::Integrations::Appsignal::Subscriber" do
       instrument_event_failed
 
       expect(appsignal_class.counters).to include(["pgbus_event_count", 1, hash_including(status: "failed")])
+    end
+
+    it "still reports the error when the failed counter raises" do
+      allow(appsignal_class).to receive(:increment_counter).and_raise(RuntimeError, "agent down")
+
+      instrument_event_failed
+
+      expect(transactions.sole).to have_attributes(action: "MyHandler#handle", errors: [err])
     end
 
     it "reports an error raised before the handler ran (building the event) on a <Handler>#handle transaction" do

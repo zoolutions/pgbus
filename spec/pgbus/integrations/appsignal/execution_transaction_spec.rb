@@ -97,14 +97,17 @@ RSpec.describe "AppSignal transactions around a pgbus execution" do # rubocop:di
       expect(transactions.sole.errors.map(&:class)).to eq([JSON::ParserError])
     end
 
-    it "pairs start and finish inside a fiber (execution_mode: :async)" do
+    it "pairs start and finish inside the fiber that runs the job" do
       define_job("FiberJob") { raise "in a fiber" }
 
-      Fiber.new { executor.execute(message_for("FiberJob"), "default") }.resume
+      current_after = Fiber.new do
+        executor.execute(message_for("FiberJob"), "default")
+        transaction_class.current?
+      end.resume
 
       expect(transactions.sole).to have_attributes(action: "FiberJob#perform", completed?: true)
       expect(transactions.sole.errors.map(&:message)).to eq(["in a fiber"])
-      expect(transaction_class.current?).to be(false)
+      expect(current_after).to be(false)
     end
   end
 
