@@ -123,8 +123,7 @@ module Pgbus
           Pgbus.logger.debug { "[Pgbus] Error running deploy tasks (repeated): #{signature}" }
         else
           @deploy_error = signature
-          Pgbus.logger.error { "[Pgbus] Error running deploy tasks: #{signature}" }
-          ErrorReporter.report(e, { action: "deploy_tasks_tick" })
+          ErrorReporter.report(e, { action: "deploy_tasks_tick" }) # logs at error itself
         end
       end
 

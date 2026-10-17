@@ -130,6 +130,21 @@ RSpec.describe Pgbus::Deploy::Runner do
       expect(Pgbus::ErrorReporter).to have_received(:report)
     end
 
+    it "reports a persistent sync failure once, then retries quietly" do
+      clock = [1_000.0]
+      allow(runner).to receive(:monotonic_now) { clock.first }
+      allow(Pgbus::DeployTask).to receive(:sync_from_config!).and_raise(StandardError, "db down")
+      runner.sync!(now: now)
+
+      3.times do
+        clock[0] += described_class::RETRY_BACKOFF_MAX
+        runner.tick(now)
+      end
+
+      expect(Pgbus::DeployTask).to have_received(:sync_from_config!).exactly(4).times
+      expect(Pgbus::ErrorReporter).to have_received(:report).once
+    end
+
     it "retries a failed sync from tick once its backoff has passed" do
       clock = [1_000.0]
       allow(runner).to receive(:monotonic_now) { clock.first }

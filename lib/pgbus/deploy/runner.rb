@@ -63,8 +63,13 @@ module Pgbus
         @sync_failures += 1
         delay = retry_delay(@sync_failures)
         @sync_retry_at = monotonic_now + delay
-        Pgbus.logger.error { "[Pgbus] Failed to sync deploy tasks (retrying in #{delay}s): #{e.class}: #{e.message}" }
-        ErrorReporter.report(e, { action: "deploy_tasks_sync" })
+        # Reported (and logged at error by the reporter) once; repeats of a
+        # persistent failure drop to debug instead of reporting every retry.
+        if @sync_failures == 1
+          ErrorReporter.report(e, { action: "deploy_tasks_sync", retry_in: delay })
+        else
+          Pgbus.logger.debug { "[Pgbus] Deploy task sync still failing (retrying in #{delay}s): #{e.class}: #{e.message}" }
+        end
         @synced = false
       end
 
