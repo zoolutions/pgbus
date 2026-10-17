@@ -13,10 +13,9 @@ Execute a complete engineering workflow with verification at each phase.
 
 **BEFORE any other work, prepare the git branch:**
 
-1. Check the current branch: `git branch --show-current`
-2. If NOT on `main`, switch: `git checkout main`
-3. Pull latest: `git pull origin main`
-4. Create feature branch: `git checkout -b issue-{number}-{brief-description}` (or `feature/{description}` if no issue number)
+1. Fetch latest main: `git fetch origin main`
+2. **Already prepared?** An orchestrator such as `/follow-through` may have created the branch for you, in a worktree. Keep the current branch, and say so, only when all three hold: `git branch --show-current` is `issue-{number}-…` for this issue, `git status --porcelain` prints nothing, and `git rev-parse HEAD` equals `git rev-parse origin/main`.
+3. Otherwise create the feature branch from fresh main: `git switch -c issue-{number}-{brief-description} origin/main` (or `feature/{description}` if no issue number). This works in a worktree too, where `main` is checked out elsewhere and `git checkout main` fails.
 
 ---
 
