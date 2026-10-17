@@ -78,7 +78,7 @@ hook-rewritable shapes: no `for`/subshell wrappers, no `| head` on rtk-handled c
 - **Worktree setup:** `bun install --frozen-lockfile`; undo none
 - **Release:** `bin/release <v>`; changelog `CHANGELOG.md`, heading `## [X.Y.Z] - YYYY-MM-DD` under `## [Unreleased]`; prep none; lockfiles `Gemfile.lock` `gemfiles/rails_7_1.gemfile.lock` `docs/Gemfile.lock`; docs `deploy-docs.yml` on release; human none
 - **Main health:** `gh run list --workflow main.yml --branch main --event push --limit 1 --json conclusion,headSha`
-- **Upstream:** libraries we own `zoolutions/*`; scrub none
+- **Upstream:** libraries we own `zoolutions/*` except pgmq-ruby, a fork whose upstream (`mensfeld/pgmq-ruby`) is a third party: draft only, the operator files it; scrub none
 - **Bench:** `bundle exec rake bench`, one `bundle exec rake bench:one[<name>]`; hot paths `docs/performance.md`; CI holds none
 
 ## Agent commands
