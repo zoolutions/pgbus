@@ -118,11 +118,10 @@ module Pgbus
 
             FlowControl::Outcome.skip if definition.skip?(workflow)
           end
-          return outcome!(record, step, notes, klass, verdict) if verdict
         rescue StandardError => e
           return claim.with(guard_error: e)
         end
-        claim
+        verdict ? outcome!(record, step, notes, klass, verdict) : claim
       end
 
       def cancel?(klass, workflow)

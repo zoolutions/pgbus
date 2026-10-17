@@ -61,7 +61,15 @@ module Pgbus
       # it would silently do nothing (and pull its wait forward for resume!).
       def self.ensure_ready!(workflow)
         status = workflow.reload.status
-        raise Error, "#{workflow.inspect} is #{status}, not ready: resume! it first" unless status == "ready"
+        return if status == "ready"
+
+        hint = case status
+               when "paused" then "resume! it first"
+               when "finished", "cancelled" then "it is over; rerun! starts a new run"
+               when "performing" then "a step is still running"
+               else "nothing inline can move it on"
+               end
+        raise Error, "#{workflow.inspect} is #{status}, not ready: #{hint}"
       end
 
       def self.scheduled_step(workflow)

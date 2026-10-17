@@ -27,7 +27,9 @@ RSpec.describe Pgbus::Workflow::TestHelpers do
       statuses.replace(%w[paused])
       allow(described_class).to receive(:scheduled_step).and_return(scheduled)
 
-      expect { perform_next_step(workflow) }.to raise_error(described_class::Error, /is paused, not ready/)
+      expect { perform_next_step(workflow) }.to raise_error(described_class::Error, /is paused, not ready: resume!/)
+      statuses.replace(%w[finished])
+      expect { perform_next_step(workflow) }.to raise_error(described_class::Error, /finished, not ready: .*rerun!/)
       expect(described_class).not_to have_received(:perform)
     end
 

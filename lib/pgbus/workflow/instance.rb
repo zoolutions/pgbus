@@ -56,6 +56,8 @@ module Pgbus
       # step does; later steps read them with output_of. Merges across calls.
       def output(**values)
         context = step_context!(:output)
+        raise NotInStep, "output can only be called from the step body, not from cancel_if or skip_if" if @guarding
+
         merged = (@output_values || {}).merge(values)
         @pending_output = Payload.dump(merged, what: "output of step #{context.step_name}")
         @output_values = merged

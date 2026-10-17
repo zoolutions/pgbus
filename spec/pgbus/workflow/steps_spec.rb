@@ -27,6 +27,15 @@ RSpec.describe "Pgbus::Workflow step declarations" do # rubocop:disable RSpec/De
       expect(klass.workflow_steps.fetch(:complete).body).to eq(:complete)
     end
 
+    it "names an anonymous step past a name already taken" do
+      klass = workflow_class do
+        step("step_2") { nil }
+        step { nil }
+      end
+
+      expect(klass.workflow_steps.names).to eq(%w[step_2 step_3])
+    end
+
     it "keeps each step's wait, skip_if, timeout and job options on a frozen definition" do
       klass = workflow_class do
         step :reminder, wait: 2.days, skip_if: -> { true }, timeout: 30.seconds, job_options: { queue: :mail, priority: 2 } do

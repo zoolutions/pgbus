@@ -165,6 +165,18 @@ RSpec.describe Pgbus::Workflow::StepJob do
       expect(outcomes).to eq([:skip])
     end
 
+    it "refuses flow-control verbs and output from a guard, as a guard error for the policies" do
+      klass.cancel_if { skip! }
+      perform
+      klass._cancel_conditions = [proc { output(x: 1) }].freeze
+      perform
+
+      errors = applied.map { |_outcome, options| options[:error] }
+      expect(errors).to all(be_a(Pgbus::Workflow::NotInStep))
+      expect(errors.first.message).to include("cancel_if or skip_if")
+      expect(ran).to be_empty
+    end
+
     it "sends a guard that raises through the exception policies" do
       klass.cancel_if { raise ArgumentError, "subject lookup failed" }
 
