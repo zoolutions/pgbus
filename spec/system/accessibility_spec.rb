@@ -45,6 +45,16 @@ RSpec.describe "Dashboard accessibility", type: :system do
           end
         end
       end
+
+      # The open confirm dialog (issue #529) that Pause, Purge and Delete raise.
+      it_behaves_like "an accessible page", "/pgbus/queues", mode do
+        let(:interaction) do
+          lambda do
+            click_on "Pause", match: :first
+            page.assert_selector("dialog#pgbus-confirm-dialog[open]")
+          end
+        end
+      end
     end
   end
 
