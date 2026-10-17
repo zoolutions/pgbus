@@ -1,0 +1,19 @@
+spec/requests/pgbus/workflows_controller_spec.rb
+  s_e3a487096d49a3::t_e9d0cea4e29cf6 249-259
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "9d50c0cc0e6490e175c5c33c18cd7edbb12edf00",
+  "prompts": {},
+  "sessions": {
+    "s_e3a487096d49a3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "faf1faea-af65-4cb2-b526-81aed7772ead",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
