@@ -63,11 +63,13 @@ module Pgbus
       # The waiting-step columns pgbus:add_workflow_signals adds to
       # pgbus_workflow_steps (issue #541), with the pgbus_workflow_signals table.
       WORKFLOW_WAITING_COLUMNS = %w[batch_id wait_for signal_id waiting_since timeout_at].freeze
-      WORKFLOW_WAITING_INDEXES = [
-        %w[pgbus_workflow_steps idx_pgbus_workflow_steps_batch],
-        %w[pgbus_workflow_steps idx_pgbus_workflow_steps_timeout],
-        %w[pgbus_workflow_signals idx_pgbus_workflow_signals_claimed]
-      ].freeze
+      WORKFLOW_WAITING_INDEXES = Ractor.make_shareable(
+        [
+          %w[pgbus_workflow_steps idx_pgbus_workflow_steps_batch],
+          %w[pgbus_workflow_steps idx_pgbus_workflow_steps_timeout],
+          %w[pgbus_workflow_signals idx_pgbus_workflow_signals_claimed]
+        ]
+      )
 
       # generator_key → Rails generator name. Passed to Thor's invoke.
       #
