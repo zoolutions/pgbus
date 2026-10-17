@@ -75,14 +75,19 @@ RSpec.describe Pgbus::ActiveJob::BatchId do
       expect(captured).to eq(["b-1"])
     end
 
-    it "keeps the batch the job was explicitly added to" do
-      Thread.current[:pgbus_batch_id] = "outer"
+    # An id left on the instance by an add whose enqueue never ran (the
+    # transaction rolled back, or a before_enqueue aborted) must not follow
+    # the job into a later enqueue.
+    it "replaces a stale id with the tag of the block it is enqueued in, or none" do
       job = job_class.new
-      job.enqueue_batch_id = "inner"
-
+      job.enqueue_batch_id = "rolled-back"
       job.enqueue
 
-      expect(captured).to eq(["inner"])
+      job.enqueue_batch_id = "rolled-back"
+      Thread.current[:pgbus_batch_id] = "b-2"
+      job.enqueue
+
+      expect(captured).to eq([nil, "b-2"])
     end
 
     it "tags each instance with the batch it is added to" do

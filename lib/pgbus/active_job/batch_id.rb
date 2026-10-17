@@ -37,8 +37,11 @@ module Pgbus
         jobs.each { |job| job.enqueue_batch_id = batch_id if job.respond_to?(:enqueue_batch_id=) }
       end
 
+      # Plain assignment, not ||=: an id left by an add whose enqueue never
+      # ran (rolled back, or aborted by a before_enqueue) must not follow the
+      # instance into this one. b.add / batch.add never come through here.
       def enqueue(...)
-        self.enqueue_batch_id ||= Thread.current[:pgbus_batch_id]
+        self.enqueue_batch_id = Thread.current[:pgbus_batch_id]
         super
       end
 
