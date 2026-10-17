@@ -11,11 +11,13 @@ module Pgbus
     #   config.workflow_stall_action = :pause           # :pause, :reattempt or :cancel a stalled step
     #   config.workflow_max_payload_size = 131_072      # bytes: arguments and step outputs
     #   config.workflow_error_backtrace_lines = 50      # backtrace lines kept on a failed step
+    #   config.workflow_waiting_visibility_threshold = 7.days # a step waiting this long without a
+    #                                                   # wait_timeout: counts as stuck (waiting_overdue)
     module WorkflowSettings
       WORKFLOW_STALL_ACTIONS = %i[pause reattempt cancel].freeze
 
       attr_reader :workflow_queue, :workflow_retention, :workflow_sweep_interval, :workflow_stall_threshold,
-                  :workflow_stall_action
+                  :workflow_stall_action, :workflow_waiting_visibility_threshold
       attr_accessor :workflow_max_payload_size, :workflow_error_backtrace_lines
 
       def workflow_queue=(value)
@@ -35,6 +37,10 @@ module Pgbus
 
       def workflow_stall_threshold=(value)
         @workflow_stall_threshold = coerce_duration!(value, :workflow_stall_threshold)
+      end
+
+      def workflow_waiting_visibility_threshold=(value)
+        @workflow_waiting_visibility_threshold = coerce_duration!(value, :workflow_waiting_visibility_threshold)
       end
 
       def workflow_stall_action=(value)
@@ -57,10 +63,12 @@ module Pgbus
         @workflow_stall_action = :pause
         @workflow_max_payload_size = 131_072 # 128 KB
         @workflow_error_backtrace_lines = 50
+        @workflow_waiting_visibility_threshold = 7 * 24 * 3600 # 7 days
       end
 
       def validate_workflow_settings!
         { workflow_sweep_interval: workflow_sweep_interval, workflow_stall_threshold: workflow_stall_threshold,
+          workflow_waiting_visibility_threshold: workflow_waiting_visibility_threshold,
           workflow_retention: workflow_retention }.each do |name, value|
           next if value.nil? && name == :workflow_retention
           next if value.is_a?(Numeric) && value.positive? && value.finite?

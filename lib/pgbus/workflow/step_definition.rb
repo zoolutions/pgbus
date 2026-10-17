@@ -6,12 +6,15 @@ module Pgbus
     # instance method) and its options. Built and validated when the class
     # body runs, so a bad option fails at load, not on the first run.
     class StepDefinition
-      OPTIONS = %i[wait skip_if job_options timeout on_exception].freeze
+      OPTIONS = %i[wait skip_if job_options timeout on_exception wait_for wait_timeout on_timeout].freeze
+      # What a wait_for: step does when its wait_timeout: passes first.
+      ON_TIMEOUT = %i[pause! cancel! skip! run].freeze
       # The StepJob options a class (set_step_job_options) or a step
       # (job_options:) may set. Anything else raises at class load.
       JOB_OPTIONS = %i[queue priority wait wait_until].freeze
 
-      attr_reader :name, :body, :wait, :skip_if, :job_options, :timeout, :exception_policies
+      attr_reader :name, :body, :wait, :skip_if, :job_options, :timeout, :exception_policies,
+                  :wait_for, :wait_for_name, :wait_timeout, :on_timeout
 
       def self.validate_job_options!(options)
         raise ArgumentError, "job_options: must be a Hash, got #{options.inspect}" unless options.is_a?(Hash)
@@ -66,7 +69,8 @@ module Pgbus
         defined?(ActiveSupport::Duration) && value.is_a?(ActiveSupport::Duration)
       end
 
-      def initialize(name:, body:, wait: nil, skip_if: nil, job_options: {}, timeout: nil, on_exception: nil)
+      def initialize(name:, body:, wait: nil, skip_if: nil, job_options: {}, timeout: nil, on_exception: nil,
+                     wait_for: nil, wait_timeout: nil, on_timeout: nil)
         @name = -name.to_s
         @body = body
         @wait = self.class.seconds(wait, "wait", positive: false) || 0
@@ -74,10 +78,14 @@ module Pgbus
         @job_options = self.class.validate_job_options!(job_options.nil? ? {} : job_options)
         @timeout = self.class.seconds(timeout, "timeout", positive: true)
         @exception_policies = ExceptionPolicy.coerce_all(on_exception)
+        assign_wait(wait_for, wait_timeout, on_timeout)
         freeze
       end
 
       def kind = "step"
+
+      # True for a wait_for: step: it parks until a matching signal arrives.
+      def waits_for_signal? = !wait_for.nil?
 
       def removed? = false
 
@@ -95,6 +103,23 @@ module Pgbus
       end
 
       private
+
+      def assign_wait(wait_for, wait_timeout, on_timeout)
+        @wait_for = wait_for.nil? ? nil : SignalMatcher.coerce(wait_for)
+        @wait_for_name = @wait_for && SignalMatcher.label(@wait_for)
+        raise ArgumentError, "on_timeout: needs wait_for: and wait_timeout:" if !on_timeout.nil? && (@wait_for.nil? || wait_timeout.nil?)
+        raise ArgumentError, "wait_timeout: needs wait_for: (it bounds the wait for a signal)" if wait_timeout && @wait_for.nil?
+
+        @wait_timeout = self.class.seconds(wait_timeout, "wait_timeout", positive: true)
+        @on_timeout = @wait_timeout && normalize_on_timeout(on_timeout.nil? ? :pause! : on_timeout)
+      end
+
+      def normalize_on_timeout(value)
+        verb = value.to_s == "run" ? :run : :"#{value.to_s.delete_suffix("!")}!"
+        return verb if ON_TIMEOUT.include?(verb)
+
+        raise ArgumentError, "on_timeout: must be one of #{ON_TIMEOUT.map(&:inspect).join(", ")}, got #{value.inspect}"
+      end
 
       def validate_skip_if(value)
         return value if value.nil? || value.is_a?(Symbol) || value.is_a?(Proc)

@@ -36,7 +36,8 @@ RSpec.describe "Selective railtie loading" do # rubocop:disable RSpec/DescribeCl
       "JobStat" => "pgbus_job_stats",
       "WorkflowEntry" => "pgbus_workflows",
       "WorkflowStep" => "pgbus_workflow_steps",
-      "WorkflowEvent" => "pgbus_workflow_events"
+      "WorkflowEvent" => "pgbus_workflow_events",
+      "WorkflowSignal" => "pgbus_workflow_signals"
     }.each do |class_name, table_name|
       it "#{class_name} inherits from BusRecord and uses #{table_name}" do
         klass = Pgbus.const_get(class_name)

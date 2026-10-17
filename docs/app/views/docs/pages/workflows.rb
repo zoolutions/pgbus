@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# Durable multi-step workflows: Pgbus::Workflow (issue #540).
+# Durable multi-step workflows: Pgbus::Workflow (issues #540, #541).
 class Views::Docs::Pages::Workflows < DocsUI::Page
   title "Workflows"
   eyebrow "Guide"
@@ -11,6 +11,8 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
     install
     defining
     flow_control
+    fan_out
+    signals
     exceptions
     idempotency
     removing_steps
@@ -26,7 +28,7 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
   def install
     DocsUI::Section("Install") do
       md <<~'MD'
-        Workflows keep their state in three tables. A fresh `pgbus:install`
+        Workflows keep their state in four tables. A fresh `pgbus:install`
         creates them; an existing install adds them with the generator (or
         `rails generate pgbus:update`, which detects the missing tables):
       MD
@@ -34,6 +36,13 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
         rails generate pgbus:add_workflows               # or --database=pgbus for a separate database
         rails db:migrate
       SHELL
+      md <<~'MD'
+        An install that ran `pgbus:add_workflows` before waiting steps existed
+        adds them (the `pgbus_workflow_signals` table and five step columns)
+        with `rails generate pgbus:add_workflow_signals`; `pgbus:update`
+        detects that too. `start!` of a class with a `fan_out` or `wait_for:`
+        step raises `Pgbus::Workflow::WaitingStepsUnmigrated` until it has run.
+      MD
     end
   end
 
@@ -84,6 +93,8 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
           `wait`/`wait_until` only ever move a step later: they are folded
           into its `scheduled_at` when it is scheduled. Anything else raises.
         - `on_exception:` — a step-level exception policy (below).
+        - `wait_for:`, `wait_timeout:`, `on_timeout:` — wait for a signal
+          (below).
         - `before_step:` / `after_step:` — insert the step before or after
           another (useful in a subclass).
 
@@ -125,7 +136,8 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
         - `finished!` — the step completes and the run finishes now.
 
         From outside (the console, your code; the dashboard later), every verb
-        takes `actor:` and `reason:` for the audit trail:
+        takes `actor:` and `reason:` for the audit trail. Outside a step,
+        `skip!` skips the step a waiting run waits on:
       MD
       DocsUI::Code(<<~'RUBY')
         wf = SignupWorkflow.find(workflow_id)
@@ -136,12 +148,155 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
         wf.reschedule!(at: 1.hour.from_now)
         wf.cancel!(reason: "customer asked")
         wf.rerun!                                           # a finished or cancelled run, started again
-        wf.available_actions                                # => [:pause, :cancel, :run_now, :reschedule]
+        wf.skip!(actor: "alice", reason: "picked up in store")  # waiting → skip the step it waits on
+        wf.available_actions                                # => [:pause, :cancel, :run_now, :reschedule, :signal]
       RUBY
       md <<~'MD'
         A verb that is not legal in the run's state raises
         `Pgbus::Workflow::InvalidTransition` (`NotPaused` for `resume!` and
         `resume_at!`); the table at the bottom of this page is the rule.
+      MD
+    end
+  end
+
+  def fan_out
+    DocsUI::Section("Fan-out steps") do
+      md <<~'MD'
+        A `fan_out` step adds a group of jobs and waits for all of them, as
+        one batch:
+      MD
+      DocsUI::Code(<<~'RUBY')
+        fan_out :notify_vendors, on_batch_failure: :pause! do |b|
+          b.add(*subject.vendors.map { |vendor| NotifyVendorJob.new(vendor.id, "#{step_idempotency_key}:#{vendor.id}") })
+        end
+      RUBY
+      md <<~'MD'
+        The body adds job instances with `b.add`, as often as it likes (each
+        keeps its own `.set(queue:, wait:, priority:)`; a block given to
+        `b.add` runs inside the batch, so a `perform_later` in it joins too).
+        When the body returns, one batch opens with those jobs, described
+        `OrderWorkflow#notify_vendors <workflow_id>` and carrying
+        `{ workflow_id, step_id }` as its properties, so it shows on the
+        Batches page. The step is `waiting`, and so is the run; no message is
+        sent for it.
+
+        When every member has finished (completed or dead-lettered), the
+        batch's `on_complete` callback, `Pgbus::Workflow::BatchFinishedJob`
+        on the step's StepJob queue, resumes the run: with no dead-lettered
+        member the step completes and the next one is scheduled; with any,
+        `on_batch_failure` applies (`:pause!` by default, `:cancel!` or
+        `:skip!`) and `Pgbus::Workflow::FanOutFailed` ("3 of 12 jobs
+        dead-lettered") is recorded on the step. A batch that stalls is
+        repaired by the batch sweep, whose finish fires the same callback; a
+        callback that is lost (dead-lettered, or never sent) is made up by the
+        workflow sweep once its batch has been finished for
+        `config.workflow_stall_threshold`. If the batch row itself is gone
+        (batch retention ran before a long-delayed callback), its outcome is
+        unknown: the step fails with `FanOutFailed` and the run **pauses**,
+        whatever `on_batch_failure` says, for a person to resume or skip.
+
+        - The workflow owns the batch's callbacks: `b.on_complete`,
+          `b.on_success` and `b.on_failure` raise `ArgumentError` in the body.
+        - A flow-control verb (`skip!`, `cancel!`, …) or an exception in the
+          body ends the step before any batch exists. Members join only
+          through `b.add`: a bare `perform_later` in the body is not a member.
+        - An empty batch finishes at once; the step completes without waiting.
+        - **A reattempt, or `resume!` after a failure, runs the whole body
+          again and opens a fresh batch.** Every member runs again, so member
+          jobs must be idempotent: derive each member's key from
+          `step_idempotency_key` (stable across attempts) plus something that
+          tells the members apart, such as the vendor id.
+        - `fan_out` takes every `step` option except `wait_for:`,
+          `wait_timeout:` and `on_timeout:`, and needs the batch callback-job
+          columns (`rails generate pgbus:add_batch_callback_jobs`): without
+          them `start!` raises `Pgbus::Workflow::BatchCallbacksUnmigrated`.
+      MD
+    end
+  end
+
+  def signals
+    DocsUI::Section("Signals") do
+      md <<~'MD'
+        A `wait_for:` step waits for an event from outside, delivered with
+        `signal!`:
+      MD
+      DocsUI::Code(<<~'RUBY')
+        class OrderWorkflow < Pgbus::Workflow
+          step :capture, wait_for: :payment_confirmed, wait_timeout: 2.days, on_timeout: :pause! do
+            PaymentGateway.capture(subject, amount: received_signal.payload["amount"])
+          end
+        end
+
+        wf.signal!(:payment_confirmed, payload: { amount: 42 }, idempotency_key: event.id)
+
+        # A webhook that knows the order, not the run:
+        OrderWorkflow.signal!(order, :payment_confirmed, payload: { amount: 42 },
+                              idempotency_key: event.id, missing: :ignore)
+      RUBY
+      md <<~'MD'
+        The step reaches its gate after its `wait:` and its guards. It takes
+        the oldest pending signal its matcher takes and runs with it as
+        `received_signal`; with none it parks as `waiting` and nothing is
+        sent. `signal!` stores the signal under the run's row lock and, when
+        the run's step is waiting for one it matches, claims it and schedules
+        the step; its StepJob is sent once the signal commits (so a `signal!`
+        inside your transaction wakes nothing before it commits), into a queue
+        the workers already LISTEN on, so the step runs at once.
+      MD
+      DocsUI::Table(
+        [ "Signal status", "Means" ],
+        [
+          [ [ :code, "pending" ], "Stored, taken by no step: it arrived before the step waited, or no waiting step matches it." ],
+          [ [ :code, "claimed" ], [ :md, "A step took it and runs with it (`claimed_by_step_id`)." ] ],
+          [ [ :code, "consumed" ], "The step that took it ended." ]
+        ]
+      )
+      md <<~'MD'
+        - **Buffering.** A signal sent before its step waits stays pending
+          and is taken when the step reaches its gate.
+        - **Idempotency.** With an `idempotency_key`, a redelivery stores
+          nothing, wakes nothing and returns the stored signal, whose
+          `duplicate_delivery?` is true.
+        - **Matchers.** `wait_for:` takes a signal name, a
+          `Pgbus::Workflow::SignalMatcher.new(:shipped) { |payload| payload[:region] == "eu" }`,
+          or any object answering `matches?(signal)`. A matcher runs under the
+          run's row lock, so it must be fast and free of side effects. One
+          that raises at the gate is handed to the exception policies; in
+          `signal!` the error reaches the caller and nothing is stored.
+        - **Payloads** go through `ActiveJob::Arguments`, are capped at
+          `config.workflow_max_payload_size`, and read back with indifferent
+          access (`received_signal.payload["amount"]`).
+        - **A finished or cancelled run** raises `Pgbus::Workflow::NotOngoing`.
+          By subject, `missing: :raise` (default) raises it when the subject
+          has no ongoing run of the class; `missing: :ignore` returns `nil`. A
+          subject-less run is signalled through its handle
+          (`OrderWorkflow.find(workflow_id).signal!`).
+        - **Lifecycle.** A claimed signal is consumed when its step ends, and
+          kept when the attempt reattempts or fails into a pause: the next
+          attempt (`reattempt!`, `resume!`, or `resume_at!` of that step)
+          runs with the same signal, without matching again.
+        - **A paused run** still takes a signal for its waiting step, but stays
+          paused; `resume!` runs the step. `resume!` of a run paused while it
+          waited puts it back to waiting.
+
+        **Timeouts.** A signal that never comes is the usual way a workflow
+        gets stuck, so a waiting step can carry a deadline:
+        `wait_timeout:` (seconds or a Duration) and `on_timeout:`, one of `:pause!`
+        (default: the step fails with `Pgbus::Workflow::WaitTimedOut`),
+        `:cancel!`, `:skip!` or `:run` (the body runs with `received_signal`
+        nil and `timed_out?` true). `timeout:` keeps its meaning on every
+        step: it bounds the in-progress attempt from its claim, while `wait_timeout:`
+        bounds the wait before it. The sweep fires timeouts, so one fires
+        within `config.workflow_sweep_interval` of its deadline. A paused run's
+        wait does not time out while it is paused, and the time spent paused
+        does not count against it: `resume!` moves the deadline by the length
+        of the pause. A signal that arrives after the timeout fired stays
+        pending.
+
+        **A wait without a timeout** has three escape hatches: `skip!` (the
+        run moves on), `cancel!`, or `pause!` then `resume_at!`. One waiting
+        longer than `config.workflow_waiting_visibility_threshold` (7 days)
+        counts as stuck (`waiting_overdue`).
       MD
     end
   end
@@ -286,6 +441,12 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
           attempt, `:cancel` cancels the run.
         - **A lost message** — a scheduled step of a ready run, due more than
           the threshold ago and not sent within it — is sent again.
+        - **A wait past its `wait_timeout:`** gets its `on_timeout:` (see
+          Signals). A waiting step is never treated as stalled.
+        - **A lost fan-out callback** — a `fan_out` step still waiting on a
+          batch that finished more than the threshold ago — is resolved as
+          its `BatchFinishedJob` would have. One whose batch row is gone
+          pauses with `FanOutFailed` (the outcome is unknown).
         - **Retention**: finished and cancelled runs older than
           `config.workflow_retention` (30 days) are deleted hourly, with their
           steps and events.
@@ -303,7 +464,9 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
           [ [ :code, "workflow_stall_threshold" ], [ :code, "1.hour" ], "When an in-progress step is stalled, or a scheduled one overdue." ],
           [ [ :code, "workflow_stall_action" ], [ :code, ":pause" ], [ :md, "`:pause`, `:reattempt` or `:cancel`." ] ],
           [ [ :code, "workflow_max_payload_size" ], [ :code, "131_072" ], "Byte cap on arguments and on each step output." ],
-          [ [ :code, "workflow_error_backtrace_lines" ], [ :code, "50" ], "Backtrace lines kept on a failed step." ]
+          [ [ :code, "workflow_error_backtrace_lines" ], [ :code, "50" ], "Backtrace lines kept on a failed step." ],
+          [ [ :code, "workflow_waiting_visibility_threshold" ], [ :code, "7.days" ],
+            [ :md, "A wait without a `wait_timeout:` this long counts as stuck (`waiting_overdue`)." ] ]
         ]
       )
     end
@@ -319,7 +482,12 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
         `started`, `step_scheduled`, `step_started`, `step_completed`,
         `step_failed`, `step_skipped`, `step_reattempted`, `paused`,
         `resumed`, `cancelled`, `finished`, `run_now`, `rescheduled`, `rerun`,
-        `stall_detected`, `late_completion_ignored`.
+        `stall_detected`, `late_completion_ignored`, and for waiting steps
+        `step_waiting` (details: `wait_for` or `batch_id`), `signal_received`
+        (`name`, `idempotency_key`, `duplicate`), `signal_claimed`,
+        `wait_timed_out`, `fan_out_opened` (`batch_id`, `size`) and
+        `fan_out_finished` (`failed_jobs`, `total_jobs`). `signal!` takes
+        `actor:` too.
 
         **Metrics** reach Prometheus, StatsD and AppSignal with the same names
         (one exception for StatsD, below the table):
@@ -344,7 +512,9 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
         **Stuck reasons** (the `pgbus_workflows_stuck` gauge): `paused_error`
         (paused on a step that failed), `stalled` (paused on `StepStalled`),
         `paused_manual` (the step called `pause!`, or an outside `pause!`),
-        `overdue` (a scheduled step nobody picked up).
+        `overdue` (a scheduled step nobody picked up), `waiting_overdue` (a
+        wait without a `wait_timeout:` older than
+        `workflow_waiting_visibility_threshold`).
 
         **Errors** reach `Pgbus::ErrorReporter` with
         `{ workflow_class:, workflow_id:, step_name:, attempt:, outcome: }` as
@@ -354,7 +524,8 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
         `attempt`) to tag its own. The instrumentation events are
         `pgbus.workflow.step`, `pgbus.workflow_finished`,
         `pgbus.workflow_paused`, `pgbus.workflow_cancelled`,
-        `pgbus.workflow.stall_detected` and `pgbus.workflow.gauge`.
+        `pgbus.workflow.stall_detected`, `pgbus.workflow.signal`,
+        `pgbus.workflow.wait_timed_out` and `pgbus.workflow.gauge`.
       MD
     end
   end
@@ -378,11 +549,25 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
 
             expect(wf.status).to eq("finished")
           end
+
+          it "ships the order" do
+            wf = OrderWorkflow.start!(order)
+            speedrun_workflow(wf)            # raises StepWaiting at notify_vendors
+          rescue Pgbus::Workflow::StepWaiting
+            complete_fan_out(wf)             # every member completes; the run moves on
+            deliver_signal(wf, :shipped, payload: { at: Time.current })  # signal!, then the step it woke
+            expire_wait(wf)                  # or: the waiting step's on_timeout, now
+          end
         end
       RUBY
       md <<~'MD'
         `speedrun_workflow` stops at `paused`, `finished` and `cancelled`, and
-        raises on `waiting` (nothing inline can deliver what the run waits for).
+        raises `Pgbus::Workflow::StepWaiting` on `waiting`, naming the signal
+        or the batch the step waits for. `complete_fan_out` completes every
+        member of the waiting step's batch (without running them) and runs
+        its `BatchFinishedJob` inline; `deliver_signal` calls `signal!` and
+        runs the step it scheduled; `expire_wait` applies the waiting step's
+        `on_timeout` whatever its deadline.
       MD
     end
   end
@@ -400,6 +585,9 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
           output and the error.
         - `pgbus_workflow_events` — the append-only audit trail
           (`Pgbus::WorkflowEvent`).
+        - `pgbus_workflow_signals` — one row per signal
+          (`Pgbus::WorkflowSignal`), unique on `(workflow_id,
+          idempotency_key)`.
 
         Every StepJob is sent by `WorkflowStep`'s after-commit callback, and
         only there: a new scheduled row, a row going back to scheduled, or a
@@ -408,6 +596,10 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
         (ready → performing) under the run's row lock, runs the guards and
         the body, then applies the outcome under the lock again: one step at
         a time per run, every change a guarded UPDATE from the table below.
+        A waiting step goes back to scheduled when it is woken (a signal, or a
+        timeout with `:run`), so its resume is a StepJob like any other; a
+        fan-out's batch, a timeout or an operator `skip!` resolves the waiting
+        row directly.
       MD
     end
   end
@@ -428,8 +620,8 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
         Workflow states: `ready`, `performing`, `waiting`, `paused` (the four
         ongoing ones), `finished`, `cancelled`. Step states: `scheduled`,
         `waiting`, `in_progress`, `completed`, `failed`, `cancelled`,
-        `skipped`. Nothing enters `waiting` yet: fan-out steps and signals
-        arrive with the waiting-steps release.
+        `skipped`. A run is `waiting` while its step waits for a signal or a
+        fan-out batch.
       MD
     end
   end

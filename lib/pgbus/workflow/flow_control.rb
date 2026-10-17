@@ -9,20 +9,23 @@ module Pgbus
     # actor:/reason: on the audit trail); the step-only verbs raise NotInStep.
     module FlowControl
       THROW_TAG = :pgbus_workflow_flow
-      ACTIONS = %i[complete reattempt pause cancel skip finish].freeze
+      ACTIONS = %i[complete reattempt pause cancel skip finish fan_out].freeze
 
       # What a step attempt ended with. +wait+ is the reattempt delay in
       # seconds (nil = now); +actor+ and +reason+ are what a step's own
-      # pause!/cancel! passed, for the audit trail.
-      Outcome = Data.define(:action, :wait, :actor, :reason) do
-        def initialize(action:, wait: nil, actor: nil, reason: nil) = super
+      # pause!/cancel! (or an operator's skip!) passed, for the audit trail;
+      # +details+ carries a fan_out's batch_id and size.
+      Outcome = Data.define(:action, :wait, :actor, :reason, :details) do
+        def initialize(action:, wait: nil, actor: nil, reason: nil, details: nil) = super
 
         def self.complete = new(action: :complete, wait: nil)
         def self.pause(actor: nil, reason: nil) = new(action: :pause, actor: actor, reason: reason)
         def self.cancel(actor: nil, reason: nil) = new(action: :cancel, actor: actor, reason: reason)
-        def self.skip = new(action: :skip, wait: nil)
+        def self.skip(actor: nil, reason: nil) = new(action: :skip, actor: actor, reason: reason)
         def self.finish = new(action: :finish, wait: nil)
         def self.reattempt(wait: nil) = new(action: :reattempt, wait: StepDefinition.seconds(wait, "wait", positive: false))
+        # A fan_out body returned and its batch is open: the step parks on it.
+        def self.fan_out(batch_id:, size:) = new(action: :fan_out, details: { batch_id: batch_id, size: size }.freeze)
 
         # An ExceptionPolicy action (:pause!, :reattempt!, :cancel!, :skip!).
         def self.for(verb, wait: nil)
@@ -61,9 +64,13 @@ module Pgbus
         throw_outcome(Outcome.reattempt(wait: wait), verb: :reattempt!)
       end
 
-      # Ends the step as skipped; the workflow moves on. Step bodies only.
-      def skip!
-        throw_outcome(Outcome.skip, verb: :skip!)
+      # Inside a step: end it here, skipped; the workflow moves on.
+      # Outside: skip the step a waiting run waits on (a signal it holds is
+      # consumed) and schedule the next one.
+      def skip!(actor: nil, reason: nil)
+        return throw_outcome(Outcome.skip) if in_step?
+
+        apply_outside_verb(:skip, actor: actor, reason: reason)
       end
 
       # Ends the step as completed and finishes the workflow, skipping the

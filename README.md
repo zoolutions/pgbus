@@ -882,15 +882,17 @@ wf.resume!                                          # a failed step runs again; 
 wf.events.map(&:event)                              # ["started", "step_scheduled", "step_started", …]
 ```
 
-- **Flow control** inside a step: `pause!`, `cancel!`, `reattempt!(wait:)`, `skip!`, `finished!`. Outside: `resume!`, `resume_at!(:step)`, `pause!`, `cancel!`, `run_now!`, `reschedule!(at:)`, `rerun!`. `Pgbus::Workflow::States` is the one table of which verb is legal in which state (`wf.available_actions`).
+- **Flow control** inside a step: `pause!`, `cancel!`, `reattempt!(wait:)`, `skip!`, `finished!`. Outside: `resume!`, `resume_at!(:step)`, `pause!`, `cancel!`, `run_now!`, `reschedule!(at:)`, `rerun!`, `signal!`, and `skip!` for the step a waiting run waits on. `Pgbus::Workflow::States` is the one table of which verb is legal in which state (`wf.available_actions`).
 - **Exceptions** never reach ActiveJob: the error is recorded on the step row and reported through `Pgbus::ErrorReporter`, and the run pauses unless an `on_exception` policy (step- or class-level, with `max_reattempts:`, `terminal_action:` and `report:`) says otherwise.
 - **Idempotent by contract**: `output(charge_id: …)` is durable once the step completes and later steps read it with `output_of(:charge)`; `step_idempotency_key` is the same on every attempt, for the external API; `start!(order, idempotency_key: "checkout-#{order.id}")` returns the existing run.
 - **One ongoing run per subject** and class: a second `start!` raises `Pgbus::Workflow::AlreadyRunning`. Subject-less runs are not limited.
+- **Fan-out**: `fan_out :notify_vendors do |b| b.add(*jobs) end` opens one batch for the jobs and parks the step until every member finished; the batch's `on_complete` resumes the run, and a dead-lettered member applies `on_batch_failure:` (`:pause!` by default) with `Pgbus::Workflow::FanOutFailed` recorded. A reattempt, or `resume!` of a failed fan-out step, re-runs the whole body on a fresh batch, so members must be idempotent; a run resumed while its batch is still running keeps waiting on that batch.
+- **Signals**: `step :capture, wait_for: :payment_confirmed do … received_signal.payload["amount"] … end` parks until `wf.signal!(:payment_confirmed, payload: {…}, idempotency_key: event.id)`, or by subject, `OrderWorkflow.signal!(order, :payment_confirmed, …, missing: :ignore)`. Early signals are buffered, a redelivery with the same key is a no-op (`duplicate_delivery?`), and matchers (`Pgbus::Workflow::SignalMatcher.new(:shipped) { |payload| … }`) narrow what a step takes. `wait_timeout: 2.days, on_timeout: :pause!` (or `:cancel!`, `:skip!`, `:run`) puts a deadline on the wait, fired by the dispatcher's sweep.
 - **Housekeeping**: a worker that dies mid-step is noticed when its message comes back (the visibility heartbeat keeps a live one invisible); a hung step stalls after its `timeout:` or `workflow_stall_threshold`; the dispatcher re-sends lost steps and deletes finished runs after `workflow_retention` (30 days).
 - **Metrics** for Prometheus/StatsD and AppSignal: per-step duration histograms and counters, and gauges of runs by status and by stuck reason.
-- **Testing**: `include Pgbus::Workflow::TestHelpers`, then `perform_next_step(wf)`, `run_step_inline(wf, :reminder)` or `speedrun_workflow(wf)`.
+- **Testing**: `include Pgbus::Workflow::TestHelpers`, then `perform_next_step(wf)`, `run_step_inline(wf, :reminder)` or `speedrun_workflow(wf)` (which raises `Pgbus::Workflow::StepWaiting` at a waiting step), and `deliver_signal(wf, :shipped)`, `complete_fan_out(wf)` or `expire_wait(wf)` to move a waiting run on.
 
-When the workflow tables share your application's database, the StepJob is sent after the step row commits, so `start!` inside your own transaction sends nothing until it commits; with a separate pgbus database (`connects_to`) the run commits and its first step is sent on their own, before your transaction commits. Generate and apply the migration with `rails generate pgbus:add_workflows` and `rails db:migrate` (`pgbus:update` detects the missing tables). The [Workflows guide](https://pgbus.zoolutions.llc/docs/workflows) covers policies, outputs, removing steps, the stall actions and the transition table.
+When the workflow tables share your application's database, the StepJob is sent after the step row commits, so `start!` inside your own transaction sends nothing until it commits; with a separate pgbus database (`connects_to`) the run commits and its first step is sent on their own, before your transaction commits. Generate and apply the migration with `rails generate pgbus:add_workflows` and `rails db:migrate` (`pgbus:update` detects the missing tables); an install that added workflows before waiting steps adds them with `rails generate pgbus:add_workflow_signals`. The [Workflows guide](https://pgbus.zoolutions.llc/docs/workflows) covers policies, outputs, removing steps, the stall actions and the transition table.
 
 ### Transactional outbox
 
@@ -1070,7 +1072,7 @@ c.metrics_backend = MyOpenTelemetryBackend.new
 | `pgbus_workflows_paused_total` | counter | `workflow_class`, `error_class` (absent for a manual pause) |
 | `pgbus_workflow_stalls_total` | counter | `workflow_class`, `step`, `detection` (`redelivery`/`sweep`) |
 | `pgbus_workflows` | gauge | `workflow_class`, `status` |
-| `pgbus_workflows_stuck` | gauge | `workflow_class`, `reason` (`paused_error`/`stalled`/`paused_manual`/`overdue`) |
+| `pgbus_workflows_stuck` | gauge | `workflow_class`, `reason` (`paused_error`/`stalled`/`paused_manual`/`overdue`/`waiting_overdue`) |
 
 A backend that raises (registry bug, StatsD socket down) is logged and swallowed — a metrics failure never propagates into the thread that emitted the event.
 
@@ -2370,6 +2372,7 @@ Pgbus uses these tables (created via PGMQ and migrations):
 | `pgbus_workflows` | Workflow runs: class, subject, arguments, status, current step |
 | `pgbus_workflow_steps` | One row per workflow step attempt: timings, worker, output, error |
 | `pgbus_workflow_events` | Append-only workflow audit trail (event, actor, reason) |
+| `pgbus_workflow_signals` | Signals delivered to workflow runs: name, payload, idempotency key, pending/claimed/consumed |
 | `pgbus_uniqueness_keys` | Job uniqueness locks (lock_key, queue_name, msg_id) |
 | `pgbus_job_stats` | Job execution metrics (class, queue, status, duration) |
 | `pgbus_queue_states` | Queue pause/resume and circuit breaker state |

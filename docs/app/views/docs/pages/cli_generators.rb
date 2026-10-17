@@ -173,6 +173,8 @@ class Views::Docs::Pages::CliGenerators < DocsUI::Page
         [
           [ [ :code, "pgbus:add_recurring" ], [ :md, "Recurring-task tables + a starter `recurring.yml`." ] ],
           [ [ :code, "pgbus:add_deploy_tasks" ], [ :md, "Deploy-task tables + a starter `deploy_tasks.yml`." ] ],
+          [ [ :code, "pgbus:add_workflows" ], "The workflow tables: runs, step attempts, the audit trail and signals. Included in fresh pgbus:install." ],
+          [ [ :code, "pgbus:add_workflow_signals" ], "Waiting workflow steps (fan_out, wait_for: signals, wait timeouts) for an install that ran pgbus:add_workflows before them." ],
           [ [ :code, "pgbus:add_outbox" ], "The transactional-outbox table." ],
           [ [ :code, "pgbus:add_presence" ], "The stream-presence table." ],
           [ [ :code, "pgbus:add_presence_seats" ], "Per-connection presence seats (connection_id, seat, state) on an existing presence table. Included in fresh pgbus:add_presence." ],

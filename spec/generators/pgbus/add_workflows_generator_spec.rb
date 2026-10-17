@@ -64,6 +64,23 @@ RSpec.describe Pgbus::Generators::AddWorkflowsGenerator do
       end
     end
 
+    # A fresh install needs one generator: the waiting-step columns and the
+    # signals table (pgbus:add_workflow_signals, issue #541) are in it too.
+    it "includes the waiting-step columns and the signals table" do
+      generate_migration(described_class, basename: basename) do |_path, content|
+        %w[batch_id wait_for].each { |column| expect(content).to include("t.string :#{column}") }
+        expect(content).to include("t.bigint :signal_id", "t.datetime :waiting_since", "t.datetime :timeout_at")
+        expect(content).to include('name: "idx_pgbus_workflow_steps_timeout"', 'name: "idx_pgbus_workflow_steps_batch"')
+        expect(content).to include("create_table :pgbus_workflow_signals, if_not_exists: true")
+        expect(content).to include('name: "idx_pgbus_workflow_signals_idempotency"')
+        expect(content).to include("drop_table :pgbus_workflow_signals, if_exists: true")
+        expect(content).to include('name: "idx_pgbus_workflow_signals_claimed"')
+        # A steps table from before waiting steps has no such columns yet.
+        expect(content).to include("if column_exists?(:pgbus_workflow_steps, :batch_id)",
+                                   "if column_exists?(:pgbus_workflow_steps, :timeout_at)")
+      end
+    end
+
     it "drops the three tables on rollback, children first" do
       generate_migration(described_class, basename: basename) do |_path, content|
         down = content[/def down.*?\n  end/m]

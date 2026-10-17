@@ -31,6 +31,10 @@ module WorkflowBenchFakes
     def workflow_klass = BenchStepWorkflow
   end
 
+  # Runner.locked asks the connection whether an app transaction is open
+  # (Notes#flush_after_commit); the fakes run outside any.
+  NO_TRANSACTION = Object.new.tap { |connection| connection.define_singleton_method(:transaction_open?) { false } }
+
   module_function
 
   def install!
@@ -38,6 +42,7 @@ module WorkflowBenchFakes
     step = Row.new(id: 1, workflow_id: "wf-bench", workflow_class: BenchStepWorkflow.name, step_name: "charge", attempt: 1,
                    status: "scheduled", scheduled_at: Time.now - 1)
     define(Pgbus::WorkflowEntry, :transaction) { |*, &block| block.call }
+    define(Pgbus::WorkflowEntry, :connection) { NO_TRANSACTION }
     define(Pgbus::WorkflowEntry, :lock_for) { |_id| run }
     define(Pgbus::WorkflowEntry, :transition!) do |_id, to:, **|
       run.status = to

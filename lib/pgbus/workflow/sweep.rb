@@ -14,8 +14,15 @@ module Pgbus
     #   ago and not sent within it, is sent again by bumping enqueued_at (the
     #   model callback re-fires). No queue inspection: a duplicate message is
     #   a no-op at the claim.
+    # - a waiting step of a waiting run past its timeout_at (wait_timeout:)
+    #   gets its on_timeout (WaitTimeout), so a timeout fires within one
+    #   workflow_sweep_interval of its deadline.
+    # - a fan_out step still waiting on a batch that finished more than
+    #   workflow_stall_threshold ago lost its BatchFinishedJob (dead-lettered,
+    #   or never sent): the sweep resolves it as the callback would have.
     # - pgbus.workflow.gauge: runs by class and status, and by class and stuck
-    #   reason.
+    #   reason (waiting_overdue: waiting longer than
+    #   workflow_waiting_visibility_threshold on a step without a timeout).
     #
     # cleanup (hourly): finished and cancelled runs older than
     # workflow_retention are deleted in batches; their steps and events go
@@ -28,6 +35,7 @@ module Pgbus
       # outside it.
       @schema_lock = Mutex.new
       @tables_ready = false
+      @waiting_ready = false
 
       class << self
         def repair(config: Pgbus.configuration, now: Time.current)
@@ -35,7 +43,10 @@ module Pgbus
 
           threshold = config.workflow_stall_threshold
           summary = { stalled: repair_stalled(now: now, config: config), resent: resend_overdue(now: now, threshold: threshold) }
-          emit_gauge(now: now, threshold: threshold)
+          waiting = waiting_ready?
+          summary[:timed_out] = waiting ? WaitTimeout.expire_due(now: now) : 0
+          summary[:fan_outs] = waiting ? FanOut.resolve_lost(now: now, grace: threshold) : 0
+          emit_gauge(now: now, threshold: threshold, waiting_threshold: (config.workflow_waiting_visibility_threshold if waiting))
           summary
         end
 
@@ -67,9 +78,32 @@ module Pgbus
           ready
         end
 
+        # True once the waiting-step schema exists (pgbus:add_workflow_signals,
+        # or an add_workflows that carries it): the signals table and the
+        # step columns. Asked of the database through the connection, not the
+        # schema cache (which keeps a negative answer). A process that loaded
+        # the step model before the migration still needs a restart to see
+        # the new columns, as for any column added under a running app.
+        def waiting_ready?
+          return true if @schema_lock.synchronize { @waiting_ready }
+
+          ready = begin
+            connection = WorkflowStep.connection
+            connection.table_exists?(WorkflowSignal.table_name) && connection.column_exists?(WorkflowStep.table_name, :timeout_at)
+          rescue StandardError => e
+            Pgbus.logger.debug { "[Pgbus] Workflow waiting-step schema probe failed: #{e.class}: #{e.message}" }
+            false
+          end
+          @schema_lock.synchronize { @waiting_ready = true } if ready
+          ready
+        end
+
         # Specs only.
         def reset_tables_ready!
-          @schema_lock.synchronize { @tables_ready = false }
+          @schema_lock.synchronize do
+            @tables_ready = false
+            @waiting_ready = false
+          end
         end
 
         private
@@ -98,9 +132,9 @@ module Pgbus
           end.size
         end
 
-        def emit_gauge(now:, threshold:)
+        def emit_gauge(now:, threshold:, waiting_threshold: nil)
           statuses = WorkflowEntry.status_counts
-          stuck = WorkflowEntry.stuck_reason_counts(threshold: threshold, now: now)
+          stuck = WorkflowEntry.stuck_reason_counts(threshold: threshold, now: now, waiting_threshold: waiting_threshold)
           classes = (statuses.keys.map(&:first) + stuck.keys.map(&:first) + Workflow.registered_classes.map(&:name)).uniq.sort
           Instrumentation.instrument(
             "pgbus.workflow.gauge",

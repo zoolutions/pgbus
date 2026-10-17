@@ -74,10 +74,18 @@ module Pgbus
   #                                  (detection: "sweep")
   #                                  payload: workflow_class, workflow_id, step_name, attempt,
   #                                  detection
+  #   pgbus.workflow.signal        — signal! stored a signal on a run (or found it stored:
+  #                                  a redelivery with the same idempotency key)
+  #                                  payload: workflow_class, workflow_id, name, duplicate,
+  #                                  woke (true when it woke the step waiting for it)
+  #   pgbus.workflow.wait_timed_out — a waiting step's wait_timeout: passed; its on_timeout
+  #                                  applied (the sweep, or TestHelpers#expire_wait)
+  #                                  payload: workflow_class, workflow_id, step_name, attempt,
+  #                                  action (pause! | cancel! | skip! | run)
   #   pgbus.workflow.gauge         — emitted by each dispatcher workflow sweep
   #                                  payload: statuses ([{ workflow_class:, status:, count: }]),
   #                                  stuck ([{ workflow_class:, reason:, count: }]), zero-filled
-  #                                  across every known class
+  #                                  across every known class; reasons include waiting_overdue
   #
   module Instrumentation
     module_function

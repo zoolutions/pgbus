@@ -16,8 +16,10 @@ module WorkflowIntegration
       before do
         GlobalID.app ||= "pgbus-integration"
         ActiveJob::Base.logger = Logger.new(IO::NULL)
-        # Only the workflow specs use StepJob, so it stays on :pgbus.
+        # Only the workflow specs use StepJob and BatchFinishedJob, so they
+        # stay on :pgbus (ActiveJob::Base defaults to the in-process :async).
         Pgbus::Workflow::StepJob.queue_adapter = :pgbus
+        Pgbus::Workflow::BatchFinishedJob.queue_adapter = :pgbus
         Pgbus.client.ensure_queue(QUEUE)
         WorkflowIntegration.ensure_subject_table
         stub_const("WorkflowSpecUser", WorkflowIntegration.subject_class)
@@ -55,6 +57,27 @@ module WorkflowIntegration
     end
   end
 
+  # What a run looked like when run_until gave up: its step rows, its audit
+  # trail and any job the executor recorded as failed, so a CI failure
+  # carries its own diagnosis.
+  def self.diagnose(workflow)
+    steps = Pgbus::WorkflowStep.where(workflow_id: workflow.workflow_id).order(:id).map do |step|
+      "  step #{step.step_name}##{step.attempt} #{step.status}/#{step.outcome.inspect} msg=#{step.msg_id} " \
+        "#{step.error_class} #{step.error_message.to_s[0, 200]}"
+    end
+    events = workflow.events.map { |event| "  event #{event.event} #{event.actor} #{event.details.to_json}" }
+    rows = ActiveRecord::Base.connection.select_all(
+      "SELECT queue_name, error_class, error_message, backtrace FROM pgbus_failed_events ORDER BY id DESC LIMIT 5"
+    )
+    failed = rows.map do |row|
+      "  failed_event #{row["queue_name"]} #{row["error_class"]}: #{row["error_message"].to_s[0, 300]}\n    " \
+        "#{row["backtrace"].to_s.lines.first(8).map(&:strip).join("\n    ")}"
+    end
+    (steps + events + failed).join("\n")
+  rescue StandardError => e
+    "  (diagnosis failed: #{e.class}: #{e.message})"
+  end
+
   def create_user(**attrs) = WorkflowSpecUser.create!(name: "user", **attrs)
 
   def executor = Pgbus::ActiveJob::Executor.new
@@ -73,7 +96,9 @@ module WorkflowIntegration
     deadline = monotonic + timeout
     loop do
       return workflow if statuses.include?(workflow.reload.status)
-      raise "#{workflow.inspect} did not reach #{statuses.join("/")} within #{timeout}s" if monotonic > deadline
+      if monotonic > deadline
+        raise "#{workflow.inspect} did not reach #{statuses.join("/")} within #{timeout}s\n#{WorkflowIntegration.diagnose(workflow)}"
+      end
 
       message = read_step_message
       message ? executor.execute(message, QUEUE) : sleep(0.1)

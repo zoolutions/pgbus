@@ -1,0 +1,51 @@
+class AddPgbusWorkflowSignals < ActiveRecord::Migration<%= migration_version %>
+  # Waiting workflow steps (fan_out, wait_for: signals, wait timeouts) for an
+  # installation that ran pgbus:add_workflows before them. if_not_exists
+  # throughout, so pgbus:update can queue it on a half-migrated schema.
+  def up
+    add_column :pgbus_workflow_steps, :batch_id, :string, if_not_exists: true # fan_out: the batch this step waits on
+    add_column :pgbus_workflow_steps, :wait_for, :string, if_not_exists: true # the signal a parked step waits for
+    add_column :pgbus_workflow_steps, :signal_id, :bigint, if_not_exists: true # the signal it claimed
+    add_column :pgbus_workflow_steps, :waiting_since, :datetime, if_not_exists: true
+    add_column :pgbus_workflow_steps, :timeout_at, :datetime, if_not_exists: true # waiting_since + wait_timeout:
+    add_index :pgbus_workflow_steps, :batch_id,
+      name: "idx_pgbus_workflow_steps_batch", if_not_exists: true
+    add_index :pgbus_workflow_steps, [:status, :timeout_at],
+      name: "idx_pgbus_workflow_steps_timeout", if_not_exists: true
+
+    # One row per signal delivered to a run (Pgbus::WorkflowSignal):
+    # pending → claimed → consumed.
+    create_table :pgbus_workflow_signals, if_not_exists: true do |t|
+      t.string :workflow_id, null: false
+      t.string :name, null: false
+      t.jsonb :payload, null: false, default: {}
+      t.string :idempotency_key
+      t.string :status, null: false, default: "pending"
+      t.bigint :claimed_by_step_id
+      t.datetime :created_at, null: false
+      t.datetime :claimed_at
+      t.datetime :consumed_at
+    end
+
+    add_index :pgbus_workflow_signals, [:workflow_id, :idempotency_key],
+      unique: true, where: "idempotency_key IS NOT NULL",
+      name: "idx_pgbus_workflow_signals_idempotency", if_not_exists: true
+    add_index :pgbus_workflow_signals, [:workflow_id, :name, :status],
+      name: "idx_pgbus_workflow_signals_pending", if_not_exists: true
+    add_index :pgbus_workflow_signals, [:workflow_id, :status, :claimed_by_step_id],
+      name: "idx_pgbus_workflow_signals_claimed", if_not_exists: true
+    add_foreign_key :pgbus_workflow_signals, :pgbus_workflows,
+      column: :workflow_id, primary_key: :workflow_id, on_delete: :cascade, if_not_exists: true
+  end
+
+  def down
+    drop_table :pgbus_workflow_signals, if_exists: true
+    remove_index :pgbus_workflow_steps, name: "idx_pgbus_workflow_steps_timeout", if_exists: true
+    remove_index :pgbus_workflow_steps, name: "idx_pgbus_workflow_steps_batch", if_exists: true
+    remove_column :pgbus_workflow_steps, :timeout_at, if_exists: true
+    remove_column :pgbus_workflow_steps, :waiting_since, if_exists: true
+    remove_column :pgbus_workflow_steps, :signal_id, if_exists: true
+    remove_column :pgbus_workflow_steps, :wait_for, if_exists: true
+    remove_column :pgbus_workflow_steps, :batch_id, if_exists: true
+  end
+end

@@ -13,7 +13,9 @@ RSpec.describe Pgbus::Workflow::States do
       cancel: [%w[ready performing waiting paused], "cancelled", Pgbus::Workflow::InvalidTransition],
       run_now: [%w[ready], "ready", Pgbus::Workflow::InvalidTransition],
       reschedule: [%w[ready], "ready", Pgbus::Workflow::InvalidTransition],
-      rerun: [%w[finished cancelled], "ready", Pgbus::Workflow::InvalidTransition]
+      rerun: [%w[finished cancelled], "ready", Pgbus::Workflow::InvalidTransition],
+      skip: [%w[waiting], "ready", Pgbus::Workflow::InvalidTransition],
+      signal: [%w[ready performing waiting paused], nil, Pgbus::Workflow::NotOngoing]
     }
   end
 
@@ -35,7 +37,7 @@ RSpec.describe Pgbus::Workflow::States do
 
   describe "every (workflow state x outside verb) pair" do
     Pgbus::Workflow::States::WORKFLOW.each do |state|
-      %i[pause resume resume_at cancel run_now reschedule rerun].each do |verb|
+      %i[pause resume resume_at cancel run_now reschedule rerun skip signal].each do |verb|
         it "#{verb} from #{state} is legal with its documented target, or raises the documented error" do
           from, to, error = contract.fetch(verb)
 
@@ -52,10 +54,10 @@ RSpec.describe Pgbus::Workflow::States do
   describe ".available_actions" do
     it "lists exactly the outside verbs legal in each state" do
       expected = {
-        "ready" => %i[pause cancel run_now reschedule],
-        "performing" => %i[pause cancel],
-        "waiting" => %i[pause cancel],
-        "paused" => %i[resume resume_at cancel],
+        "ready" => %i[pause cancel run_now reschedule signal],
+        "performing" => %i[pause cancel signal],
+        "waiting" => %i[pause cancel skip signal],
+        "paused" => %i[resume resume_at cancel signal],
         "finished" => %i[rerun],
         "cancelled" => %i[rerun]
       }
@@ -90,10 +92,22 @@ RSpec.describe Pgbus::Workflow::States do
       expect(described_class.to(:unpause)).to eq("performing")
     end
 
+    it "parks a performing run as waiting, and wakes, resolves or re-waits it" do
+      expect([described_class.from(:park), described_class.to(:park)]).to eq([%w[performing], "waiting"])
+      expect([described_class.from(:wake), described_class.to(:wake)]).to eq([%w[waiting], "ready"])
+      expect([described_class.from(:resolve), described_class.to(:resolve)]).to eq([%w[waiting], "performing"])
+      expect([described_class.from(:rewait), described_class.to(:rewait)]).to eq([%w[paused], "waiting"])
+    end
+
+    it "names waiting_overdue among the stuck reasons" do
+      expect(described_class::STUCK_REASONS).to eq(%w[paused_error stalled paused_manual overdue waiting_overdue])
+    end
+
     it "keeps runner transitions out of available_actions" do
       runner = described_class::TRANSITIONS.values.reject(&:outside).map(&:verb)
 
-      expect(runner).to include(:claim, :advance, :finish, :reattempt, :step_pause, :step_cancel, :hold, :unpause)
+      expect(runner).to include(:claim, :advance, :finish, :reattempt, :step_pause, :step_cancel, :hold, :unpause,
+                                :park, :wake, :resolve, :rewait)
       described_class::WORKFLOW.each do |state|
         expect(described_class.available_actions(state) & runner).to be_empty
       end

@@ -34,6 +34,7 @@ module Pgbus
           return false
         end
 
+        Signals.settle(step, status, column, now: now)
         step_events(record, step, outcome, column, error)
         move_run(record, step, outcome, notes: notes, captured: captured, klass: klass, now: now)
         notes.instrument("pgbus.workflow.step", step_payload(record, step, column, status, error, duration))
@@ -121,7 +122,7 @@ module Pgbus
         case outcome.action
         when :complete, :finish, :pause
           Runner.event!(record, "step_completed", actor: actor, step: step, details: { outcome: column }) unless error
-        when :skip then Runner.event!(record, "step_skipped", actor: actor, step: step)
+        when :skip then Runner.event!(record, "step_skipped", actor: outcome.actor || actor, reason: outcome.reason, step: step)
         when :reattempt then Runner.event!(record, "step_reattempted", actor: actor, step: step, details: { wait: outcome.wait }.compact)
         end
       end
