@@ -1,0 +1,19 @@
+lib/pgbus/generators/migration_detector.rb
+  s_e3a487096d49a3::t_374bb62e028ead 66-72
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "bff14b3db2a0f4287f934dfa48c489d32843aa34",
+  "prompts": {},
+  "sessions": {
+    "s_e3a487096d49a3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "faf1faea-af65-4cb2-b526-81aed7772ead",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
