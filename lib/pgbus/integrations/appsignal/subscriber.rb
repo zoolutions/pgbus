@@ -178,13 +178,15 @@ module Pgbus
 
           # A counter only, like on_job_dead_lettered: nothing is raised at
           # move time, and the handler's error already went out through
-          # pgbus.event_failed on the attempt that raised (issue #543).
+          # pgbus.event_failed on the attempt that raised (issue #543). A body
+          # that is not JSON leaves handler and routing_key nil; compact drops
+          # those tags, as Metrics::Subscriber does.
           def on_event_dead_lettered(event)
             payload = event.payload
             ::Appsignal.increment_counter(
               "#{METRIC_PREFIX}event_count",
               1,
-              { handler: payload[:handler], routing_key: payload[:routing_key], status: "dead_lettered" }
+              { handler: payload[:handler], routing_key: payload[:routing_key], status: "dead_lettered" }.compact
             )
           end
 

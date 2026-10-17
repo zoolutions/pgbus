@@ -344,12 +344,16 @@ module Pgbus
         (headers["routing_key"] if headers.is_a?(Hash)) || envelope["routing_key"]
       end
 
-      # The subscriber that owns +queue_name+ in this process (one owner per
-      # queue since #469), or nil when there is none or no usable routing key.
+      # The handler of the one subscriber that owns +queue_name+ in this
+      # process, or nil when there is none, no usable routing key, or more than
+      # one: #469 makes one owner per queue the convention, but Registry does
+      # not enforce it, and dispatch runs every owner, so naming one of several
+      # would misattribute the dead letter.
       def owning_handler_name(routing_key, queue_name)
         return unless routing_key.is_a?(String)
 
-        @registry.handlers_for(routing_key, queue_name: queue_name).first&.handler_class&.name
+        owners = @registry.handlers_for(routing_key, queue_name: queue_name)
+        owners.first.handler_class.name if owners.one?
       end
 
       # The executor's handle_failure, for events (issue #494): one upsert per

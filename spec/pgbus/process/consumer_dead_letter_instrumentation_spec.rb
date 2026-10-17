@@ -100,6 +100,17 @@ RSpec.describe Pgbus::Process::Consumer, "#handle_message emits pgbus.event_dead
     expect(received.sole).to include(routing_key: "orders.placed", handler: nil, event_id: "e-1")
   end
 
+  # Registry#subscribe does not enforce one owner per queue: two subscribers
+  # bound to one queue are both dispatched, so naming either would misattribute.
+  it "names no handler when more than one subscriber owns the queue" do
+    second = instance_double(Pgbus::EventBus::Subscriber, handler_class: Class.new { def self.name = "OtherHandler" })
+    allow(registry).to receive(:handlers_for).with("orders.placed", queue_name: "q_orders").and_return([owner, second])
+
+    received = capture_dead_letters { handle(envelope) }
+
+    expect(received.sole).to include(routing_key: "orders.placed", handler: nil, event_id: "e-1")
+  end
+
   # PGMQ stores jsonb, so a poison body is as often valid JSON that is not an
   # object (a raw scalar or array a producer wrote straight to the queue) as it
   # is unparseable text. The success path raises on each of these every read
@@ -214,6 +225,7 @@ RSpec.describe Pgbus::Process::Consumer, "#handle_message emits pgbus.event_dead
 
       expect(received).to be_empty
       expect(mock_client).not_to have_received(:move_to_dead_letter)
+      expect(mock_client).to have_received(:archive_message).with("q_orders", 7)
       expect(JSON).to have_received(:parse).with(envelope).once
     end
   end

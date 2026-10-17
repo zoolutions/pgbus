@@ -167,19 +167,24 @@ class Views::Docs::Pages::RetriesDeadLetters < DocsUI::Page
         [
           [ [ :code, "queue_name" ], [ :md, "The logical subscriber queue (`orders_handler`, not `pgbus_orders_handler`)." ] ],
           [ [ :code, "routing_key" ], "From the envelope's headers, else its top level." ],
-          [ [ :code, "handler" ], "The handler class that owns the queue in this process; nil when none does." ],
+          [ [ :code, "handler" ], "The handler class that owns the queue in this process; nil when none does, or when more than one does." ],
           [ [ :code, "event_id" ], "From the envelope." ],
           [ [ :code, "read_ct" ], "The read that routed it." ],
           [ [ :code, "msg_id" ], "The source message's id." ],
-          [ [ :code, "error" ], [ :md, "The last recorded handler error's class, from `pgbus_failed_events`; nil when none was recorded." ] ]
+          [ [ :code, "error" ], [ :md, "The class of the last recorded failure, from `pgbus_failed_events`: a handler's error, or the consumer's own parse error for a body it could not route; nil when none was recorded." ] ]
         ]
       )
       md <<~'MD'
+        There is no `exception_object`: nothing is raised at move time. When a
+        handler raised, its error already went out through `pgbus.event_failed`
+        on the attempt that raised.
+
         A body that is not a JSON object (a raw scalar written straight to the
         queue, for example) is still dead-lettered; its `routing_key`, `handler`
-        and `event_id` are nil. There is no `exception_object`: nothing is raised
-        at move time, and the handler's error went out through `pgbus.event_failed`
-        on the attempt that raised.
+        and `event_id` are nil. No handler ever ran for it, so there was no
+        `pgbus.event_failed`: `error` is the consumer's own failure to read the
+        body (`JSON::ParserError`, `NoMethodError` or `TypeError`), not a handler
+        exception.
       MD
     end
   end
