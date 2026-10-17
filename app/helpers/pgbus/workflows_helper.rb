@@ -36,8 +36,9 @@ module Pgbus
     SIGNAL_TONES = { "pending" => :yellow, "claimed" => :blue, "consumed" => :green }.freeze
 
     # The verbs that need the run's class (its step list): resume!, resume_at!
-    # and rerun! raise StepNotDefined without it.
-    CLASS_ACTIONS = %i[resume resume_at rerun].freeze
+    # and rerun! raise StepNotDefined without it, and skip! would find no next
+    # step and finish the run.
+    CLASS_ACTIONS = %i[resume resume_at rerun skip].freeze
 
     # The show page's buttons: available_actions it has a button for, without
     # CLASS_ACTIONS when the run's class is not loaded here.

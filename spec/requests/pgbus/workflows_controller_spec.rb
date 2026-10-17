@@ -109,6 +109,16 @@ RSpec.describe "Pgbus::WorkflowsController", type: :request do
       expect(response.body).to include(">Cancel</button>")
     end
 
+    it "offers no Skip step when the waiting run's class is not loaded here" do
+      row = @stub_data_source.workflows_list.find { |w| w[:workflow_id] == samples::SIGNAL_ID }
+      row[:class_loaded] = false
+
+      get "/pgbus/workflows/#{samples::SIGNAL_ID}"
+
+      expect(response.body).not_to include(">Skip step</button>")
+      expect(response.body).to include(">Cancel</button>")
+    end
+
     it "offers no Rerun when the finished run's class is not loaded here" do
       row = @stub_data_source.workflows_list.find { |w| w[:workflow_id] == samples::FINISHED_ID }
       row[:class_loaded] = false
