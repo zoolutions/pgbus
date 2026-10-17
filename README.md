@@ -928,7 +928,7 @@ end
 
 Each reporter receives `(exception, context_hash)`. The context hash includes keys like `action`, `queue`, `job_class`, and `msg_id` depending on the call site. Reporters that accept a third argument also receive the Pgbus configuration object.
 
-Use `Appsignal.report_error`, not `Appsignal.set_error`: a reporter may run from a rescue where no AppSignal transaction is current, and there `set_error` does nothing. `report_error` works whether a transaction is current or not. With the [AppSignal integration](#appsignal-integration) installed, job and handler errors already reach AppSignal on their own transaction, so a reporter like the one above is only needed for the other rescue paths; AppSignal reports an exception once, whichever reports it first.
+Use `Appsignal.report_error`, not `Appsignal.set_error`: a reporter may run from a rescue where no AppSignal transaction is current, and there `set_error` does nothing. `report_error` works whether a transaction is current or not. With the [AppSignal integration](#appsignal-integration) installed, job and handler errors already reach AppSignal on their own transaction, so a reporter like the one above is only needed for the other rescue paths. It does not report those job errors a second time: AppSignal marks an exception once it is on a transaction (`Transaction#add_error`) and does not add a marked exception to another one.
 
 Reporters are wired into all critical rescue paths: job execution failures, worker fetch/process errors, dispatcher maintenance, supervisor fork failures, circuit breaker trips, outbox publish errors, and failed event recording. Non-critical paths (dashboard queries, stat recording) remain log-only.
 
