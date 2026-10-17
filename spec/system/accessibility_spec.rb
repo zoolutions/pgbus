@@ -47,6 +47,8 @@ RSpec.describe "Dashboard accessibility", type: :system do
       end
 
       # The open confirm dialog (issue #529) that Pause, Purge and Delete raise.
+      # The static contrast guard does not scan application.js, which paints
+      # the Confirm button, so this example is that button's only gate.
       it_behaves_like "an accessible page", "/pgbus/queues", mode do
         let(:interaction) do
           lambda do
