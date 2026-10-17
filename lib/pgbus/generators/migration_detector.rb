@@ -67,6 +67,8 @@ module Pgbus
         [
           %w[pgbus_workflow_steps idx_pgbus_workflow_steps_batch],
           %w[pgbus_workflow_steps idx_pgbus_workflow_steps_timeout],
+          %w[pgbus_workflow_signals idx_pgbus_workflow_signals_idempotency],
+          %w[pgbus_workflow_signals idx_pgbus_workflow_signals_pending],
           %w[pgbus_workflow_signals idx_pgbus_workflow_signals_claimed]
         ]
       )

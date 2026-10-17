@@ -351,9 +351,19 @@ RSpec.describe Pgbus::Generators::MigrationDetector do
         %w[pgbus_workflows pgbus_workflow_steps pgbus_workflow_events pgbus_workflow_signals].each { |table| add_table(table) }
         stub_columns("pgbus_workflow_steps", %w[id batch_id wait_for signal_id waiting_since timeout_at])
         stub_indexes("pgbus_workflow_steps", %w[idx_pgbus_workflow_steps_batch idx_pgbus_workflow_steps_timeout])
-        stub_indexes("pgbus_workflow_signals", %w[idx_pgbus_workflow_signals_claimed])
+        stub_indexes("pgbus_workflow_signals", %w[idx_pgbus_workflow_signals_idempotency idx_pgbus_workflow_signals_pending
+                                                  idx_pgbus_workflow_signals_claimed])
 
         expect(detector.missing_migrations).not_to include(:add_workflows, :add_workflow_signals)
+      end
+
+      it "queues add_workflow_signals when the signal idempotency index (the ON CONFLICT target) is missing" do
+        %w[pgbus_workflows pgbus_workflow_steps pgbus_workflow_events pgbus_workflow_signals].each { |table| add_table(table) }
+        stub_columns("pgbus_workflow_steps", %w[id batch_id wait_for signal_id waiting_since timeout_at])
+        stub_indexes("pgbus_workflow_steps", %w[idx_pgbus_workflow_steps_batch idx_pgbus_workflow_steps_timeout])
+        stub_indexes("pgbus_workflow_signals", %w[idx_pgbus_workflow_signals_pending idx_pgbus_workflow_signals_claimed])
+
+        expect(detector.missing_migrations).to include(:add_workflow_signals)
       end
 
       it "queues add_workflow_signals when a waiting-step index is missing" do
