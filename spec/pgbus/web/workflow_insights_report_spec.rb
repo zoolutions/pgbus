@@ -69,6 +69,39 @@ RSpec.describe Pgbus::Web::WorkflowInsightsReport do
     expect(buckets.map { |b| b[:from] }).to include(Time.utc(2026, 10, 20, 22), Time.utc(2026, 10, 26, 23))
   end
 
+  it "skips the wall-clock buckets a spring-forward night does not have" do
+    zone = ActiveSupport::TimeZone["Europe/Stockholm"]
+    hour = Pgbus::Web::WorkflowWindow.parse("1h", retention: nil)
+    after_jump = Time.utc(2026, 3, 29, 1, 30) # 03:30 CEST; 02:00-02:59 never happened
+    froms = described_class.detail("ReportSpecWorkflow", klass, window: hour, since: hour.since(after_jump), now: after_jump,
+                                                                zone: zone, **inputs)[:throughput].map { |b| b[:from] }
+
+    expect(froms).to eq(froms.uniq.sort)
+    expect(froms.map { |t| t.in_time_zone(zone).hour }.uniq).to eq([1, 3])
+  end
+
+  it "keeps every wall-clock bucket a fall-back night passes through, the repeated ones once" do
+    zone = ActiveSupport::TimeZone["Europe/Stockholm"]
+    hour = Pgbus::Web::WorkflowWindow.parse("1h", retention: nil)
+    after_fall = Time.utc(2026, 10, 25, 1, 30) # 02:30 CET, the second 02:30 that night
+    buckets = described_class.detail("ReportSpecWorkflow", klass, window: hour, since: hour.since(after_fall), now: after_fall,
+                                                                  zone: zone, **inputs)[:throughput]
+    walls = buckets.map { |b| b[:from].in_time_zone(zone).strftime("%H:%M") }
+
+    expect(walls).to eq(%w[02:00 02:05 02:10 02:15 02:20 02:25 02:30 02:35 02:40 02:45 02:50 02:55])
+  end
+
+  it "starts a day bucket whose midnight a DST change skips at the first hour that day has" do
+    zone = ActiveSupport::TimeZone["America/Santiago"] # 2026-09-06 00:00 jumps to 01:00
+    month = Pgbus::Web::WorkflowWindow.parse("7d", retention: nil)
+    froms = described_class.detail("ReportSpecWorkflow", klass, window: month, since: Time.utc(2026, 9, 4), now: Time.utc(2026, 9, 9),
+                                                                zone: zone, **inputs)[:throughput].map { |b| b[:from] }
+
+    expect(froms).to all(be_a(Time))
+    expect(froms).to eq(froms.uniq.sort)
+    expect(froms).to include(Time.utc(2026, 9, 6, 4)) # 01:00 -03, the first hour of 6 September
+  end
+
   it "keys the buckets by the zone's wall clock, as the query does" do
     zone = ActiveSupport::TimeZone["Asia/Kolkata"]
     wall = described_class.wall_epoch(Time.utc(2026, 10, 17, 0, 0), zone)

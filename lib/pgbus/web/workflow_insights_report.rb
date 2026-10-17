@@ -17,6 +17,10 @@ module Pgbus
       OUTCOMES = %i[completed failed reattempted skipped cancelled].freeze
       # Percentiles over fewer samples than this get a "few samples" note.
       FEW_SAMPLES = 20
+      # The real-time step that walks a window's buckets: 15 min, the finest
+      # granularity of a UTC offset change.
+      WALK = 900
+      DAY = 86_400
 
       module_function
 
@@ -109,10 +113,13 @@ module Pgbus
 
       # The wall-clock epoch seconds (in +zone+) each bucket from +since+ to
       # +now+ starts at: what WorkflowInsightsQueries.throughput keys by.
+      # Walked in real time (steps of at most WALK seconds, finer than any DST
+      # change), so a spring-forward night has no bucket for the hour it
+      # skips and a fall-back night's repeated hour is one bucket.
       def bucket_starts(since:, now:, bucket:, zone: nil)
         zone ||= utc_zone
-        first = wall_epoch(since, zone) / bucket * bucket
-        (first..wall_epoch(now, zone)).step(bucket).to_a
+        moments = (since.to_i..now.to_i).step([bucket, WALK].min).map { |seconds| Time.at(seconds) } << now
+        moments.map { |moment| wall_epoch(moment, zone) / bucket * bucket }.uniq.sort
       end
 
       # +time+'s wall clock in +zone+, as epoch seconds.
@@ -121,11 +128,17 @@ module Pgbus
         local.to_i + local.utc_offset
       end
 
-      # The real (UTC) time a wall-clock epoch in +zone+ falls on; a wall
-      # time a DST change skips moves forward, as ActiveSupport does.
+      # The real (UTC) time a bucket's wall-clock start falls on in +zone+:
+      # the first of the two in a repeated hour, or, when a DST change skips
+      # the start itself (a midnight that jumps to 01:00), the first moment
+      # of the bucket that exists.
       def from_wall(wall, zone)
-        year, month, day, hour, min, sec = Time.at(wall).utc.to_a.first(6).reverse
-        zone.local(year, month, day, hour, min, sec).utc
+        (0...DAY).step(WALK) do |later|
+          return zone.tzinfo.local_to_utc(Time.at(wall + later).utc, true).utc
+        rescue TZInfo::PeriodNotFound
+          next
+        end
+        Time.at(wall).utc
       end
 
       def utc_zone = ActiveSupport::TimeZone["UTC"]
