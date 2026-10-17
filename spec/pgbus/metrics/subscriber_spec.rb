@@ -119,6 +119,29 @@ RSpec.describe Pgbus::Metrics::Subscriber do
     end
   end
 
+  describe "pgbus.event_dead_lettered" do
+    it "increments event_count as dead_lettered, tagged with the handler and routing key (issue #543)" do
+      ActiveSupport::Notifications.instrument(
+        "pgbus.event_dead_lettered",
+        queue_name: "q_orders", routing_key: "orders.placed", handler: "NotifyHandler",
+        event_id: "e-1", read_ct: 6, msg_id: 7, error: "RuntimeError"
+      )
+
+      expect(backend.counters).to eq(
+        [["pgbus_event_count", 1, { handler: "NotifyHandler", routing_key: "orders.placed", status: "dead_lettered" }]]
+      )
+    end
+
+    it "drops the handler and routing key tags when a body that is not JSON left them nil" do
+      ActiveSupport::Notifications.instrument(
+        "pgbus.event_dead_lettered",
+        queue_name: "q_orders", routing_key: nil, handler: nil, event_id: nil, read_ct: 6, msg_id: 7, error: nil
+      )
+
+      expect(backend.counters).to eq([["pgbus_event_count", 1, { status: "dead_lettered" }]])
+    end
+  end
+
   describe "pgbus.event_skipped" do
     it "increments event_count as skipped, tagged with the reason (issue #470)" do
       ActiveSupport::Notifications.instrument(

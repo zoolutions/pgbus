@@ -83,6 +83,50 @@ RSpec.describe "Event bus flow (integration)", :integration do
     end
   end
 
+  # Issue #543: the consumer moved an exhausted event to its DLQ in silence.
+  # max_retries 0 makes the first read (read_ct 1) the dead-letter read.
+  describe "dead-lettering (issue #543)" do
+    let(:dead_letters) { [] }
+    let(:dlq_queue) do
+      Pgbus.configuration.dead_letter_queue_name(queue_name).delete_prefix("#{Pgbus.configuration.queue_prefix}_")
+    end
+
+    before { allow(consumer.config).to receive(:max_retries).and_return(0) }
+
+    def handle_capturing(message)
+      callback = ->(_name, _start, _finish, _id, payload) { dead_letters << payload }
+      ActiveSupport::Notifications.subscribed(callback, "pgbus.event_dead_lettered") do
+        consumer.send(:handle_message, message, queue_name)
+      end
+    end
+
+    it "emits pgbus.event_dead_lettered once the real move has put the event in the DLQ" do
+      message = publish_and_read
+
+      handle_capturing(message)
+
+      expect(dead_letters).to eq([
+                                   { queue_name: queue_name, routing_key: "orders.created",
+                                     handler: "EventBusFlowSpec::RecordingHandler",
+                                     event_id: JSON.parse(message.message)["event_id"], read_ct: 1,
+                                     msg_id: message.msg_id.to_i, error: nil }
+                                 ])
+      expect(handler_class.handled).to be_empty
+      expect(client.read_message(queue_name)).to be_nil
+      expect(client.read_batch(dlq_queue, qty: 5).size).to eq(1)
+    end
+
+    it "still dead-letters and emits for a raw jsonb scalar written straight to the queue" do
+      client.send_message(queue_name, 42)
+      message = client.read_message(queue_name)
+
+      handle_capturing(message)
+
+      expect(dead_letters.sole).to include(queue_name: queue_name, routing_key: nil, handler: nil, event_id: nil)
+      expect(client.read_batch(dlq_queue, qty: 5).size).to eq(1)
+    end
+  end
+
   describe "idempotency" do
     it "skips a redelivered event and never writes a second row" do
       Pgbus::EventBus::Publisher.publish("orders.created", { "order_id" => 99 })

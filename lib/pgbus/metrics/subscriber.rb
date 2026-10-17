@@ -63,6 +63,7 @@ module Pgbus
             subscribe("pgbus.job_visibility_extended") { |event| on_job_visibility_extended(event) },
             subscribe("pgbus.event_processed") { |event| on_event_processed(event) },
             subscribe("pgbus.event_failed") { |event| on_event_failed(event) },
+            subscribe("pgbus.event_dead_lettered") { |event| on_event_dead_lettered(event) },
             subscribe("pgbus.event_skipped") { |event| on_event_skipped(event) },
             subscribe("pgbus.client.send_message") { |event| on_send_message(event) },
             subscribe("pgbus.client.send_batch") { |event| on_send_batch(event) },
@@ -151,6 +152,17 @@ module Pgbus
           backend.increment(
             "#{METRIC_PREFIX}event_count", 1,
             compact(handler: payload[:handler], routing_key: payload[:routing_key], status: "failed")
+          )
+        end
+
+        # The consumer moved an event that exhausted max_retries to its DLQ
+        # (issue #543). A body that is not JSON leaves handler and routing_key
+        # nil; compact drops those tags.
+        def on_event_dead_lettered(event)
+          payload = event.payload
+          backend.increment(
+            "#{METRIC_PREFIX}event_count", 1,
+            compact(handler: payload[:handler], routing_key: payload[:routing_key], status: "dead_lettered")
           )
         end
 

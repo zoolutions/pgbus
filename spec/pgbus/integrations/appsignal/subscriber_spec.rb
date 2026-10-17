@@ -196,6 +196,38 @@ RSpec.describe "Pgbus::Integrations::Appsignal::Subscriber" do
     end
   end
 
+  describe "pgbus.event_dead_lettered" do
+    it "increments the event dead_lettered counter, tagged with the handler and routing key (issue #543)" do
+      ActiveSupport::Notifications.instrument(
+        "pgbus.event_dead_lettered",
+        queue_name: "q_orders", routing_key: "orders.placed", handler: "NotifyHandler",
+        event_id: "e-1", read_ct: 6, msg_id: 7, error: "RuntimeError"
+      )
+
+      expect(appsignal_class.counters).to eq(
+        [["pgbus_event_count", 1, { handler: "NotifyHandler", routing_key: "orders.placed", status: "dead_lettered" }]]
+      )
+    end
+
+    it "drops the handler and routing key tags when a body that is not JSON left them nil" do
+      ActiveSupport::Notifications.instrument(
+        "pgbus.event_dead_lettered",
+        queue_name: "q_orders", routing_key: nil, handler: nil, event_id: nil, read_ct: 6, msg_id: 7, error: nil
+      )
+
+      expect(appsignal_class.counters).to eq([["pgbus_event_count", 1, { status: "dead_lettered" }]])
+    end
+
+    it "counts only: no transaction and no error report (nothing was raised at move time)" do
+      ActiveSupport::Notifications.instrument(
+        "pgbus.event_dead_lettered", handler: "NotifyHandler", routing_key: "orders.placed", error: "RuntimeError"
+      )
+
+      expect(appsignal_class.errors).to be_empty
+      expect(transaction_class.completed_count).to eq(0)
+    end
+  end
+
   describe "pgbus.client.send_message / send_batch / read_batch" do
     it "tracks counters and distributions" do
       ActiveSupport::Notifications.instrument("pgbus.client.send_message", queue: "default") { nil }

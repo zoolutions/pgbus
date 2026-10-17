@@ -1011,7 +1011,7 @@ c.metrics_backend = MyOpenTelemetryBackend.new
 | `pgbus_queue_job_count` | counter | `queue`, `job_class`, `status` (`processed`/`failed`/`dead_lettered`) |
 | `pgbus_visibility_extended` | counter | `queue`, `job_class` — one per re-armed visibility timeout; a class listed here outlives `visibility_timeout` |
 | `pgbus_job_duration_ms` | histogram | `queue`, `job_class` |
-| `pgbus_event_count` | counter | `handler`, `routing_key`, `status` |
+| `pgbus_event_count` | counter | `handler`, `routing_key`, `status` (`processed`/`failed`/`skipped`/`dead_lettered`), plus `reason` on `skipped` only (`completed`/`cached`/`owned`) |
 | `pgbus_event_duration_ms` | histogram | `handler`, `routing_key` |
 | `pgbus_messages_sent` / `pgbus_messages_read` | counter | `queue` |
 | `pgbus_stream_broadcast_count` | counter | `stream`, `deferred` |
@@ -1046,7 +1046,7 @@ ActiveSupport::Notifications.subscribe(/^pgbus\./) do |name, start, finish, _id,
 end
 ```
 
-Metrics-relevant events emitted (the subset the metrics subscriber maps; see `lib/pgbus/instrumentation.rb` for the full `pgbus.*` catalog): `pgbus.executor.execute`, `pgbus.job_completed`, `pgbus.job_failed`, `pgbus.job_dead_lettered`, `pgbus.event_processed`, `pgbus.event_failed`, `pgbus.client.send_message`, `pgbus.client.send_batch`, `pgbus.client.read_batch`, `pgbus.client.pool`, `pgbus.stream.broadcast`, `pgbus.outbox.publish`, `pgbus.recurring.enqueue`, `pgbus.worker.recycle`, `pgbus.consumer.recycle`. Payload keys are documented in `lib/pgbus/instrumentation.rb`.
+Metrics-relevant events emitted (the subset the metrics subscriber maps; see `lib/pgbus/instrumentation.rb` for the full `pgbus.*` catalog): `pgbus.executor.execute`, `pgbus.job_completed`, `pgbus.job_failed`, `pgbus.job_dead_lettered`, `pgbus.event_processed`, `pgbus.event_failed`, `pgbus.event_dead_lettered`, `pgbus.event_skipped`, `pgbus.job_visibility_extended`, `pgbus.client.send_message`, `pgbus.client.send_batch`, `pgbus.client.read_batch`, `pgbus.client.pool`, `pgbus.stream.broadcast`, `pgbus.outbox.publish`, `pgbus.recurring.enqueue`, `pgbus.worker.recycle`, `pgbus.consumer.recycle`. Payload keys are documented in `lib/pgbus/instrumentation.rb`.
 
 ### Connection pool metrics
 
