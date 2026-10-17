@@ -71,14 +71,18 @@ hook-rewritable shapes: no `for`/subshell wrappers, no `| head` on rtk-handled c
 |---------|---------|
 | `/lfg` | Full autonomous workflow: branch → understand → explore → plan → TDD → verify → PR |
 | `/plan` | Fable-powered planning → GitHub issue or `docs/plans/` markdown (read-only; execute with `/lfg`) |
-| `/github-review-comments` | Process unresolved PR review comments |
+| `/follow-through` | Epic or issues → merged, unattended: dependency waves, `/lfg` per issue in its own worktree, then `/finish-prs automerge`; parks what it cannot settle (`--dry-run` prints the waves) |
+| `/finish-prs` | Ordered PRs → merge-ready (merges main in, `/github-review-pr`); `automerge` squash-merges once the PR is mergeable, CI is green, no thread is open, cubic APPROVED the head and `fable-validator` passes |
+| `/github-review-pr` | Full PR pass: merge conflicts → CI failures → review comments |
+| `/github-review-failures` | Fix failing CI checks on a PR |
+| `/github-review-comments` | Process unresolved PR review comments (cubic's included) |
 | `/review-pr` | Review a PR for pattern compliance |
 | `/tdd` | Enforce RED → GREEN → REFACTOR cycle |
 | `/security` | Security audit (PGMQ ops, connections, auth, deserialization) |
 | `/architect` | Coordinate multi-layer development |
 | `/perf` | Benchmark current branch against main (before/after with worktree) |
 
-**Models.** Sessions run on `opus` (Opus 5.5) with `fable` (Fable 5.1) as the advisor (`.claude/settings.json`). Fable is spent where judgment matters most: `/plan` runs on Fable, the advisor is consulted at decision points (before choosing an approach, a schema or public API, a migration, a dependency, anything irreversible, and when a failure repeats), and the `fable-validator` agent checks every finished implementation before its pull request opens (`/lfg`, Phase 6.5). Commands pin their tier by alias, never by full model ID: `opus` for orchestration, security, full PR review, payments and production debugging; `sonnet` for the implementation specialists and TDD; `haiku` for mechanical scans. Every spawned agent names its `model:`; one that does not runs on `sonnet` (`CLAUDE_CODE_SUBAGENT_MODEL`), never on the session's model. Plan mode cannot take a model of its own: it runs on Opus and asks the advisor.
+**Models.** Sessions run on `opus` (Opus 5.5) with `fable` (Fable 5.1) as the advisor (`.claude/settings.json`). Fable is spent where judgment matters most: `/plan` runs on Fable, the advisor is consulted at decision points (before choosing an approach, a schema or public API, a migration, a dependency, anything irreversible, and when a failure repeats), and the `fable-validator` agent checks every finished implementation before its pull request opens (`/lfg`, Phase 6.5). Commands pin their tier by alias, never by full model ID: `opus` for orchestration, security, full PR review, payments and production debugging; `sonnet` for the implementation specialists and TDD; `haiku` for mechanical scans. Every spawned agent names its `model:`; one that does not runs on `sonnet` (`CLAUDE_CODE_SUBAGENT_MODEL`), never on the session's model. `/follow-through` spawns one `opus` agent per issue. Plan mode cannot take a model of its own: it runs on Opus and asks the advisor.
 
 ## Architecture
 

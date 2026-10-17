@@ -2,7 +2,7 @@
 description: "Use when a PR has unresolved review comments that need responses -- evaluates each comment, implements valid fixes, pushes back on incorrect suggestions, and resolves all threads."
 model: sonnet
 argument-hint: "PR number (e.g., 123 or #123)"
-allowed-tools: Bash(gh pr view:*), Bash(gh pr diff:*), Bash(gh pr comment:*), Bash(gh api:*), Bash(git log:*), Bash(git blame:*), Bash(git push:*), Bash(git commit:*), Bash(git add:*), Bash(bundle exec:*), Read, Write, Edit, Glob, Grep, Agent
+allowed-tools: Bash(gh pr view:*), Bash(gh pr diff:*), Bash(gh pr comment:*), Bash(gh api:*), Bash(git log:*), Bash(git blame:*), Bash(git push:*), Bash(git commit:*), Bash(git add:*), Bash(bundle exec:*), Read, Write, Edit, Glob, Grep, Agent, ToolSearch, mcp__cubic__get_pr_issues, mcp__cubic__update_pr_issue_status
 ---
 
 # Review GitHub PR Comments: $ARGUMENTS
@@ -76,7 +76,18 @@ For each unresolved thread, extract:
 - File path and line number (if inline)
 - Author (to understand context)
 
-Filter to only **unresolved** threads. Skip bot comments (CodeRabbit, dependabot), resolved threads, and PR description comments.
+Filter to only **unresolved** threads. Skip `dependabot` comments, resolved threads, and PR description comments.
+
+**Cubic threads are review threads.** Treat a thread from cubic (`cubic-dev-ai[bot]` in REST, `cubic-dev-ai` in GraphQL) exactly like a human reviewer's. Cubic approves a pull request only once every issue it raised is fixed or answered, so a skipped cubic thread holds the merge back.
+
+### Cubic's open issues through the cubic MCP (when available)
+
+Load the tools once: `ToolSearch` with `select:mcp__cubic__get_pr_issues,mcp__cubic__update_pr_issue_status`. If they load:
+
+- `get_pr_issues` (the PR's GitHub URL as `pullRequest`) lists cubic's **open** issues, already-addressed ones left out, each with its `issueId`. The work list stays the GraphQL list of unresolved threads; the MCP adds the `issueId` for each cubic thread (match on `path` and `line`, author `cubic-dev-ai`). An unresolved cubic thread with no open issue in `get_pr_issues` was already triaged in cubic: read its replies, and if they answer it, just resolve the thread.
+- Its `review` block says whether cubic has seen the latest push (`review.status`, `review.headSha`, `review.reviewedSha`, `review.hasNewCommitsSinceReview`). If a review is still running, the list may be incomplete: say so in the final report.
+
+Without the tools (another repository or session), the GraphQL query above is the whole list: cubic's threads are the unresolved ones whose first comment's author is `cubic-dev-ai`.
 
 If there are no unresolved review comments, report that and stop.
 
@@ -159,6 +170,19 @@ gh api "repos/zoolutions/pgbus/pulls/<PR>/comments/<COMMENT_ID>/replies" \
   -f 'body=<Technical explanation of why the suggestion was not implemented>'
 ```
 
+### For cubic's issues, when the cubic MCP loaded:
+
+Record each outcome with `update_pr_issue_status(issueId, triageStatus, comment)` instead of a REST reply. Cubic reads these outcomes before it re-reviews, so a push-back recorded here is what lets it approve. The call posts an attributed reply on the GitHub thread.
+
+| Outcome | `triageStatus` | `comment` |
+|---------|----------------|-----------|
+| Fixed | `resolved` | `Fixed in <SHA>. <what changed>.` |
+| Wrong for this codebase | `false_positive` | the technical reason, citing code |
+| Valid, deliberately not done | `wont_fix` | why, citing code or AGENTS.md |
+| Working as designed | `intended_behavior` | the design reason, citing code |
+
+Then check the thread's `isResolved` (Phase 5's query) and resolve it with the mutation below if the MCP did not. Without the MCP, reply and resolve cubic's threads like any other.
+
 ### Resolving threads (via GraphQL):
 
 After replying, resolve the thread:
@@ -231,7 +255,7 @@ When pushing back:
 - Always read the actual code before evaluating a comment -- reviewers sometimes misread diffs
 - If a comment reveals a genuine bug you missed, fix it without defensiveness
 - If multiple comments suggest the same change, implement it once and reference the fix in all replies
-- Bot reviewers (CodeRabbit, etc.) sometimes suggest changes that conflict with project conventions -- verify against AGENTS.md
+- Bot reviewers (cubic, etc.) sometimes suggest changes that conflict with project conventions -- verify against AGENTS.md, and push back citing code
 - If a new round of review comments appears after your push (from re-review), report that to the user rather than entering an infinite loop
 
 Now begin by determining the PR number from `$ARGUMENTS` or the current branch.
