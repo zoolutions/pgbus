@@ -107,6 +107,18 @@ RSpec.describe Pgbus::Workflow::StepOutcome do
     expect(events).to eq(%w[late_completion_ignored])
   end
 
+  it "still reports the error of a late attempt that raised" do
+    allow(Pgbus::WorkflowStep).to receive(:finish!).and_return(0)
+    allow(Pgbus::ErrorReporter).to receive(:report)
+    error = RuntimeError.new("late boom")
+
+    apply(outcome.pause, error: error)
+    notes.flush
+
+    expect(Pgbus::ErrorReporter).to have_received(:report)
+      .with(error, hash_including(workflow_id: "wf-1", step_name: "charge", outcome: "late_completion_ignored"))
+  end
+
   it "notes the step event, and the error report only when asked" do
     allow(Pgbus::Instrumentation).to receive(:instrument)
     allow(Pgbus::ErrorReporter).to receive(:report)

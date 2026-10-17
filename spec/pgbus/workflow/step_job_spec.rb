@@ -225,6 +225,24 @@ RSpec.describe Pgbus::Workflow::StepJob do
       expect(applied.first.last).to include(report: true)
     end
 
+    it "decides an imperative policy before taking the run's lock again, so user code never holds it" do
+      locks = 0
+      allow(Pgbus::Workflow::Runner).to receive(:locked).with("wf-1") do |&block|
+        locks += 1
+        block.call(record, notes)
+      end
+      seen_at = nil
+      klass.on_exception(RuntimeError) { |_e| (seen_at = locks) && skip! }
+      klass.step(:raises) { raise "boom" }
+      allow(step).to receive(:step_name).and_return("raises")
+
+      perform
+
+      expect(seen_at).to eq(1)
+      expect(locks).to eq(2)
+      expect(outcomes).to eq([:skip])
+    end
+
     it "counts consecutive reattempts for max_reattempts from the step rows" do
       allow(Pgbus::WorkflowStep).to receive(:consecutive_reattempts).with("wf-1", "raises").and_return(3)
       klass.on_exception RuntimeError, action: :reattempt!, max_reattempts: 3, terminal_action: :cancel!

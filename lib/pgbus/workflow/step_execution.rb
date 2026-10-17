@@ -152,19 +152,19 @@ module Pgbus
         [nil, e]
       end
 
+      # The exception policy is decided before the run's lock is taken
+      # again: an imperative on_exception block is app code, and must not
+      # hold the row lock (and an open transaction) while it runs.
       def finish(claim, outcome, error, duration)
+        decision = error && decide(claim, error)
+        outcome = decision.outcome if decision
         Runner.locked(claim.record.workflow_id) do |record, notes|
           next debug("step #{claim.step.id}'s run was deleted while the step ran") unless record
 
-          report = true
-          if error
-            decision = decide(claim, error)
-            outcome = decision.outcome
-            report = decision.report
-            notes.report(decision.handler_error, handler_context(claim)) if decision.handler_error
-          end
+          notes.report(decision.handler_error, handler_context(claim)) if decision&.handler_error
           StepOutcome.apply(record, claim.step, outcome, notes: notes, error: error, output: claim.workflow.pending_output,
-                                                         report: report, duration: duration, klass: claim.klass)
+                                                         report: decision ? decision.report : true, duration: duration,
+                                                         klass: claim.klass)
         end
       end
 

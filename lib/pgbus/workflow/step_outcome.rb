@@ -30,6 +30,7 @@ module Pgbus
         attrs = { status: status, outcome: column, finished_at: now, output: output, **captured.to_h }
         if WorkflowStep.finish!(step.id, **attrs).zero?
           ignore_late_completion(record, step, status, column, error)
+          notes.report(error, error_context(record, step, "late_completion_ignored")) if error && report
           return false
         end
 
