@@ -32,6 +32,36 @@ module Pgbus
             kind == :instrument ? Instrumentation.instrument(subject, detail) : ErrorReporter.report(subject, detail)
           end
         end
+
+        # Sends now, or, when the transition ran inside an app's transaction
+        # on the same connection, once that transaction commits (and never
+        # if it rolls back): what is reported must have happened.
+        def flush_after_commit(connection)
+          return flush unless connection.transaction_open?
+
+          connection.add_transaction_record(AfterCommit.new(self))
+        end
+
+        # The transaction-record interface ActiveRecord calls on commit and
+        # rollback (the one after_commit callbacks use), on 7.1 and later;
+        # ActiveRecord.after_all_transactions_commit needs 7.2.
+        class AfterCommit
+          def initialize(notes)
+            @notes = notes
+          end
+
+          def trigger_transactional_callbacks? = true
+
+          def has_transactional_callbacks? = true # rubocop:disable Naming/PredicatePrefix -- ActiveRecord's name
+
+          def before_committed!; end
+
+          def committed!(*, **) = @notes.flush
+
+          def rolledback!(*, **); end
+
+          def add_to_transaction(*); end
+        end
       end
 
       module_function
@@ -128,7 +158,7 @@ module Pgbus
       def locked(workflow_id)
         notes = Notes.new
         result = WorkflowEntry.transaction { yield WorkflowEntry.lock_for(workflow_id), notes }
-        notes.flush
+        notes.flush_after_commit(WorkflowEntry.connection)
         result
       end
 

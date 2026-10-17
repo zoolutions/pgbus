@@ -45,6 +45,16 @@ RSpec.describe Pgbus::Metrics::Backends::Statsd do
     end
   end
 
+  describe "#histogram of a _seconds metric" do
+    it "sends it as a millisecond timer, named _ms, since StatsD reads |ms values as milliseconds" do
+      backend.histogram("pgbus_workflow_step_duration_seconds", 0.25, { step: "welcome" })
+
+      expect(socket).to have_received(:send).with(
+        "pgbus_workflow_step_duration_ms:250.0|ms|#step:welcome", 0, "127.0.0.1", 8125
+      )
+    end
+  end
+
   describe "tag formatting" do
     it "omits the tag section when there are no tags" do
       backend.increment("pgbus_messages_sent", 3)

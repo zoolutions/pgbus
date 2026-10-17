@@ -26,6 +26,7 @@ RSpec.describe Pgbus::Workflow do
 
   before do
     allow(Pgbus::WorkflowEntry).to receive(:transaction).and_yield
+    allow(Pgbus::WorkflowEntry).to receive(:connection).and_return(double("connection", transaction_open?: false))
     allow(Pgbus::WorkflowEvent).to receive(:record!) { |**attrs| events << attrs }
     allow(Pgbus::WorkflowStep).to receive(:insert_next!) { |**attrs| double("WorkflowStep", id: 5, **attrs, attempt: 1) }
   end

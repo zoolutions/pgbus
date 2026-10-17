@@ -337,6 +337,9 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
         ]
       )
       md <<~'MD'
+        StatsD reads timer values as milliseconds, so it receives the step
+        histogram as `pgbus_workflow_step_duration_ms` (seconds × 1000).
+
         **Stuck reasons** (the `pgbus_workflows_stuck` gauge): `paused_error`
         (paused on a step that failed), `stalled` (paused on `StepStalled`),
         `paused_manual` (the step called `pause!`, or an outside `pause!`),

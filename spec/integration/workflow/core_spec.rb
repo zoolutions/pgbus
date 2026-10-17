@@ -143,6 +143,27 @@ RSpec.describe "Workflow core (integration)", :integration do
       expect(queue_depth).to eq(1)
     end
 
+    it "instruments an outside verb in an app transaction only once that transaction commits" do
+      wf = SignupWorkflow.start!(create_user)
+      seen = []
+      subscription = ActiveSupport::Notifications.subscribe("pgbus.workflow_paused") { |*args| seen << args.last[:workflow_id] }
+
+      ActiveRecord::Base.transaction do
+        wf.pause!
+        raise ActiveRecord::Rollback
+      end
+      expect(seen).to be_empty
+      expect(wf.reload.status).to eq("ready")
+
+      ActiveRecord::Base.transaction do
+        wf.pause!
+        expect(seen).to be_empty
+      end
+      expect(seen).to eq([wf.workflow_id])
+    ensure
+      ActiveSupport::Notifications.unsubscribe(subscription) if subscription
+    end
+
     it "sends nothing and keeps nothing when that transaction rolls back" do
       user = create_user
       ActiveRecord::Base.transaction do
