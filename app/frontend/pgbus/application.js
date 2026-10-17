@@ -17,13 +17,14 @@ Turbo.config.forms.confirm = (message, element) => {
     : (i18n?.dataset.confirmTitle || "Are you sure?");
   messageEl.textContent = message;
 
-  confirmBtn.className = "rounded-md px-4 py-2 text-sm font-medium text-white focus:outline-none focus:ring-2";
+  confirmBtn.className = "rounded-md px-4 py-2 text-sm font-medium focus:outline-none focus:ring-2";
   if (isDelete) {
-    confirmBtn.classList.add("bg-red-600", "hover:bg-red-500", "focus:ring-red-500");
+    confirmBtn.classList.add("bg-red-600", "text-white", "hover:bg-red-500", "focus:ring-red-500");
     confirmBtn.textContent = i18n?.dataset.deleteLabel || "Delete";
     iconEl.className = "flex-shrink-0 flex items-center justify-center h-10 w-10 rounded-full bg-red-100 dark:bg-red-900/30";
   } else {
-    confirmBtn.classList.add("bg-yellow-500", "hover:bg-yellow-400", "focus:ring-yellow-500");
+    // White on yellow fails contrast; yellow buttons carry dark text (ButtonHelper's warning variant).
+    confirmBtn.classList.add("bg-yellow-400", "text-yellow-950", "hover:bg-yellow-300", "focus:ring-yellow-500");
     confirmBtn.textContent = i18n?.dataset.confirmLabel || "Confirm";
     iconEl.className = "flex-shrink-0 flex items-center justify-center h-10 w-10 rounded-full bg-yellow-100 dark:bg-yellow-900/30";
   }

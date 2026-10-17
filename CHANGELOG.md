@@ -10,6 +10,10 @@
 
 - **The batch completion callback is `on_complete`.** `Pgbus::Batch.new(on_complete:)`, the builder's `b.on_complete` and the `#on_complete` reader replace `on_finish`, which keeps working as a deprecated alias until 1.0 and logs one warning per process. The database columns stay `on_finish_class` / `on_finish_job` until the 1.0 schema cleanup, so batches created before upgrading still fire, and the `pgbus.batch_finished` instrumentation event keeps its name. The dashboard's batch page labels the callback "On Complete". Refs #538.
 
+### Fixed
+
+- **The dashboard's confirm and alert dialogs open centred again (issue #529).** The engine's stylesheet is built with Tailwind 4, whose preflight sets `margin: 0` on every element. A modal `<dialog>` keeps the browser's `inset: 0` but lost the `margin: auto` that centres it inside that inset, so every Pause, Purge and Delete confirmation opened in the top-left corner. Both dialogs now carry `m-auto`. The confirm dialog's Confirm button was white on yellow (1.91:1). It now uses the dark-on-yellow warning colours (`bg-yellow-400 text-yellow-950`), and the axe gate audits an open confirm dialog in light and dark mode. Refs #529.
+
 ## [0.19.0] - 2026-10-16
 
 ### Added
