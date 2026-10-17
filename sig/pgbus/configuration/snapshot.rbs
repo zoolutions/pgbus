@@ -1,0 +1,12 @@
+module Pgbus
+  class Configuration
+    # The settings a non-main Ractor reads, as one shareable value
+    # (Pgbus.configuration_snapshot).
+    class Snapshot < Data
+      attr_reader queue_prefix: String
+      def self.new: (queue_prefix: String) -> instance
+                  | (String queue_prefix) -> instance
+      def self.of: (Configuration configuration) -> Snapshot?
+    end
+  end
+end

@@ -57,6 +57,7 @@ module Pgbus
   end
 
   def self.configuration: () -> Configuration
+  def self.configuration_snapshot: () -> Configuration::Snapshot
   def self.configure: () { (Configuration) -> void } -> Configuration
   def self.finalize!: () -> Configuration
   def self.client: () -> Client

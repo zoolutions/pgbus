@@ -105,7 +105,7 @@ module Pgbus
         raise ArgumentError,
               "stream_key #{key.inspect} is #{key.length} chars, " \
               "exceeds pgbus budget of #{budget} " \
-              "(queue_prefix=#{Pgbus.configuration.queue_prefix.inspect}, " \
+              "(queue_prefix=#{queue_prefix.inspect}, " \
               "pgbus_max_queue_name_length=#{QueueNameValidator::MAX_QUEUE_NAME_LENGTH}). " \
               "Shorten the streamables or use Pgbus::Streams::Streamable on the model."
       end
@@ -182,9 +182,18 @@ module Pgbus
       # override `config.queue_prefix` get the correct budget
       # automatically.
       def queue_name_budget
-        QueueNameValidator::MAX_QUEUE_NAME_LENGTH -
-          Pgbus.configuration.queue_prefix.length - 1
+        QueueNameValidator::MAX_QUEUE_NAME_LENGTH - queue_prefix.length - 1
       end
+
+      # The live configuration's queue_prefix on the main Ractor. A non-main
+      # Ractor cannot read Pgbus.configuration (it holds the logger and the
+      # app's callables), so there it is the published snapshot's: the
+      # prefix as the last Pgbus.finalize! or Pgbus.configure left it.
+      def queue_prefix
+        config = Shareable.main_ractor? ? Pgbus.configuration : Pgbus.configuration_snapshot
+        config.queue_prefix
+      end
+      private_class_method :queue_prefix
 
       # Raises if a normalized fragment contains the `:` separator.
       # Kept private-ish via module_function so the guard is shared

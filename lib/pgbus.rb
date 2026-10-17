@@ -90,6 +90,13 @@ module Pgbus
     # Readers need no lock: a reference is published whole.
     attr_reader :loader, :models_loader, :configuration
 
+    # The settings a non-main Ractor reads (Configuration::Snapshot): a
+    # Ractor-shareable copy of the configuration as the last Pgbus.finalize!
+    # or Pgbus.configure left it, readable from any Ractor. The defaults until
+    # the first finalize, and again after reset!. A setter alone does not
+    # publish: the main Ractor reads the configuration itself.
+    attr_reader :configuration_snapshot
+
     # Process-global flag set by Worker#graceful_shutdown so the adapter
     # can report stopping? to ActiveJob::Continuation (Rails 8.1+).
     def stopping
@@ -210,20 +217,21 @@ module Pgbus
       # configure once a Rails app has booted. While a Rails app boots, the
       # engine's after_initialize finalizes instead, after every initializer
       # and after_initialize block has had its say.
-      configuration.finalize! if configuration.finalized? || !rails_booting?
+      finalize_configuration! if configuration.finalized? || !rails_booting?
       configuration
     end
 
     # The end of boot: validates the configuration (unless eager_validation
-    # is off) and freezes its plain-data settings into Ractor-shareable values
-    # (Configuration#finalize!). Callables and the logger stay as they are, on
-    # the main Ractor. Runs on its own: from the engine's after_initialize in a
+    # is off), freezes its plain-data settings into Ractor-shareable values
+    # (Configuration#finalize!) and publishes configuration_snapshot for
+    # non-main Ractors. Callables and the logger stay as they are, on the main
+    # Ractor. Runs on its own: from the engine's after_initialize in a
     # Rails app, at the end of each Pgbus.configure without Rails, and in
     # `pgbus start` after its flags. Call it yourself only when you configure
     # pgbus through setters alone, without Rails.
     def finalize!
       configuration.validate! if configuration.eager_validation
-      configuration.finalize!
+      finalize_configuration!
     end
 
     # Built on first use, under @state_lock: two threads making the first
@@ -333,6 +341,7 @@ module Pgbus
         @client&.close
         @client = nil
         @configuration = Configuration.new
+        @configuration_snapshot = Configuration::Snapshot.of(@configuration)
         @stream_cache = Concurrent::Map.new
       end
     end
@@ -364,11 +373,26 @@ module Pgbus
     # Process-local, like the client it holds; replaced (never mutated in
     # place) by reset!/reset_client!.
     attr_reader :stream_cache
+
+    # Freezes the configuration's plain-data settings and publishes the
+    # snapshot non-main Ractors read, unless a reset! replaced the
+    # configuration meanwhile (its own snapshot stands) or the snapshot could
+    # not be taken (the last one stands).
+    def finalize_configuration!
+      config = configuration
+      config.finalize!
+      snapshot = Configuration::Snapshot.of(config)
+      @state_lock.synchronize do
+        @configuration_snapshot = snapshot if snapshot && @configuration.equal?(config)
+      end
+      config
+    end
   end
 
   # Module state, built here at load rather than by `||=` on first use, so no
   # two threads can each build their own (issue #527). @state_lock guards every
-  # later write: the client memo, reset!/reset_client!, the stopping flag.
+  # later write: the client memo, reset!/reset_client!, the stopping flag, the
+  # configuration snapshot.
   @state_lock = Mutex.new
   @stopping = false
   @client = nil
@@ -378,6 +402,7 @@ module Pgbus
 
   # After loader.setup: Configuration is Zeitwerk-managed.
   @configuration = Configuration.new
+  @configuration_snapshot = Configuration::Snapshot.of(@configuration)
 
   # In non-Rails contexts, set up model autoloading via a separate loader.
   # This is torn down by the Engine initializer when Rails boots.

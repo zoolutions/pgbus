@@ -29,7 +29,7 @@ main_only:
   # pgbus's own process state: locks built at load, and the objects they guard
   - name: Pgbus.@configuration
     reason: >-
-      the configuration holds the app's logger (a Monitor) and any callables it configured (error reporters, hooks, the web data source); Pgbus.finalize! freezes every plain-data setting into a shareable value at boot (spec/pgbus/configuration_finalize_spec.rb)
+      the configuration holds the app's logger (a Monitor) and any callables it configured (error reporters, hooks, the web data source); Pgbus.finalize! freezes every plain-data setting into a shareable value at boot (spec/pgbus/configuration_finalize_spec.rb) and publishes Pgbus.@configuration_snapshot, the shareable copy non-main Ractors read (spec/pgbus/configuration/snapshot_spec.rb)
   - name: Pgbus.@loader
     reason: >-
       the gem's Zeitwerk loader, built when pgbus is required on the main Ractor; autoloading happens there

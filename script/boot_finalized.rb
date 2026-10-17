@@ -27,6 +27,7 @@ def configure_unshareable(config, configured)
   config.fair_share = configured[:fair_share]
   config.web_filter_parameters = configured[:filters]
   config.streams_durable_patterns = [+"orders"]
+  config.queue_prefix = +"booted_app"
 end
 
 case ARGV.first
@@ -56,4 +57,7 @@ puts "LATE_PATTERN=#{config.streams_durable_patterns.include?("late")}"
 puts "CALLABLES_KEPT=#{config.web_auth.equal?(configured[:web_auth]) && config.fair_share.equal?(configured[:fair_share])}"
 puts "AUTH_CALLED=#{config.web_auth.call(:request) && seen == [:request]}"
 puts "LOGGER_KEPT=#{config.logger.equal?(configured[:logger])}"
+# What a non-main Ractor reads: the snapshot the boot's finalize published.
+snapshot = Pgbus.configuration_snapshot
+puts "SNAPSHOT=#{snapshot.queue_prefix == "booted_app" && Ractor.shareable?(snapshot)}"
 puts "FILTERS_KEPT=#{config.web_filter_parameters.equal?(configured[:filters]) && !config.web_filter_parameters.frozen?}"

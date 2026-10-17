@@ -11,16 +11,17 @@ end
 # The Ractor canary of the conformance gate (issue #527): pgbus's pure
 # operations run inside a non-main Ractor on Ruby 4.0 and return what they
 # return on the main Ractor (the kit's "runs inside a non-main Ractor", tagged
-# :ractor and skipped below 4.0). Nothing here touches the database or a
-# global Pgbus setting: a non-main Ractor cannot read Pgbus.configuration,
-# which holds the logger and the app's callables.
+# :ractor and skipped below 4.0). Nothing here touches the database. A
+# non-main Ractor cannot read Pgbus.configuration, which holds the logger and
+# the app's callables; the global settings it reads come from
+# Pgbus.configuration_snapshot.
 RSpec.describe "pgbus inside a non-main Ractor" do # rubocop:disable RSpec/DescribeClass
   # Below 4.0 a non-main Ractor cannot autoload: load what the blocks touch.
   before do
     [Pgbus::Streams::Stream, Pgbus::Streams::Key, Pgbus::Streams::Cursor, Pgbus::Streams::Envelope,
      Pgbus::Configuration, Pgbus::Shareable, Pgbus::StatBuffer, Pgbus::Serializer, Pgbus::Event,
      Pgbus::Web::Streamer::Listener, Pgbus::Web::Streamer::StreamEventDispatcher,
-     Pgbus::Client::ReadAfter]
+     Pgbus::Client::ReadAfter, Pgbus::QueueNameValidator, Pgbus::Configuration::Snapshot]
   end
 
   describe "stream names" do
@@ -101,14 +102,53 @@ RSpec.describe "pgbus inside a non-main Ractor" do # rubocop:disable RSpec/Descr
     end
   end
 
-  # Blocked today: Streams::Key.stream_key checks the queue-name budget against
-  # Pgbus.configuration.queue_prefix, and Pgbus.@configuration is main-Ractor
-  # only (the logger, the app's callables). Starts passing, and so fails as
-  # pending, once a non-main Ractor can read a configuration snapshot.
-  it "builds a full stream key with Streams::Key.stream_key", :ractor do
-    skip "needs Ruby 4.0+ (Ractor#value)" unless Ractor.method_defined?(:value)
-    pending "Streams::Key.stream_key reads Pgbus.configuration, which is main-Ractor-only (#527)"
+  # Streams::Key checks the queue-name budget against the queue_prefix. A
+  # non-main Ractor cannot read Pgbus.configuration (the logger, the app's
+  # callables), so there it reads Pgbus.configuration_snapshot: the plain-data
+  # settings the last Pgbus.finalize! or Pgbus.configure published.
+  describe "full stream keys and the queue-name budget" do
+    # As after boot: the snapshot is the one the live configuration published.
+    before { Pgbus.finalize! }
 
-    expect(Ractor.new { Pgbus::Streams::Key.stream_key("chat", :messages) }.value).to eq("chat:messages")
+    let(:subject_call) do
+      lambda do |parts|
+        [Pgbus::Streams::Key.stream_key(*parts), Pgbus.stream_key(*parts), Pgbus.stream_key!("chat:messages"),
+         Pgbus.stream_name_budget, Ractor.shareable?(Pgbus.configuration_snapshot)]
+      end
+    end
+
+    it_behaves_like "runs inside a non-main Ractor", inputs: [["chat", :messages]]
+
+    it "builds a full stream key with Streams::Key.stream_key", :ractor do
+      skip "needs Ruby 4.0+ (Ractor#value)" unless Ractor.method_defined?(:value)
+
+      expect(Ractor.new { Pgbus::Streams::Key.stream_key("chat", :messages) }.value).to eq("chat:messages")
+    end
+
+    context "when Pgbus.configure changes the queue_prefix" do
+      around do |example|
+        original = Pgbus.configuration.queue_prefix
+        Pgbus.configure { |c| c.queue_prefix = "ractor_canary" }
+        example.run
+      ensure
+        Pgbus.configure { |c| c.queue_prefix = original }
+      end
+
+      it "checks the budget against the queue_prefix it published", :ractor do
+        skip "needs Ruby 4.0+ (Ractor#value)" unless Ractor.method_defined?(:value)
+
+        budget, error = Ractor.new do
+          message = begin
+            Pgbus.stream_key("x" * 60)
+          rescue ArgumentError => e
+            e.message
+          end
+          [Pgbus.stream_name_budget, message]
+        end.value
+
+        expect(budget).to eq(Pgbus::QueueNameValidator::MAX_QUEUE_NAME_LENGTH - "ractor_canary".length - 1)
+        expect(error).to include('queue_prefix="ractor_canary"')
+      end
+    end
   end
 end

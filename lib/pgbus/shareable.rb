@@ -2,7 +2,8 @@
 
 module Pgbus
   # Deep-frozen, Ractor-shareable copies of plain data, for the settings
-  # Configuration#finalize! freezes at boot (issue #527).
+  # Configuration#finalize! freezes at boot and the snapshot non-main Ractors
+  # read (issue #527).
   module Shareable
     # Leaves that are plain data. Modules and classes count too: they are
     # shareable by nature.
@@ -37,6 +38,15 @@ module Pgbus
         value.default_proc.nil? && data?(value.default, path) && value.all? { |k, v| data?(k, path) && data?(v, path) }
       else data?(value.begin, path) && data?(value.end, path)
       end
+    end
+
+    # True on the main Ractor, the only one that can read Pgbus.configuration,
+    # and wherever the engine has no Ractors. Ractor.main? is Ruby 3.4+.
+    def main_ractor?
+      return true unless defined?(::Ractor)
+      return ::Ractor.main? if ::Ractor.respond_to?(:main?)
+
+      ::Ractor.current.equal?(::Ractor.main)
     end
 
     # A deep-frozen copy of plain data (see data?), Ractor-shareable where the

@@ -153,10 +153,12 @@ RSpec.describe Pgbus::CLI do
       # As the app's boot leaves it: finalized, its collections frozen.
       around do |example|
         original = Pgbus.configuration
+        published = Pgbus.configuration_snapshot
         Pgbus.instance_variable_set(:@configuration, Pgbus::Configuration.new.finalize!)
         example.run
       ensure
         Pgbus.instance_variable_set(:@configuration, original)
+        Pgbus.instance_variable_set(:@configuration_snapshot, published)
       end
 
       # The flags go through setters after the app's boot finalized the
