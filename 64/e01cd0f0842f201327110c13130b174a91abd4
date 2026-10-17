@@ -1,0 +1,19 @@
+spec/system/accessibility_spec.rb
+  s_e51fcd13dd1fef::t_281638e33ff4c4 50-51
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "64e01cd0f0842f201327110c13130b174a91abd4",
+  "prompts": {},
+  "sessions": {
+    "s_e51fcd13dd1fef": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a6628440-545c-4ef6-92aa-b5d471e836b6",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
