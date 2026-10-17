@@ -917,7 +917,7 @@ By default, Pgbus logs caught exceptions and continues. To route them to your AP
 ```ruby
 Pgbus.configure do |c|
   c.error_reporters << ->(ex, ctx) {
-    Appsignal.set_error(ex) { |t| t.set_tags(ctx) }
+    Appsignal.report_error(ex) { |t| t.add_tags(ctx) }
   }
 end
 ```
@@ -951,7 +951,7 @@ If you upgraded from 0.9.x and previously did `rescue ArgumentError` around `Pgb
 
 When the `appsignal` gem is loaded in your app, Pgbus auto-installs a subscriber and a minutely probe that report into AppSignal:
 
-- **Background-job transactions** for every ActiveJob run and every event-bus handler invocation. Action names follow the AppSignal convention: `MyJob#perform`, `MyHandler#handle`. Tags include `queue`, `job_class`/`handler`, `routing_key`, `attempts`, and the `active_job_id` / `provider_job_id`. `enqueued_at` becomes the AppSignal `queue_start` timestamp so "time on queue" shows up correctly in the timeline.
+- **Background-job transactions** for every ActiveJob run and every event-bus handler invocation. Action names follow the AppSignal convention: `MyJob#perform`, `MyHandler#handle`. Tags include `queue`, `job_class`/`handler`, `routing_key`, `attempts`, and the `active_job_id` / `provider_job_id`. `enqueued_at` becomes the AppSignal `queue_start` timestamp so "time on queue" shows up correctly in the timeline. The transaction is current for the whole execution (deserialize, `perform`/`handle`, archive), so `Appsignal.add_tags`, `Appsignal.set_error` and `Appsignal.instrument` called from job or handler code attach to it, and the error an execution raised is reported on it, also when it was raised before `perform` (an unknown job class, arguments that cannot be deserialized).
 - **Custom counters and distributions** for sends, reads, broadcasts, outbox publishes, recurring scheduling, and worker recycles. All metric names are prefixed `pgbus_`.
 - **A minutely probe** that gauges queue depth (visible vs total), oldest message age per queue, DLQ depth, failed events count, dead-tuple totals, MVCC horizon age, active processes, and stream connection estimates.
 
