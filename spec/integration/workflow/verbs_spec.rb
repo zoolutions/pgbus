@@ -191,6 +191,27 @@ RSpec.describe "Workflow start! and outside verbs (integration)", :integration d
     end
   end
 
+  describe "the audit trail and the definition digest" do
+    it "keeps events read-only once written" do
+      event = OrderWorkflow.start!.events.first
+
+      expect { event.update!(reason: "rewritten") }.to raise_error(ActiveRecord::ReadOnlyRecord)
+    end
+
+    it "marks a run that started on an older step list" do
+      wf = OrderWorkflow.start!
+      expect(wf.record).not_to be_definition_outdated
+
+      stub_const("OrderWorkflow", Class.new(Pgbus::Workflow) do
+        step(:charge) { nil }
+        step(:fraud_check) { nil }
+        step(:receipt) { nil }
+      end)
+
+      expect(Pgbus::Workflow.find(wf.workflow_id).record).to be_definition_outdated
+    end
+  end
+
   describe "available_actions" do
     it "follows the States table" do
       wf = OrderWorkflow.start!

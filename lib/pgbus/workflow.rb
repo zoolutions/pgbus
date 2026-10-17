@@ -98,15 +98,17 @@ module Pgbus
         Runner.start(self, subject: subject, arguments: arguments, idempotency_key: idempotency_key)
       end
 
-      # The run with this workflow_id, as an instance of this class (or of
-      # the class that started it, when called on Pgbus::Workflow); nil when
-      # there is none.
+      # The run with this workflow_id, as an instance of the class that
+      # started it; nil when there is none, or when that class is not this
+      # one or a subclass of it. Pgbus::Workflow.find finds any run (as a
+      # bare Pgbus::Workflow when its class no longer exists, so it can still
+      # be cancelled).
       def find(workflow_id)
         record = WorkflowEntry.find_by(workflow_id: workflow_id)
         return nil unless record
 
-        klass = self == Workflow ? (record.workflow_klass || self) : self
-        klass.new(record)
+        klass = record.workflow_klass || Workflow
+        klass <= self ? klass.new(record) : nil
       end
 
       # How many ongoing runs still sit on each removed step:

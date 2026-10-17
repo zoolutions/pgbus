@@ -51,6 +51,16 @@ RSpec.describe Pgbus::Workflow::StepJob do
     expect(execution).to have_received(:call)
   end
 
+  it "never opts out of the visibility heartbeat, which crash detection depends on" do
+    ActiveJob::Base.include(Pgbus::VisibilityHeartbeat::JobMixin) unless ActiveJob::Base < Pgbus::VisibilityHeartbeat::JobMixin
+
+    expect(described_class.pgbus_visibility_heartbeat_enabled).not_to be(false)
+  end
+
+  it "has no retry_on or discard_on: a step's failures belong to the exception policies" do
+    expect(described_class.rescue_handlers).to be_empty
+  end
+
   describe "the claim" do
     it "claims the row, moves the run to performing, runs the body and completes the step" do
       perform

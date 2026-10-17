@@ -252,7 +252,15 @@ RSpec.describe Pgbus::Workflow do
       allow(Pgbus::WorkflowEntry).to receive(:find_by).with(workflow_id: "missing").and_return(nil)
 
       expect(described_class.find("wf-1")).to be_a(klass)
+      expect(klass.find("wf-1")).to be_a(klass)
       expect(described_class.find("missing")).to be_nil
+    end
+
+    it ".find on another workflow class does not return the run" do
+      other = Class.new(described_class) { def self.name = "SpecOtherWorkflow" }
+      allow(Pgbus::WorkflowEntry).to receive(:find_by).with(workflow_id: "wf-1").and_return(record)
+
+      expect(other.find("wf-1")).to be_nil
     end
   end
 end
