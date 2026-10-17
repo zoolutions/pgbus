@@ -32,7 +32,9 @@ module Pgbus
         when :queue then -value.to_s
         when :wait then seconds(value, "job_options: wait", positive: false)
         when :wait_until
-          return value if value.respond_to?(:to_time)
+          # Time, DateTime and TimeWithZone; not a String, which ActiveSupport
+          # also gives #to_time (nil for an unparseable one).
+          return value.to_time if value.respond_to?(:to_time) && !value.is_a?(String) && value.to_time
 
           raise ArgumentError, "job_options: wait_until must be a Time, got #{value.inspect}"
         else value

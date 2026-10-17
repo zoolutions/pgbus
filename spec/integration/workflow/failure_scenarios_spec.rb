@@ -140,6 +140,24 @@ RSpec.describe "Workflow failure scenarios (integration)", :integration do
       expect(steps_of(wf).first.error_message).to include("removed_step :old_name")
     end
 
+    it "refuses to resume a run paused after a step that is no longer declared, changing nothing" do
+      stub_const("ReviewedWorkflow", Class.new(Pgbus::Workflow) do
+        step(:review) { pause! }
+        step(:publish) { nil }
+      end)
+      wf = run_until(ReviewedWorkflow.start!)
+      expect(wf.status).to eq("paused")
+      stub_const("ReviewedWorkflow", Class.new(Pgbus::Workflow) do
+        step(:approve) { nil }
+        step(:publish) { nil }
+      end)
+
+      expect { wf.resume! }.to raise_error(Pgbus::Workflow::StepNotDefined, /no step review/)
+      expect(wf.reload.status).to eq("paused")
+      expect(steps_of(wf).map(&:step_name)).to eq(%w[review])
+      expect(events_of(wf)).not_to include("resumed")
+    end
+
     it "skips the old step and advances when a removed_step gravestone covers it" do
       wf = RenamedWorkflow.start!
       stub_const("RenamedWorkflow", Class.new(Pgbus::Workflow) do

@@ -2,6 +2,8 @@
 
 require "spec_helper"
 require "active_support/core_ext/numeric/time"
+# String#to_time, as in a Rails app: a String must still not pass as a wait_until.
+require "active_support/core_ext/string/conversions"
 
 RSpec.describe "Pgbus::Workflow step declarations" do # rubocop:disable RSpec/DescribeClass
   def workflow_class(name = "SpecWorkflow", parent: Pgbus::Workflow, &body)
@@ -150,6 +152,17 @@ RSpec.describe "Pgbus::Workflow step declarations" do # rubocop:disable RSpec/De
           step(:a) { :again }
         end
       end.to raise_error(ArgumentError, /duplicate step a/)
+    end
+
+    it "rejects a job_options: wait_until that is not a time, a String included" do
+      ["not a time", 42].each do |bad|
+        expect { workflow_class { step(:a, job_options: { wait_until: bad }) { nil } } }
+          .to raise_error(ArgumentError, /wait_until must be a Time/), "for #{bad.inspect}"
+      end
+
+      at = Time.utc(2030, 1, 1)
+      expect(workflow_class { step(:a, job_options: { wait_until: at }) { nil } }.workflow_steps.fetch(:a).job_options)
+        .to eq(wait_until: at)
     end
 
     it "rejects an unknown job_options: key" do
