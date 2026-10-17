@@ -68,7 +68,7 @@ module Pgbus
         @matching = normalize_matching(matching)
         @wait = StepDefinition.seconds(wait, "wait", positive: false)
         @max_reattempts = validate_max_reattempts(max_reattempts)
-        @terminal_action = normalize_action(terminal_action || :pause!, TERMINAL_ACTIONS, "terminal_action")
+        @terminal_action = normalize_action(terminal_action.nil? ? :pause! : terminal_action, TERMINAL_ACTIONS, "terminal_action")
         @report = validate_report(report)
         @handler = handler
         freeze

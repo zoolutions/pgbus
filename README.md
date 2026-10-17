@@ -1064,6 +1064,13 @@ c.metrics_backend = MyOpenTelemetryBackend.new
 | `pgbus_recurring_enqueued` | counter | `task`, `class_name` |
 | `pgbus_worker_recycled` | counter | `reason`, `kind` (`worker`/`consumer`) |
 | `pgbus_pool_size` / `pgbus_pool_available` | gauge | `hostname` |
+| `pgbus_workflow_step_duration_seconds` | histogram | `workflow_class`, `step`, `outcome` — StatsD receives it as `pgbus_workflow_step_duration_ms` |
+| `pgbus_workflow_steps_total` | counter | `workflow_class`, `step`, `outcome` |
+| `pgbus_workflows_finished_total` / `pgbus_workflows_cancelled_total` | counter | `workflow_class` |
+| `pgbus_workflows_paused_total` | counter | `workflow_class`, `error_class` (absent for a manual pause) |
+| `pgbus_workflow_stalls_total` | counter | `workflow_class`, `step`, `detection` (`redelivery`/`sweep`) |
+| `pgbus_workflows` | gauge | `workflow_class`, `status` |
+| `pgbus_workflows_stuck` | gauge | `workflow_class`, `reason` (`paused_error`/`stalled`/`paused_manual`/`overdue`) |
 
 A backend that raises (registry bug, StatsD socket down) is logged and swallowed — a metrics failure never propagates into the thread that emitted the event.
 

@@ -250,17 +250,42 @@ RSpec.describe Pgbus::Workflow::StepJob do
       expect(applied.first.last[:output]).to include("user" => "alice")
     end
 
-    it "does not run an imperative policy for an attempt that is no longer in progress" do
-      allow(Pgbus::WorkflowStep).to receive(:where).with(id: 11, status: "in_progress").and_return(double(exists?: false))
-      handled = []
-      klass.on_exception(RuntimeError) { |e| handled << e }
-      klass.step(:raises) { raise "late" }
-      allow(step).to receive(:step_name).and_return("raises")
+    describe "an attempt that raised after its row stopped being in progress" do
+      let(:late) { [] }
 
-      perform
+      before do
+        allow(Pgbus::WorkflowStep).to receive(:where).with(id: 11, status: "in_progress").and_return(double(exists?: false))
+        allow(Pgbus::Workflow::StepOutcome).to receive(:ignore_late_completion) { |*args| late << args }
+        allow(Pgbus::ErrorReporter).to receive(:report)
+        klass.step(:raises) { raise "late" }
+        allow(step).to receive(:step_name).and_return("raises")
+      end
 
-      expect(handled).to be_empty
-      expect(applied.first.last).to include(error: an_instance_of(RuntimeError))
+      def reports
+        notes.flush
+        Pgbus::ErrorReporter
+      end
+
+      it "does not run an imperative policy, records no outcome and still reports" do
+        handled = []
+        klass.on_exception(RuntimeError) { |e| handled << e }
+
+        perform
+
+        expect(handled).to be_empty
+        expect(late.first.values_at(2, 3)).to eq(["failed", nil])
+        expect(reports).to have_received(:report).with(an_instance_of(RuntimeError), hash_including(outcome: "late_completion_ignored"))
+        expect(applied).to be_empty
+      end
+
+      it "records a declarative policy's outcome and honours its report: setting" do
+        klass.on_exception RuntimeError, action: :skip!, report: :never
+
+        perform
+
+        expect(late.first.values_at(2, 3)).to eq(%w[failed skipped])
+        expect(reports).not_to have_received(:report)
+      end
     end
 
     it "decides an imperative policy before taking the run's lock again, so user code never holds it" do

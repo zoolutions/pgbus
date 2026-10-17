@@ -162,13 +162,11 @@ module Pgbus
       # The exception policy is decided before the run's lock is taken
       # again: an imperative on_exception block is app code, and must not
       # hold the row lock (and an open transaction) while it runs.
-      # An attempt whose row is no longer in_progress (declared stalled, or
-      # the run cancelled) is late: its outcome is ignored either way, so its
-      # imperative on_exception block must not run (and cause side effects)
-      # for it. The check is outside the lock; the guarded finish! is final.
       def finish(claim, outcome, error, duration)
-        decision = error && attempt_active?(claim) ? decide(claim, error) : nil
-        outcome = decision ? decision.outcome : (outcome || FlowControl::Outcome.pause)
+        return finish_late(claim, error) if error && !attempt_active?(claim)
+
+        decision = error && decide(claim, error)
+        outcome = decision.outcome if decision
         Runner.locked(claim.record.workflow_id) do |record, notes|
           next debug("step #{claim.step.id}'s run was deleted while the step ran") unless record
 
@@ -179,11 +177,33 @@ module Pgbus
         end
       end
 
+      # A row moves away from in_progress and never back, so an attempt that
+      # finds it gone has been declared stalled (or its run cancelled): late.
       def attempt_active?(claim) = WorkflowStep.where(id: claim.step.id, status: "in_progress").exists?
 
-      def decide(claim, error)
-        policy = ExceptionPolicy.resolve(error, step_policies: claim.definition.exception_policies,
-                                                class_policies: claim.klass.exception_policies)
+      # A late attempt that raised: its outcome is ignored either way, so an
+      # imperative on_exception block must not run (and cause side effects)
+      # for it. A declarative policy still names the outcome it would have
+      # applied and decides the report; an imperative one records none.
+      def finish_late(claim, error)
+        policy = policy_for(claim, error)
+        decision = policy.handler ? nil : decide(claim, error, policy: policy)
+        column = decision && StepOutcome::STEP_OUTCOME.fetch(decision.outcome.action)
+        report = decision ? decision.report : policy.report != :never
+        Runner.locked(claim.record.workflow_id) do |record, notes|
+          next debug("step #{claim.step.id}'s run was deleted while the step ran") unless record
+
+          StepOutcome.ignore_late_completion(record, claim.step, "failed", column, error)
+          notes.report(error, StepOutcome.error_context(record, claim.step, "late_completion_ignored")) if report
+        end
+      end
+
+      def policy_for(claim, error)
+        ExceptionPolicy.resolve(error, step_policies: claim.definition.exception_policies,
+                                       class_policies: claim.klass.exception_policies)
+      end
+
+      def decide(claim, error, policy: policy_for(claim, error))
         step = claim.step
         policy.decide(error, workflow: claim.workflow,
                              consecutive_reattempts: -> { WorkflowStep.consecutive_reattempts(step.workflow_id, step.step_name) })
