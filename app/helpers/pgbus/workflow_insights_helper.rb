@@ -61,12 +61,13 @@ module Pgbus
     end
 
     # A count of runs: the number, linked to +path+ (named +label+ for
-    # assistive tech, which keeps the number), or plain "0".
-    def pgbus_insight_count(count, path, label)
+    # assistive tech, which keeps the number), or plain "0". size: :lg for
+    # a summary card's number.
+    def pgbus_insight_count(count, path, label, size: :md)
       return pgbus_number(0) if count.to_i.zero?
 
       number = pgbus_number(count)
-      pgbus_link_to(number, path, aria: { label: "#{number} #{label}" }, data: { turbo_frame: "_top" })
+      pgbus_link_to(number, path, size: size, aria: { label: "#{number} #{label}" }, data: { turbo_frame: "_top" })
     end
 
     def pgbus_insight_definition_path(name, window) = pgbus.workflow_definition_path(name, window: window.name)

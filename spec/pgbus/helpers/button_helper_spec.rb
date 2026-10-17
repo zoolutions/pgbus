@@ -55,6 +55,12 @@ RSpec.describe Pgbus::ButtonHelper do
       expect(classes(:link, :md)).to include("min-h-6", "text-sm")
     end
 
+    it "sizes a link as a summary card's number (lg), links only" do
+      expect(classes(:link, :lg)).to include("min-h-6", "text-2xl")
+      expect(classes(:link, :lg)).not_to include("text-sm")
+      expect { view.pgbus_button_classes(:primary, :lg) }.to raise_error(ArgumentError, /size/)
+    end
+
     it "sizes buttons" do
       expect(classes(:primary, :sm)).to include("px-3", "py-1.5", "text-xs")
       expect(classes(:primary, :md)).to include("px-3", "py-2", "text-sm")
