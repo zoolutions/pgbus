@@ -160,6 +160,7 @@ RSpec.describe "the workflow write tools" do # rubocop:disable RSpec/DescribeCla
     }.each do |tool, verb|
       transition = Pgbus::Workflow::States.fetch(verb)
       expect(tool.description).to include(transition.effect, transition.from.join(", "), "mcp_write_tools")
+      expect(tool.description).to be_frozen # class state the conformance audit requires to be shareable
     end
   end
 end
