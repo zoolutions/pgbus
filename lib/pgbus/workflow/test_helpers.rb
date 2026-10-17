@@ -23,7 +23,7 @@ module Pgbus
       def perform_next_step(workflow)
         TestHelpers.ensure_ready!(workflow)
         step = TestHelpers.scheduled_step(workflow) || raise(Error, "#{workflow.inspect} has no scheduled step")
-        TestHelpers.perform(step)
+        TestHelpers.perform(step, workflow)
         workflow.reload
       end
 
@@ -36,7 +36,7 @@ module Pgbus
           raise Error, "#{workflow.inspect} is not about to run #{step_name} (scheduled: #{step&.step_name || "nothing"})"
         end
 
-        TestHelpers.perform(step)
+        TestHelpers.perform(step, workflow)
         workflow.reload
       end
 
@@ -76,8 +76,10 @@ module Pgbus
         WorkflowStep.where(workflow_id: workflow.workflow_id, status: "scheduled").order(:id).last
       end
 
-      def self.perform(step)
-        step.update_columns(scheduled_at: Time.current) if step.scheduled_at > Time.current
+      # A step still waiting is pulled forward through run_now!, so the audit
+      # trail records the skipped wait (actor "test_helpers").
+      def self.perform(step, workflow)
+        workflow.run_now!(actor: "test_helpers", reason: "run inline by a test helper") if step.scheduled_at > Time.current
         StepJob.new(step.id).perform_now
       end
     end

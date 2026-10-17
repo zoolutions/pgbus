@@ -53,10 +53,10 @@ RSpec.describe Pgbus::WorkflowStep do
       expect(row.send(:step_job_set_options)).to eq(queue: "workflows", priority: 1, wait_until: at)
     end
 
-    it "lets a job_options wait delay the step past scheduled_at, never before it" do
-      stub_row(step_name: "slow")
+    it "sends at scheduled_at only: a job_options wait was folded into it when the row was scheduled" do
+      stub_row(step_name: "slow", scheduled_at: 1.minute.ago)
 
-      expect(row.send(:step_job_set_options)[:wait_until]).to be_within(5).of(600.seconds.from_now)
+      expect(row.send(:step_job_set_options)).not_to have_key(:wait_until)
     end
 
     it "sends a due step without wait_until, on config.workflow_queue when nothing else is set" do

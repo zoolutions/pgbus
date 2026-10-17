@@ -30,7 +30,7 @@ module WorkflowStatesReference
     unpause: [ %w[paused], "performing",
                "resume! while the step that was running at the outside pause! is still running: the run goes on performing it" ],
     hold: [ %w[paused], "paused",
-            "an outcome that arrived after an outside pause!: recorded, the next step is scheduled, and the workflow stays paused" ]
+            "an outcome that arrived after an outside pause!: recorded on the step; a completed, skipped or reattempted step has its next row scheduled; the workflow stays paused" ]
   }.freeze
 
   def self.all = OUTSIDE.merge(RUNNER)

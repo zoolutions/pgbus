@@ -7,8 +7,10 @@ module Pgbus
     #   Pgbus::ActiveJob::Delivery.current # => { msg_id: 42, read_ct: 2, queue_name: "default" }
     #
     # Set by Executor#execute around perform_now and cleared after, also when
-    # the job raises; nil outside the executor (perform_now in a test, the
-    # inline adapter). Fiber-local (Thread.current[]), so concurrent jobs under
+    # the job raises; nil outside the executor (perform_now in a test, a
+    # top-level inline-adapter job). A job run inline from inside an executing
+    # job sees the enclosing job's delivery; StepJob only acts on it when the
+    # step row's msg_id matches, so that is harmless. Fiber-local (Thread.current[]), so concurrent jobs under
     # execution_mode: :async each see their own. Pgbus::Workflow::StepJob reads
     # read_ct to tell a redelivery after a worker died from a first delivery.
     #

@@ -7,10 +7,6 @@ module Pgbus
     # Pgbus::WorkflowEntry row; inside a step it also knows which step
     # attempt it is running (the step context).
     module Instance
-      # Which attempt a step body is running. Set by the StepJob on the fresh
-      # instance it runs the body on, never by app code.
-      StepContext = Data.define(:step_id, :step_name, :attempt)
-
       def workflow_id = record.workflow_id
 
       def workflow_class = record.workflow_class

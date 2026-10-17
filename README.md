@@ -1091,7 +1091,7 @@ ActiveSupport::Notifications.subscribe(/^pgbus\./) do |name, start, finish, _id,
 end
 ```
 
-Metrics-relevant events emitted (the subset the metrics subscriber maps; see `lib/pgbus/instrumentation.rb` for the full `pgbus.*` catalog): `pgbus.executor.execute`, `pgbus.job_completed`, `pgbus.job_failed`, `pgbus.job_dead_lettered`, `pgbus.event_processed`, `pgbus.event_failed`, `pgbus.event_dead_lettered`, `pgbus.event_skipped`, `pgbus.job_visibility_extended`, `pgbus.client.send_message`, `pgbus.client.send_batch`, `pgbus.client.read_batch`, `pgbus.client.pool`, `pgbus.stream.broadcast`, `pgbus.outbox.publish`, `pgbus.recurring.enqueue`, `pgbus.worker.recycle`, `pgbus.consumer.recycle`. Payload keys are documented in `lib/pgbus/instrumentation.rb`.
+Metrics-relevant events emitted (the subset the metrics subscriber maps; see `lib/pgbus/instrumentation.rb` for the full `pgbus.*` catalog): `pgbus.executor.execute`, `pgbus.job_completed`, `pgbus.job_failed`, `pgbus.job_dead_lettered`, `pgbus.event_processed`, `pgbus.event_failed`, `pgbus.event_dead_lettered`, `pgbus.event_skipped`, `pgbus.job_visibility_extended`, `pgbus.client.send_message`, `pgbus.client.send_batch`, `pgbus.client.read_batch`, `pgbus.client.pool`, `pgbus.stream.broadcast`, `pgbus.outbox.publish`, `pgbus.recurring.enqueue`, `pgbus.worker.recycle`, `pgbus.consumer.recycle`, `pgbus.workflow.step`, `pgbus.workflow_finished`, `pgbus.workflow_paused`, `pgbus.workflow_cancelled`, `pgbus.workflow.stall_detected`, `pgbus.workflow.gauge`. Payload keys are documented in `lib/pgbus/instrumentation.rb`.
 
 ### Connection pool metrics
 

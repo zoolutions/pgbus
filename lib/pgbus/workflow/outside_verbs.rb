@@ -62,7 +62,8 @@ module Pgbus
       end
 
       def reschedule(record, _notes, actor:, reason:, at:, event: "rescheduled") # rubocop:disable Naming/MethodParameterName
-        raise ArgumentError, "reschedule!(at:) takes a Time, got #{at.inspect}" unless at.respond_to?(:to_time)
+        time = at.respond_to?(:to_time) && !at.is_a?(String) ? at.to_time : nil
+        raise ArgumentError, "reschedule!(at:) takes a Time, got #{at.inspect}" unless time
 
         step = WorkflowStep.where(workflow_id: record.workflow_id, status: "scheduled").order(id: :desc).first
         raise InvalidTransition, "workflow #{record.workflow_id} has no scheduled step to #{event.tr("_", " ")}" unless step
@@ -70,7 +71,7 @@ module Pgbus
         verb = event == "run_now" ? :run_now : :reschedule
         from = step.scheduled_at
         Runner.transition!(record, verb)
-        step.update!(scheduled_at: at.to_time, enqueued_at: Time.current)
+        step.update!(scheduled_at: time, enqueued_at: Time.current)
         Runner.event!(record, event, actor: actor, reason: reason, step: step,
                                      details: { from: from.utc.iso8601(3), to: step.scheduled_at.utc.iso8601(3) })
       end

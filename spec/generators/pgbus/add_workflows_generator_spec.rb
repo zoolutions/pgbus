@@ -57,7 +57,10 @@ RSpec.describe Pgbus::Generators::AddWorkflowsGenerator do
         expect(content).to include('name: "idx_pgbus_workflow_steps_attempt"')
         expect(content).to include('name: "idx_pgbus_workflow_steps_stall"')
         expect(content).to include("add_foreign_key :pgbus_workflow_steps, :pgbus_workflows")
-        expect(content).to include("on_delete: :cascade")
+        parts = ["add_foreign_key :pgbus_workflow_steps, :pgbus_workflows,", "column: :workflow_id,",
+                 "primary_key: :workflow_id,", "on_delete: :cascade"]
+        steps_fk = Regexp.new(parts.map { |part| Regexp.escape(part) }.join("\\s+"))
+        expect(content).to match(steps_fk)
       end
     end
 

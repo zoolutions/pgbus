@@ -73,14 +73,16 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
         name, and `step def name = …`. Options, all checked when the class
         loads:
 
-        - `wait:` — seconds or a Duration after the previous step. Underneath
-          it is a PGMQ delay: the StepJob is sent with `wait_until:`.
+        - `wait:` — seconds or a Duration after the previous step (for the
+          first step, after `start!`). Underneath it is a PGMQ delay: the
+          StepJob is sent with `wait_until:`.
         - `skip_if:` — a lambda or method name; truthy skips the step.
         - `timeout:` — how long the step may stay in progress before the sweep
           treats it as stalled (default `config.workflow_stall_threshold`).
         - `job_options:` — `queue`, `priority`, `wait`, `wait_until` for this
           step's StepJob; `set_step_job_options` sets them for the class.
-          Anything else raises.
+          `wait`/`wait_until` only ever move a step later: they are folded
+          into its `scheduled_at` when it is scheduled. Anything else raises.
         - `on_exception:` — a step-level exception policy (below).
         - `before_step:` / `after_step:` — insert the step before or after
           another (useful in a subclass).
@@ -344,7 +346,7 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
         `{ workflow_class:, workflow_id:, step_name:, attempt:, outcome: }` as
         context. **Logs**: while a step runs, Pgbus's own log lines carry
         `workflow=… step=… attempt=…` through `Pgbus::LogFormatter`, and your
-        code reads `Pgbus::Workflow::Current.workflow_id` (and `step_name`,
+        code reads `Pgbus::Workflow::StepContext.workflow_id` (and `step_name`,
         `attempt`) to tag its own. The instrumentation events are
         `pgbus.workflow.step`, `pgbus.workflow_finished`,
         `pgbus.workflow_paused`, `pgbus.workflow_cancelled`,

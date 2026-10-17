@@ -78,6 +78,15 @@ RSpec.describe Pgbus::Workflow::StepOutcome do
     expect(events).to eq(%w[step_reattempted])
   end
 
+  it "records a step's own pause!/cancel! actor and reason on the event" do
+    allow(Pgbus::Workflow::Runner).to receive(:event!)
+
+    apply(outcome.pause(actor: "reviewer", reason: "fraud check"))
+
+    expect(Pgbus::Workflow::Runner).to have_received(:event!).with(record, "paused",
+                                                                   hash_including(actor: "reviewer", reason: "fraud check"))
+  end
+
   it "cancels the run and whatever else is open" do
     apply(outcome.cancel)
 

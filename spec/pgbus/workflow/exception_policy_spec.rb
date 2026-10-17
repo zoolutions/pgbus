@@ -140,6 +140,13 @@ RSpec.describe Pgbus::Workflow::ExceptionPolicy do
       expect { policy(:pause!, report: :sometimes) }.to raise_error(ArgumentError, /report:/)
     end
 
+    it "rejects wait: and terminal_action: on anything but reattempt!, the block form included" do
+      expect { policy(:pause!, wait: 5) }.to raise_error(ArgumentError, /wait: only applies to action: :reattempt!/)
+      expect { policy(:cancel!, terminal_action: :skip!) }.to raise_error(ArgumentError, /terminal_action: only applies/)
+      expect { policy(wait: 5) { |_e| reattempt! } }.to raise_error(ArgumentError, /wait: only applies/)
+      expect(policy(:reattempt!, wait: 5, terminal_action: :cancel!).terminal_action).to eq(:cancel!)
+    end
+
     it "rejects max_reattempts on anything but reattempt!, and a non-positive count" do
       expect { policy(:pause!, max_reattempts: 3) }.to raise_error(ArgumentError, /only applies to action: :reattempt!/)
       expect { policy(:reattempt!, max_reattempts: 0) }.to raise_error(ArgumentError, /positive Integer/)

@@ -12,7 +12,7 @@ RSpec.describe Pgbus::Workflow::FlowControl do
   let(:workflow) { klass.new(record) }
 
   def in_step(&)
-    workflow.send(:enter_step, Pgbus::Workflow::Instance::StepContext.new(step_id: 1, step_name: "charge", attempt: 2))
+    workflow.send(:enter_step, Pgbus::Workflow::StepContext::Attempt.new(step_id: 1, step_name: "charge", attempt: 2))
     catch(described_class::THROW_TAG) do
       workflow.instance_exec(&)
       :fell_through
@@ -33,6 +33,13 @@ RSpec.describe Pgbus::Workflow::FlowControl do
         expect(outcome).to be_a(described_class::Outcome)
         expect(outcome.action).to eq(action)
       end
+    end
+
+    it "pause! and cancel! carry their actor: and reason: for the audit trail" do
+      expect(in_step do
+        pause!(actor: "reviewer", reason: "fraud check")
+      end).to have_attributes(action: :pause, actor: "reviewer", reason: "fraud check")
+      expect(in_step { cancel!(reason: "duplicate order") }).to have_attributes(action: :cancel, actor: nil, reason: "duplicate order")
     end
 
     it "reattempt! carries its wait: in seconds" do

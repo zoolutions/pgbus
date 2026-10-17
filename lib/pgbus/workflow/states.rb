@@ -62,8 +62,9 @@ module Pgbus
                          effect: "resume! while the step that was running at the outside pause! is still running: " \
                                  "the run goes on performing it"),
           Transition.new(verb: :hold, from: %w[paused], to: "paused", outside: false, error: :InvalidTransition,
-                         effect: "an outcome that arrived after an outside pause!: recorded, the next step is " \
-                                 "scheduled, and the workflow stays paused")
+                         effect: "an outcome that arrived after an outside pause!: recorded on the step; a " \
+                                 "completed, skipped or reattempted step has its next row scheduled; the workflow " \
+                                 "stays paused")
         ].to_h { |transition| [transition.verb, transition] }
       )
 

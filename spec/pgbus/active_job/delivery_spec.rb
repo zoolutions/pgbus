@@ -17,6 +17,14 @@ RSpec.describe Pgbus::ActiveJob::Delivery do
       expect(described_class.current).to be_nil
     end
 
+    it "restores an outer delivery after a nested one, also when the inner block raises" do
+      described_class.with(msg_id: 1, read_ct: 1, queue_name: "outer") do
+        expect { described_class.with(msg_id: 2, read_ct: 3, queue_name: "inner") { raise ArgumentError } }.to raise_error(ArgumentError)
+
+        expect(described_class.current).to eq(msg_id: 1, read_ct: 1, queue_name: "outer")
+      end
+    end
+
     it "is fiber-local: concurrent Async tasks each see their own delivery" do
       seen = {}
       Sync do |task|

@@ -27,7 +27,10 @@ module Pgbus
         anchor = before || after
         if anchor
           index = position(anchor)
-          raise ArgumentError, "#{before ? "before_step" : "after_step"}: #{anchor.to_sym.inspect} — no step named #{anchor}" unless index
+          unless index
+            raise ArgumentError,
+                  "#{before ? "before_step" : "after_step"}: #{anchor.to_s.to_sym.inspect} — no step named #{anchor}"
+          end
 
           list.insert(before ? index : index + 1, definition)
         else

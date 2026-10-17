@@ -12,7 +12,7 @@ RSpec.describe Pgbus::Workflow::StepJob do
     Class.new(Pgbus::Workflow) do
       def self.name = "SpecStepWorkflow"
 
-      step(:charge) { calls << [:charge, Pgbus::Workflow::Current.step_name] }
+      step(:charge) { calls << [:charge, Pgbus::Workflow::StepContext.step_name] }
     end
   end
   let(:record) { double("WorkflowEntry", workflow_id: "wf-1", workflow_class: "SpecStepWorkflow", status: "ready") }
@@ -40,6 +40,7 @@ RSpec.describe Pgbus::Workflow::StepJob do
     allow(Pgbus::Deploy::Revision).to receive(:current).and_return("rev-1")
     allow(Pgbus::Workflow::StepOutcome).to receive(:apply) { |_record, _step, outcome, **options| applied << [outcome, options] }
     allow(Pgbus::Workflow::StepOutcome).to receive(:stall!)
+    allow(Pgbus::WorkflowStep).to receive(:where).with(id: 11, status: "in_progress").and_return(double(exists?: true))
   end
 
   it "runs perform(step_id) through a StepExecution" do
@@ -235,6 +236,33 @@ RSpec.describe Pgbus::Workflow::StepJob do
       expect(applied.first.last).to include(report: true)
     end
 
+    # A string class_eval scopes constants to the class, as an app's
+    # `class SignupWorkflow < Pgbus::Workflow` body does (a block would scope
+    # them to this spec): a constant named Current under Pgbus::Workflow
+    # would win the lookup there.
+    it "leaves a bare Current in a step body to the app's own constant" do
+      stub_const("Current", Module.new { def self.user = "alice" })
+      klass.class_eval("step(:current_user) { output(user: Current.user) }", __FILE__, __LINE__)
+      allow(step).to receive(:step_name).and_return("current_user")
+
+      perform
+
+      expect(applied.first.last[:output]).to include("user" => "alice")
+    end
+
+    it "does not run an imperative policy for an attempt that is no longer in progress" do
+      allow(Pgbus::WorkflowStep).to receive(:where).with(id: 11, status: "in_progress").and_return(double(exists?: false))
+      handled = []
+      klass.on_exception(RuntimeError) { |e| handled << e }
+      klass.step(:raises) { raise "late" }
+      allow(step).to receive(:step_name).and_return("raises")
+
+      perform
+
+      expect(handled).to be_empty
+      expect(applied.first.last).to include(error: an_instance_of(RuntimeError))
+    end
+
     it "decides an imperative policy before taking the run's lock again, so user code never holds it" do
       locks = 0
       allow(Pgbus::Workflow::Runner).to receive(:locked).with("wf-1") do |&block|
@@ -264,10 +292,10 @@ RSpec.describe Pgbus::Workflow::StepJob do
       expect(outcomes).to eq([:cancel])
     end
 
-    it "sets Pgbus::Workflow::Current inside the body and restores it, also when the body raises" do
+    it "sets Pgbus::Workflow::StepContext inside the body and restores it, also when the body raises" do
       seen = nil
       klass.step(:current) do
-        seen = [Pgbus::Workflow::Current.workflow_id, Pgbus::Workflow::Current.attempt]
+        seen = [Pgbus::Workflow::StepContext.workflow_id, Pgbus::Workflow::StepContext.attempt]
         raise "boom"
       end
       allow(step).to receive(:step_name).and_return("current")
@@ -275,7 +303,7 @@ RSpec.describe Pgbus::Workflow::StepJob do
       perform
 
       expect(seen).to eq(["wf-1", 1])
-      expect(Pgbus::Workflow::Current.context).to be_nil
+      expect(Pgbus::Workflow::StepContext.context).to be_nil
     end
   end
 

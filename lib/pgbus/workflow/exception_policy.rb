@@ -59,15 +59,16 @@ module Pgbus
         end
       end
 
-      def initialize(action = nil, matching: nil, wait: nil, max_reattempts: nil, terminal_action: :pause!, report: :always, &handler)
+      def initialize(action = nil, matching: nil, wait: nil, max_reattempts: nil, terminal_action: nil, report: :always, &handler)
         raise ArgumentError, "on_exception takes action: or a block, not both" if action && handler
         raise ArgumentError, "on_exception needs action: (#{ACTIONS.join(", ")}) or a block" unless action || handler
 
         @action = action && normalize_action(action, ACTIONS, "action")
+        reattempt_only!(wait: wait, terminal_action: terminal_action)
         @matching = normalize_matching(matching)
         @wait = StepDefinition.seconds(wait, "wait", positive: false)
         @max_reattempts = validate_max_reattempts(max_reattempts)
-        @terminal_action = normalize_action(terminal_action, TERMINAL_ACTIONS, "terminal_action")
+        @terminal_action = normalize_action(terminal_action || :pause!, TERMINAL_ACTIONS, "terminal_action")
         @report = validate_report(report)
         @handler = handler
         freeze
@@ -136,6 +137,16 @@ module Pgbus
 
           raise ArgumentError, "matching: takes exception classes or class names, got #{matcher.inspect}"
         end.freeze
+      end
+
+      # wait: and terminal_action: shape a reattempt!; anywhere else (another
+      # action, an imperative block, which passes its own wait) they would be
+      # silently ignored.
+      def reattempt_only!(**options)
+        given = options.compact.keys
+        return if given.empty? || action == :reattempt!
+
+        raise ArgumentError, "#{given.map { |key| "#{key}:" }.join(" and ")} only applies to action: :reattempt!"
       end
 
       def validate_max_reattempts(value)

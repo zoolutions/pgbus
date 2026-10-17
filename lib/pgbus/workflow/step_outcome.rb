@@ -77,8 +77,8 @@ module Pgbus
         when :reattempt
           Runner.schedule!(record, step.step_name, at: now + (outcome.wait || 0), actor: Runner::SYSTEM_ACTOR)
           Runner.transition!(record, paused ? :hold : :reattempt, current_step: step.step_name)
-        when :pause then pause(record, step, notes, captured: captured, paused: paused, now: now)
-        when :cancel then cancel(record, step, notes, now: now)
+        when :pause then pause(record, step, outcome, notes, captured: captured, paused: paused, now: now)
+        when :cancel then cancel(record, step, outcome, notes, now: now)
         end
       end
 
@@ -94,20 +94,21 @@ module Pgbus
       end
 
       # The run row keeps the error that paused it (cleared by resume!).
-      def pause(record, step, notes, captured:, paused:, now:)
+      def pause(record, step, outcome, notes, captured:, paused:, now:)
         run_error = captured ? captured.except(:error_causes) : {}
         return Runner.transition!(record, :hold, **run_error) if paused
 
         error_class = captured&.fetch(:error_class)
         Runner.transition!(record, :step_pause, paused_at: now, **run_error)
-        Runner.event!(record, "paused", actor: Runner::SYSTEM_ACTOR, step: step, details: { error_class: error_class }.compact)
+        Runner.event!(record, "paused", actor: outcome.actor || Runner::SYSTEM_ACTOR, reason: outcome.reason, step: step,
+                                        details: { error_class: error_class }.compact)
         notes.instrument("pgbus.workflow_paused", Runner.payload_for(record, step_name: step.step_name, error_class: error_class))
       end
 
-      def cancel(record, step, notes, now:)
+      def cancel(record, step, outcome, notes, now:)
         Runner.transition!(record, :step_cancel, cancelled_at: now)
         WorkflowStep.cancel_open!(record.workflow_id, now: now)
-        Runner.event!(record, "cancelled", actor: Runner::SYSTEM_ACTOR, step: step)
+        Runner.event!(record, "cancelled", actor: outcome.actor || Runner::SYSTEM_ACTOR, reason: outcome.reason, step: step)
         notes.instrument("pgbus.workflow_cancelled", Runner.payload_for(record, step_name: step.step_name))
       end
 

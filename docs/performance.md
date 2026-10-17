@@ -285,8 +285,8 @@ Ruby 3.4.2 + YJIT):
 
 | | Per step |
 |---|---|
-| Throughput | 75.3k i/s (13.3 µs) |
-| Allocated | ~79 objects, ~9 KB |
+| Throughput | 81.0k i/s (12.3 µs) |
+| Allocated | ~85 objects, ~9.7 KB |
 | Retained | 0 objects (4 across 1 000 steps: one-time memos) |
 
 Method-level, not system-level: a step that does nothing still pays several

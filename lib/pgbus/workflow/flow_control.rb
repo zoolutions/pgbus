@@ -12,11 +12,14 @@ module Pgbus
       ACTIONS = %i[complete reattempt pause cancel skip finish].freeze
 
       # What a step attempt ended with. +wait+ is the reattempt delay in
-      # seconds (nil = now).
-      Outcome = Data.define(:action, :wait) do
+      # seconds (nil = now); +actor+ and +reason+ are what a step's own
+      # pause!/cancel! passed, for the audit trail.
+      Outcome = Data.define(:action, :wait, :actor, :reason) do
+        def initialize(action:, wait: nil, actor: nil, reason: nil) = super
+
         def self.complete = new(action: :complete, wait: nil)
-        def self.pause = new(action: :pause, wait: nil)
-        def self.cancel = new(action: :cancel, wait: nil)
+        def self.pause(actor: nil, reason: nil) = new(action: :pause, actor: actor, reason: reason)
+        def self.cancel(actor: nil, reason: nil) = new(action: :cancel, actor: actor, reason: reason)
         def self.skip = new(action: :skip, wait: nil)
         def self.finish = new(action: :finish, wait: nil)
         def self.reattempt(wait: nil) = new(action: :reattempt, wait: StepDefinition.seconds(wait, "wait", positive: false))
@@ -39,7 +42,7 @@ module Pgbus
       # Inside a step: end it here, completed, with the workflow paused.
       # Outside: pause the run (ready, performing or waiting → paused).
       def pause!(actor: nil, reason: nil)
-        return throw_outcome(Outcome.pause) if in_step?
+        return throw_outcome(Outcome.pause(actor: actor, reason: reason)) if in_step?
 
         apply_outside_verb(:pause, actor: actor, reason: reason)
       end
@@ -47,7 +50,7 @@ module Pgbus
       # Inside a step: end it here and cancel the workflow.
       # Outside: cancel the run from any ongoing state.
       def cancel!(actor: nil, reason: nil)
-        return throw_outcome(Outcome.cancel) if in_step?
+        return throw_outcome(Outcome.cancel(actor: actor, reason: reason)) if in_step?
 
         apply_outside_verb(:cancel, actor: actor, reason: reason)
       end

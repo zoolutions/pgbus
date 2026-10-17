@@ -150,12 +150,21 @@ module Pgbus
       end
 
       # A new attempt row of +step_name+ (its after-commit callback sends the
-      # StepJob), with its step_scheduled event.
+      # StepJob), with its step_scheduled event. A job_options wait:/wait_until:
+      # (class or step) is folded into scheduled_at here, once, so the sweep
+      # does not take a deliberately delayed step for a lost one and
+      # run_now!/reschedule! move the one time that counts.
       def schedule!(record, step_name, at:, actor:) # rubocop:disable Naming/MethodParameterName
+        at = job_delay_floor(record, step_name, at)
         step = WorkflowStep.insert_next!(workflow_id: record.workflow_id, workflow_class: record.workflow_class,
                                          step_name: step_name, scheduled_at: at)
         event!(record, "step_scheduled", actor: actor, step: step, details: { scheduled_at: at.utc.iso8601(3) })
         step
+      end
+
+      def job_delay_floor(record, step_name, at) # rubocop:disable Naming/MethodParameterName
+        options = record.workflow_klass&.step_job_options_for(step_name) || {}
+        [at, options[:wait] && (Time.current + options[:wait]), options[:wait_until]].compact.max
       end
 
       # "hostname:pid", stamped on every attempt a worker claims.

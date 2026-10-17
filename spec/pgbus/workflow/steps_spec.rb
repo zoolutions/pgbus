@@ -165,6 +165,26 @@ RSpec.describe "Pgbus::Workflow step declarations" do # rubocop:disable RSpec/De
         .to eq(wait_until: at)
     end
 
+    it "rejects a blank queue and a non-Integer priority in job_options:" do
+      [nil, "", "  "].each do |bad|
+        expect { workflow_class { step(:a, job_options: { queue: bad }) { nil } } }
+          .to raise_error(ArgumentError, /queue must be a queue name/), "for #{bad.inspect}"
+      end
+      expect { workflow_class { step(:a, job_options: { priority: "high" }) { nil } } }
+        .to raise_error(ArgumentError, /priority must be an Integer/)
+    end
+
+    it "rejects an infinite or NaN wait:/timeout: with ArgumentError" do
+      [Float::INFINITY, Float::NAN].each do |bad|
+        expect { workflow_class { step(:a, timeout: bad) { nil } } }.to raise_error(ArgumentError, /timeout:/)
+        expect { workflow_class { step(:a, wait: bad) { nil } } }.to raise_error(ArgumentError, /wait:/)
+      end
+    end
+
+    it "raises ArgumentError for a before_step: that is not a name" do
+      expect { workflow_class { step(:a, before_step: 1) { nil } } }.to raise_error(ArgumentError, /before_step: :"1"/)
+    end
+
     it "rejects an unknown job_options: key" do
       expect { workflow_class { step(:a, job_options: { retry: 3 }) { nil } } }
         .to raise_error(ArgumentError, /job_options: :retry.*queue, :priority, :wait, :wait_until/)
@@ -246,12 +266,15 @@ RSpec.describe "Pgbus::Workflow step declarations" do # rubocop:disable RSpec/De
       expect(Pgbus::Workflow.registered_classes).to contain_exactly(first, second)
     end
 
-    it "keeps the latest class when a name is defined again (code reloading)" do
+    it "keeps the latest class when a name is defined again (code reloading), and drops the old one" do
       Pgbus::Workflow::Registry.reset!
-      workflow_class("ReloadedWorkflow")
+      old = workflow_class("ReloadedWorkflow")
+      Pgbus::Workflow::Registry.register(old)
       reloaded = workflow_class("ReloadedWorkflow")
+      Pgbus::Workflow::Registry.register(reloaded)
 
       expect(Pgbus::Workflow.registered_classes).to eq([reloaded])
+      expect(Pgbus::Workflow::Registry.instance_variable_get(:@classes).count { |k| k.name == "ReloadedWorkflow" }).to eq(1)
     end
 
     it "loses no class when two threads define classes at once", :first_call_race do

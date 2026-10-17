@@ -40,8 +40,12 @@ module Pgbus
 
         private
 
+        # A class registered again by name (code reloading) replaces the old
+        # one, so reloads do not accumulate. Anonymous classes are kept until
+        # they get a name; classes lists them then.
         def merged(list, klass)
-          (list.reject { |existing| existing.equal?(klass) } << klass).freeze
+          name = klass.name
+          (list.reject { |existing| existing.equal?(klass) || (name && existing.name == name) } << klass).freeze
         end
       end
     end

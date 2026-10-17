@@ -108,15 +108,14 @@ module Pgbus
                                 workflow_id: workflow_id, step_name: step_name, attempt: attempt })
     end
 
-    # queue/priority from the class and the step (step wins), sent no
-    # earlier than scheduled_at nor than a job_options wait/wait_until.
+    # queue/priority from the class and the step (step wins), sent at
+    # scheduled_at (which already holds any job_options wait/wait_until, see
+    # Workflow::Runner.schedule!).
     def step_job_set_options
       klass = workflow_class.safe_constantize
       options = klass.is_a?(Class) && klass < Workflow ? klass.step_job_options_for(step_name) : {}
-      now = Time.current
-      deliver_at = [scheduled_at, options[:wait] && (now + options[:wait]), options[:wait_until]].compact.max
       set = { queue: options[:queue] || Pgbus.configuration.workflow_queue, priority: options[:priority] }
-      set[:wait_until] = deliver_at if deliver_at > now
+      set[:wait_until] = scheduled_at if scheduled_at > Time.current
       set.compact
     end
   end

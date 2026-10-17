@@ -83,6 +83,15 @@ RSpec.describe Pgbus::Workflow::Sweep, :integration do
       expect(queue_depth).to eq(1)
     end
 
+    it "does not take a step delayed by job_options wait: for a lost one" do
+      stub_const("DelayedWorkflow", Class.new(Pgbus::Workflow) { step(:later, job_options: { wait: 3 * 3600 }) { nil } })
+      wf = DelayedWorkflow.start!
+      expect(steps_of(wf).first.scheduled_at).to be > 2.hours.from_now
+
+      steps_of(wf).first.update_columns(enqueued_at: 2.hours.ago)
+      expect(described_class.repair(config: config)).to include(resent: 0)
+    end
+
     it "leaves the scheduled step of a paused run alone" do
       wf = SweptWorkflow.start!
       wf.pause!

@@ -8,6 +8,8 @@ require "active_support/core_ext/numeric/time"
 # their guards, the audit trail. spec/integration/workflow/verbs_spec.rb runs
 # the same against a real database.
 RSpec.describe Pgbus::Workflow do
+  after { Pgbus::Workflow::Registry.reset! }
+
   let(:klass) do
     Class.new(described_class) do
       def self.name = "SpecOrderWorkflow"
@@ -90,6 +92,15 @@ RSpec.describe Pgbus::Workflow do
     it "rejects a class with no steps or no name" do
       expect { Class.new(described_class) { def self.name = "EmptyWorkflow" }.start! }.to raise_error(ArgumentError, /declares no steps/)
       expect { Class.new(described_class) { step(:a) { nil } }.start! }.to raise_error(ArgumentError, /anonymous/)
+    end
+
+    it "folds a class or step job_options wait into the first step's scheduled_at" do
+      klass.set_step_job_options(wait: 600)
+
+      klass.start!
+
+      expect(Pgbus::WorkflowStep).to have_received(:insert_next!)
+        .with(hash_including(step_name: "charge", scheduled_at: be_within(5).of(600.seconds.from_now)))
     end
 
     it "rejects a subject that has no GlobalID" do
@@ -212,6 +223,7 @@ RSpec.describe Pgbus::Workflow do
       workflow.reschedule!(at: later, reason: "after the deploy")
 
       expect(events.map { |e| e[:event] }).to eq(%w[run_now rescheduled])
+      expect { workflow.reschedule!(at: "tomorrow-ish") }.to raise_error(ArgumentError, /takes a Time/)
       expect(scheduled).to have_received(:update!).with(scheduled_at: later, enqueued_at: a_kind_of(Time))
     end
   end
@@ -221,7 +233,7 @@ RSpec.describe Pgbus::Workflow do
 
     it "keeps step_idempotency_key per step and varies attempt_idempotency_key per attempt" do
       keys = [1, 2].map do |attempt|
-        workflow.send(:enter_step, described_class::Instance::StepContext.new(step_id: attempt, step_name: "charge", attempt: attempt))
+        workflow.send(:enter_step, described_class::StepContext::Attempt.new(step_id: attempt, step_name: "charge", attempt: attempt))
         [workflow.step_idempotency_key, workflow.attempt_idempotency_key]
       end
 

@@ -33,8 +33,8 @@ module Pgbus
         step = WorkflowStep.find_by(id: @step_id)
         return debug("step #{@step_id} no longer exists (its run was deleted)") unless step
 
-        Current.with(workflow_id: step.workflow_id, workflow_class: step.workflow_class, step_name: step.step_name,
-                     attempt: step.attempt) do
+        StepContext.with(workflow_id: step.workflow_id, workflow_class: step.workflow_class, step_name: step.step_name,
+                         attempt: step.attempt) do
           claim = claim(step)
           run(claim) if claim
         end
@@ -110,7 +110,7 @@ module Pgbus
         end
 
         workflow = klass.new(record)
-        workflow.send(:enter_step, Instance::StepContext.new(step_id: step.id, step_name: step.step_name, attempt: step.attempt))
+        workflow.send(:enter_step, StepContext::Attempt.new(step_id: step.id, step_name: step.step_name, attempt: step.attempt))
         claim = Claim.new(record: record, step: step, klass: klass, definition: definition, workflow: workflow, guard_error: nil)
         begin
           verdict = workflow.send(:guarding) do
@@ -162,9 +162,13 @@ module Pgbus
       # The exception policy is decided before the run's lock is taken
       # again: an imperative on_exception block is app code, and must not
       # hold the row lock (and an open transaction) while it runs.
+      # An attempt whose row is no longer in_progress (declared stalled, or
+      # the run cancelled) is late: its outcome is ignored either way, so its
+      # imperative on_exception block must not run (and cause side effects)
+      # for it. The check is outside the lock; the guarded finish! is final.
       def finish(claim, outcome, error, duration)
-        decision = error && decide(claim, error)
-        outcome = decision.outcome if decision
+        decision = error && attempt_active?(claim) ? decide(claim, error) : nil
+        outcome = decision ? decision.outcome : (outcome || FlowControl::Outcome.pause)
         Runner.locked(claim.record.workflow_id) do |record, notes|
           next debug("step #{claim.step.id}'s run was deleted while the step ran") unless record
 
@@ -174,6 +178,8 @@ module Pgbus
                                                          klass: claim.klass)
         end
       end
+
+      def attempt_active?(claim) = WorkflowStep.where(id: claim.step.id, status: "in_progress").exists?
 
       def decide(claim, error)
         policy = ExceptionPolicy.resolve(error, step_policies: claim.definition.exception_policies,
@@ -189,7 +195,7 @@ module Pgbus
       end
 
       def debug(message)
-        Pgbus.logger.debug { "[Pgbus::Workflow] #{message} #{Current.log_tag}".rstrip }
+        Pgbus.logger.debug { "[Pgbus::Workflow] #{message} #{StepContext.log_tag}".rstrip }
         nil
       end
     end

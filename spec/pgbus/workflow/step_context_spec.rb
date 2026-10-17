@@ -3,7 +3,7 @@
 require "spec_helper"
 require "async"
 
-RSpec.describe Pgbus::Workflow::Current do
+RSpec.describe Pgbus::Workflow::StepContext do
   let(:context) { { workflow_id: "wf-1", workflow_class: "SignupWorkflow", step_name: "welcome", attempt: 2 } }
 
   it "is empty outside a step" do

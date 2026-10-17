@@ -29,7 +29,14 @@ module Pgbus
 
       def self.job_option_value(key, value)
         case key
-        when :queue then -value.to_s
+        when :queue
+          raise ArgumentError, "job_options: queue must be a queue name, got #{value.inspect}" if value.to_s.strip.empty?
+
+          -value.to_s
+        when :priority
+          return value if value.is_a?(Integer)
+
+          raise ArgumentError, "job_options: priority must be an Integer, got #{value.inspect}"
         when :wait then seconds(value, "job_options: wait", positive: false)
         when :wait_until
           # Time, DateTime and TimeWithZone; not a String, which ActiveSupport
@@ -47,7 +54,7 @@ module Pgbus
         return nil if value.nil?
 
         seconds = duration?(value) ? value.to_f : value
-        unless seconds.is_a?(Numeric) && seconds.real? && (positive ? seconds.positive? : !seconds.negative?)
+        unless seconds.is_a?(Numeric) && seconds.real? && seconds.finite? && (positive ? seconds.positive? : !seconds.negative?)
           requirement = positive ? "a positive" : "a non-negative"
           raise ArgumentError, "#{option}: must be #{requirement} number of seconds or a Duration, got #{value.inspect}"
         end
