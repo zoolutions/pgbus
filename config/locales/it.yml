@@ -1069,8 +1069,8 @@ it:
       not_loaded_hint: 'Questa classe non si carica più nell''app: i suoi passi vengono dalle righe delle sue esecuzioni, nell''ordine in cui le esecuzioni li hanno raggiunti.'
       percentile: "%{name} %{value}"
       removed_in_flight:
-        one: "%{count} esecuzione su un passo rimosso"
-        other: "%{count} esecuzioni su passi rimossi"
+        one: "%{count} esecuzione sul passo rimosso %{step}"
+        other: "%{count} esecuzioni sul passo rimosso %{step}"
       show:
         by_revision:
           all_steps: Tutti i passi
@@ -1223,6 +1223,7 @@ it:
           seen: Visto
           workflow: Workflow
         last_seen_html: ultima volta %{time}
+        only_class_html: Solo %{workflow}.
         reasons:
           overdue: 'In ritardo: prevista, ma non presa'
           paused_error: In pausa per un errore
@@ -1232,6 +1233,7 @@ it:
         resume_all:
           one: Riprendi %{count}
           other: Riprendi tutte (%{count})
+        show_all: Mostra tutte le classi
         show_runs: Mostra esecuzioni
         title: Richiedono attenzione
       audit:

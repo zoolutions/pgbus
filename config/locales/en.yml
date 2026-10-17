@@ -1069,8 +1069,8 @@ en:
       not_loaded_hint: 'This class does not load in this app any more: its steps come from its runs'' rows, in the order the runs reached them.'
       percentile: "%{name} %{value}"
       removed_in_flight:
-        one: "%{count} run on a removed step"
-        other: "%{count} runs on removed steps"
+        one: "%{count} run on removed step %{step}"
+        other: "%{count} runs on removed step %{step}"
       show:
         by_revision:
           all_steps: All steps
@@ -1223,6 +1223,7 @@ en:
           seen: Seen
           workflow: Workflow
         last_seen_html: last %{time}
+        only_class_html: "%{workflow} only."
         reasons:
           overdue: 'Overdue: due, but not picked up'
           paused_error: Paused on an error
@@ -1232,6 +1233,7 @@ en:
         resume_all:
           one: Resume all %{count}
           other: Resume all %{count}
+        show_all: Show every class
         show_runs: Show runs
         title: Needs attention
       audit:

@@ -566,14 +566,17 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
         marked). The window is 1 h, 24 h (default), 7 d or 30 d, capped at
         `workflow_retention`. Every count of runs links to the Workflows
         list filtered to those runs; that list gained `ended_from`/`ended_to`
-        (when a run finished or was cancelled) for it.
+        (when a run finished or was cancelled) for it, and the need-attention
+        counts open Needs attention narrowed to the class
+        (`/pgbus/workflows/attention?workflow_class=OrderWorkflow`).
 
         The numbers come from the step and run rows, on the indexes the
         tables already have: on about 1 M step rows over 20 classes a class's
-        page reads in about 25 ms and the list in about 100 ms
-        (`rake bench:workflow_insights`). The read-only MCP server has the same:
+        page reads in about 25 ms and the list in about 100 ms over 24 hours,
+        both under 300 ms over 30 days (`rake bench:workflow_insights`). The read-only MCP server has the same:
         `pgbus_workflow_definitions(window:)` and
-        `pgbus_workflow_stats(workflow_class:, window:)`.
+        `pgbus_workflow_stats(workflow_class:, window:)`, and
+        `pgbus_workflows_attention` takes `workflow_class:`.
 
         **Alerts** belong in Prometheus or AppSignal, on the metrics below.
         Two starting points: a step whose attempts end in a reattempt or a

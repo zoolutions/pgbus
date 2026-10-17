@@ -1069,8 +1069,8 @@ da:
       not_loaded_hint: 'Klassen indlæses ikke længere i appen: trinene kommer fra kørslernes rækker, i den rækkefølge kørslerne nåede dem.'
       percentile: "%{name} %{value}"
       removed_in_flight:
-        one: "%{count} kørsel på et fjernet trin"
-        other: "%{count} kørsler på fjernede trin"
+        one: "%{count} kørsel på fjernet trin %{step}"
+        other: "%{count} kørsler på fjernet trin %{step}"
       show:
         by_revision:
           all_steps: Alle trin
@@ -1223,6 +1223,7 @@ da:
           seen: Set
           workflow: Workflow
         last_seen_html: senest %{time}
+        only_class_html: Kun %{workflow}.
         reasons:
           overdue: 'Forsinket: forfalden, men ikke hentet'
           paused_error: På pause pga. en fejl
@@ -1232,6 +1233,7 @@ da:
         resume_all:
           one: Genoptag alle %{count}
           other: Genoptag alle %{count}
+        show_all: Vis alle klasser
         show_runs: Vis kørsler
         title: Kræver opmærksomhed
       audit:

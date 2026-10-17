@@ -1069,8 +1069,8 @@ ja:
       not_loaded_hint: 'このクラスはアプリで読み込まれなくなりました: ステップは実行の行から取得し、実行が到達した順に並べています。'
       percentile: "%{name} %{value}"
       removed_in_flight:
-        one: 削除済みステップ上の実行 %{count}件
-        other: 削除済みステップ上の実行 %{count}件
+        one: 削除済みステップ %{step} 上の実行 %{count}件
+        other: 削除済みステップ %{step} 上の実行 %{count}件
       show:
         by_revision:
           all_steps: すべてのステップ
@@ -1223,6 +1223,7 @@ ja:
           seen: 検出
           workflow: ワークフロー
         last_seen_html: 最終 %{time}
+        only_class_html: "%{workflow} のみ。"
         reasons:
           overdue: '期限超過: 期限は到来したが未取得'
           paused_error: エラーで一時停止
@@ -1232,6 +1233,7 @@ ja:
         resume_all:
           one: "%{count} 件すべて再開"
           other: "%{count} 件すべて再開"
+        show_all: すべてのクラスを表示
         show_runs: 実行を表示
         title: 要対応
       audit:

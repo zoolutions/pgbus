@@ -1069,8 +1069,8 @@ de:
       not_loaded_hint: 'Diese Klasse lädt in der App nicht mehr: Die Schritte stammen aus den Zeilen ihrer Läufe, in der Reihenfolge, in der die Läufe sie erreicht haben.'
       percentile: "%{name} %{value}"
       removed_in_flight:
-        one: "%{count} Lauf auf einem entfernten Schritt"
-        other: "%{count} Läufe auf entfernten Schritten"
+        one: "%{count} Lauf auf dem entfernten Schritt %{step}"
+        other: "%{count} Läufe auf dem entfernten Schritt %{step}"
       show:
         by_revision:
           all_steps: Alle Schritte
@@ -1223,6 +1223,7 @@ de:
           seen: Gesehen
           workflow: Workflow
         last_seen_html: zuletzt %{time}
+        only_class_html: Nur %{workflow}.
         reasons:
           overdue: 'Überfällig: fällig, aber nicht abgeholt'
           paused_error: Wegen eines Fehlers pausiert
@@ -1232,6 +1233,7 @@ de:
         resume_all:
           one: Alle %{count} fortsetzen
           other: Alle %{count} fortsetzen
+        show_all: Alle Klassen anzeigen
         show_runs: Läufe anzeigen
         title: Braucht Aufmerksamkeit
       audit:

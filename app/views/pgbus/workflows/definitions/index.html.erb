@@ -34,7 +34,7 @@
             <div><%= pgbus_link_to name, pgbus_insight_definition_path(name, @window), class: "font-mono" %></div>
             <div class="mt-1 flex flex-wrap gap-1">
               <%= pgbus_insight_not_loaded_badge unless row[:loaded] %>
-              <%= pgbus_insight_removed_badge(row[:removed_in_flight]) %>
+              <%= pgbus_insight_removed_links(name, row[:removed_in_flight]) %>
             </div>
           </td>
           <td data-label="<%= t("pgbus.workflow_insights.index.headers.ongoing") %>" class="px-4 py-3 text-sm text-right font-mono text-gray-700 dark:text-gray-300">
@@ -44,7 +44,7 @@
             <%= pgbus_insight_count(row[:paused], pgbus_insight_runs_path(status: "paused", workflow_class: name), t("pgbus.workflow_insights.links.paused", workflow: name)) %>
           </td>
           <td data-label="<%= t("pgbus.workflow_insights.index.headers.attention") %>" class="px-4 py-3 text-sm text-right font-mono text-gray-700 dark:text-gray-300">
-            <%= pgbus_insight_count(row[:attention], pgbus.attention_workflows_path, t("pgbus.workflow_insights.links.attention", workflow: name)) %>
+            <%= pgbus_insight_count(row[:attention], pgbus.attention_workflows_path(workflow_class: name), t("pgbus.workflow_insights.links.attention", workflow: name)) %>
           </td>
           <td data-label="<%= t("pgbus.workflow_insights.index.headers.finished") %>" class="px-4 py-3 text-sm text-right font-mono text-gray-700 dark:text-gray-300">
             <%= pgbus_insight_count(row[:finished], pgbus_insight_runs_path(status: "finished", workflow_class: name, ended_from: since), t("pgbus.workflow_insights.links.finished", workflow: name)) %>

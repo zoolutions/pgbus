@@ -12,7 +12,7 @@
     <p class="mt-1 text-sm text-gray-600 dark:text-gray-300"><%= t("pgbus.workflow_insights.show.description", window: pgbus_insight_window_name(@window)) %></p>
     <div class="mt-2 flex flex-wrap gap-1">
       <%= pgbus_insight_not_loaded_badge unless definition[:loaded] %>
-      <%= pgbus_insight_removed_badge(definition[:removed_in_flight]) %>
+      <%= pgbus_insight_removed_links(name, definition[:removed_in_flight]) %>
     </div>
     <% unless definition[:loaded] %>
       <p class="mt-2 max-w-2xl text-sm text-gray-600 dark:text-gray-300"><%= t("pgbus.workflow_insights.not_loaded_hint") %></p>
@@ -27,7 +27,7 @@
        finished: pgbus_insight_count(definition[:finished], pgbus_insight_runs_path(status: "finished", workflow_class: name, ended_from: since), t("pgbus.workflow_insights.links.finished", workflow: name), size: :lg),
        cancelled: pgbus_insight_count(definition[:cancelled], pgbus_insight_runs_path(status: "cancelled", workflow_class: name, ended_from: since), t("pgbus.workflow_insights.links.cancelled", workflow: name), size: :lg),
        ongoing: pgbus_insight_count(definition[:ongoing], pgbus_insight_runs_path(workflow_class: name), t("pgbus.workflow_insights.links.ongoing", workflow: name), size: :lg),
-       attention: pgbus_insight_count(definition[:attention], pgbus.attention_workflows_path, t("pgbus.workflow_insights.links.attention", workflow: name), size: :lg)
+       attention: pgbus_insight_count(definition[:attention], pgbus.attention_workflows_path(workflow_class: name), t("pgbus.workflow_insights.links.attention", workflow: name), size: :lg)
      } %>
   <% summary.each do |key, value| %>
     <dl class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">

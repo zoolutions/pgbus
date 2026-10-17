@@ -1269,7 +1269,7 @@ All tools are read-only — no tool mutates state, and there is no raw-SQL passt
 | `pgbus_throughput` / `pgbus_stats` | Recent throughput time series and status counts. |
 | `pgbus_deploy_tasks` | Deploy tasks, their state and the rollover status (read-only). |
 | `pgbus_workflows` / `pgbus_workflow` | Workflow runs with the dashboard's filters (paginated, `total` capped at 10,000), and one run's attempts, durations, signals, audit trail and `available_actions`. Arguments, outputs, signal payloads and error text are redacted unless payloads are allowed and `include_payloads` is set. |
-| `pgbus_workflows_attention` | Stuck workflow runs grouped by class, step, reason and error class, with counts and first/last seen. |
+| `pgbus_workflows_attention` | Stuck workflow runs grouped by class, step, reason and error class, with counts and first/last seen (`workflow_class` narrows them to one class). |
 | `pgbus_workflow_definitions` / `pgbus_workflow_stats` | One row per workflow class over a `window` (1h, 24h, 7d, 30d), and one class's pipeline (runs at each step now, run-time and pickup percentiles, failure/reattempt/skip rates), throughput, durations, funnel and per-revision numbers. |
 | `pgbus_recurring` | Recurring task schedule + last/next run times. All tasks unless `page` / `per_page` is given (then `total` is capped at 10,000); returns `total`, `has_more`. |
 

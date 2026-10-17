@@ -1069,8 +1069,8 @@ fr:
       not_loaded_hint: 'Cette classe ne se charge plus dans l''application : ses étapes viennent des lignes de ses exécutions, dans l''ordre où les exécutions les ont atteintes.'
       percentile: "%{name} %{value}"
       removed_in_flight:
-        one: "%{count} exécution sur une étape supprimée"
-        other: "%{count} exécutions sur des étapes supprimées"
+        one: "%{count} exécution sur l'étape supprimée %{step}"
+        other: "%{count} exécutions sur l'étape supprimée %{step}"
       show:
         by_revision:
           all_steps: Toutes les étapes
@@ -1223,6 +1223,7 @@ fr:
           seen: Vu
           workflow: Workflow
         last_seen_html: dernière fois %{time}
+        only_class_html: "%{workflow} uniquement."
         reasons:
           overdue: 'En retard : dû, mais pas pris en charge'
           paused_error: En pause sur une erreur
@@ -1232,6 +1233,7 @@ fr:
         resume_all:
           one: Reprendre %{count}
           other: Tout reprendre (%{count})
+        show_all: Afficher toutes les classes
         show_runs: Afficher les exécutions
         title: À traiter
       audit:

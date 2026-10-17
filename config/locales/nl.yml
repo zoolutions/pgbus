@@ -1069,8 +1069,8 @@ nl:
       not_loaded_hint: 'Deze klasse laadt niet meer in de app: de stappen komen uit de rijen van de runs, in de volgorde waarin de runs ze bereikten.'
       percentile: "%{name} %{value}"
       removed_in_flight:
-        one: "%{count} run op een verwijderde stap"
-        other: "%{count} runs op verwijderde stappen"
+        one: "%{count} run op verwijderde stap %{step}"
+        other: "%{count} runs op verwijderde stap %{step}"
       show:
         by_revision:
           all_steps: Alle stappen
@@ -1223,6 +1223,7 @@ nl:
           seen: Gezien
           workflow: Workflow
         last_seen_html: laatste %{time}
+        only_class_html: Alleen %{workflow}.
         reasons:
           overdue: 'Achterstallig: aan de beurt, maar niet opgepakt'
           paused_error: Gepauzeerd door een fout
@@ -1232,6 +1233,7 @@ nl:
         resume_all:
           one: Hervat alles (%{count})
           other: Hervat alles (%{count})
+        show_all: Alle klassen tonen
         show_runs: Runs tonen
         title: Aandacht nodig
       audit:

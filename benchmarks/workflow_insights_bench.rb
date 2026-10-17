@@ -176,6 +176,15 @@ begin
                 name == :definition ? "workflow_definition(24h)" : "workflow_definitions(24h)", median, max,
                 BUDGETS_MS.fetch(name), verdict)
   end
+
+  # The widest window, reported only: the budgets are for the default 24 h.
+  month = Pgbus::Web::WorkflowWindow.parse("30d", retention: nil)
+  { "workflow_definition(30d)" => -> { data_source.workflow_definition("BenchWorkflow7", window: month) },
+    "workflow_definitions(30d)" => -> { data_source.workflow_definitions(window: month) } }.each do |label, read|
+    read.call
+    median, max = median_and_max_ms(&read)
+    puts format("  %-34s median %7.1f ms  max %7.1f ms  (report only)", label, median, max)
+  end
 ensure
   clean!
 end

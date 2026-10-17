@@ -66,11 +66,13 @@ module Pgbus
         end
 
         # The stuck runs grouped by (class, step, reason, error class), each
-        # with the status its runs are in and the actions that status allows.
-        def workflow_attention_groups
+        # with the status its runs are in and the actions that status allows;
+        # with +workflow_class+, that class's groups only (issue #549).
+        def workflow_attention_groups(workflow_class: nil)
           return [] unless Workflow::Sweep.tables_ready?
 
-          WorkflowEntry.attention_groups(**attention_thresholds, limit: ATTENTION_GROUPS).map do |group|
+          groups = WorkflowEntry.attention_groups(**attention_thresholds, limit: ATTENTION_GROUPS, workflow_class: workflow_class)
+          groups.map do |group|
             status = WorkflowActionPlan.group_status(group[:reason])
             group.merge(status: status, available_actions: Workflow::States.available_actions(status))
           end

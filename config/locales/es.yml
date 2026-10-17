@@ -1069,8 +1069,8 @@ es:
       not_loaded_hint: 'Esta clase ya no se carga en la aplicación: sus pasos vienen de las filas de sus ejecuciones, en el orden en que las ejecuciones los alcanzaron.'
       percentile: "%{name} %{value}"
       removed_in_flight:
-        one: "%{count} ejecución en un paso eliminado"
-        other: "%{count} ejecuciones en pasos eliminados"
+        one: "%{count} ejecución en el paso eliminado %{step}"
+        other: "%{count} ejecuciones en el paso eliminado %{step}"
       show:
         by_revision:
           all_steps: Todos los pasos
@@ -1223,6 +1223,7 @@ es:
           seen: Visto
           workflow: Workflow
         last_seen_html: última vez %{time}
+        only_class_html: Solo %{workflow}.
         reasons:
           overdue: 'Atrasada: vencida, pero sin tomar'
           paused_error: En pausa por un error
@@ -1232,6 +1233,7 @@ es:
         resume_all:
           one: Reanudar %{count}
           other: Reanudar todas (%{count})
+        show_all: Mostrar todas las clases
         show_runs: Mostrar ejecuciones
         title: Requieren atención
       audit:

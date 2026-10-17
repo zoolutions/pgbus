@@ -58,6 +58,16 @@ RSpec.describe Pgbus::Web::WorkflowInsightsReport do
     expect(buckets.find { |b| b[:from].to_i == busy }).to include(started: 2, finished: 1, cancelled: 0)
   end
 
+  it "starts day buckets at midnight in the zone's offset, not UTC's" do
+    window = Pgbus::Web::WorkflowWindow.parse("30d", retention: nil)
+    offset = 2 * 3600
+    buckets = described_class.detail("ReportSpecWorkflow", klass, window: window, since: window.since(now), now: now,
+                                                                  offset: offset, **inputs)[:throughput]
+
+    expect(buckets.map { |b| (b[:from].to_i + offset) % 86_400 }.uniq).to eq([0])
+    expect(buckets.last[:from]).to eq(Time.utc(2026, 10, 16, 22))
+  end
+
   it "labels the duration bins with their bounds" do
     bins = detail(histogram: { 0 => 2, 8 => 1 })[:duration_histogram]
 

@@ -64,7 +64,8 @@ module Pgbus
             ended: queries.ended(since: since, workflow_class: name).first,
             attention: attention_by_class(workflow_class: name).fetch(name, 0),
             stats: queries.step_stats(name, since: since), histogram: queries.duration_histogram(name, since: since),
-            throughput: queries.throughput(name, since: since, bucket: window.bucket_seconds),
+            throughput: queries.throughput(name, since: since, bucket: window.bucket_seconds, offset: now.utc_offset),
+            offset: now.utc_offset,
             reached: queries.funnel_reached(name, since: since), stopped: queries.funnel_stopped(name, since: since),
             revisions: queries.by_revision(name, since: since)
           )

@@ -1069,8 +1069,8 @@ nb:
       not_loaded_hint: 'Klassen lastes ikke lenger i appen: stegene kommer fra kjøringenes rader, i den rekkefølgen kjøringene nådde dem.'
       percentile: "%{name} %{value}"
       removed_in_flight:
-        one: "%{count} kjøring på et fjernet steg"
-        other: "%{count} kjøringer på fjernede steg"
+        one: "%{count} kjøring på fjernet steg %{step}"
+        other: "%{count} kjøringer på fjernet steg %{step}"
       show:
         by_revision:
           all_steps: Alle steg
@@ -1223,6 +1223,7 @@ nb:
           seen: Sett
           workflow: Arbeidsflyt
         last_seen_html: sist %{time}
+        only_class_html: Bare %{workflow}.
         reasons:
           overdue: 'Forsinket: forfalt, men ikke hentet'
           paused_error: På pause på grunn av en feil
@@ -1232,6 +1233,7 @@ nb:
         resume_all:
           one: Gjenoppta alle %{count}
           other: Gjenoppta alle %{count}
+        show_all: Vis alle klasser
         show_runs: Vis kjøringer
         title: Trenger oppmerksomhet
       audit:

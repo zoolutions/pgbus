@@ -41,8 +41,10 @@ module Pgbus
         def paused_workflows_count = @workflows_list.count { |w| w[:status] == "paused" }
         def workflow_attention_count = @workflow_attention_groups_list.sum { |g| g[:count] }
 
-        def workflow_attention_groups
-          @workflow_attention_groups_list.map do |group|
+        def workflow_attention_groups(workflow_class: nil)
+          groups = @workflow_attention_groups_list
+          groups = groups.select { |group| group[:workflow_class] == workflow_class } if workflow_class
+          groups.map do |group|
             status = Pgbus::Web::WorkflowActionPlan.group_status(group[:reason])
             group.merge(status: status, available_actions: Pgbus::Workflow::States.available_actions(status))
           end

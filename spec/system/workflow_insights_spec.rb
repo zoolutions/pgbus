@@ -36,11 +36,14 @@ RSpec.describe "Workflow insights", type: :system do
         expect(page).to have_link("1", href: runs_path(status: "paused", workflow_class: "OrderWorkflow"), match: :first)
         expect(page).to have_link("412", href: runs_path(ended_from: since, status: "finished", workflow_class: "OrderWorkflow"))
         expect(page).to have_link("9", href: runs_path(ended_from: since, status: "cancelled", workflow_class: "OrderWorkflow"))
-        expect(page).to have_link("1", href: "/pgbus/workflows/attention")
+        expect(page).to have_link("1", href: "/pgbus/workflows/attention?workflow_class=OrderWorkflow")
         expect(page).to have_text("48.2s")
         expect(page).to have_text("5m 12s")
       end
-      within(class_row("SignupWorkflow")) { expect(page).to have_text("2 runs on removed steps") }
+      within(class_row("SignupWorkflow")) do
+        expect(page).to have_link("2 runs on removed step nudge",
+                                  href: runs_path(step: "nudge", workflow_class: "SignupWorkflow"))
+      end
       within(class_row("Billing::InvoiceWorkflow")) { expect(page).to have_text("Definition not loaded") }
       expect(page).to have_link("OrderWorkflow", href: "/pgbus/workflows/definitions/OrderWorkflow?window=24h")
     end
@@ -130,7 +133,18 @@ RSpec.describe "Workflow insights", type: :system do
         expect(page).to have_text("Removed")
         expect(page).to have_link("2", href: runs_path(status: "performing", step: "nudge", workflow_class: "SignupWorkflow"))
       end
-      expect(page).to have_text("2 runs on removed steps")
+      expect(page).to have_link("2 runs on removed step nudge", href: runs_path(step: "nudge", workflow_class: "SignupWorkflow"))
+    end
+
+    it "links its need-attention count to that class's attention groups" do
+      visit "/pgbus/workflows/definitions/Billing::InvoiceWorkflow"
+
+      within("[data-testid=workflow-insights-summary]") do
+        find_link("2", href: "/pgbus/workflows/attention?workflow_class=Billing%3A%3AInvoiceWorkflow").click
+      end
+
+      expect(page).to have_css("h1", text: "Needs attention")
+      expect(page).to have_text("Billing::InvoiceWorkflow only")
     end
 
     it "builds the funnel: how many reached each step, and where the rest are now" do

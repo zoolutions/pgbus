@@ -79,11 +79,17 @@ module Pgbus
       pgbus_workflow_tone_badge(t("pgbus.workflow_insights.show.pipeline.kinds.#{key}"), KIND_TONES.fetch(key))
     end
 
-    def pgbus_insight_removed_badge(removed_in_flight)
-      runs = removed_in_flight.values.sum
-      return if runs.zero?
+    # "2 runs on removed step nudge", per gravestone some ongoing run still
+    # sits on, each linked to those runs.
+    def pgbus_insight_removed_links(name, removed_in_flight)
+      links = removed_in_flight.filter_map do |step, runs|
+        next if runs.zero?
 
-      pgbus_workflow_tone_badge(t("pgbus.workflow_insights.removed_in_flight", count: runs), :yellow)
+        label = t("pgbus.workflow_insights.removed_in_flight", count: runs, step: step)
+        path = pgbus_insight_runs_path(workflow_class: name, step: step)
+        pgbus_link_to(label, path, size: :sm, tone: :yellow, data: { turbo_frame: "_top" })
+      end
+      safe_join(links, " ")
     end
 
     def pgbus_insight_not_loaded_badge = pgbus_workflow_tone_badge(t("pgbus.workflow_insights.not_loaded"), :gray)

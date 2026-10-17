@@ -78,19 +78,21 @@ module Pgbus
     # biggest group first, at most +limit+ groups. first_seen_at/last_seen_at
     # bound when the group's runs got stuck (paused_at, the overdue step's
     # scheduled_at, or the waiting step's waiting_since); error_message is
-    # the newest one's.
-    def self.attention_groups(threshold:, now: Time.current, waiting_threshold: nil, limit: 200)
+    # the newest one's. With +workflow_class+, that class's groups only.
+    def self.attention_groups(threshold:, now: Time.current, waiting_threshold: nil, limit: 200, workflow_class: nil)
+      binds = stuck_binds(threshold, now, waiting_threshold)
+      class_bind = "$#{binds.size + 1}" if workflow_class
       sql = <<~SQL
         SELECT stuck.workflow_class, stuck.step_name, stuck.reason, stuck.error_class, COUNT(*) AS runs,
                MIN(stuck.since) AS first_seen_at, MAX(stuck.since) AS last_seen_at,
                (ARRAY_AGG(stuck.error_message ORDER BY stuck.since DESC NULLS LAST, stuck.id DESC))[1] AS error_message
-        FROM (#{stuck_runs_sql(waiting: !waiting_threshold.nil?)}) stuck
+        FROM (#{stuck_runs_sql(waiting: !waiting_threshold.nil?, class_bind: class_bind)}) stuck
         WHERE stuck.reason IS NOT NULL
         GROUP BY stuck.workflow_class, stuck.step_name, stuck.reason, stuck.error_class
         ORDER BY runs DESC, last_seen_at DESC NULLS LAST, stuck.workflow_class
         LIMIT #{Integer(limit)}
       SQL
-      result = connection.exec_query(sql, "WorkflowEntry Attention", stuck_binds(threshold, now, waiting_threshold))
+      result = connection.exec_query(sql, "WorkflowEntry Attention", binds + [workflow_class].compact)
       result.cast_values.map do |klass, step_name, reason, error_class, count, first_seen, last_seen, message|
         { workflow_class: klass, step_name: step_name, reason: reason, error_class: error_class, count: count.to_i,
           first_seen_at: first_seen, last_seen_at: last_seen, error_message: message }

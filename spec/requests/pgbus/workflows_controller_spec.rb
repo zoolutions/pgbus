@@ -83,6 +83,20 @@ RSpec.describe "Pgbus::WorkflowsController", type: :request do
       expect(response).to have_http_status(:ok)
       expect(response.body).to include("Needs attention", "Paused on an error", "Timeout::Error")
     end
+
+    it "narrows the groups to one workflow class (issue #549)" do
+      get "/pgbus/workflows/attention", params: { workflow_class: "ImportWorkflow" }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include("ImportWorkflow", "Show every class")
+      expect(response.body).not_to include("Timeout::Error")
+    end
+
+    it "answers 400 for a workflow_class that is not a class name" do
+      get "/pgbus/workflows/attention", params: { workflow_class: "Kernel.exit" }
+
+      expect(response).to have_http_status(:bad_request)
+    end
   end
 
   describe "GET /pgbus/workflows/:workflow_id" do

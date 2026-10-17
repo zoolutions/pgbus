@@ -1069,8 +1069,8 @@ fi:
       not_loaded_hint: 'Luokka ei enää lataudu sovelluksessa: vaiheet tulevat ajojen riveiltä siinä järjestyksessä, jossa ajot saavuttivat ne.'
       percentile: "%{name} %{value}"
       removed_in_flight:
-        one: "%{count} ajo poistetussa vaiheessa"
-        other: "%{count} ajoa poistetuissa vaiheissa"
+        one: "%{count} ajo poistetussa vaiheessa %{step}"
+        other: "%{count} ajoa poistetussa vaiheessa %{step}"
       show:
         by_revision:
           all_steps: Kaikki vaiheet
@@ -1223,6 +1223,7 @@ fi:
           seen: Nähty
           workflow: Työnkulku
         last_seen_html: viimeisin %{time}
+        only_class_html: Vain %{workflow}.
         reasons:
           overdue: 'Myöhässä: erääntynyt, mutta ei otettu'
           paused_error: Keskeytetty virheen vuoksi
@@ -1232,6 +1233,7 @@ fi:
         resume_all:
           one: Jatka kaikki %{count}
           other: Jatka kaikki %{count}
+        show_all: Näytä kaikki luokat
         show_runs: Näytä ajot
         title: Vaatii huomiota
       audit:

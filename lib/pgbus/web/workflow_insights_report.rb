@@ -30,14 +30,14 @@ module Pgbus
       end
 
       def detail(name, klass, window:, since:, now:, ongoing:, ended:, attention:, stats:, histogram:, throughput:, reached:,
-                 stopped:, revisions:)
+                 stopped:, revisions:, offset: 0)
         names = step_list(klass, stats, ongoing, reached, stopped)
         summary(name, klass, ongoing, ended, attention).merge(
           window: window.to_h.merge(since: since), bucket_seconds: window.bucket_seconds,
           started: stopped.values.sum, e2e_ms: ended ? ended[:e2e_ms] : empty_percentiles(%i[p50 p95 p99]),
           steps: names.map { |entry| step(entry, stats[entry[:name]], ongoing) },
           duration_histogram: duration_histogram(histogram),
-          throughput: throughput_buckets(throughput, since: since, now: now, bucket: window.bucket_seconds),
+          throughput: throughput_buckets(throughput, since: since, now: now, bucket: window.bucket_seconds, offset: offset),
           funnel: names.map { |entry| funnel_step(entry[:name], reached, stopped) },
           by_revision: by_revision(revisions, names.map { |entry| entry[:name] })
         )
@@ -98,12 +98,19 @@ module Pgbus
       end
 
       # Every bucket of the window, oldest first, empty ones as zeros.
-      def throughput_buckets(counts, since:, now:, bucket:)
-        first = (since.to_i / bucket) * bucket
-        (first..now.to_i).step(bucket).map do |start|
+      def throughput_buckets(counts, since:, now:, bucket:, offset: 0)
+        bucket_starts(since: since, now: now, bucket: bucket, offset: offset).map do |start|
           started, finished, cancelled = counts.fetch(start, [0, 0, 0])
           { from: Time.at(start).utc, started: started, finished: finished, cancelled: cancelled }
         end
+      end
+
+      # The epoch seconds each bucket from +since+ to +now+ starts at, at
+      # multiples of +bucket+ in a zone +offset+ seconds from UTC (what
+      # WorkflowInsightsQueries.throughput keys its rows by).
+      def bucket_starts(since:, now:, bucket:, offset: 0)
+        first = ((since.to_i + offset) / bucket * bucket) - offset
+        (first..now.to_i).step(bucket).to_a
       end
 
       def funnel_step(name, reached, stopped)

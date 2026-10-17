@@ -60,6 +60,15 @@ RSpec.describe "Workflow needs-attention groups", :integration do
       .to eq(%w[ManualWorkflow paused_manual] => 1)
   end
 
+  it "groups one class's stuck runs when asked (issue #549)" do
+    paused_on_error(1)
+    run_until(ManualWorkflow.start!)
+
+    groups = Pgbus::WorkflowEntry.attention_groups(threshold: threshold, workflow_class: "ManualWorkflow")
+
+    expect(groups.map { |g| g[:workflow_class] }).to eq(["ManualWorkflow"])
+  end
+
   it "bounds the number of groups" do
     paused_on_error(1)
     run_until(ManualWorkflow.start!)

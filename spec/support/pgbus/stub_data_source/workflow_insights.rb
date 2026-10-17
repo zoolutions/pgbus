@@ -22,11 +22,12 @@ module Pgbus
           sample = @workflow_insights_samples[workflow_class]
           return nil unless sample
 
-          now = Time.now
+          now = Time.current
           since = window.since(now)
           Pgbus::Web::WorkflowInsightsReport.detail(
             workflow_class, sample[:klass],
-            window: window, since: since, now: now, throughput: sample_throughput(sample, since, now, window.bucket_seconds),
+            window: window, since: since, now: now, offset: now.utc_offset,
+            throughput: sample_throughput(sample, since, now, window.bucket_seconds),
             **sample.slice(:ongoing, :ended, :attention, :stats, :histogram, :reached, :stopped, :revisions)
           )
         end
@@ -35,8 +36,8 @@ module Pgbus
 
         # A steady hourly rate with a daily swell, scaled to the bucket.
         def sample_throughput(sample, since, now, bucket)
-          first = (since.to_i / bucket) * bucket
-          (first..now.to_i).step(bucket).each_with_index.to_h do |start, i|
+          starts = Pgbus::Web::WorkflowInsightsReport.bucket_starts(since: since, now: now, bucket: bucket, offset: now.utc_offset)
+          starts.each_with_index.to_h do |start, i|
             started = (sample[:hourly] * bucket / 3600.0 * (0.6 + (0.4 * Math.sin(i / 3.0).abs))).round
             [start, [started, (started * 0.85).round, (started * 0.05).round]]
           end

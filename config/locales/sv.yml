@@ -1069,8 +1069,8 @@ sv:
       not_loaded_hint: 'Klassen laddas inte längre i appen: stegen kommer från körningarnas rader, i den ordning körningarna nådde dem.'
       percentile: "%{name} %{value}"
       removed_in_flight:
-        one: "%{count} körning på ett borttaget steg"
-        other: "%{count} körningar på borttagna steg"
+        one: "%{count} körning på borttaget steg %{step}"
+        other: "%{count} körningar på borttaget steg %{step}"
       show:
         by_revision:
           all_steps: Alla steg
@@ -1223,6 +1223,7 @@ sv:
           seen: Sedd
           workflow: Arbetsflöde
         last_seen_html: senast %{time}
+        only_class_html: Endast %{workflow}.
         reasons:
           overdue: 'Försenad: förfallen men inte hämtad'
           paused_error: Pausad på grund av ett fel
@@ -1232,6 +1233,7 @@ sv:
         resume_all:
           one: Återuppta alla %{count}
           other: Återuppta alla %{count}
+        show_all: Visa alla klasser
         show_runs: Visa körningar
         title: Behöver uppmärksamhet
       audit:

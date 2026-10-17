@@ -29,6 +29,7 @@
         "http://localhost:3003/pgbus/workflows",
         "http://localhost:3003/pgbus/workflows?status=paused",
         "http://localhost:3003/pgbus/workflows/attention",
+        "http://localhost:3003/pgbus/workflows/attention?workflow_class=CheckoutWorkflow",
         "http://localhost:3003/pgbus/workflows/definitions",
         "http://localhost:3003/pgbus/workflows/definitions/OrderWorkflow",
         "http://localhost:3003/pgbus/workflows/definitions/Billing::InvoiceWorkflow",

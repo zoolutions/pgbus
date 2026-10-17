@@ -138,6 +138,19 @@ RSpec.describe "Pgbus::Web::DataSource workflow insights", :integration do
       expect(definition[:bucket_seconds]).to eq(3_600)
     end
 
+    it "starts the buckets at the zone's midnight" do
+      run!(created_at: now - 3600, finished_at: now - 1800)
+      day = Pgbus::Web::WorkflowWindow.parse("30d", retention: nil)
+
+      Time.use_zone("Asia/Kolkata") do
+        buckets = data_source.workflow_definition("CheckoutWorkflow", window: day)[:throughput]
+
+        expect(buckets.map { |b| b[:from].in_time_zone.strftime("%H:%M") }.uniq).to eq(["00:00"])
+        expect(buckets.sum { |b| b[:started] }).to eq(1)
+        expect(buckets.sum { |b| b[:finished] }).to eq(1)
+      end
+    end
+
     it "builds the funnel of the runs started in the window: how many reached each step and where the rest are" do
       3.times do
         run = run!(created_at: now - 600)
@@ -226,6 +239,17 @@ RSpec.describe "Pgbus::Web::DataSource workflow insights", :integration do
   end
 
   describe "#workflow_definitions" do
+    it "lists every class name in the rows, however many there are" do
+      rows = Array.new(600) do |i|
+        { workflow_id: SecureRandom.uuid, workflow_class: format("Many::Workflow%03d", i), status: "finished",
+          current_step: "one", definition_digest: "spec", arguments: {}, created_at: now - 600, updated_at: now - 600 }
+      end
+      Pgbus::WorkflowEntry.insert_all!(rows)
+
+      expect(data_source.workflow_definitions(window: window).count { |row| row[:workflow_class].start_with?("Many::") })
+        .to eq(600)
+    end
+
     it "lists every registered class and every class still in the rows, with counts and end-to-end percentiles" do
       stub_const("SignupWorkflow", Class.new(Pgbus::Workflow) { step(:welcome) { nil } })
       run!(created_at: now - 600, finished_at: now - 590)
