@@ -13,6 +13,8 @@ module Pgbus
 
         def frame_key = :pgbus_appsignal_event_span
 
+        def attached_key = :pgbus_appsignal_event_span_error
+
         def describe(transaction, payload)
           transaction.set_action_if_nil("#{payload[:handler] || "UnknownHandler"}#handle")
           apply_queue_start(transaction, payload[:published_at])

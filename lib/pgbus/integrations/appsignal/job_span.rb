@@ -13,6 +13,8 @@ module Pgbus
 
         def frame_key = :pgbus_appsignal_job_span
 
+        def attached_key = :pgbus_appsignal_job_span_error
+
         def describe(transaction, payload)
           transaction.set_action_if_nil("#{payload[:job_class] || "UnknownJob"}#perform")
           apply_queue_start(transaction, payload[:enqueued_at])

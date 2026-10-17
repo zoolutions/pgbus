@@ -25,22 +25,25 @@ module Pgbus
       #
       # The frame lives in Thread.current[], which is fiber-local, so start and
       # finish pair up per job under execution_mode: :async, the same way
-      # AppSignal keeps its current transaction. An instance holds no state of
-      # its own. Nothing an AppSignal call raises reaches the job: it is logged
-      # at warn level.
+      # AppSignal keeps its current transaction. A span opened inside another
+      # of its kind (a handler calling another handler's #process) keeps the
+      # enclosing frame and restores it at finish, so the outer span still
+      # completes its transaction. An instance holds no state of its own.
+      # Nothing an AppSignal call raises reaches the job: it is logged at warn
+      # level.
       #
-      # Subclasses define #frame_key (the fiber-local slot),
+      # Subclasses define #frame_key and #attached_key (the fiber-local slots),
       # #describe(transaction, payload) (action, queue start, tags) and
       # #finished(payload, duration_ms) (the span's metrics).
       class SpanSubscriber
         BACKGROUND_JOB = "background_job"
 
         # owned: this span created the transaction, so it completes it.
-        # attached: the exception #finish recorded, for #report_unattached.
-        Frame = Struct.new(:started_at, :owned, :attached)
+        # previous: the enclosing span's frame, restored at finish.
+        Frame = Struct.new(:started_at, :owned, :previous)
 
         def start(_name, _id, payload)
-          frame = Thread.current[frame_key] = Frame.new(monotonic_now, false, nil)
+          frame = Thread.current[frame_key] = Frame.new(monotonic_now, false, Thread.current[frame_key])
           guard do
             frame.owned = !::Appsignal::Transaction.current?
             transaction = frame.owned ? ::Appsignal::Transaction.create(BACKGROUND_JOB) : ::Appsignal::Transaction.current
@@ -51,22 +54,27 @@ module Pgbus
         def finish(_name, _id, payload)
           frame = Thread.current[frame_key]
           guard do
-            attach(frame, payload[:exception_object])
+            Thread.current[attached_key] = attach(payload[:exception_object])
             finished(payload, monotonic_now - frame.started_at)
           end
         ensure
-          guard { ::Appsignal::Transaction.complete_current! if frame.owned }
+          guard do
+            Thread.current[frame_key] = frame.previous
+            ::Appsignal::Transaction.complete_current! if frame.owned
+          end
         end
 
         # pgbus.job_failed and pgbus.event_failed fire after #finish. An error
         # the span recorded is already on its transaction. One raised before
         # the span opened (a message body that is not JSON, an event that
         # cannot be built, a dead-letter move that failed) had no transaction,
-        # so it is reported on one of its own, named and tagged like the span's.
+        # so it is reported on one of its own, named and tagged like the span's
+        # (or added to a transaction that is current, which is left as it is).
         def report_unattached(error, payload)
-          frame = Thread.current[frame_key]
-          Thread.current[frame_key] = nil
-          return if error.nil? || error.equal?(frame&.attached)
+          attached = Thread.current[attached_key]
+          Thread.current[attached_key] = nil
+          return if error.nil? || error.equal?(attached)
+          return ::Appsignal::Transaction.current.set_error(error) if ::Appsignal::Transaction.current?
 
           ::Appsignal.report_error(error) do |transaction|
             transaction.set_namespace(BACKGROUND_JOB)
@@ -76,11 +84,12 @@ module Pgbus
 
         private
 
-        def attach(frame, error)
+        # Returns the exception it recorded, nil when there was none.
+        def attach(error)
           return unless error && ::Appsignal::Transaction.current?
 
           ::Appsignal::Transaction.current.set_error(error)
-          frame.attached = error
+          error
         end
 
         # AppSignal expects queue-start as Unix epoch milliseconds. Pgbus

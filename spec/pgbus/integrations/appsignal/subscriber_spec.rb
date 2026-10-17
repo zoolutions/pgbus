@@ -115,6 +115,14 @@ RSpec.describe "Pgbus::Integrations::Appsignal::Subscriber" do
       expect(transaction_class.current).to be(host)
     end
 
+    it "still completes its own transaction when a span of the same kind runs inside it" do
+      instrument_execute(job_class: "OuterJob") { instrument_execute(job_class: "InnerJob") { :ok } }
+
+      expect(transactions.sole).to have_attributes(action: "OuterJob#perform", completed?: true)
+      expect(transaction_class.current?).to be(false)
+      expect(appsignal_class.distributions.map { |_name, _value, tags| tags[:job_class] }).to eq(%w[InnerJob OuterJob])
+    end
+
     it "keeps each fiber's transaction to itself when two jobs interleave (execution_mode: :async)" do
       seen = {}
       first = Fiber.new do
@@ -185,6 +193,15 @@ RSpec.describe "Pgbus::Integrations::Appsignal::Subscriber" do
         namespace: "background_job", action: "TestJob#perform", errors: [err], completed?: true
       )
       expect(transactions.sole.tags).to include("queue" => "default", "job_class" => "TestJob", "attempts" => 2)
+    end
+
+    it "adds an error raised outside the span to a host transaction without renaming it" do
+      host = transaction_class.create("http_request")
+
+      instrument_job_failed
+
+      expect(transactions).to eq([host])
+      expect(host).to have_attributes(namespace: "http_request", action: nil, tags: {}, errors: [err], completed?: false)
     end
 
     it "reports nothing more for the error the execute span already recorded" do
