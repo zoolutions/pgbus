@@ -1,0 +1,73 @@
+app/models/pgbus/workflow_entry.rb
+  s_e3a487096d49a3::t_0628ada3f7bdf0 52
+spec/pgbus/workflow/signal_matcher_spec.rb
+  s_e3a487096d49a3::t_26818c2877cb1d 32-36
+CHANGELOG.md
+  s_e3a487096d49a3::t_e61d524f18bb40 5
+lib/generators/pgbus/templates/migration.rb.erb
+  s_e3a487096d49a3::t_0628ada3f7bdf0 332-333
+lib/pgbus/workflow/step_definition.rb
+  s_e3a487096d49a3::t_0628ada3f7bdf0 110
+lib/pgbus/workflow/fan_out_definition.rb
+  s_e3a487096d49a3::t_0628ada3f7bdf0 11-13
+spec/pgbus/workflow/waiting_declarations_spec.rb
+  s_e3a487096d49a3::t_26818c2877cb1d 67-68,138
+lib/generators/pgbus/templates/add_workflow_signals.rb.erb
+  s_e3a487096d49a3::t_0628ada3f7bdf0 35-36
+spec/pgbus/workflow/flow_control_spec.rb
+  s_e3a487096d49a3::t_0628ada3f7bdf0 79
+spec/integration_helper.rb
+  s_e3a487096d49a3::t_0628ada3f7bdf0 354-357
+docs/performance.md
+  s_e3a487096d49a3::t_0628ada3f7bdf0 296-300
+lib/pgbus/workflow/test_helpers.rb
+  s_e3a487096d49a3::t_0628ada3f7bdf0 61-63,71,73-75
+spec/integration/workflow/sweep_spec.rb
+  s_e3a487096d49a3::t_0628ada3f7bdf0 154,157
+lib/pgbus/generators/migration_detector.rb
+  s_e3a487096d49a3::t_0628ada3f7bdf0 66-70,258-260
+docs/app/views/docs/pages/workflows.rb
+  s_e3a487096d49a3::t_0628ada3f7bdf0 170,203-205,281,285
+spec/integration/workflow/fan_out_spec.rb
+  s_e3a487096d49a3::t_ac64a0c5f442de 210-223
+spec/generators/pgbus/add_workflows_generator_spec.rb
+  s_e3a487096d49a3::t_26818c2877cb1d 77-80
+app/models/pgbus/workflow_signal.rb
+  s_e3a487096d49a3::t_0628ada3f7bdf0 36-37,39
+lib/generators/pgbus/templates/add_workflows.rb.erb
+  s_e3a487096d49a3::t_0628ada3f7bdf0 87-96,138-139
+lib/pgbus/workflow/wait_timeout.rb
+  s_e3a487096d49a3::t_0628ada3f7bdf0 22-35
+lib/pgbus/workflow/signals.rb
+  s_e3a487096d49a3::t_0628ada3f7bdf0 112
+README.md
+  s_e3a487096d49a3::t_e61d524f18bb40 889
+spec/pgbus/generators/migration_detector_spec.rb
+  s_e3a487096d49a3::t_26818c2877cb1d 350,353-354,359-364
+lib/pgbus/workflow/signal_matcher.rb
+  s_e3a487096d49a3::t_0628ada3f7bdf0 39,45
+spec/pgbus/workflow/test_helpers_spec.rb
+  s_e3a487096d49a3::t_26818c2877cb1d 108-115,128,137-142
+lib/pgbus/workflow/fan_out.rb
+  s_e3a487096d49a3::t_ac64a0c5f442de 105-106,113-115,118-131
+spec/generators/pgbus/add_workflow_signals_generator_spec.rb
+  s_e3a487096d49a3::t_26818c2877cb1d 41
+lib/pgbus/workflow/dsl.rb
+  s_e3a487096d49a3::t_0628ada3f7bdf0 44,97-98,101
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "e01ba4cc00a88e25a68acfa4b990c4db224239d8",
+  "prompts": {},
+  "sessions": {
+    "s_e3a487096d49a3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "faf1faea-af65-4cb2-b526-81aed7772ead",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
