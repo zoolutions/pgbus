@@ -1,0 +1,39 @@
+lib/pgbus/workflow/sweep.rb
+  s_e3a487096d49a3::t_465653e4daa2cb 1-122
+spec/integration/workflow/verbs_spec.rb
+  s_e3a487096d49a3::t_f8c3e8e777313e 1-101,104-181,184-203
+spec/integration/workflow/sweep_spec.rb
+  s_e3a487096d49a3::t_5b855c4d08ceb4 1-148
+lib/pgbus/workflow/test_helpers.rb
+  s_e3a487096d49a3::t_7530770ace3413 1-66
+lib/pgbus/workflow/step_outcome.rb
+  s_e3a487096d49a3::t_42ba0c2929f97f 47-52
+spec/integration/workflow/outputs_spec.rb
+  s_e3a487096d49a3::t_d64f49a47cb0ef 1-13,15-86
+spec/integration/workflow/support.rb
+  s_e3a487096d49a3::t_7b9ca653b36015 1-18,20-26,28-102
+spec/integration/workflow/step_callback_spec.rb
+  s_e3a487096d49a3::t_5e955b707d2d2b 1-25,28-71,73-87
+spec/integration/workflow/core_spec.rb
+  s_e3a487096d49a3::t_075b99979d062d 1-48,50-53,55-209
+spec/pgbus/workflow/test_helpers_spec.rb
+  s_e3a487096d49a3::t_6e842c967619bc 1-100
+spec/integration/workflow/failure_scenarios_spec.rb
+  s_e3a487096d49a3::t_e85839dec06ffa 1-100,102-205
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "392a805e9bcf95ce35968186b05af4fcf021c859",
+  "prompts": {},
+  "sessions": {
+    "s_e3a487096d49a3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "faf1faea-af65-4cb2-b526-81aed7772ead",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}

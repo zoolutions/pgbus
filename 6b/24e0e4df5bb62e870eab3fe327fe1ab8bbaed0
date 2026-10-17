@@ -1,0 +1,31 @@
+spec/pgbus/workflow/step_outcome_spec.rb
+  s_e3a487096d49a3::t_490f3da4b78a04 1-34,36-140
+spec/pgbus/workflow_spec.rb
+  s_e3a487096d49a3::t_e7b8e1bc69cbbe 1-258
+lib/pgbus/instrumentation.rb
+  s_e3a487096d49a3::t_4d79bec2a6918b 57-78
+lib/pgbus/metrics/workflow_metrics.rb
+  s_e3a487096d49a3::t_1e7d470911d6e4 1-65
+spec/pgbus/workflow/step_job_spec.rb
+  s_e3a487096d49a3::t_407667182d00f9 1-273
+spec/pgbus/workflow_step_spec.rb
+  s_e3a487096d49a3::t_c962fe905dcc90 1-19,23-78,80-88,91-93
+spec/pgbus/workflow/sweep_spec.rb
+  s_e3a487096d49a3::t_7da6185996f51b 1-40,43-55,58-84
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "6b24e0e4df5bb62e870eab3fe327fe1ab8bbaed0",
+  "prompts": {},
+  "sessions": {
+    "s_e3a487096d49a3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "faf1faea-af65-4cb2-b526-81aed7772ead",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
