@@ -101,13 +101,30 @@ place:
   without Rails, and `pgbus start` again after its flags. Callables, the logger
   and anything else that cannot be made shareable stay as they are, on the main
   Ractor; they never make finalizing raise.
+- **A snapshot for non-main Ractors.** `Pgbus.configuration` stays on the main
+  Ractor. Each finalize also publishes `Pgbus.configuration_snapshot`, a
+  Ractor-shareable `Configuration::Snapshot` of the settings pgbus's
+  Ractor-safe code reads (today the `queue_prefix`), which any Ractor can read.
+  `Pgbus.stream_key`, `Pgbus.stream_key!` and `Pgbus.stream_name_budget` read
+  the live configuration on the main Ractor and the snapshot elsewhere, so a
+  non-main Ractor sees the prefix as the last `Pgbus.finalize!` or
+  `Pgbus.configure` left it: a setter alone does not publish.
 - **A shareable seam.** The values the LISTEN thread hands the dispatcher, and
   the frames the dispatcher hands a connection (`WakeMessage`,
   `StreamEnvelope`, `ReadAfter::Envelope`), are `Ractor.shareable?`, so a
   future Ractor dispatcher could pass them by reference.
 - **A canary** (`spec/pgbus/ractor_canary_spec.rb`, Ruby 4.0): stream names,
-  stream-key fragments, durable and presence pattern resolution, the event
-  serializer and the dispatch seam run inside a non-main Ractor.
+  full stream keys and their queue-name budget, durable and presence pattern
+  resolution, the event serializer and the dispatch seam run inside a non-main
+  Ractor.
+- **A kino smoke** (CI's report-only `kino-smoke` job, `script/kino_smoke.sh`):
+  [kino](https://github.com/yaroslav/kino) serves the dummy app, and the job
+  sends `GET /up` and opens one SSE subscription, in streaming-body mode since
+  kino has no `rack.hijack`. A threaded run is the control; the Ractor run,
+  through `ractor-rails-shim`, records the first blocker in the job summary.
+  Today that blocker is in Rails, before pgbus runs: making the app shareable
+  freezes Action View's view reloader, and every request answers 500 with a
+  `FrozenError` from it.
 - **The audit**: `bundle exec conformance-audit --strict` reports every constant
   and class/module instance variable under `Pgbus` that is not shareable. What
   is main-only by design is listed in `.conformance.yml` with its reason.
@@ -115,10 +132,9 @@ place:
 The blockers, in order:
 
 1. `Pgbus.configuration` is main-only: it holds the logger and the app's
-   callables, so a non-main Ractor cannot read it, and with it anything that
-   reads a setting (`Streams::Key.stream_key` checks the queue-name budget
-   against `queue_prefix`). Lifting this needs a shareable configuration
-   snapshot for non-main Ractors.
+   callables. Code that reads a setting runs in a non-main Ractor only once it
+   reads that setting through `Pgbus.configuration_snapshot`, as the stream
+   keys do; the snapshot gains a setting when such code needs it.
 2. The PGMQ client and its connection pools are per process.
 3. ActiveRecord itself is reachable from non-main Ractors only through Rails'
    own proxying, which is not there yet.

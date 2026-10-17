@@ -19,3 +19,6 @@ tmp/capybara/
 .rspec_integration_status
 codedb.snapshot
 .lighthouseci/
+
+# The kino-smoke bundle (gemfiles/kino.gemfile) keeps no lockfile.
+gemfiles/kino.gemfile.lock

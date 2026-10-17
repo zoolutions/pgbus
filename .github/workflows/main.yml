@@ -109,6 +109,69 @@ jobs:
           path: tmp/benchmarks/*.txt
           if-no-files-found: warn
 
+  kino-smoke:
+    runs-on: ubuntu-26.04
+    name: kino smoke (Ractor mode, report only)
+    # Issue #527: the dummy app served by kino (script/kino_smoke.sh) — GET /up,
+    # then one SSE subscription, in streaming-body mode since kino has no
+    # rack.hijack. A threaded run is the control; the Ractor run, through
+    # ractor-rails-shim, cannot pass until Rails runs in a non-main Ractor and
+    # records the first blocker in the job summary and an artifact. It never
+    # fails the build. kino and the shim are in gemfiles/kino.gemfile only,
+    # never the gem's bundle; that gemfile keeps no lockfile, so the bundle is
+    # installed fresh (no bundler-cache).
+    continue-on-error: true
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      BUNDLE_GEMFILE: ${{ github.workspace }}/gemfiles/kino.gemfile
+      # bin/conformance-db gives the runner's user a role and a ~/.pgpass entry.
+      PGBUS_DATABASE_URL: postgres://localhost:5432/pgbus_test
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          # ractor-rails-shim needs Ruby >= 4.0.6.
+          ruby-version: "4.0.6"
+      - name: Install the kino bundle
+        run: bundle install --jobs 4
+      - name: Set up the database
+        run: bin/conformance-db
+      - name: Smoke
+        run: script/kino_smoke.sh
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## kino smoke (Ractor mode, report only)"
+            echo '```'
+            cat tmp/kino-smoke/report.txt 2>/dev/null || echo "no report: the smoke did not run"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload the smoke's logs
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: kino-smoke
+          path: |
+            tmp/kino-smoke/*.txt
+            tmp/kino-smoke/*.log
+          if-no-files-found: warn
+
   test:
     runs-on: ubuntu-26.04
     name: Ruby ${{ matrix.ruby }} (Rails ${{ matrix.rails }})
