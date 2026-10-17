@@ -154,12 +154,20 @@ module Pgbus
       # --- shared helpers -----------------------------------------------
 
       # Runs the block in a transaction with the run's row locked (nil when
-      # the run is gone), then sends what the block noted.
+      # the run is gone), and sends what the block noted once it commits.
+      #
+      # The notes are enrolled inside the transition's own transaction, the
+      # way a saved model is: they go out when that transaction's work really
+      # commits, whether it is a top-level transaction, part of an app's
+      # joinable one, or a savepoint inside a non-joinable one (Rails'
+      # transactional tests), and never on a rollback.
       def locked(workflow_id)
         notes = Notes.new
-        result = WorkflowEntry.transaction { yield WorkflowEntry.lock_for(workflow_id), notes }
-        notes.flush_after_commit(WorkflowEntry.connection)
-        result
+        WorkflowEntry.transaction do
+          result = yield WorkflowEntry.lock_for(workflow_id), notes
+          notes.flush_after_commit(WorkflowEntry.connection)
+          result
+        end
       end
 
       # The guarded UPDATE for +verb+: WHERE status IN (States.from(verb)).

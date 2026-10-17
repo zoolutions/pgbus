@@ -164,6 +164,27 @@ RSpec.describe "Workflow core (integration)", :integration do
       ActiveSupport::Notifications.unsubscribe(subscription) if subscription
     end
 
+    # Rails' transactional tests wrap each example in a non-joinable
+    # transaction: the transition commits in a savepoint and its notes must go
+    # out then, not wait for an outer commit that never comes.
+    it "instruments and reports a transition under a non-joinable outer transaction" do
+      stub_const("FailingWorkflow", Class.new(Pgbus::Workflow) { step(:boom) { raise ArgumentError, "boom" } })
+      seen = []
+      subscription = ActiveSupport::Notifications.subscribe("pgbus.workflow_paused") { |*args| seen << args.last[:error_class] }
+
+      ActiveRecord::Base.transaction(joinable: false) do
+        wf = FailingWorkflow.start!
+        Pgbus::Workflow::StepJob.perform_now(steps_of(wf).first.id)
+
+        expect(wf.reload.status).to eq("paused")
+        expect(seen).to eq(["ArgumentError"])
+        expect(Pgbus::ErrorReporter).to have_received(:report).with(an_instance_of(ArgumentError), hash_including(step_name: "boom"))
+        raise ActiveRecord::Rollback
+      end
+    ensure
+      ActiveSupport::Notifications.unsubscribe(subscription) if subscription
+    end
+
     it "sends nothing and keeps nothing when that transaction rolls back" do
       user = create_user
       ActiveRecord::Base.transaction do
