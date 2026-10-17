@@ -45,6 +45,10 @@ ignore_unused:
   - "pgbus.processes.state.activity.slots.*"
   - "pgbus.processes.state.activity.threads.*"
   - "pgbus.processes.state.kinds.*"
+  # Workflows (issue #542): plural forms reached through a dynamic key.
+  - "pgbus.workflows.attention.confirm.*"
+  - "pgbus.workflows.flash.bulk_resume.*"
+  - "pgbus.workflows.flash.bulk_cancel.*"
   # Plural forms reached through the dynamic summary.<key> lookup (issue #491).
   - "pgbus.queues.show.summary.drained_by_html.*"
   - "pgbus.queues.show.summary.drained_wildcard_html.*"

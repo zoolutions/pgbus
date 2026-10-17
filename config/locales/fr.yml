@@ -140,6 +140,11 @@ fr:
         throughput: Débit
         throughput_detail: tâches/min sur les %{minutes} dernières min
         throughput_unavailable: nécessite les statistiques de jobs (rails g pgbus:add_job_stats)
+        workflows: Workflows
+        workflows_attention:
+          one: "%{count} requiert votre attention"
+          other: "%{count} requièrent votre attention"
+        workflows_detail: en cours (%{paused} en pause)
       verdict:
         links:
           dlq: Dead letters
@@ -723,6 +728,7 @@ fr:
         processes: Processus
         queues: Files d'attente
         recurring: Récurrent
+        workflows: Workflows
       return_to_app: Retour à l'application
       title: Tableau de bord Pgbus
       toggle_dark_mode: Basculer en mode sombre
@@ -1023,3 +1029,280 @@ fr:
         disabled: Tâche désactivée
         enabled: Tâche activée
         failed: Impossible de basculer la tâche
+    workflows:
+      actions:
+        bulk_cancel: Tout annuler
+        bulk_resume: Tout reprendre
+        cancel: Annuler
+        rerun: Relancer
+        resume: Reprendre
+        resume_at: Reprendre à l'étape
+        run_now: Exécuter maintenant
+        signal: Envoyer un signal
+        skip_step: Ignorer l'étape
+      attempt: tentative %{attempt}
+      attention:
+        at_step_html: à %{step}
+        back: "← Workflows"
+        cancel_all:
+          one: Annuler %{count}
+          other: Tout annuler (%{count})
+        confirm:
+          cancel:
+            one: Annuler l'exécution bloquée à %{step} ?
+            other: Annuler les %{count} exécutions bloquées à %{step} ?
+          cancel_error:
+            one: Annuler l'exécution bloquée à %{step} sur %{error} ?
+            other: Annuler les %{count} exécutions bloquées à %{step} sur %{error} ?
+          resume:
+            one: Reprendre l'exécution en pause à %{step} ?
+            other: Reprendre les %{count} exécutions en pause à %{step} ?
+          resume_error:
+            one: Reprendre l'exécution en pause à %{step} sur %{error} ?
+            other: Reprendre les %{count} exécutions en pause à %{step} sur %{error} ?
+        description: Exécutions en cours qui attendent une personne, regroupées selon ce qui les a arrêtées. Une fois la cause corrigée, agissez sur tout le groupe.
+        empty_hint: Aucune exécution en cours n'est en pause, bloquée, en retard ou en attente au-delà de workflow_waiting_visibility_threshold.
+        empty_title: Rien à traiter.
+        first_seen_html: première fois %{time}
+        headers:
+          actions: Actions
+          reason: Raison
+          runs: Exécutions
+          seen: Vu
+          workflow: Workflow
+        last_seen_html: dernière fois %{time}
+        reasons:
+          overdue: 'En retard : dû, mais pas pris en charge'
+          paused_error: En pause sur une erreur
+          paused_manual: Mis en pause manuellement
+          stalled: 'Bloqué : son worker ne répond plus'
+          waiting_overdue: Attente trop longue
+        resume_all:
+          one: Reprendre %{count}
+          other: Tout reprendre (%{count})
+        show_runs: Afficher les exécutions
+        title: À traiter
+      audit:
+        by: "%{event} par %{actor}"
+        empty: Aucun événement enregistré.
+        headers:
+          what: Ce qui s'est passé
+          when: Quand
+        title: Journal d'audit
+        with_reason: "%{sentence} : %{reason}"
+        with_step: "%{sentence} (%{step} #%{attempt})"
+      bad_request: 'Requête invalide : %{reason}'
+      confirm:
+        cancel: Annuler ce workflow ? Ses étapes ouvertes sont annulées et il ne s'exécutera plus.
+        rerun: Relancer ce workflow comme nouvelle exécution, avec le même sujet et les mêmes arguments ?
+        resume: Reprendre ce workflow ?
+        resume_at: Reprendre ce workflow à l'étape choisie ? Ses étapes ouvertes sont d'abord annulées.
+        run_now: Exécuter maintenant l'étape planifiée au lieu d'attendre ?
+        signal: Envoyer ce signal au workflow ?
+        skip_step: Ignorer l'étape attendue par ce workflow et passer à la suivante ?
+      events:
+        cancelled: Annulé
+        fan_out_finished: Fan-out terminé
+        fan_out_opened: Fan-out ouvert
+        finished: Terminé
+        late_completion_ignored: Fin tardive ignorée
+        paused: Mis en pause
+        rerun: Relancé
+        rescheduled: Replanifié
+        resumed: Repris
+        run_now: Exécuter maintenant
+        signal_claimed: Signal pris en charge
+        signal_received: Signal reçu
+        stall_detected: Blocage détecté
+        started: Démarré
+        step_completed: Étape terminée
+        step_failed: Étape échouée
+        step_reattempted: Étape réessayée
+        step_scheduled: Étape planifiée
+        step_skipped: Étape ignorée
+        step_started: Étape démarrée
+        step_waiting: Étape en attente
+        wait_timed_out: Attente expirée
+      filters:
+        apply: Appliquer les filtres
+        clear: Effacer
+        created_from: Créé à partir du
+        created_to: Créé jusqu'au
+        error_class: Classe d'erreur
+        step: Étape en cours
+        subject_id: ID du sujet
+        subject_type: Type de sujet
+        workflow_class: Classe du workflow
+        workflow_id: ID du workflow
+      flash:
+        bad_group: Ce groupe n'est pas valide.
+        bulk_cancel:
+          one: "%{count} annulé."
+          other: "%{count} annulés."
+        bulk_cancel_skipped: "%{count} annulés ; %{skipped} avaient déjà avancé."
+        bulk_more: 'D''autres exécutions attendent peut-être : appuyez à nouveau pour les %{cap} suivantes.'
+        bulk_resume:
+          one: "%{count} repris."
+          other: "%{count} repris."
+        bulk_resume_skipped: "%{count} repris ; %{skipped} avaient déjà avancé."
+        cancel: Workflow annulé.
+        choose_step: Choisissez une étape de reprise.
+        failed:
+          not_allowed: 'Non effectué : l''exécution est maintenant %{status}.'
+          not_found: Ce workflow n'existe plus.
+          other: "%{action} a échoué : %{reason}"
+        payload_not_object: 'Non envoyé : la charge utile n''est pas un objet JSON.'
+        payload_too_large: 'Non envoyé : la charge utile dépasse %{limit} octets.'
+        rerun: Nouvelle exécution démarrée.
+        resume: Workflow repris.
+        resume_at: Workflow repris à l'étape %{step}.
+        run_now: L'étape planifiée s'exécute maintenant.
+        signal: Signal %{name} envoyé.
+        signal_duplicate: Le signal %{name} a déjà été remis avec cette clé ; rien de nouveau n'a été envoyé.
+        signal_name_missing: 'Non envoyé : le signal doit avoir un nom.'
+        skip_step: Étape ignorée.
+      headers:
+        current_step: Étape en cours
+        last_activity: Dernière activité
+        started: Démarré
+        status: Statut
+        subject: Sujet
+        workflow: Workflow
+      index:
+        attention_link:
+          one: À traiter (%{count})
+          other: À traiter (%{count})
+        description: 'Exécutions durables en plusieurs étapes : ce que fait chacune et ce qui se passe ensuite.'
+        empty_hint: Choisissez un autre statut ou effacez les filtres. Une exécution démarre avec YourWorkflow.start!(subject, **arguments).
+        empty_title: Aucun workflow ne correspond.
+        status_label: Filtrer par statut
+        title: Workflows
+      next:
+        cancelled_html: Annulé %{ago}.
+        due_html: 'Prêt : %{step} était dû %{ago} et attend un worker.'
+        finished_html: Terminé %{ago}.
+        overdue_html: 'En retard : %{step} était dû %{ago} ; le balayage le renvoie.'
+        paused_error_html: 'En pause sur %{step} : %{error} — reprenez ou annulez.'
+        paused_manual_html: En pause sur %{step} — reprenez ou annulez.
+        performing_attempt_html: Exécution de %{step} (tentative %{attempt}).
+        performing_html: Exécution de %{step}.
+        ready_html: 'Prêt : %{step} s''exécute ensuite.'
+        scheduled_html: 'Planifié : %{step} s''exécute %{time}.'
+        unknown_html: 'Statut : %{status}.'
+        waiting_batch_html: En attente du lot %{batch} (%{done} travaux sur %{total} terminés).
+        waiting_signal_html: En attente du signal %{signal} depuis %{ago}.
+        waiting_signal_timeout_html: En attente du signal %{signal} depuis %{ago}. L'attente expire %{time}.
+        waiting_step_html: En attente de %{step}.
+      not_found:
+        hint: Il est peut-être terminé et supprimé après workflow_retention.
+        title: Workflow introuvable
+      outcomes:
+        cancelled: annulé
+        completed: terminé
+        finished_early: a terminé l'exécution plus tôt
+        paused: a mis l'exécution en pause
+        reattempted: réessayé
+        skipped: ignoré
+      resume:
+        carry_on: 'Reprendre : poursuivre avec %{step}'
+        continue: 'Reprendre : continuer avec %{step}'
+        finish: 'Reprendre : terminer l''exécution'
+        resend: 'Reprendre : renvoyer %{step}'
+        retry: 'Reprendre : réessayer %{step}'
+        rewait: 'Reprendre : attendre à nouveau %{step}'
+      show:
+        actions: Actions
+        arguments: Arguments
+        back: "← Workflows"
+        cancelled_at: Annulé
+        class_missing: "%{workflow_class} n'est pas chargé dans ce processus : l'exécution peut encore être annulée, mais pas reprise."
+        definition_outdated: 'Cette exécution a démarré avec une ancienne définition de %{workflow_class} : ses étapes ont changé depuis.'
+        details: Détails
+        finished_at: Terminé
+        no_arguments: Cette exécution n'a pas d'arguments.
+        paused_at: Mis en pause
+        reason_hint: Consigné dans le journal d'audit, avec l'auteur de l'action.
+        reason_label: Motif (facultatif)
+        rerun_of: Relance de
+        reruns: Relancé en
+        resume_at_label: Étape de reprise
+      signal:
+        hint: Une étape qui l'attend se réveille aussitôt ; sinon il reste en attente jusqu'à ce qu'une étape le prenne.
+        name: Nom du signal
+        payload: Charge utile (JSON)
+        send: Envoyer le signal
+        title: Envoyer un signal
+      signal_statuses:
+        claimed: Pris en charge
+        consumed: Consommé
+        pending: En attente
+      signals:
+        empty: Aucun signal remis à cette exécution.
+        headers:
+          claimed: Pris en charge
+          consumed: Consommé
+          idempotency_key: Clé d'idempotence
+          name: Signal
+          received: Reçu
+          status: Statut
+        payload: Charge utile
+        title: Signaux
+      statuses:
+        cancelled: Annulé
+        finished: Terminé
+        gone: disparu
+        paused: En pause
+        performing: En exécution
+        ready: Prêt
+        scheduled: Planifié
+        waiting: En attente
+      step_statuses:
+        cancelled: Annulée
+        completed: Terminée
+        failed: Échouée
+        in_progress: En cours
+        scheduled: Planifiée
+        skipped: Ignorée
+        waiting: En attente
+      steps:
+        batch: lot %{batch}
+        caused_by: Causé par %{error}
+        empty: Aucune tentative pour l'instant.
+        headers:
+          finished: Terminée
+          queued: En file
+          ran: Exécution
+          scheduled: Planifiée
+          started: Démarrée
+          status: Statut
+          step: Étape
+          waited: Attente
+          worker: Worker
+        revision: révision %{revision}
+        show_backtrace: Afficher la trace
+        title: Tentatives
+        waiting_for: puis attente de %{duration}
+        waits_for_html: attend %{signal}
+      tabs:
+        all: Tous
+        cancelled: Annulés
+        finished: Terminés
+        ongoing: En cours
+        paused: En pause
+        performing: En exécution
+        ready: Prêts
+        waiting: En attente
+      timeline:
+        caption: 'Chaque tentative, la plus ancienne en haut : attente (son délai), en file (due, pas encore prise), exécution (colorée selon son issue) et en attente (d''un signal ou de son lot), avec les pauses sur leur propre ligne. Le tableau des tentatives ci-dessous donne les mêmes durées.'
+        empty: Aucune tentative pour l'instant.
+        paused_row: En pause
+        series:
+          paused: En pause
+          queued: En file
+          ran_cancelled: Exécuté, annulé
+          ran_failed: Exécuté, échoué
+          ran_ok: Exécuté
+          ran_open: En cours
+          waited: Attendu
+          waiting: En attente
+        title: Chronologie
