@@ -16,11 +16,33 @@ module Pgbus
     # Both round-trip through +serialize+/+deserialize+, and both are omitted
     # from the serialized hash when unset — an unbatched job's payload is
     # byte-for-byte what it was before this mixin existed.
+    #
+    # A third, transient id, +enqueue_batch_id+, is the batch this instance
+    # was *added* to. +b.add+ / +batch.add+ set it, and +enqueue+ copies the
+    # block's tag onto it, before Active Job decides whether to defer the
+    # enqueue to after commit (+enqueue_after_transaction_commit+). The
+    # deferred enqueue keeps the instance, so the adapter still finds the
+    # batch once the block's thread tag is gone (issue #553). It is never
+    # serialized and the adapter clears it once the enqueue is done.
     module BatchId
       extend ActiveSupport::Concern
 
       included do
-        attr_accessor :batch_id, :callback_batch_id
+        attr_accessor :batch_id, :callback_batch_id, :enqueue_batch_id
+      end
+
+      # Mark +jobs+ as added to +batch_id+ (instances without this mixin are
+      # left alone; they join through the block's thread tag only).
+      def self.capture(jobs, batch_id)
+        jobs.each { |job| job.enqueue_batch_id = batch_id if job.respond_to?(:enqueue_batch_id=) }
+      end
+
+      # Plain assignment, not ||=: an id left by an add whose enqueue never
+      # ran (rolled back, or aborted by a before_enqueue) must not follow the
+      # instance into this one. b.add / batch.add never come through here.
+      def enqueue(...)
+        self.enqueue_batch_id = Thread.current[:pgbus_batch_id]
+        super
       end
 
       def serialize

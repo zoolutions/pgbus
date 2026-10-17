@@ -45,6 +45,19 @@ module Pgbus
     # Thread.current): b.add raises anywhere else, and a plain perform_later
     # from a thread or fiber the block spawns does not join the batch.
     #
+    # Inside a database transaction the batch stays pending until the
+    # transaction commits: a job with enqueue_after_transaction_commit keeps
+    # the batch on its instance (b.add, batch.add and perform_later put it
+    # there) and counts itself in at commit, before the batch starts. On a
+    # rollback no job is sent and, when pgbus shares the application's
+    # database, the batch row is gone with the rest (a separate pgbus
+    # database commits the row on its own connection). A bare
+    # ActiveJob.perform_all_later in the block does not keep it: use b.add.
+    # Add jobs that defer: one sent at once, on a connection other than the
+    # caller's, can run before the batch commits and is then accounted for
+    # only by the stalled-execution sweep. A job instance is one member (one
+    # job_id): enqueue it once.
+    #
     #   Pgbus::Batch.start(description: "Import") do |b|
     #     b.on_complete ImportDoneJob
     #     b.add(*rows.map { |row| ImportRowJob.new(row.id) })
@@ -124,7 +137,7 @@ module Pgbus
       end
       @started = true
       count_jobs(&)
-      start_processing
+      self.class.send(:after_transactions_commit) { start_processing }
       self
     end
 
@@ -139,6 +152,7 @@ module Pgbus
       return jobs if jobs.empty? && block.nil?
 
       enqueue do
+        Pgbus::ActiveJob::BatchId.capture(jobs, batch_id)
         ::ActiveJob.perform_all_later(jobs) if jobs.any?
         yield if block
       end
@@ -473,6 +487,22 @@ module Pgbus
         finish_if_needed(try_finish!(batch_id))
       end
 
+      # Run the end-of-block start (or an open batch's re-check) once every
+      # open transaction has committed, and at once when none is open
+      # (issue #553). Jobs with enqueue_after_transaction_commit register
+      # their enqueue as an after_commit callback during the block; Active
+      # Record runs a transaction's callbacks in registration order and
+      # appends a savepoint's to its parent's on release, so every one of
+      # them has counted itself into the still-pending row before this runs.
+      # On a rollback none of them runs, and the row (created in the same
+      # transaction) is gone. Active Record 7.1 has no
+      # after_all_transactions_commit, and Active Job 7.1 never defers.
+      def after_transactions_commit(&)
+        return yield unless ::ActiveRecord.respond_to?(:after_all_transactions_commit)
+
+        ::ActiveRecord.after_all_transactions_commit(&)
+      end
+
       def finish_if_needed(result)
         return result unless result&.fetch(:just_finished, false) && result[:record]
 
@@ -629,8 +659,10 @@ module Pgbus
       raise AlreadyFinished, "Can't add jobs into an already finished batch" if finished?
 
       count_jobs(&)
-      reload
-      self.class.send(:finish_if_needed, BatchEntry.check_finished!(batch_id))
+      self.class.send(:after_transactions_commit) do
+        reload
+        self.class.send(:finish_if_needed, BatchEntry.check_finished!(batch_id))
+      end
       self
     end
 

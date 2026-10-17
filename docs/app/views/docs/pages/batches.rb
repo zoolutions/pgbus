@@ -55,6 +55,34 @@ class Views::Docs::Pages::Batches < DocsUI::Page
         the batch, so the batch can finish before that job runs. Enqueue from
         the block itself.
 
+        A batch can be opened inside a database transaction, for example to
+        store `batch.batch_id` on the rows the transaction writes. Jobs with
+        `enqueue_after_transaction_commit` are sent once the transaction
+        commits, and they still join the batch: `b.add`, `batch.add` and
+        `perform_later` record the batch on the job instance, each job counts
+        itself in at commit, and only then does the batch start processing.
+        If the transaction rolls back, no job is sent, no callback fires and,
+        when pgbus shares the application's database, the batch row is rolled
+        back with everything else. With a separate pgbus database
+        (`config.connects_to`) the batch row is written on its own connection
+        and commits on its own: a rollback leaves a pending batch with no
+        jobs, which the stalled-batch sweep later starts and finishes empty,
+        firing its callbacks. Inside a transaction, add jobs that defer: a
+        job without `enqueue_after_transaction_commit` is sent at once, and
+        unless pgbus sends on the caller's own connection a worker can run it
+        before the transaction commits the batch, so the batch waits for the
+        stalled-execution sweep to account for it. Enqueue a job instance
+        once: an instance is one member (one `job_id`, one execution row). A
+        second enqueue of it is unsupported: deferred, it runs outside the
+        batch; sent at once inside the block, it is counted again against
+        the one row and the batch can be left waiting. A bare
+        `ActiveJob.perform_all_later` inside the block does not record the
+        batch on its jobs, so use `b.add` there. A `batch.add` inside a
+        transaction raises `Pgbus::Batch::AlreadyFinished` when the
+        transaction commits if the batch finished in the meantime. A member
+        job that adds siblings from its own `perform` is safe, because its
+        own run keeps the batch open.
+
         `Pgbus.batch` returns the `Pgbus::Batch` handle. Usually it is
         started; when `on_conflict: :discard` or `:log` finds the
         `uniqueness_key` held, the block never runs and the handle answers
