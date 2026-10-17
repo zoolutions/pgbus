@@ -72,8 +72,10 @@ class Views::Docs::Pages::Batches < DocsUI::Page
         unless pgbus sends on the caller's own connection a worker can run it
         before the transaction commits the batch, so the batch waits for the
         stalled-execution sweep to account for it. Enqueue a job instance
-        once: an instance is one member (one `job_id`), and a second enqueue
-        of it runs outside the batch. A bare
+        once: an instance is one member (one `job_id`, one execution row). A
+        second enqueue of it is unsupported: deferred, it runs outside the
+        batch; sent at once inside the block, it is counted again against
+        the one row and the batch can be left waiting. A bare
         `ActiveJob.perform_all_later` inside the block does not record the
         batch on its jobs, so use `b.add` there. A `batch.add` inside a
         transaction raises `Pgbus::Batch::AlreadyFinished` when the
