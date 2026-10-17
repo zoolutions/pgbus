@@ -246,6 +246,17 @@ RSpec.describe "Pgbus::WorkflowsController", type: :request do
       expect(@stub_data_source.called?(:bulk_resume_workflows) || @stub_data_source.called?(:bulk_cancel_workflows)).to be(false)
     end
 
+    it "refuses a malformed group instead of failing" do
+      post "/pgbus/workflows/bulk_resume", params: { group: "CheckoutWorkflow" }
+      expect(response).to redirect_to("/pgbus/workflows/attention")
+      expect(flash[:alert]).to eq("That group is not valid.")
+
+      post "/pgbus/workflows/bulk_cancel", params: { group: group.merge(workflow_class: %w[A B]) }
+      expect(flash[:alert]).to eq("That group is not valid.")
+
+      expect(@stub_data_source.called?(:bulk_resume_workflows) || @stub_data_source.called?(:bulk_cancel_workflows)).to be(false)
+    end
+
     it "flashes a bulk call that failed" do
       @stub_data_source.workflow_bulk_result = { ok: false, code: :failed, reason: "db down", done: 0, skipped: 0 }
 

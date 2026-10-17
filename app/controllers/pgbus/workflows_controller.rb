@@ -87,15 +87,34 @@ module Pgbus
     end
 
     def bulk_action(action)
-      group = GROUP_FIELDS.to_h { |field| [field, params.dig(:group, field).presence] }
-      unless group.values_at(:workflow_class, :step_name).all? && Workflow::States::STUCK_REASONS.include?(group[:reason])
-        return redirect_to(pgbus.attention_workflows_path, alert: t("pgbus.workflows.flash.bad_group"))
-      end
+      group = attention_group
+      return redirect_to(pgbus.attention_workflows_path, alert: t("pgbus.workflows.flash.bad_group")) unless valid_group?(group)
 
       result = yield(group)
       return redirect_to(pgbus.attention_workflows_path, alert: failure_message(action, result)) unless result[:ok]
 
       redirect_to pgbus.attention_workflows_path, notice: bulk_notice(action, result)
+    end
+
+    def valid_group?(group)
+      return false unless group
+
+      group.values_at(:workflow_class, :step_name).all? && Workflow::States::STUCK_REASONS.include?(group[:reason])
+    end
+
+    # The needs-attention group a bulk form posts (group[workflow_class] and
+    # friends, each a String; a blank error_class is nil), or nil when the
+    # param is not that shape.
+    def attention_group
+      raw = params[:group]
+      return nil unless raw.is_a?(ActionController::Parameters)
+
+      GROUP_FIELDS.to_h do |field|
+        value = raw[field]
+        return nil unless value.nil? || value.is_a?(String)
+
+        [field, value.presence]
+      end
     end
 
     # "Resumed 212; 2 had already moved on." and, at the cap, that more may wait.
