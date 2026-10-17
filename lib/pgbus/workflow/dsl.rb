@@ -41,7 +41,7 @@ module Pgbus
                                "not for a signal"
         end
 
-        reject_unknown_options!(options)
+        reject_unknown_options!(options, kind: "fan_out", accepted: FanOutDefinition::OPTIONS)
         definition = FanOutDefinition.new(name: name, body: block || name.to_sym, on_batch_failure: on_batch_failure, **options)
         self._workflow_steps = _workflow_steps.add(definition, before: before_step, after: after_step)
         definition.name.to_sym
@@ -94,11 +94,11 @@ module Pgbus
 
       private
 
-      def reject_unknown_options!(options)
-        unknown = options.keys - StepDefinition::OPTIONS
+      def reject_unknown_options!(options, kind: "step", accepted: StepDefinition::OPTIONS)
+        unknown = options.keys - accepted
         return if unknown.empty?
 
-        raise ArgumentError, "unknown step option #{unknown.first.inspect} (accepted: #{StepDefinition::OPTIONS.join(", ")})"
+        raise ArgumentError, "unknown #{kind} option #{unknown.first.inspect} (accepted: #{accepted.join(", ")})"
       end
     end
   end

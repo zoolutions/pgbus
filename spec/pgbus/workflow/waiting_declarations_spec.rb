@@ -64,6 +64,8 @@ RSpec.describe "Pgbus::Workflow waiting step declarations" do # rubocop:disable 
         .to raise_error(ArgumentError, /fan_out :a cannot take wait_timeout:/)
       expect { workflow_class { step(:a, on_batch_failure: :pause!) { nil } } }
         .to raise_error(ArgumentError, /unknown step option :on_batch_failure/)
+      expect { workflow_class { fan_out(:a, retries: 2) { |b| b } } }
+        .to raise_error(ArgumentError, /unknown fan_out option :retries \(accepted: wait, skip_if, job_options, timeout, on_exception\)/)
     end
   end
 
@@ -132,6 +134,8 @@ RSpec.describe "Pgbus::Workflow waiting step declarations" do # rubocop:disable 
       expect { workflow_class { step(:a, on_timeout: :cancel!) { nil } } }
         .to raise_error(ArgumentError, /on_timeout: needs wait_for: and wait_timeout:/)
       expect { workflow_class { step(:a, wait_for: :x, on_timeout: :cancel!) { nil } } }
+        .to raise_error(ArgumentError, /on_timeout: needs wait_for: and wait_timeout:/)
+      expect { workflow_class { step(:a, wait_for: :x, on_timeout: false) { nil } } }
         .to raise_error(ArgumentError, /on_timeout: needs wait_for: and wait_timeout:/)
     end
 

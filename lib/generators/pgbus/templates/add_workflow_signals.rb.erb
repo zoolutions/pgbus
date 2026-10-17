@@ -32,6 +32,8 @@ class AddPgbusWorkflowSignals < ActiveRecord::Migration<%= migration_version %>
       name: "idx_pgbus_workflow_signals_idempotency", if_not_exists: true
     add_index :pgbus_workflow_signals, [:workflow_id, :name, :status],
       name: "idx_pgbus_workflow_signals_pending", if_not_exists: true
+    add_index :pgbus_workflow_signals, [:workflow_id, :status, :claimed_by_step_id],
+      name: "idx_pgbus_workflow_signals_claimed", if_not_exists: true
     add_foreign_key :pgbus_workflow_signals, :pgbus_workflows,
       column: :workflow_id, primary_key: :workflow_id, on_delete: :cascade, if_not_exists: true
   end

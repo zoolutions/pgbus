@@ -36,13 +36,13 @@ module Pgbus
       def initialize(name, &condition)
         raise ArgumentError, "a SignalMatcher needs a signal name, got #{name.inspect}" if name.to_s.strip.empty?
 
-        @signal_name = -name.to_s
+        @signal_name = -name.to_s.strip
         @condition = condition
         freeze
       end
 
       def matches?(signal)
-        return false unless signal.name.to_s == signal_name
+        return false unless signal.name.to_s.strip == signal_name
 
         condition.nil? || (condition.call(signal.payload) ? true : false)
       end

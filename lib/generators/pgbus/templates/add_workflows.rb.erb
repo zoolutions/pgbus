@@ -84,10 +84,16 @@ class AddPgbusWorkflows < ActiveRecord::Migration<%= migration_version %>
       name: "idx_pgbus_workflow_steps_stall", if_not_exists: true
     add_index :pgbus_workflow_steps, [:workflow_class, :step_name, :finished_at],
       name: "idx_pgbus_workflow_steps_insights", if_not_exists: true
-    add_index :pgbus_workflow_steps, :batch_id,
-      name: "idx_pgbus_workflow_steps_batch", if_not_exists: true
-    add_index :pgbus_workflow_steps, [:status, :timeout_at],
-      name: "idx_pgbus_workflow_steps_timeout", if_not_exists: true
+    # A steps table that predates waiting steps lacks these columns (the
+    # queued pgbus:add_workflow_signals adds them and their indexes).
+    if column_exists?(:pgbus_workflow_steps, :batch_id)
+      add_index :pgbus_workflow_steps, :batch_id,
+        name: "idx_pgbus_workflow_steps_batch", if_not_exists: true
+    end
+    if column_exists?(:pgbus_workflow_steps, :timeout_at)
+      add_index :pgbus_workflow_steps, [:status, :timeout_at],
+        name: "idx_pgbus_workflow_steps_timeout", if_not_exists: true
+    end
     add_foreign_key :pgbus_workflow_steps, :pgbus_workflows,
       column: :workflow_id, primary_key: :workflow_id, on_delete: :cascade, if_not_exists: true
 
@@ -129,6 +135,8 @@ class AddPgbusWorkflows < ActiveRecord::Migration<%= migration_version %>
       name: "idx_pgbus_workflow_signals_idempotency", if_not_exists: true
     add_index :pgbus_workflow_signals, [:workflow_id, :name, :status],
       name: "idx_pgbus_workflow_signals_pending", if_not_exists: true
+    add_index :pgbus_workflow_signals, [:workflow_id, :status, :claimed_by_step_id],
+      name: "idx_pgbus_workflow_signals_claimed", if_not_exists: true
     add_foreign_key :pgbus_workflow_signals, :pgbus_workflows,
       column: :workflow_id, primary_key: :workflow_id, on_delete: :cascade, if_not_exists: true
   end

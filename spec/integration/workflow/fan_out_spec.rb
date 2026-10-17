@@ -207,6 +207,20 @@ RSpec.describe "Workflow fan_out (integration)", :integration do
     run_until(wf, statuses: %w[finished])
   end
 
+  it "pauses with FanOutFailed when the batch row is gone before the step resolved" do
+    wf = run_until(VendorWorkflow.start!(vendors: %w[a]), statuses: %w[waiting])
+    step = waiting_step(wf)
+    Pgbus::BatchEntry.where(batch_id: step.batch_id).delete_all
+
+    expect(Pgbus::Workflow::Sweep.repair).to include(fan_outs: 0)
+    step.update_columns(waiting_since: 2.hours.ago)
+    expect(Pgbus::Workflow::Sweep.repair).to include(fan_outs: 1)
+
+    expect(wf.reload.status).to eq("paused")
+    expect(waiting_step(wf).reload).to have_attributes(status: "failed", error_class: "Pgbus::Workflow::FanOutFailed")
+    expect(waiting_step(wf).error_message).to include("no longer exists")
+  end
+
   it "lets an operator skip a step waiting on its batch; the callback then leaves the run alone" do
     wf = run_until(VendorWorkflow.start!(vendors: %w[a]), statuses: %w[waiting])
     wf.skip!(actor: "ops")

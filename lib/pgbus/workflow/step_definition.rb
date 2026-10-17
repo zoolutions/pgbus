@@ -107,7 +107,7 @@ module Pgbus
       def assign_wait(wait_for, wait_timeout, on_timeout)
         @wait_for = wait_for.nil? ? nil : SignalMatcher.coerce(wait_for)
         @wait_for_name = @wait_for && SignalMatcher.label(@wait_for)
-        raise ArgumentError, "on_timeout: needs wait_for: and wait_timeout:" if on_timeout && (@wait_for.nil? || wait_timeout.nil?)
+        raise ArgumentError, "on_timeout: needs wait_for: and wait_timeout:" if !on_timeout.nil? && (@wait_for.nil? || wait_timeout.nil?)
         raise ArgumentError, "wait_timeout: needs wait_for: (it bounds the wait for a signal)" if wait_timeout && @wait_for.nil?
 
         @wait_timeout = self.class.seconds(wait_timeout, "wait_timeout", positive: true)

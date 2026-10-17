@@ -102,19 +102,33 @@ module Pgbus
           end
 
           entry = BatchEntry.find_by(batch_id: step.batch_id)
-          next log("batch #{step.batch_id} of step #{step_id} has not finished") unless entry&.status == "finished"
+          next resolve_vanished(record, step, notes) unless entry
+          next log("batch #{step.batch_id} of step #{step_id} has not finished") unless entry.status == "finished"
 
           resolve(record, step, entry, notes)
         end
       end
 
       # The sweep's repair for a lost callback: fan_out steps still waiting on
-      # a batch that finished more than +grace+ ago. Returns how many it
-      # resolved.
+      # a batch that finished more than +grace+ ago, or whose batch row is
+      # gone (batch retention ran before a long-delayed callback). Returns how
+      # many it resolved.
       def resolve_lost(now:, grace:, limit: Sweep::BATCH_SIZE)
         finished_batches = BatchEntry.finished.where(finished_at: ...(now - grace)).select(:batch_id)
-        WorkflowStep.where(status: "waiting", batch_id: finished_batches).order(:id).limit(limit).pluck(:id)
-                    .count { |step_id| finished(step_id) }
+        waiting = WorkflowStep.where(status: "waiting").where.not(batch_id: nil)
+        lost = waiting.where(batch_id: finished_batches)
+                      .or(waiting.where(waiting_since: ...(now - grace)).where.not(batch_id: BatchEntry.select(:batch_id)))
+        lost.order(:id).limit(limit).pluck(:id).count { |step_id| finished(step_id) }
+      end
+
+      # The batch row is gone, so its outcome is unknown: the step pauses
+      # (whatever on_batch_failure says) with FanOutFailed, for a person to
+      # resume (a fresh batch) or skip.
+      def resolve_vanished(record, step, notes)
+        Runner.event!(record, "fan_out_finished", actor: Runner::SYSTEM_ACTOR, step: step,
+                                                  details: { batch_id: step.batch_id, vanished: true })
+        error = FanOutFailed.new("batch #{step.batch_id} no longer exists (deleted before its callback ran); its outcome is unknown")
+        Waiting.resolve!(record, step, FlowControl::Outcome.pause, notes: notes, error: error)
       end
 
       def resolve(record, step, entry, notes)

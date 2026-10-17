@@ -74,6 +74,10 @@ RSpec.describe Pgbus::Generators::AddWorkflowsGenerator do
         expect(content).to include("create_table :pgbus_workflow_signals, if_not_exists: true")
         expect(content).to include('name: "idx_pgbus_workflow_signals_idempotency"')
         expect(content).to include("drop_table :pgbus_workflow_signals, if_exists: true")
+        expect(content).to include('name: "idx_pgbus_workflow_signals_claimed"')
+        # A steps table from before waiting steps has no such columns yet.
+        expect(content).to include("if column_exists?(:pgbus_workflow_steps, :batch_id)",
+                                   "if column_exists?(:pgbus_workflow_steps, :timeout_at)")
       end
     end
 

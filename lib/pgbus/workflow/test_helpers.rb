@@ -58,7 +58,9 @@ module Pgbus
           else return workflow
           end
         end
-        return workflow unless %w[ready waiting performing].include?(workflow.reload.status)
+        status = workflow.reload.status
+        raise StepWaiting, "#{workflow.inspect} #{TestHelpers.waiting_for(workflow)}" if status == "waiting"
+        return workflow unless %w[ready performing].include?(status)
 
         raise Error, "#{workflow.inspect} was still #{workflow.status} after #{max_steps} steps"
       end
@@ -66,8 +68,11 @@ module Pgbus
       # signal! the run, then run the step it scheduled (the waiting step it
       # woke, or the step that claims a buffered signal). Returns the
       # reloaded workflow.
+      # A redelivery (duplicate_delivery?) woke nothing, so it runs nothing.
       def deliver_signal(workflow, name, payload: {}, idempotency_key: nil)
-        workflow.signal!(name, payload: payload, idempotency_key: idempotency_key, actor: "test_helpers")
+        signal = workflow.signal!(name, payload: payload, idempotency_key: idempotency_key, actor: "test_helpers")
+        return workflow.reload if signal.duplicate_delivery?
+
         perform_next_step(workflow)
       end
 

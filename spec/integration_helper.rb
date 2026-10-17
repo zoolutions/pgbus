@@ -351,6 +351,10 @@ def bootstrap_integration_tables(conn)
       CREATE INDEX idx_pgbus_workflow_signals_pending ON pgbus_workflow_signals (workflow_id, name, status);
     SQL
   end
+  conn.execute(<<~SQL) if conn.table_exists?("pgbus_workflow_signals")
+    CREATE INDEX IF NOT EXISTS idx_pgbus_workflow_signals_claimed
+      ON pgbus_workflow_signals (workflow_id, status, claimed_by_step_id);
+  SQL
 
   if conn.table_exists?("pgbus_batches")
     cols = conn.columns("pgbus_batches").map(&:name)

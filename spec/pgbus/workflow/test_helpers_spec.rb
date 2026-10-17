@@ -105,6 +105,14 @@ RSpec.describe Pgbus::Workflow::TestHelpers do
       expect(speedrun_workflow(workflow, max_steps: 2)).to be(workflow)
     end
 
+    it "raises StepWaiting, not Error, when the last allowed step parks" do
+      statuses.replace(%w[ready waiting])
+      allow(described_class).to receive(:waiting_step)
+        .and_return(double(step_name: "ship", batch_id: nil, wait_for: "shipped", timeout_at: nil))
+
+      expect { speedrun_workflow(workflow, max_steps: 1) }.to raise_error(Pgbus::Workflow::StepWaiting, /ship/)
+    end
+
     it "raises when the run never settles" do
       allow(workflow).to receive(:status).and_return("ready")
 
@@ -115,14 +123,23 @@ RSpec.describe Pgbus::Workflow::TestHelpers do
   describe "#deliver_signal" do
     it "signals the run and runs the step that signal scheduled" do
       statuses.replace(%w[ready])
-      allow(workflow).to receive(:signal!)
       allow(described_class).to receive(:scheduled_step).and_return(scheduled)
 
+      allow(workflow).to receive(:signal!).and_return(double(duplicate_delivery?: false))
       deliver_signal(workflow, :shipped, payload: { at: "today" })
 
       expect(workflow).to have_received(:signal!).with(:shipped, payload: { at: "today" }, idempotency_key: nil,
                                                                  actor: "test_helpers")
       expect(described_class).to have_received(:perform).with(scheduled, workflow)
+    end
+  end
+
+  describe "#deliver_signal with a redelivered key" do
+    it "runs nothing: the redelivery woke nothing" do
+      allow(workflow).to receive(:signal!).and_return(double(duplicate_delivery?: true))
+
+      expect(deliver_signal(workflow, :shipped, idempotency_key: "evt-1")).to be(workflow)
+      expect(described_class).not_to have_received(:perform)
     end
   end
 

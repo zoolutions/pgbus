@@ -167,7 +167,7 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
       MD
       DocsUI::Code(<<~'RUBY')
         fan_out :notify_vendors, on_batch_failure: :pause! do |b|
-          b.add(*subject.vendors.map { |vendor| NotifyVendorJob.new(vendor.id, step_idempotency_key) })
+          b.add(*subject.vendors.map { |vendor| NotifyVendorJob.new(vendor.id, "#{step_idempotency_key}:#{vendor.id}") })
         end
       RUBY
       md <<~'MD'
@@ -200,8 +200,9 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
         - An empty batch finishes at once; the step completes without waiting.
         - **A reattempt, or `resume!` after a failure, runs the whole body
           again and opens a fresh batch.** Every member runs again, so member
-          jobs must be idempotent: derive their keys from
-          `step_idempotency_key`, which is stable across attempts.
+          jobs must be idempotent: derive each member's key from
+          `step_idempotency_key` (stable across attempts) plus something that
+          tells the members apart, such as the vendor id.
         - `fan_out` takes every `step` option except `wait_for:`,
           `wait_timeout:` and `on_timeout:`, and needs the batch callback-job
           columns (`rails generate pgbus:add_batch_callback_jobs`): without
@@ -277,11 +278,11 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
 
         **Timeouts.** A signal that never comes is the usual way a workflow
         gets stuck, so a waiting step can carry a deadline:
-        `wait_timeout:` (a Duration) and `on_timeout:`, one of `:pause!`
+        `wait_timeout:` (seconds or a Duration) and `on_timeout:`, one of `:pause!`
         (default: the step fails with `Pgbus::Workflow::WaitTimedOut`),
         `:cancel!`, `:skip!` or `:run` (the body runs with `received_signal`
         nil and `timed_out?` true). `timeout:` keeps its meaning on every
-        step: it bounds the run once the body starts, while `wait_timeout:`
+        step: it bounds the in-progress attempt from its claim, while `wait_timeout:`
         bounds the wait before it. The sweep fires timeouts, so one fires
         within `config.workflow_sweep_interval` of its deadline. A paused run's
         wait does not time out while it is paused, and the time spent paused

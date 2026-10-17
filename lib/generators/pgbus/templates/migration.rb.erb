@@ -329,6 +329,8 @@ class CreatePgbusTables < ActiveRecord::Migration<%= migration_version %>
       name: "idx_pgbus_workflow_signals_idempotency"
     add_index :pgbus_workflow_signals, [:workflow_id, :name, :status],
       name: "idx_pgbus_workflow_signals_pending"
+    add_index :pgbus_workflow_signals, [:workflow_id, :status, :claimed_by_step_id],
+      name: "idx_pgbus_workflow_signals_claimed"
     add_foreign_key :pgbus_workflow_signals, :pgbus_workflows,
       column: :workflow_id, primary_key: :workflow_id, on_delete: :cascade
 

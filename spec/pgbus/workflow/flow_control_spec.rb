@@ -76,7 +76,7 @@ RSpec.describe Pgbus::Workflow::FlowControl do
       end
     end
 
-    it "routes pause! and cancel! to the Runner with the actor and reason" do
+    it "routes pause!, cancel! and skip! to the Runner with the actor and reason" do
       updated = double("WorkflowEntry", workflow_id: "wf-1", status: "paused")
       allow(Pgbus::Workflow::Runner).to receive(:apply).and_return(updated)
 

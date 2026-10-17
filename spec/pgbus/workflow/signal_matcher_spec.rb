@@ -29,6 +29,11 @@ RSpec.describe Pgbus::Workflow::SignalMatcher do
     expect(seen).to eq(%w[dhl ups])
   end
 
+  it "ignores surrounding whitespace in both names, as signal! does" do
+    expect(described_class.new(" shipped ").matches?(signal("shipped"))).to be(true)
+    expect(described_class.new(:shipped).matches?(signal(" shipped "))).to be(true)
+  end
+
   it "answers true or false whatever the block returns" do
     expect(described_class.new(:x) { |_payload| "yes" }.matches?(signal("x"))).to be(true)
     expect(described_class.new(:x) { |_payload| nil }.matches?(signal("x"))).to be(false)

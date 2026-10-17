@@ -63,6 +63,11 @@ module Pgbus
       # The waiting-step columns pgbus:add_workflow_signals adds to
       # pgbus_workflow_steps (issue #541), with the pgbus_workflow_signals table.
       WORKFLOW_WAITING_COLUMNS = %w[batch_id wait_for signal_id waiting_since timeout_at].freeze
+      WORKFLOW_WAITING_INDEXES = [
+        %w[pgbus_workflow_steps idx_pgbus_workflow_steps_batch],
+        %w[pgbus_workflow_steps idx_pgbus_workflow_steps_timeout],
+        %w[pgbus_workflow_signals idx_pgbus_workflow_signals_claimed]
+      ].freeze
 
       # generator_key → Rails generator name. Passed to Thor's invoke.
       #
@@ -250,7 +255,9 @@ module Pgbus
         return migrations unless table_exists?("pgbus_workflow_steps")
 
         columns = column_names("pgbus_workflow_steps")
-        waiting = WORKFLOW_WAITING_COLUMNS.all? { |column| columns.include?(column) } && table_exists?("pgbus_workflow_signals")
+        waiting = WORKFLOW_WAITING_COLUMNS.all? { |column| columns.include?(column) } &&
+                  table_exists?("pgbus_workflow_signals") &&
+                  WORKFLOW_WAITING_INDEXES.all? { |table, index| index_exists?(table, index) }
         migrations << :add_workflow_signals unless waiting
         migrations
       end

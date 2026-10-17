@@ -38,6 +38,7 @@ RSpec.describe Pgbus::Generators::AddWorkflowSignalsGenerator do
         expect(content).to include("t.bigint :claimed_by_step_id")
         expect(content).to match(/\[:workflow_id, :idempotency_key\],\s+unique: true, where: "idempotency_key IS NOT NULL"/)
         expect(content).to include("add_index :pgbus_workflow_signals, [:workflow_id, :name, :status]")
+        expect(content).to include("add_index :pgbus_workflow_signals, [:workflow_id, :status, :claimed_by_step_id]")
         foreign_key = /add_foreign_key :pgbus_workflow_signals, :pgbus_workflows,\s+column: :workflow_id,\s+primary_key: :workflow_id,/
         expect(content).to match(foreign_key)
         expect(content).to include("primary_key: :workflow_id, on_delete: :cascade, if_not_exists: true")

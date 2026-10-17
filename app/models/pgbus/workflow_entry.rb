@@ -49,7 +49,7 @@ module Pgbus
 
     # Why ongoing runs need a person, as { [workflow_class, reason] => count }
     # (Workflow::States::STUCK_REASONS). One query: each paused or ready run
-    # with its latest step row.
+    # (and, with +waiting_threshold+, each waiting run) with its latest step row.
     #   stalled       paused on a step that failed with StepStalled
     #   paused_error  paused on a step that failed with any other error
     #   paused_manual paused otherwise (the step called pause!, or an outside pause!)

@@ -33,9 +33,10 @@ module Pgbus
       id && find(id)
     end
 
-    # The pending signals of a run, oldest first; only +name+'s when given.
+    # The pending signals of a run (only +name+'s when given); iterate them
+    # oldest first with find_each, which batches by id.
     def self.pending_for(workflow_id, name: nil)
-      scope = where(workflow_id: workflow_id, status: "pending").order(:id)
+      scope = where(workflow_id: workflow_id, status: "pending")
       name ? scope.where(name: name.to_s) : scope
     end
 

@@ -151,10 +151,10 @@ RSpec.describe Pgbus::Workflow::Sweep, :integration do
       expect(fresh.reload.status).to eq("waiting")
     end
 
-    it "never treats a waiting step as stalled, and leaves it out of the waiting_overdue count before the schema exists" do
+    it "never treats a waiting step as stalled, and counts no waiting_overdue without a waiting_threshold:" do
       stub_const("ParkedWorkflow", Class.new(Pgbus::Workflow) { step(:forever, wait_for: :never) { nil } })
       wf = run_until(ParkedWorkflow.start!, statuses: %w[waiting])
-      steps_of(wf).last.update_columns(waiting_since: 30.days.ago, started_at: 30.days.ago)
+      steps_of(wf).last.update_columns(waiting_since: 30.days.ago)
 
       expect(described_class.repair(config: config)).to include(stalled: 0, resent: 0, timed_out: 0)
       expect(wf.reload.status).to eq("waiting")

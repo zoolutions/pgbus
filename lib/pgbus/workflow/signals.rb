@@ -109,7 +109,7 @@ module Pgbus
       # query to its name; any other matcher sees every pending signal.
       def match(record, matcher)
         name = matcher.respond_to?(:signal_name) ? matcher.signal_name : nil
-        WorkflowSignal.pending_for(record.workflow_id, name: name).each do |signal|
+        WorkflowSignal.pending_for(record.workflow_id, name: name).find_each(batch_size: 100) do |signal|
           return signal if matcher.matches?(signal)
         end
         nil

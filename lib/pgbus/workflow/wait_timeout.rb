@@ -19,8 +19,20 @@ module Pgbus
     module WaitTimeout
       module_function
 
-      def expire_due(now: Time.current, limit: Sweep::BATCH_SIZE)
-        WorkflowStep.wait_expired(now: now).order(:id).limit(limit).pluck(:id, :workflow_id).count do |id, workflow_id|
+      # Drains every due wait, Sweep::BATCH_SIZE at a time (at most
+      # +max_batches+ of them per sweep, so one sweep cannot run unbounded).
+      def expire_due(now: Time.current, limit: Sweep::BATCH_SIZE, max_batches: 20)
+        total = 0
+        max_batches.times do
+          batch = WorkflowStep.wait_expired(now: now).order(:id).limit(limit).pluck(:id, :workflow_id)
+          total += expire_batch(batch, now: now)
+          break if batch.size < limit
+        end
+        total
+      end
+
+      def expire_batch(batch, now:)
+        batch.count do |id, workflow_id|
           Runner.locked(workflow_id) do |record, notes|
             step = record && WorkflowStep.find_by(id: id)
             next false unless record&.status == "waiting" && step&.status == "waiting" && step.timeout_at && step.timeout_at < now

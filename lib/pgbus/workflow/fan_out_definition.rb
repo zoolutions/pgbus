@@ -8,6 +8,9 @@ module Pgbus
     class FanOutDefinition < StepDefinition
       # What a batch with dead-lettered members does to the run.
       FAILURE_ACTIONS = %i[pause! cancel! skip!].freeze
+      # The step options a fan_out takes (on_batch_failure: besides): every
+      # one but the signal waits.
+      OPTIONS = (StepDefinition::OPTIONS - %i[wait_for wait_timeout on_timeout]).freeze
 
       attr_reader :on_batch_failure
 
