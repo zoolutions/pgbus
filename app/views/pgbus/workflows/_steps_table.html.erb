@@ -1,0 +1,79 @@
+<%# Every attempt, newest first (issue #542): the text equivalent of the
+    timeline — the three durations, the worker and app revision, and the
+    error with its backtrace and cause chain under a <details>. %>
+<section class="mb-8 rounded-lg bg-white dark:bg-gray-800 shadow ring-1 ring-gray-200 dark:ring-gray-700" aria-labelledby="workflow-steps-title" data-testid="workflow-steps">
+  <h2 id="workflow-steps-title" class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 text-lg font-medium text-gray-900 dark:text-white"><%= t("pgbus.workflows.steps.title") %></h2>
+  <table class="pgbus-table min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+    <thead class="bg-gray-50 dark:bg-gray-900">
+      <tr>
+        <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.workflows.steps.headers.step") %></th>
+        <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.workflows.steps.headers.status") %></th>
+        <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.workflows.steps.headers.scheduled") %></th>
+        <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.workflows.steps.headers.started") %></th>
+        <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.workflows.steps.headers.finished") %></th>
+        <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.workflows.steps.headers.waited") %></th>
+        <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.workflows.steps.headers.queued") %></th>
+        <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.workflows.steps.headers.ran") %></th>
+        <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.workflows.steps.headers.worker") %></th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+      <% @workflow[:steps].each do |step| %>
+        <% durations = step[:durations] || {} %>
+        <tr data-step-attempt="<%= step[:step_name] %>-<%= step[:attempt] %>" class="align-top hover:bg-gray-50 dark:hover:bg-gray-700/50">
+          <td data-label="<%= t("pgbus.workflows.steps.headers.step") %>" class="px-4 py-3 text-sm text-gray-900 dark:text-white">
+            <code class="font-mono"><%= step[:step_name] %></code>
+            <span class="text-gray-500 dark:text-gray-400">#<%= step[:attempt] %></span>
+            <% if step[:batch_id] %>
+              <span class="block text-xs"><%= pgbus_link_to t("pgbus.workflows.steps.batch", batch: step[:batch_id][0, 8]), pgbus.batch_path(step[:batch_id]), size: :sm %></span>
+            <% end %>
+            <% if step[:wait_for] %>
+              <span class="block text-xs text-gray-600 dark:text-gray-300"><%= t("pgbus.workflows.steps.waits_for_html", signal: tag.code(step[:wait_for], class: "font-mono")) %></span>
+            <% end %>
+          </td>
+          <td data-label="<%= t("pgbus.workflows.steps.headers.status") %>" class="px-4 py-3 text-sm max-w-md">
+            <%= pgbus_workflow_step_badge(step[:status]) %>
+            <% if step[:outcome] && step[:outcome] != step[:status] %>
+              <span class="ml-1 text-xs text-gray-600 dark:text-gray-300"><%= t("pgbus.workflows.outcomes.#{step[:outcome]}", default: step[:outcome].to_s.humanize) %></span>
+            <% end %>
+            <% if step[:error_class] %>
+              <p class="mt-1 font-mono text-xs text-red-700 dark:text-red-300"><%= step[:error_class] %></p>
+              <p class="text-xs text-gray-700 dark:text-gray-300 break-words"><%= step[:error_message] %></p>
+              <% if step[:error_backtrace].present? || step[:error_causes].any? %>
+                <details class="mt-1">
+                  <summary class="inline-flex min-h-6 cursor-pointer items-center text-xs font-medium text-indigo-700 hover:text-indigo-900 dark:text-indigo-300 dark:hover:text-indigo-200"><%= t("pgbus.workflows.steps.show_backtrace") %></summary>
+                  <% if step[:error_backtrace].present? %>
+                    <pre class="mt-1 max-h-64 overflow-auto rounded bg-gray-50 p-2 text-xs text-gray-800 dark:bg-gray-900 dark:text-gray-200"><%= step[:error_backtrace] %></pre>
+                  <% end %>
+                  <% step[:error_causes].each do |cause| %>
+                    <p class="mt-1 text-xs text-gray-700 dark:text-gray-300"><%= t("pgbus.workflows.steps.caused_by", error: "#{cause["class"]}: #{cause["message"]}") %></p>
+                  <% end %>
+                </details>
+              <% end %>
+            <% end %>
+          </td>
+          <td data-label="<%= t("pgbus.workflows.steps.headers.scheduled") %>" class="px-4 py-3 text-sm text-gray-600 dark:text-gray-300"><%= pgbus_time(step[:scheduled_at]) %></td>
+          <td data-label="<%= t("pgbus.workflows.steps.headers.started") %>" class="px-4 py-3 text-sm text-gray-600 dark:text-gray-300"><%= pgbus_time(step[:started_at]) %></td>
+          <td data-label="<%= t("pgbus.workflows.steps.headers.finished") %>" class="px-4 py-3 text-sm text-gray-600 dark:text-gray-300"><%= pgbus_time(step[:finished_at]) %></td>
+          <td data-label="<%= t("pgbus.workflows.steps.headers.waited") %>" class="px-4 py-3 text-right font-mono text-sm text-gray-700 dark:text-gray-300">
+            <%= pgbus_duration(durations[:waited]) %>
+            <% if durations[:waiting] %>
+              <span class="block text-xs text-gray-600 dark:text-gray-300"><%= t("pgbus.workflows.steps.waiting_for", duration: pgbus_duration(durations[:waiting])) %></span>
+            <% end %>
+          </td>
+          <td data-label="<%= t("pgbus.workflows.steps.headers.queued") %>" class="px-4 py-3 text-right font-mono text-sm text-gray-700 dark:text-gray-300"><%= pgbus_duration(durations[:queued]) %></td>
+          <td data-label="<%= t("pgbus.workflows.steps.headers.ran") %>" class="px-4 py-3 text-right font-mono text-sm text-gray-700 dark:text-gray-300"><%= pgbus_duration(durations[:ran]) %></td>
+          <td data-label="<%= t("pgbus.workflows.steps.headers.worker") %>" class="px-4 py-3 text-xs text-gray-600 dark:text-gray-300">
+            <span class="block font-mono"><%= step[:worker] || Pgbus::Web::TimeFormat::NONE %></span>
+            <% if step[:app_revision] %>
+              <span class="block"><%= t("pgbus.workflows.steps.revision", revision: step[:app_revision]) %></span>
+            <% end %>
+          </td>
+        </tr>
+      <% end %>
+      <% if @workflow[:steps].empty? %>
+        <%= render "pgbus/shared/empty_row", colspan: 9, message: t("pgbus.workflows.steps.empty") %>
+      <% end %>
+    </tbody>
+  </table>
+</section>

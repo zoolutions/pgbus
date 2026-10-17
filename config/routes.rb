@@ -53,6 +53,25 @@ Pgbus::Engine.routes.draw do
   end
 
   resources :batches, only: %i[index show]
+
+  # attention is a collection route, declared before the member routes so
+  # /workflows/attention is never read as a workflow_id.
+  resources :workflows, only: %i[index show], param: :workflow_id do
+    collection do
+      get :attention
+      post :bulk_resume
+      post :bulk_cancel
+    end
+    member do
+      post :resume
+      post :resume_at
+      post :run_now
+      post :signal
+      post :rerun
+      post :cancel
+      post :skip_step
+    end
+  end
   resources :processes, only: [:index]
 
   resources :events, only: %i[index show] do

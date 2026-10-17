@@ -1,0 +1,40 @@
+<%# The signals delivered to this run (issue #542), newest first. %>
+<section class="mb-8 rounded-lg bg-white dark:bg-gray-800 shadow ring-1 ring-gray-200 dark:ring-gray-700" aria-labelledby="workflow-signals-title" data-testid="workflow-signals">
+  <h2 id="workflow-signals-title" class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 text-lg font-medium text-gray-900 dark:text-white"><%= t("pgbus.workflows.signals.title") %></h2>
+  <table class="pgbus-table min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+    <thead class="bg-gray-50 dark:bg-gray-900">
+      <tr>
+        <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.workflows.signals.headers.name") %></th>
+        <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.workflows.signals.headers.status") %></th>
+        <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.workflows.signals.headers.received") %></th>
+        <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.workflows.signals.headers.claimed") %></th>
+        <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.workflows.signals.headers.consumed") %></th>
+        <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.workflows.signals.headers.idempotency_key") %></th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+      <% @workflow[:signals].each do |signal| %>
+        <tr class="align-top hover:bg-gray-50 dark:hover:bg-gray-700/50">
+          <td data-label="<%= t("pgbus.workflows.signals.headers.name") %>" class="px-4 py-3 text-sm text-gray-900 dark:text-white">
+            <code class="font-mono"><%= signal[:name] %></code>
+            <% payload = Pgbus::Web::PayloadFilter.filter(signal[:payload] || {}) %>
+            <% if payload.any? %>
+              <details class="mt-1">
+                <summary class="inline-flex min-h-6 cursor-pointer items-center text-xs font-medium text-indigo-700 hover:text-indigo-900 dark:text-indigo-300 dark:hover:text-indigo-200"><%= t("pgbus.workflows.signals.payload") %></summary>
+                <pre class="mt-1 overflow-auto rounded bg-gray-50 p-2 text-xs text-gray-800 dark:bg-gray-900 dark:text-gray-200"><%= JSON.pretty_generate(payload) %></pre>
+              </details>
+            <% end %>
+          </td>
+          <td data-label="<%= t("pgbus.workflows.signals.headers.status") %>" class="px-4 py-3 text-sm"><%= pgbus_workflow_signal_badge(signal[:status]) %></td>
+          <td data-label="<%= t("pgbus.workflows.signals.headers.received") %>" class="px-4 py-3 text-sm text-gray-600 dark:text-gray-300"><%= pgbus_time(signal[:created_at]) %></td>
+          <td data-label="<%= t("pgbus.workflows.signals.headers.claimed") %>" class="px-4 py-3 text-sm text-gray-600 dark:text-gray-300"><%= pgbus_time(signal[:claimed_at]) %></td>
+          <td data-label="<%= t("pgbus.workflows.signals.headers.consumed") %>" class="px-4 py-3 text-sm text-gray-600 dark:text-gray-300"><%= pgbus_time(signal[:consumed_at]) %></td>
+          <td data-label="<%= t("pgbus.workflows.signals.headers.idempotency_key") %>" class="px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-300"><%= signal[:idempotency_key] || Pgbus::Web::TimeFormat::NONE %></td>
+        </tr>
+      <% end %>
+      <% if @workflow[:signals].empty? %>
+        <%= render "pgbus/shared/empty_row", colspan: 6, message: t("pgbus.workflows.signals.empty") %>
+      <% end %>
+    </tbody>
+  </table>
+</section>

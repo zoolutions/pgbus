@@ -1,0 +1,24 @@
+<%# The audit trail (issue #542): pgbus_workflow_events, newest first, each
+    as "<what> by <actor>: <reason>". %>
+<section class="rounded-lg bg-white dark:bg-gray-800 shadow ring-1 ring-gray-200 dark:ring-gray-700" aria-labelledby="workflow-events-title" data-testid="workflow-events">
+  <h2 id="workflow-events-title" class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 text-lg font-medium text-gray-900 dark:text-white"><%= t("pgbus.workflows.audit.title") %></h2>
+  <table class="pgbus-table min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+    <thead class="bg-gray-50 dark:bg-gray-900">
+      <tr>
+        <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.workflows.audit.headers.when") %></th>
+        <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.workflows.audit.headers.what") %></th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+      <% @workflow[:events].each do |event| %>
+        <tr data-event="<%= event[:event] %>" class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+          <td data-label="<%= t("pgbus.workflows.audit.headers.when") %>" class="px-4 py-3 text-sm text-gray-600 dark:text-gray-300 whitespace-nowrap"><%= pgbus_time(event[:created_at]) %></td>
+          <td data-label="<%= t("pgbus.workflows.audit.headers.what") %>" class="px-4 py-3 text-sm text-gray-900 dark:text-white"><%= pgbus_workflow_event_sentence(event) %></td>
+        </tr>
+      <% end %>
+      <% if @workflow[:events].empty? %>
+        <%= render "pgbus/shared/empty_row", colspan: 2, message: t("pgbus.workflows.audit.empty") %>
+      <% end %>
+    </tbody>
+  </table>
+</section>

@@ -1,0 +1,93 @@
+<% result = pgbus_workflow_state(@workflow) %>
+<% card = "rounded-lg bg-white dark:bg-gray-800 shadow ring-1 ring-gray-200 dark:ring-gray-700" %>
+<div class="mb-6">
+  <div class="mb-2"><%= pgbus_link_to t("pgbus.workflows.show.back"), pgbus.workflows_path %></div>
+  <div class="flex flex-wrap items-center gap-3">
+    <h1 class="text-2xl font-bold text-gray-900 dark:text-white"><%= @workflow[:workflow_class] %></h1>
+    <%= pgbus_workflow_badge(result) %>
+  </div>
+  <p class="mt-1 font-mono text-xs text-gray-500 dark:text-gray-400"><%= @workflow[:workflow_id] %></p>
+  <p class="mt-2 text-sm text-gray-700 dark:text-gray-300" data-testid="workflow-next"><%= pgbus_workflow_next(@workflow, result) %></p>
+  <% if @workflow[:definition_outdated] %>
+    <p class="mt-3 rounded-md bg-yellow-50 px-3 py-2 text-sm text-yellow-800 ring-1 ring-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-200 dark:ring-yellow-800">
+      <%= t("pgbus.workflows.show.definition_outdated", workflow_class: @workflow[:workflow_class]) %>
+    </p>
+  <% end %>
+  <% unless @workflow[:class_loaded] %>
+    <p class="mt-3 rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-700 ring-1 ring-gray-200 dark:bg-gray-900/40 dark:text-gray-200 dark:ring-gray-700">
+      <%= t("pgbus.workflows.show.class_missing", workflow_class: @workflow[:workflow_class]) %>
+    </p>
+  <% end %>
+</div>
+
+<div class="grid grid-cols-1 gap-6 lg:grid-cols-3 mb-8">
+  <section class="<%= card %> lg:col-span-2" aria-labelledby="workflow-details-title">
+    <h2 id="workflow-details-title" class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 text-lg font-medium text-gray-900 dark:text-white"><%= t("pgbus.workflows.show.details") %></h2>
+    <dl class="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2">
+      <div>
+        <dt class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.workflows.headers.subject") %></dt>
+        <dd class="mt-1 text-sm text-gray-900 dark:text-white"><%= pgbus_workflow_subject(@workflow) %></dd>
+      </div>
+      <div>
+        <dt class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.workflows.headers.current_step") %></dt>
+        <dd class="mt-1 text-sm text-gray-900 dark:text-white"><code class="font-mono"><%= @workflow[:current_step] || Pgbus::Web::TimeFormat::NONE %></code></dd>
+      </div>
+      <div>
+        <dt class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.workflows.headers.started") %></dt>
+        <dd class="mt-1 text-sm text-gray-900 dark:text-white"><%= pgbus_timestamp(@workflow[:created_at]) %></dd>
+      </div>
+      <div>
+        <dt class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.workflows.headers.last_activity") %></dt>
+        <dd class="mt-1 text-sm text-gray-900 dark:text-white"><%= pgbus_timestamp(@workflow[:updated_at]) %></dd>
+      </div>
+      <% { paused_at: :paused_at, finished_at: :finished_at, cancelled_at: :cancelled_at }.each do |field, label| %>
+        <% next unless @workflow[field] %>
+        <div>
+          <dt class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.workflows.show.#{label}") %></dt>
+          <dd class="mt-1 text-sm text-gray-900 dark:text-white"><%= pgbus_timestamp(@workflow[field]) %></dd>
+        </div>
+      <% end %>
+      <% if @workflow[:rerun_of_workflow_id] %>
+        <div>
+          <dt class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.workflows.show.rerun_of") %></dt>
+          <dd class="mt-1 text-sm font-mono"><%= pgbus_link_to @workflow[:rerun_of_workflow_id][0, 8], pgbus.workflow_path(@workflow[:rerun_of_workflow_id]) %></dd>
+        </div>
+      <% end %>
+      <% if @workflow[:reruns].any? %>
+        <div>
+          <dt class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.workflows.show.reruns") %></dt>
+          <dd class="mt-1 space-y-1 text-sm text-gray-900 dark:text-white">
+            <% @workflow[:reruns].each do |rerun| %>
+              <span class="block"><%= pgbus_link_to rerun[:workflow_id][0, 8], pgbus.workflow_path(rerun[:workflow_id]), class: "font-mono" %>
+                · <%= t("pgbus.workflows.statuses.#{rerun[:status]}") %> · <%= pgbus_time(rerun[:created_at]) %></span>
+            <% end %>
+          </dd>
+        </div>
+      <% end %>
+    </dl>
+  </section>
+
+  <section class="<%= card %>" aria-labelledby="workflow-arguments-title" data-testid="workflow-arguments">
+    <h2 id="workflow-arguments-title" class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 text-lg font-medium text-gray-900 dark:text-white"><%= t("pgbus.workflows.show.arguments") %></h2>
+    <% arguments = Pgbus::Web::PayloadFilter.filter(@workflow[:arguments] || {}) %>
+    <% if arguments.empty? %>
+      <p class="p-4 text-sm text-gray-500 dark:text-gray-400"><%= t("pgbus.workflows.show.no_arguments") %></p>
+    <% else %>
+      <dl class="space-y-3 p-4">
+        <% arguments.each do |key, value| %>
+          <div>
+            <dt class="font-mono text-xs font-medium text-gray-500 dark:text-gray-400"><%= key %></dt>
+            <dd class="mt-0.5 break-all font-mono text-sm text-gray-900 dark:text-white"><%= pgbus_workflow_value(value) %></dd>
+          </div>
+        <% end %>
+      </dl>
+    <% end %>
+  </section>
+</div>
+
+<%= render "pgbus/workflows/actions" %>
+<%= render "pgbus/workflows/signal_form" if @workflow[:available_actions].include?(:signal) %>
+<%= render "pgbus/workflows/timeline" %>
+<%= render "pgbus/workflows/steps_table" %>
+<%= render "pgbus/workflows/signals_table" %>
+<%= render "pgbus/workflows/events_table" %>

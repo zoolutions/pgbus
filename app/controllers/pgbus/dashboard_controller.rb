@@ -35,6 +35,8 @@ module Pgbus
     def load_stats
       @stats = data_source.summary_stats
       @signals = data_source.dashboard_signals
+      @workflow_counts = { ongoing: data_source.ongoing_workflows_count, paused: data_source.paused_workflows_count,
+                           attention: data_source.workflow_attention_count }
     end
 
     def load_queues

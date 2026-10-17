@@ -74,6 +74,22 @@ RSpec.describe "Dashboard sample data", type: :system do
     expect(page).to have_css("tr[data-state=disabled]")
   end
 
+  it "shows a workflow in every state, the attention groups and a full timeline" do
+    samples = Pgbus::Test::StubDataSource::SampleWorkflows
+
+    visit "/pgbus/workflows?status=all"
+    %w[ready performing waiting paused finished cancelled].each { |status| expect(page).to have_css("tr[data-status=#{status}]") }
+
+    visit "/pgbus/workflows/attention"
+    %w[paused_error stalled overdue waiting_overdue].each { |reason| expect(page).to have_css("tr[data-reason=#{reason}]") }
+
+    visit "/pgbus/workflows/#{samples::PAUSED_ID}"
+    expect(page).to have_no_text(I18n.t("pgbus.workflows.steps.empty"))
+    expect(page).to have_no_text(I18n.t("pgbus.workflows.audit.empty"))
+    visit "/pgbus/workflows/#{samples::SIGNAL_ID}"
+    expect(page).to have_no_text(I18n.t("pgbus.workflows.signals.empty"))
+  end
+
   it "shows recurring task executions" do
     visit "/pgbus/recurring_tasks/1"
     expect(page).to have_no_text(I18n.t("pgbus.recurring_tasks.show.no_executions"))

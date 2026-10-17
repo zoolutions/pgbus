@@ -4,6 +4,8 @@ require_relative "stub_data_source/sample_data"
 require_relative "stub_data_source/sample_events"
 require_relative "stub_data_source/sample_processes"
 require_relative "stub_data_source/sample_deploy_tasks"
+require_relative "stub_data_source/sample_workflows"
+require_relative "stub_data_source/workflows"
 require_relative "stub_data_source/dashboard_signals"
 
 module Pgbus
@@ -18,6 +20,8 @@ module Pgbus
       include SampleEvents
       include SampleProcesses
       include SampleDeployTasks
+      include SampleWorkflows
+      include Workflows
       include DashboardSignals
 
       attr_accessor :stats, :queues, :processes_list, :failed_events_list,
@@ -33,7 +37,8 @@ module Pgbus
                     :capped_lists, :queue_pause_states, :queue_drainers_hash,
                     :event_rows_list, :events_ahead_hash, :event_context, :replay_states_hash,
                     :process_thresholds_overrides, :dashboard_signals_overrides, :throughput_signal,
-                    :deploy_tasks_list, :deploy_task_runs_list, :deploy_rollover_hash, :deploy_enqueue_result
+                    :deploy_tasks_list, :deploy_task_runs_list, :deploy_rollover_hash, :deploy_enqueue_result,
+                    :workflows_list, :workflow_attention_groups_list, :workflow_action_result, :workflow_bulk_result
       attr_reader :calls
 
       def initialize
@@ -85,6 +90,10 @@ module Pgbus
         @deploy_task_runs_list = []
         @deploy_rollover_hash = default_deploy_rollover
         @deploy_enqueue_result = :enqueued
+        @workflows_list = []
+        @workflow_attention_groups_list = []
+        @workflow_action_result = { ok: true }
+        @workflow_bulk_result = nil
         @calls = Hash.new { |h, k| h[k] = [] }
       end
 

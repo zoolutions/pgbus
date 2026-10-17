@@ -1,0 +1,27 @@
+<%# The filters beyond status (issue #542). A GET form: the filters combine,
+    the status tab is kept, and the pager carries them on. %>
+<% input_css = Pgbus::WorkflowsHelper::INPUT_CSS %>
+<form action="<%= pgbus.workflows_path %>" method="get" data-turbo-frame="_top" data-testid="workflow-filters"
+      class="mb-4 rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
+  <input type="hidden" name="status" value="<%= @query.status %>">
+  <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <% Pgbus::Web::WorkflowQuery::TEXT_FILTERS.each do |filter| %>
+      <div>
+        <label for="workflow-filter-<%= filter %>" class="block text-xs font-medium text-gray-700 dark:text-gray-300"><%= t("pgbus.workflows.filters.#{filter}") %></label>
+        <input type="text" autocomplete="off" id="workflow-filter-<%= filter %>" name="<%= filter %>" value="<%= @query.raw[filter] %>" class="<%= input_css %>">
+      </div>
+    <% end %>
+    <% Pgbus::Web::WorkflowQuery::DATE_FILTERS.each do |filter| %>
+      <div>
+        <label for="workflow-filter-<%= filter %>" class="block text-xs font-medium text-gray-700 dark:text-gray-300"><%= t("pgbus.workflows.filters.#{filter}") %></label>
+        <input type="date" autocomplete="off" id="workflow-filter-<%= filter %>" name="<%= filter %>" value="<%= @query.raw[filter] %>" class="<%= input_css %>">
+      </div>
+    <% end %>
+  </div>
+  <div class="mt-3 flex items-center gap-2">
+    <%= pgbus_button_tag t("pgbus.workflows.filters.apply"), variant: :primary, size: :sm %>
+    <% if @query.filtered? %>
+      <%= pgbus_link_to t("pgbus.workflows.filters.clear"), pgbus.workflows_path(status: @query.status), variant: :secondary, size: :sm %>
+    <% end %>
+  </div>
+</form>
