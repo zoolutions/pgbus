@@ -58,33 +58,95 @@ module Pgbus
     #                 without a wait_timeout: (only with +waiting_threshold+,
     #                 which needs the waiting-step columns)
     def self.stuck_reason_counts(threshold:, now: Time.current, waiting_threshold: nil)
-      waiting = !waiting_threshold.nil?
       sql = <<~SQL
         SELECT stuck.workflow_class, stuck.reason, COUNT(*) AS runs
-        FROM (
-          SELECT w.workflow_class,
-                 CASE
+        FROM (#{stuck_runs_sql(waiting: !waiting_threshold.nil?)}) stuck
+        WHERE stuck.reason IS NOT NULL
+        GROUP BY stuck.workflow_class, stuck.reason
+      SQL
+      connection.exec_query(sql, "WorkflowEntry Stuck", stuck_binds(threshold, now, waiting_threshold)).rows.to_h do |klass, reason, count|
+        [[klass, reason], count.to_i]
+      end
+    end
+
+    # The dashboard's needs-attention view (issue #542): the stuck runs of
+    # stuck_reason_counts grouped by (class, step, reason, error class), the
+    # biggest group first, at most +limit+ groups. first_seen_at/last_seen_at
+    # bound when the group's runs got stuck (paused_at, the overdue step's
+    # scheduled_at, or the waiting step's waiting_since); error_message is
+    # the newest one's.
+    def self.attention_groups(threshold:, now: Time.current, waiting_threshold: nil, limit: 200)
+      sql = <<~SQL
+        SELECT stuck.workflow_class, stuck.step_name, stuck.reason, stuck.error_class, COUNT(*) AS runs,
+               MIN(stuck.since) AS first_seen_at, MAX(stuck.since) AS last_seen_at,
+               (ARRAY_AGG(stuck.error_message ORDER BY stuck.since DESC NULLS LAST, stuck.id DESC))[1] AS error_message
+        FROM (#{stuck_runs_sql(waiting: !waiting_threshold.nil?)}) stuck
+        WHERE stuck.reason IS NOT NULL
+        GROUP BY stuck.workflow_class, stuck.step_name, stuck.reason, stuck.error_class
+        ORDER BY runs DESC, last_seen_at DESC NULLS LAST, stuck.workflow_class
+        LIMIT #{Integer(limit)}
+      SQL
+      result = connection.exec_query(sql, "WorkflowEntry Attention", stuck_binds(threshold, now, waiting_threshold))
+      result.cast_values.map do |klass, step_name, reason, error_class, count, first_seen, last_seen, message|
+        { workflow_class: klass, step_name: step_name, reason: reason, error_class: error_class, count: count.to_i,
+          first_seen_at: first_seen, last_seen_at: last_seen, error_message: message }
+      end
+    end
+
+    # The workflow_ids of one attention group (+group+: workflow_class,
+    # step_name, reason, error_class; a nil error_class matches runs without
+    # one), oldest stuck first, at most +limit+: what a bulk action walks.
+    def self.attention_ids(group, threshold:, now: Time.current, waiting_threshold: nil, limit: 500)
+      binds = stuck_binds(threshold, now, waiting_threshold)
+      first = binds.size + 1
+      sql = <<~SQL
+        SELECT stuck.workflow_id
+        FROM (#{stuck_runs_sql(waiting: !waiting_threshold.nil?)}) stuck
+        WHERE stuck.workflow_class = $#{first} AND stuck.step_name = $#{first + 1} AND stuck.reason = $#{first + 2}
+          AND stuck.error_class IS NOT DISTINCT FROM $#{first + 3}
+        ORDER BY stuck.since NULLS LAST, stuck.id
+        LIMIT #{Integer(limit)}
+      SQL
+      values = binds + group.values_at(:workflow_class, :step_name, :reason, :error_class)
+      connection.exec_query(sql, "WorkflowEntry Attention Ids", values).rows.map(&:first)
+    end
+
+    # Each paused or ready run (and, when +waiting+, each waiting run) with
+    # its latest step row and why it is stuck (NULL when it is not). Binds
+    # $1 (the overdue cutoff) and, when +waiting+, $2 (the waiting cutoff).
+    def self.stuck_runs_sql(waiting:)
+      <<~SQL
+        SELECT w.id, w.workflow_id, w.workflow_class, COALESCE(s.step_name, w.current_step) AS step_name,
+               s.error_class, s.error_message, stuck_reason.reason,
+               CASE
+                 WHEN stuck_reason.reason IN ('stalled', 'paused_error', 'paused_manual') THEN w.paused_at
+                 WHEN stuck_reason.reason = 'overdue' THEN s.scheduled_at
+                 #{"WHEN stuck_reason.reason = 'waiting_overdue' THEN s.waiting_since" if waiting}
+               END AS since
+        FROM #{table_name} w
+        LEFT JOIN LATERAL (
+          SELECT step_name, status, error_class, error_message, scheduled_at#{", timeout_at, waiting_since" if waiting}
+          FROM #{WorkflowStep.table_name}
+          WHERE workflow_id = w.workflow_id ORDER BY id DESC LIMIT 1
+        ) s ON TRUE
+        CROSS JOIN LATERAL (
+          SELECT CASE
                    WHEN w.status = 'paused' AND s.status = 'failed' AND s.error_class = 'Pgbus::Workflow::StepStalled' THEN 'stalled'
                    WHEN w.status = 'paused' AND s.status = 'failed' THEN 'paused_error'
                    WHEN w.status = 'paused' THEN 'paused_manual'
                    WHEN w.status = 'ready' AND s.status = 'scheduled' AND s.scheduled_at < $1 THEN 'overdue'
                    #{"WHEN w.status = 'waiting' AND s.status = 'waiting' AND s.timeout_at IS NULL AND s.waiting_since < $2 THEN 'waiting_overdue'" if waiting}
                  END AS reason
-          FROM #{table_name} w
-          LEFT JOIN LATERAL (
-            SELECT status, error_class, scheduled_at#{", timeout_at, waiting_since" if waiting} FROM #{WorkflowStep.table_name}
-            WHERE workflow_id = w.workflow_id ORDER BY id DESC LIMIT 1
-          ) s ON TRUE
-          WHERE w.status IN ('paused', 'ready'#{", 'waiting'" if waiting})
-        ) stuck
-        WHERE stuck.reason IS NOT NULL
-        GROUP BY stuck.workflow_class, stuck.reason
+        ) stuck_reason
+        WHERE w.status IN ('paused', 'ready'#{", 'waiting'" if waiting})
       SQL
-      binds = waiting ? [now - threshold, now - waiting_threshold] : [now - threshold]
-      connection.exec_query(sql, "WorkflowEntry Stuck", binds).rows.to_h do |klass, reason, count|
-        [[klass, reason], count.to_i]
-      end
     end
+    private_class_method :stuck_runs_sql
+
+    def self.stuck_binds(threshold, now, waiting_threshold)
+      waiting_threshold.nil? ? [now - threshold] : [now - threshold, now - waiting_threshold]
+    end
+    private_class_method :stuck_binds
 
     # The Pgbus::Workflow subclass that started this run, or nil when it no
     # longer exists.

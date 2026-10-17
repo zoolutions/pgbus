@@ -13,12 +13,14 @@ module Pgbus
     #   config.workflow_error_backtrace_lines = 50      # backtrace lines kept on a failed step
     #   config.workflow_waiting_visibility_threshold = 7.days # a step waiting this long without a
     #                                                   # wait_timeout: counts as stuck (waiting_overdue)
+    #   config.workflow_subject_url = ->(type, id) { "/admin/#{type.underscore.pluralize}/#{id}" }
+    #                                                   # the dashboard's subject link (nil: plain text)
     module WorkflowSettings
       WORKFLOW_STALL_ACTIONS = %i[pause reattempt cancel].freeze
 
       attr_reader :workflow_queue, :workflow_retention, :workflow_sweep_interval, :workflow_stall_threshold,
                   :workflow_stall_action, :workflow_waiting_visibility_threshold
-      attr_accessor :workflow_max_payload_size, :workflow_error_backtrace_lines
+      attr_accessor :workflow_max_payload_size, :workflow_error_backtrace_lines, :workflow_subject_url
 
       def workflow_queue=(value)
         name = value.to_s
@@ -64,6 +66,7 @@ module Pgbus
         @workflow_max_payload_size = 131_072 # 128 KB
         @workflow_error_backtrace_lines = 50
         @workflow_waiting_visibility_threshold = 7 * 24 * 3600 # 7 days
+        @workflow_subject_url = nil
       end
 
       def validate_workflow_settings!
@@ -86,6 +89,10 @@ module Pgbus
           workflow_error_backtrace_lines: workflow_error_backtrace_lines }.each do |name, value|
           raise Pgbus::ConfigurationError, "#{name} must be a positive integer" unless value.is_a?(Integer) && value.positive?
         end
+
+        return if workflow_subject_url.nil? || workflow_subject_url.respond_to?(:call)
+
+        raise Pgbus::ConfigurationError, "workflow_subject_url must respond to #call (a Proc/lambda) or be nil"
       end
     end
   end

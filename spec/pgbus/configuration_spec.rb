@@ -1677,6 +1677,22 @@ RSpec.describe Pgbus::Configuration do
         expect { config.validate! }.not_to raise_error
       end
 
+      %i[web_actor workflow_subject_url].each do |key|
+        it "defaults #{key} to nil" do
+          expect(described_class.new.public_send(key)).to be_nil
+        end
+
+        it "rejects a non-callable #{key}" do
+          config.public_send("#{key}=", "alice")
+          expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /#{key} must respond to #call/)
+        end
+
+        it "accepts a callable #{key}" do
+          config.public_send("#{key}=", ->(*) {})
+          expect { config.validate! }.not_to raise_error
+        end
+      end
+
       it "rejects a non-Array error_reporters" do
         config.error_reporters = ->(_e, _ctx) {}
         expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /error_reporters/)

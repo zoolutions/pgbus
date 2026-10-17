@@ -292,6 +292,8 @@ module Pgbus
     def visibility_timeout: () -> Numeric?
     def visibility_timeout=: (untyped value) -> untyped
     def warn_read_ahead_without_heartbeat: (untyped settings) -> untyped
+    def web_actor: () -> untyped
+    def web_actor=: (untyped) -> untyped
     def web_auth: () -> untyped
     def web_auth=: (untyped) -> untyped
     def web_data_source: () -> untyped
@@ -332,6 +334,8 @@ module Pgbus
     def workflow_stall_action=: (untyped value) -> untyped
     def workflow_stall_threshold: () -> Numeric?
     def workflow_stall_threshold=: (untyped value) -> untyped
+    def workflow_subject_url: () -> untyped
+    def workflow_subject_url=: (untyped) -> untyped
     def workflow_sweep_interval: () -> Numeric?
     def workflow_sweep_interval=: (untyped value) -> untyped
     def workflow_waiting_visibility_threshold: () -> Numeric?

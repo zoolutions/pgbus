@@ -216,7 +216,7 @@ module Pgbus
 
     # Web dashboard
     attr_accessor :web_auth, :web_refresh_interval, :web_per_page, :web_live_updates, :web_data_source,
-                  :insights_default_minutes, :base_controller_class, :return_to_app_url,
+                  :insights_default_minutes, :base_controller_class, :return_to_app_url, :web_actor,
                   :metrics_enabled,
                   :web_filter_parameters, :web_filter_sensitive
 
@@ -383,6 +383,10 @@ module Pgbus
       @connection_guc_mode = :options
 
       @web_auth = nil
+      # ->(request) { String or nil }: who an operator action on the dashboard
+      # is recorded as ("dashboard:<name>"; nil → "dashboard"). web_auth only
+      # answers allow/deny, so the name comes from here.
+      @web_actor = nil
       @web_refresh_interval = 5000
       @web_per_page = 25
       @web_live_updates = true
@@ -1065,8 +1069,10 @@ module Pgbus
 
       # web_auth gates the dashboard; a non-callable value silently leaves it
       # open (mirror streams_presence_member).
-      unless web_auth.nil? || web_auth.respond_to?(:call)
-        raise Pgbus::ConfigurationError, "web_auth must respond to #call (a Proc/lambda) or be nil"
+      { web_auth: web_auth, web_actor: web_actor }.each do |name, value|
+        next if value.nil? || value.respond_to?(:call)
+
+        raise Pgbus::ConfigurationError, "#{name} must respond to #call (a Proc/lambda) or be nil"
       end
 
       raise Pgbus::ConfigurationError, "error_reporters must be an Array" unless error_reporters.is_a?(Array)

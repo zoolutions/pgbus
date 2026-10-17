@@ -79,6 +79,7 @@ module ConfigReference
       { name: "workflow_stall_action", type: "Symbol", default: ":pause", desc: "What happens to a stalled step: :pause the workflow, :reattempt the step, or :cancel the workflow." },
       { name: "workflow_max_payload_size", type: "Integer", default: "131_072", desc: "Byte cap on a workflow's serialized arguments and on each step's output; larger raises Pgbus::Workflow::PayloadTooLarge." },
       { name: "workflow_error_backtrace_lines", type: "Integer", default: "50", desc: "Backtrace lines kept on a failed step row (cleaned through Rails.backtrace_cleaner when Rails is loaded)." },
+      { name: "workflow_subject_url", type: "Callable, nil", default: "nil", desc: "->(subject_type, subject_id) { URL or nil }: where the Workflows dashboard links a run's subject. Only an http(s) URL or a path starting with a single / is linked; anything else, or a lambda that raises, shows as text." },
       { name: "workflow_waiting_visibility_threshold", type: "Duration", default: "7.days", desc: "A step waiting this long for a signal or its batch, without a wait_timeout:, counts as stuck (the waiting_overdue reason in the pgbus_workflows_stuck gauge)." }
     ],
     "Outbox" => [
@@ -109,6 +110,7 @@ module ConfigReference
     ],
     "Dashboard" => [
       { name: "web_auth", type: "Callable, nil", default: "nil", desc: "Lambda authorizing dashboard access." },
+      { name: "web_actor", type: "Callable, nil", default: "nil", desc: "->(request) { name or nil }: who a dashboard action on a workflow is recorded as on its audit trail (\"dashboard:<name>\"; nil records \"dashboard\")." },
       { name: "base_controller_class", type: "String", default: '"::ActionController::Base"', desc: "Base class for dashboard controllers." },
       { name: "return_to_app_url", type: "String, nil", default: "nil", desc: 'URL for the "back to app" button.' },
       { name: "web_refresh_interval", type: "Integer", default: "5000", desc: "Dashboard auto-refresh interval (ms)." },
