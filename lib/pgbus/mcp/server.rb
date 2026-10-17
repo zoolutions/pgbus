@@ -66,9 +66,11 @@ module Pgbus
         pgbus_workflow_resume_at, pgbus_workflow_run_now and
         pgbus_workflow_signal change one workflow run each. Read the run with
         pgbus_workflow first, then pass a reason (recorded on the run's audit
-        trail) and expected_status (the status you read), so a stale read
-        answers ok: false instead of acting. There are no bulk write tools:
-        loop over pgbus_workflows_attention results, one call per run.
+        trail) and expected_status (the status you read): a run that has
+        moved on by the time the call starts answers ok: false and nothing
+        is done (the check runs just before the action, whose transition is
+        guarded again under the run's row lock). There are no bulk write
+        tools: loop over pgbus_workflows_attention results, one call per run.
       TEXT
 
       module_function

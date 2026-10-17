@@ -20,11 +20,12 @@ module Pgbus
 
       # Returns [record, signal]. A redelivery with a stored idempotency key
       # returns the stored signal (duplicate_delivery? true) and does nothing
-      # else.
+      # else. A blank key is no key: "" would otherwise dedup every signal
+      # sent with it against the first.
       def deliver(workflow_id, name, payload:, idempotency_key:, actor:, reason: nil)
         name = signal_name!(name)
         serialized = Payload.dump(payload || {}, what: "payload of signal #{name}")
-        key = idempotency_key&.to_s
+        key = idempotency_key.to_s.presence
         Runner.locked(workflow_id) do |record, notes|
           raise ActiveRecord::RecordNotFound, "workflow #{workflow_id} is gone" unless record
 

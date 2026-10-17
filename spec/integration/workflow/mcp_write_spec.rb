@@ -24,6 +24,10 @@ RSpec.describe "MCP workflow write tools (integration)", :integration do
     stub_const("ShippingWorkflow", Class.new(Pgbus::Workflow) do
       step(:ship, wait_for: :shipped) { output(carrier: received_signal.payload[:carrier]) }
     end)
+    stub_const("TwoGateWorkflow", Class.new(Pgbus::Workflow) do
+      step(:packed, wait_for: :packed) { nil }
+      step(:shipped, wait_for: :shipped) { nil }
+    end)
   end
 
   after { Pgbus.configuration.mcp_write_tools = false }
@@ -89,5 +93,22 @@ RSpec.describe "MCP workflow write tools (integration)", :integration do
     expect(Pgbus::WorkflowSignal.where(workflow_id: wf.workflow_id).count).to eq(1)
     run_until(wf, statuses: %w[finished])
     expect(wf.output_of(:ship)).to include("carrier" => "DHL")
+  end
+
+  it "delivers every signal sent with an empty idempotency key: blank is no key, not a shared one" do
+    wf = run_until(TwoGateWorkflow.start!, statuses: %w[waiting])
+
+    first = call_tool("pgbus_workflow_signal", workflow_id: wf.workflow_id, reason: "packed", name: "packed",
+                                               idempotency_key: "")
+    expect(first).to include("ok" => true, "duplicate" => false)
+    run_until(wf, statuses: %w[waiting])
+    expect(steps_of(wf).last).to have_attributes(step_name: "shipped", status: "waiting")
+
+    second = call_tool("pgbus_workflow_signal", workflow_id: wf.workflow_id, reason: "shipped", name: "shipped",
+                                                idempotency_key: "")
+    expect(second).to include("ok" => true, "duplicate" => false)
+    run_until(wf, statuses: %w[finished])
+    expect(Pgbus::WorkflowSignal.where(workflow_id: wf.workflow_id).pluck(:name, :idempotency_key))
+      .to contain_exactly(["packed", nil], ["shipped", nil])
   end
 end

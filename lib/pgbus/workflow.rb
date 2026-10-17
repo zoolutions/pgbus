@@ -142,7 +142,7 @@ module Pgbus
       # none (never started, or already over), missing: :raise raises
       # NotOngoing and missing: :ignore returns nil. A subject-less run is
       # signalled through its handle: find(workflow_id).signal!.
-      def signal!(subject, name, payload: {}, idempotency_key: nil, missing: :raise, actor: nil)
+      def signal!(subject, name, payload: {}, idempotency_key: nil, missing: :raise, actor: nil, reason: nil)
         raise ArgumentError, "missing: must be :raise or :ignore, got #{missing.inspect}" unless %i[raise ignore].include?(missing)
         if subject.nil?
           raise ArgumentError, "#{self.name}.signal! needs a subject; signal a subject-less run through its handle " \
@@ -154,7 +154,7 @@ module Pgbus
                                                subject_id: attrs[:subject_id])
         raise NotOngoing, "#{self.name} has no ongoing run for #{attrs[:subject_type]} #{attrs[:subject_id]}" unless record
 
-        new(record).signal!(name, payload: payload, idempotency_key: idempotency_key, actor: actor)
+        new(record).signal!(name, payload: payload, idempotency_key: idempotency_key, actor: actor, reason: reason)
       rescue NotOngoing
         raise if missing == :raise
 

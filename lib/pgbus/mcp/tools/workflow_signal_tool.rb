@@ -28,7 +28,7 @@ module Pgbus
                 description: "The signal's payload, a JSON object of at most workflow_max_payload_size bytes."
               },
               idempotency_key: { type: "string", maxLength: KEY_LIMIT,
-                                 description: "Makes a retried call deliver the signal once." }
+                                 description: "Makes a retried call deliver the signal once. Blank means none." }
             },
             required: %w[name]
           )
@@ -37,7 +37,7 @@ module Pgbus
         def self.call(workflow_id:, reason:, name:, payload: nil, idempotency_key: nil, expected_status: nil,
                       server_context: nil)
           name = name.to_s.strip
-          idempotency_key = idempotency_key&.to_s
+          idempotency_key = idempotency_key.to_s.presence # blank is no key, as in Signals.deliver
           payload = payload_object(payload)
           refusal = signal_refusal(name, idempotency_key, payload)
           return answer(ok: false, reason: refusal) if refusal

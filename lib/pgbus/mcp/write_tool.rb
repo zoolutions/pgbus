@@ -46,7 +46,7 @@ module Pgbus
                         description: "Why, in 1-#{REASON_LIMIT} characters. Recorded on the run's audit trail." },
               expected_status: {
                 type: "string", enum: Workflow::States::WORKFLOW,
-                description: "Act only if the run is still in this status (the one you read); otherwise ok: false."
+                description: "The status you read. If the run is in another one when the call starts: ok: false, nothing done."
               },
               **properties
             },
@@ -58,7 +58,7 @@ module Pgbus
         def verb_description(verb, summary)
           transition = Workflow::States.fetch(verb)
           <<~DESC
-            #{summary} Allowed from: #{transition.from.join(", ")}. What happens: #{transition.effect}. A write tool: it exists only when the server was built with config.mcp_write_tools = true. reason is required and recorded on the run's audit trail with actor "mcp"; pass expected_status (the status you read with pgbus_workflow) so a stale read answers ok: false instead of acting. Answers { ok, reason, workflow } with the run after the action (code and status when it was refused); arguments, outputs, signal payloads and error text are redacted.
+            #{summary} Allowed from: #{transition.from.join(", ")}. What happens: #{transition.effect}. A write tool: it exists only when the server was built with config.mcp_write_tools = true. reason is required and recorded on the run's audit trail with actor "mcp"; pass expected_status (the status you read with pgbus_workflow): a run that has moved on by the time the call starts answers ok: false and nothing is done (the check runs just before the action, whose transition is guarded again under the run's row lock). Answers { ok, reason, workflow } with the run after the action (code and status when it was refused); arguments, outputs, signal payloads and error text are redacted.
           DESC
         end
 

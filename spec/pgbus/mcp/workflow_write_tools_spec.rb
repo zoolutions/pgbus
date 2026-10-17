@@ -92,6 +92,13 @@ RSpec.describe "the workflow write tools" do # rubocop:disable RSpec/DescribeCla
         .with("wf-1", name: "shipped", payload: {}, idempotency_key: nil, **who)
     end
 
+    it "sends a blank idempotency key as none" do
+      call(tool, name: "shipped", idempotency_key: "  ")
+
+      expect(data_source).to have_received(:signal_workflow)
+        .with("wf-1", name: "shipped", payload: {}, idempotency_key: nil, **who)
+    end
+
     it "answers a redelivery as a duplicate" do
       allow(data_source).to receive(:signal_workflow).and_return(ok: true, duplicate: true)
 

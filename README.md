@@ -1290,9 +1290,10 @@ The flag is read when the server is built (`pgbus mcp`, `Pgbus::MCP.rack_app`). 
 | `pgbus_workflow_skip_step` | Skip the step a waiting run waits on. |
 | `pgbus_workflow_resume_at` | Resume a paused run at a named `step`. |
 | `pgbus_workflow_run_now` | Send a ready run's scheduled step now instead of after its wait. |
-| `pgbus_workflow_signal` | Deliver signal `name` with a JSON object `payload` (at most `workflow_max_payload_size`) and an optional `idempotency_key` — pass one when the call may be retried. Name and key are at most 255 characters. |
+| `pgbus_workflow_signal` | Deliver signal `name` with a JSON object `payload` (at most `workflow_max_payload_size`) and an optional `idempotency_key` — pass one when the call may be retried (a blank key is no key). Name and key are at most 255 characters. |
 
-- Each takes `workflow_id`, a required `reason` (1–500 characters) and an optional `expected_status`: the call acts only if the run is still in that status, so an agent acting on a stale read gets `ok: false` instead of a surprise.
+- Each takes `workflow_id`, a required `reason` (1–500 characters) and an optional `expected_status`, the status the agent read: a run that has moved on by the time the call starts answers `ok: false` and nothing is done, so an agent acting on a stale read is not surprised. The check runs just before the action; the transition itself is guarded again under the run's row lock.
+- Arguments the input schema rejects (no `reason`, one over 500 characters, an unknown `expected_status`, a `payload` that is not an object) come back as a tool error before the tool runs; nothing is done either way.
 - The verb is checked against the run's `available_actions` (not allowed: `ok: false` with the allowed list), then goes through the same `Web::DataSource` action as the dashboard's button, so the transition table and the run's row lock decide.
 - Every call lands on the run's audit trail with its reason and actor `mcp` (`mcp:<client name>` when the transport knows the client).
 - The answer is `{ ok:, reason:, workflow: }`: `workflow` is the `pgbus_workflow` detail after the action, with arguments, outputs, signal payloads and error text always redacted; a refused action adds `code` and the `status` the run is in now.

@@ -258,10 +258,10 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
           and is taken when the step reaches its gate.
         - **Idempotency.** With an `idempotency_key`, a redelivery stores
           nothing, wakes nothing and returns the stored signal, whose
-          `duplicate_delivery?` is true.
-        - **Audit.** `actor:` and `reason:` (both optional) go on the run's
-          `signal_received` event: `wf.signal!(:shipped, actor: "webhook",
-          reason: "carrier callback")`.
+          `duplicate_delivery?` is true. A blank key (`""`) is no key.
+        - **Audit.** `actor:` and `reason:` (both optional, on the handle and
+          by subject) go on the run's `signal_received` event:
+          `wf.signal!(:shipped, actor: "webhook", reason: "carrier callback")`.
         - **Matchers.** `wait_for:` takes a signal name, a
           `Pgbus::Workflow::SignalMatcher.new(:shipped) { |payload| payload[:region] == "eu" }`,
           or any object answering `matches?(signal)`. A matcher runs under the
@@ -530,7 +530,7 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
         end
       RUBY
       md <<~'MD'
-        The read-only MCP server has the same views: `pgbus_workflows` (the
+        The MCP server's read tools have the same views: `pgbus_workflows` (the
         list, with the page's filters), `pgbus_workflow` (one run, with
         `available_actions`) and `pgbus_workflows_attention`. Arguments, step
         outputs, signal payloads and error text are redacted unless the server
@@ -551,11 +551,13 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
         `pgbus_workflow_skip_step`, `pgbus_workflow_resume_at` (with `step`),
         `pgbus_workflow_run_now` and `pgbus_workflow_signal` (with `name`, a
         JSON object `payload` of at most `workflow_max_payload_size` and an
-        optional `idempotency_key`, which a retried call should pass). Each
+        optional `idempotency_key`, which a retried call should pass; a blank
+        one is no key). Each
         takes `workflow_id`, a required `reason` (1–500 characters) and an
-        optional `expected_status`: the call acts only if the run is still in
-        that status, so an agent acting on a stale read gets `ok: false`
-        instead of a surprise. A verb the run's `available_actions` does not
+        optional `expected_status`, the status the agent read: a run that has
+        moved on by the time the call starts answers `ok: false` and nothing
+        is done (the check runs just before the action, whose transition is
+        guarded again under the run's row lock). A verb the run's `available_actions` does not
         allow answers `ok: false` with the allowed list. Otherwise the call
         goes through the same action as the dashboard's button, lands on the
         audit trail with its reason as actor `mcp` (`mcp:<client name>` when
@@ -617,7 +619,7 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
         page reads in about 25 ms and the list in about 100 ms over 24 hours
         (the budgets `rake bench:workflow_insights` checks: 250 and 500 ms);
         over 30 days both take about 300 ms, which the bench reports without
-        a budget. The read-only MCP server has the same:
+        a budget. The MCP server's read tools have the same:
         `pgbus_workflow_definitions(window:)` and
         `pgbus_workflow_stats(workflow_class:, window:)`, and
         `pgbus_workflows_attention` takes `workflow_class:`.
