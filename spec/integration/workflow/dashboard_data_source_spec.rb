@@ -256,7 +256,7 @@ RSpec.describe "Pgbus::Web::DataSource workflows", :integration do
 
       result = data_source.bulk_resume_workflows(group: group, actor: actor, reason: "fix deployed")
 
-      expect(result).to eq(ok: true, done: 2, skipped: 1)
+      expect(result).to eq(ok: true, done: 2, skipped: 1, failed: 0)
       expect(runs.first(2).map { |wf| wf.reload.status }).to all(eq("ready"))
     end
 
@@ -266,7 +266,7 @@ RSpec.describe "Pgbus::Web::DataSource workflows", :integration do
       failed_checkout(2)
       group = { workflow_class: "CheckoutWorkflow", step_name: "capture", reason: "paused_error", error_class: "GatewayDown" }
 
-      expect(data_source.bulk_cancel_workflows(group: group, actor: actor)).to eq(ok: true, done: 1, skipped: 0)
+      expect(data_source.bulk_cancel_workflows(group: group, actor: actor)).to eq(ok: true, done: 1, skipped: 0, failed: 0)
       expect(Pgbus::WorkflowEntry.where(status: "cancelled").count).to eq(1)
     end
   end

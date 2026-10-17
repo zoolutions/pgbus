@@ -1140,6 +1140,7 @@ ja:
           one: "%{count} 件をキャンセルしました。"
           other: "%{count} 件をキャンセルしました。"
         bulk_cancel_skipped: "%{count} 件をキャンセルしました。%{skipped} 件はすでに先へ進んでいました。"
+        bulk_failed: "%{count} 件は変更できませんでした: %{reason}"
         bulk_more: ほかにも実行が残っている可能性があります。もう一度押すと次の %{cap} 件を処理します。
         bulk_resume:
           one: "%{count} 件を再開しました。"
@@ -1194,7 +1195,7 @@ ja:
         waiting_signal_timeout_html: シグナル %{signal} を %{ago} から待機中です。待機は %{time} にタイムアウトします。
         waiting_step_html: "%{step} を待機中です。"
       not_found:
-        hint: 完了し、workflow_retention の経過後に削除された可能性があります。
+        hint: 完了して workflow_retention 経過後に削除されたか、データベースを読み取れなかった可能性があります（ログを確認してください）。
         title: ワークフローが見つかりません
       outcomes:
         cancelled: キャンセル

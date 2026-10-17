@@ -1140,6 +1140,7 @@ en:
           one: Cancelled %{count}.
           other: Cancelled %{count}.
         bulk_cancel_skipped: Cancelled %{count}; %{skipped} had already moved on.
+        bulk_failed: "%{count} could not be changed: %{reason}"
         bulk_more: 'More runs may be waiting: press again for the next %{cap}.'
         bulk_resume:
           one: Resumed %{count}.
@@ -1194,7 +1195,7 @@ en:
         waiting_signal_timeout_html: Waiting for signal %{signal} since %{ago}. The wait times out %{time}.
         waiting_step_html: Waiting on %{step}.
       not_found:
-        hint: It may have finished and been removed after workflow_retention.
+        hint: It may have finished and been removed after workflow_retention, or the database could not be read (see the log).
         title: Workflow not found
       outcomes:
         cancelled: cancelled

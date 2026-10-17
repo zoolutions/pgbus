@@ -13,6 +13,9 @@ module Pgbus
         FILTERS = %i[workflow_class step error_class subject_type subject_id workflow_id created_from created_to].freeze
         STEP_HISTORY = 100
         EVENT_HISTORY = 200
+        # The pause events the timeline pairs, read on their own so a long
+        # audit trail never drops a run's earliest pauses from the chart.
+        PAUSE_HISTORY = 1_000
         SIGNAL_HISTORY = 100
         RERUN_LINKS = 10
         ATTENTION_GROUPS = 200
@@ -41,7 +44,7 @@ module Pgbus
           return nil unless record
 
           steps = WorkflowStep.where(workflow_id: workflow_id).order(id: :desc).limit(STEP_HISTORY).to_a
-          progress = batch_progress([steps.first&.batch_id].compact)
+          progress = batch_progress([step_attribute(steps.first, :batch_id)].compact)
           workflow_row(record, steps.first, progress).merge(workflow_extras(record, steps))
         rescue StandardError => e
           Pgbus.logger.error { "[Pgbus::Web] Error fetching workflow #{workflow_id}: #{e.class}: #{e.message}" }
@@ -172,7 +175,7 @@ module Pgbus
             definition_outdated: record.definition_outdated?, class_loaded: !klass.nil?,
             step_names: klass ? klass.workflow_steps.names : [], resume_action: resume_action, resume_step: resume_step,
             signal_names: WorkflowActionPlan.signal_names(steps.first, klass), reruns: workflow_reruns(record.workflow_id),
-            timeline: WorkflowTimeline.chart(step_hashes, events, status: record.status, now: now) }
+            timeline: WorkflowTimeline.chart(step_hashes, pause_events(record.workflow_id), status: record.status, now: now) }
         end
 
         def workflow_step_hash(step)
@@ -185,6 +188,11 @@ module Pgbus
             waiting_since: step_attribute(step, :waiting_since), wait_for: step_attribute(step, :wait_for),
             timeout_at: step_attribute(step, :timeout_at), batch_id: step_attribute(step, :batch_id),
             signal_id: step_attribute(step, :signal_id) }
+        end
+
+        def pause_events(workflow_id)
+          WorkflowEvent.where(workflow_id: workflow_id, event: WorkflowTimeline::PAUSE_EVENTS).order(:id).limit(PAUSE_HISTORY)
+                       .map { |event| { event: event.event, created_at: event.created_at } }
         end
 
         def workflow_signals(workflow_id)

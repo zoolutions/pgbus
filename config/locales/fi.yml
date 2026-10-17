@@ -1140,6 +1140,7 @@ fi:
           one: Peruttiin %{count}.
           other: Peruttiin %{count}.
         bulk_cancel_skipped: Peruttiin %{count}; %{skipped} oli jo edennyt.
+        bulk_failed: "%{count} ei voitu muuttaa: %{reason}"
         bulk_more: 'Ajoja voi olla vielä jäljellä: paina uudelleen seuraavat %{cap} varten.'
         bulk_resume:
           one: Jatkettiin %{count}.
@@ -1194,7 +1195,7 @@ fi:
         waiting_signal_timeout_html: Odottaa signaalia %{signal}, alkoi %{ago}. Odotus aikakatkaistaan %{time}.
         waiting_step_html: Odottaa vaihetta %{step}.
       not_found:
-        hint: Se on voinut päättyä ja poistua asetuksen workflow_retention jälkeen.
+        hint: Se on ehkä päättynyt ja poistettu workflow_retentionin jälkeen, tai tietokantaa ei voitu lukea (katso loki).
         title: Työnkulkua ei löytynyt
       outcomes:
         cancelled: peruttu

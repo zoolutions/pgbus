@@ -17,6 +17,7 @@ module Pgbus
     module WorkflowTimeline
       OPEN = %w[scheduled waiting in_progress].freeze
       PAUSE_ENDS = %w[resumed cancelled finished].freeze
+      PAUSE_EVENTS = (%w[paused] + PAUSE_ENDS).freeze
       RAN_SERIES = { "completed" => "ran_ok", "skipped" => "ran_ok", "failed" => "ran_failed",
                      "in_progress" => "ran_open", "waiting" => "ran_open" }.freeze
 

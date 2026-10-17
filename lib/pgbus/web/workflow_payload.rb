@@ -21,9 +21,6 @@ module Pgbus
         end
       end
 
-      # display, then the dashboard's sensitive-key redaction (PayloadFilter).
-      def filtered(value) = PayloadFilter.filter(display(value))
-
       def display_hash(hash)
         return hash["_aj_globalid"] if hash.size == 1 && hash.key?("_aj_globalid")
         return display(hash["value"]) if hash.key?("_aj_serialized")

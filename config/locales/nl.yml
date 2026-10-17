@@ -1140,6 +1140,7 @@ nl:
           one: "%{count} geannuleerd."
           other: "%{count} geannuleerd."
         bulk_cancel_skipped: "%{count} geannuleerd; %{skipped} waren al verder."
+        bulk_failed: "%{count} konden niet worden gewijzigd: %{reason}"
         bulk_more: 'Er wachten mogelijk meer runs: druk nogmaals voor de volgende %{cap}.'
         bulk_resume:
           one: "%{count} hervat."
@@ -1194,7 +1195,7 @@ nl:
         waiting_signal_timeout_html: Wacht op signaal %{signal}, gestart %{ago}. De wachttijd verloopt %{time}.
         waiting_step_html: Wacht op %{step}.
       not_found:
-        hint: Mogelijk is hij afgerond en na workflow_retention verwijderd.
+        hint: Hij is mogelijk voltooid en verwijderd na workflow_retention, of de database kon niet worden gelezen (zie het log).
         title: Workflow niet gevonden
       outcomes:
         cancelled: geannuleerd

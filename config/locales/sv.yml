@@ -1140,6 +1140,7 @@ sv:
           one: Avbröt %{count}.
           other: Avbröt %{count}.
         bulk_cancel_skipped: Avbröt %{count}; %{skipped} hade redan gått vidare.
+        bulk_failed: "%{count} kunde inte ändras: %{reason}"
         bulk_more: 'Fler körningar kan vänta: tryck igen för nästa %{cap}.'
         bulk_resume:
           one: Återupptog %{count}.
@@ -1194,7 +1195,7 @@ sv:
         waiting_signal_timeout_html: Väntar på signalen %{signal} sedan %{ago}. Väntan tar slut %{time}.
         waiting_step_html: Väntar på %{step}.
       not_found:
-        hint: Det kan ha slutförts och tagits bort efter workflow_retention.
+        hint: Det kan ha avslutats och tagits bort efter workflow_retention, eller så kunde databasen inte läsas (se loggen).
         title: Arbetsflödet hittades inte
       outcomes:
         cancelled: avbrutet

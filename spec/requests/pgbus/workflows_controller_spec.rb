@@ -59,6 +59,16 @@ RSpec.describe "Pgbus::WorkflowsController", type: :request do
     end
   end
 
+  describe "the list frame" do
+    it "does not count the stuck runs it does not show" do
+      allow(@stub_data_source).to receive(:workflow_attention_count).and_call_original
+
+      get "/pgbus/workflows", params: { frame: "list" }
+
+      expect(@stub_data_source).not_to have_received(:workflow_attention_count)
+    end
+  end
+
   describe "GET /pgbus/workflows/attention" do
     it "renders the needs-attention groups, not a workflow called attention" do
       get "/pgbus/workflows/attention"
@@ -118,6 +128,16 @@ RSpec.describe "Pgbus::WorkflowsController", type: :request do
       post "/pgbus/workflows/#{paused_id}/cancel"
       expect(@stub_data_source.calls[:cancel_workflow].last.last[:actor]).to eq("dashboard")
       expect(Pgbus.logger).to have_received(:error)
+    end
+
+    it "records plain dashboard when web_actor answers something that is not a name" do
+      allow(Pgbus.logger).to receive(:warn)
+      Pgbus.configuration.web_actor = ->(_request) { Object.new }
+
+      post "/pgbus/workflows/#{paused_id}/cancel"
+
+      expect(@stub_data_source.calls[:cancel_workflow].last.last[:actor]).to eq("dashboard")
+      expect(Pgbus.logger).to have_received(:warn).at_least(:once)
     end
 
     it "flashes the lost race with the run's current status" do
@@ -225,6 +245,15 @@ RSpec.describe "Pgbus::WorkflowsController", type: :request do
 
       expect(flash[:notice]).to eq("Cancelled 3.")
       expect(@stub_data_source.calls[:bulk_cancel_workflows].last.first[:group]).to include(error_class: nil)
+    end
+
+    it "says how many failed, and why, apart from the ones that moved on" do
+      @stub_data_source.workflow_bulk_result = { ok: true, done: 1, skipped: 2, failed: 3,
+                                                 failure: "GoneWorkflow has no step capture" }
+
+      post "/pgbus/workflows/bulk_resume", params: { group: group }
+
+      expect(flash[:notice]).to eq("Resumed 1; 2 had already moved on. 3 could not be changed: GoneWorkflow has no step capture")
     end
 
     it "says when the cap left more runs behind" do

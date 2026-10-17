@@ -1140,6 +1140,7 @@ nb:
           one: Avbrøt %{count}.
           other: Avbrøt %{count}.
         bulk_cancel_skipped: Avbrøt %{count}; %{skipped} hadde allerede gått videre.
+        bulk_failed: "%{count} kunne ikke endres: %{reason}"
         bulk_more: 'Flere kjøringer kan vente: trykk igjen for de neste %{cap}.'
         bulk_resume:
           one: Gjenopptok %{count}.
@@ -1194,7 +1195,7 @@ nb:
         waiting_signal_timeout_html: Venter på signalet %{signal} siden %{ago}. Ventetiden utløper %{time}.
         waiting_step_html: Venter på %{step}.
       not_found:
-        hint: Den kan ha blitt fullført og fjernet etter workflow_retention.
+        hint: Den kan ha blitt fullført og fjernet etter workflow_retention, eller databasen kunne ikke leses (se loggen).
         title: Arbeidsflyten ble ikke funnet
       outcomes:
         cancelled: avbrutt

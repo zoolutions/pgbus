@@ -1140,6 +1140,7 @@ da:
           one: Annullerede %{count}.
           other: Annullerede %{count}.
         bulk_cancel_skipped: Annullerede %{count}; %{skipped} var allerede kørt videre.
+        bulk_failed: "%{count} kunne ikke ændres: %{reason}"
         bulk_more: 'Der kan vente flere kørsler: tryk igen for de næste %{cap}.'
         bulk_resume:
           one: Genoptog %{count}.
@@ -1194,7 +1195,7 @@ da:
         waiting_signal_timeout_html: Venter på signalet %{signal} siden %{ago}. Ventetiden udløber %{time}.
         waiting_step_html: Venter på %{step}.
       not_found:
-        hint: Den kan være afsluttet og fjernet efter workflow_retention.
+        hint: Det kan være afsluttet og fjernet efter workflow_retention, eller databasen kunne ikke læses (se loggen).
         title: Workflow ikke fundet
       outcomes:
         cancelled: annulleret

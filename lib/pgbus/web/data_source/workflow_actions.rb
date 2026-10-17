@@ -18,6 +18,8 @@ module Pgbus
       module WorkflowActions
         # At most this many runs per bulk call; a bigger group takes another press.
         BULK_CAP = 500
+        # The outcomes a bulk call counts as "had already moved on".
+        MOVED_ON = %i[not_allowed not_found].freeze
 
         def resume_workflow(workflow_id, actor:, reason: nil)
           workflow_action(workflow_id) { |wf| wf.resume!(actor: actor, reason: reason) }
@@ -60,8 +62,8 @@ module Pgbus
         # +group+ is a needs-attention group (workflow_class, step_name,
         # reason, error_class). Each of its runs, at most BULK_CAP, through its
         # own guarded transition: one that moved on in the meantime is
-        # skipped. { ok:, done:, skipped: }, or ok: false with a reason when
-        # the group could not be read.
+        # skipped. { ok:, done:, skipped:, failed:, failure: }, or ok: false
+        # with a reason when the group could not be read.
         def bulk_resume_workflows(group:, actor:, reason: nil)
           bulk_workflow_action(group) { |id| resume_workflow(id, actor: actor, reason: reason) }
         end
@@ -89,14 +91,17 @@ module Pgbus
           { ok: false, code: :failed, reason: "#{e.class}: #{e.message}" }
         end
 
+        # done: changed. skipped: had moved on (no longer in a state that
+        # allows it, or gone). failed: anything else, with the first reason.
         def bulk_workflow_action(group, &)
           ids = WorkflowEntry.attention_ids(group, **attention_thresholds, limit: BULK_CAP)
           outcomes = ids.map(&)
-          done = outcomes.count { |outcome| outcome[:ok] }
-          { ok: true, done: done, skipped: outcomes.size - done }
+          moved_on, failed = outcomes.reject { |outcome| outcome[:ok] }.partition { |outcome| MOVED_ON.include?(outcome[:code]) }
+          result = { ok: true, done: outcomes.size - moved_on.size - failed.size, skipped: moved_on.size, failed: failed.size }
+          failed.empty? ? result : result.merge(failure: failed.first[:reason])
         rescue StandardError => e
           Pgbus.logger.error { "[Pgbus::Web] Bulk workflow action on #{group.inspect} failed: #{e.class}: #{e.message}" }
-          { ok: false, code: :failed, reason: "#{e.class}: #{e.message}", done: 0, skipped: 0 }
+          { ok: false, code: :failed, reason: "#{e.class}: #{e.message}", done: 0, skipped: 0, failed: 0 }
         end
       end
     end

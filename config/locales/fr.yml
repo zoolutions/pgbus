@@ -1140,6 +1140,7 @@ fr:
           one: "%{count} annulé."
           other: "%{count} annulés."
         bulk_cancel_skipped: "%{count} annulés ; %{skipped} avaient déjà avancé."
+        bulk_failed: "%{count} n'ont pas pu être modifiés : %{reason}"
         bulk_more: 'D''autres exécutions attendent peut-être : appuyez à nouveau pour les %{cap} suivantes.'
         bulk_resume:
           one: "%{count} repris."
@@ -1194,7 +1195,7 @@ fr:
         waiting_signal_timeout_html: En attente du signal %{signal} depuis %{ago}. L'attente expire %{time}.
         waiting_step_html: En attente de %{step}.
       not_found:
-        hint: Il est peut-être terminé et supprimé après workflow_retention.
+        hint: Il est peut-être terminé et supprimé après workflow_retention, ou la base de données n'a pas pu être lue (voir le journal).
         title: Workflow introuvable
       outcomes:
         cancelled: annulé

@@ -1140,6 +1140,7 @@ de:
           one: "%{count} abgebrochen."
           other: "%{count} abgebrochen."
         bulk_cancel_skipped: "%{count} abgebrochen; %{skipped} waren bereits weitergelaufen."
+        bulk_failed: "%{count} konnten nicht geändert werden: %{reason}"
         bulk_more: 'Es warten möglicherweise weitere Läufe: Erneut drücken für die nächsten %{cap}.'
         bulk_resume:
           one: "%{count} fortgesetzt."
@@ -1194,7 +1195,7 @@ de:
         waiting_signal_timeout_html: Wartet auf Signal %{signal} seit %{ago}. Das Warten läuft ab %{time}.
         waiting_step_html: Wartet auf %{step}.
       not_found:
-        hint: Er wurde möglicherweise abgeschlossen und nach workflow_retention entfernt.
+        hint: Er ist eventuell abgeschlossen und nach workflow_retention entfernt worden, oder die Datenbank konnte nicht gelesen werden (siehe Log).
         title: Workflow nicht gefunden
       outcomes:
         cancelled: abgebrochen

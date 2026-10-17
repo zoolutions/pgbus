@@ -23,8 +23,9 @@ module Pgbus
       @per_page = per_page
       @workflows = data_source.workflows(status: @query.status, page: @page, per_page: @per_page, **@query.filters)
       @workflows_count = data_source.workflows_count(status: @query.status, **@query.filters)
+      return render_frame("pgbus/workflows/workflows_table") if params[:frame] == "list"
+
       @attention_count = data_source.workflow_attention_count
-      render_frame("pgbus/workflows/workflows_table") if params[:frame] == "list"
     end
 
     def attention
@@ -120,9 +121,12 @@ module Pgbus
     # "Resumed 212; 2 had already moved on." and, at the cap, that more may wait.
     def bulk_notice(action, result)
       cap = Web::DataSource::WorkflowActions::BULK_CAP
+      failed = result[:failed].to_i
       key = result[:skipped].positive? ? "#{action}_skipped" : action.to_s
-      notice = t("pgbus.workflows.flash.#{key}", count: result[:done], skipped: result[:skipped])
-      result[:done] + result[:skipped] >= cap ? "#{notice} #{t("pgbus.workflows.flash.bulk_more", cap: cap)}" : notice
+      words = [t("pgbus.workflows.flash.#{key}", count: result[:done], skipped: result[:skipped])]
+      words << t("pgbus.workflows.flash.bulk_failed", count: failed, reason: result[:failure]) if failed.positive?
+      words << t("pgbus.workflows.flash.bulk_more", cap: cap) if result[:done] + result[:skipped] + failed >= cap
+      words.join(" ")
     end
 
     def failure_message(action, result)
@@ -163,7 +167,13 @@ module Pgbus
     # config.web_actor names the operator; a lambda that raises is logged
     # and the action is recorded as plain "dashboard".
     def dashboard_actor
-      name = Pgbus.configuration.web_actor&.call(request).to_s.strip
+      name = Pgbus.configuration.web_actor&.call(request)
+      unless name.nil? || name.is_a?(String) || name.is_a?(Symbol)
+        Pgbus.logger.warn { "[Pgbus::Web] web_actor returned a #{name.class}, not a name; recording \"dashboard\"" }
+        return "dashboard"
+      end
+
+      name = name.to_s.strip
       name.empty? ? "dashboard" : "dashboard:#{name}"
     rescue StandardError => e
       Pgbus.logger.error { "[Pgbus::Web] web_actor raised #{e.class}: #{e.message}" }

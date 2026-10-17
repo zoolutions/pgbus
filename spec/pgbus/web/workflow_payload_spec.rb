@@ -34,11 +34,4 @@ RSpec.describe Pgbus::Web::WorkflowPayload do
       expect(described_class.display(nil)).to eq({})
     end
   end
-
-  describe ".filtered" do
-    it "redacts sensitive keys the way the dashboard's payload views do" do
-      expect(described_class.filtered({ "api_token" => "s3cret", "plan" => "pro" }))
-        .to eq("api_token" => "[FILTERED]", "plan" => "pro")
-    end
-  end
 end

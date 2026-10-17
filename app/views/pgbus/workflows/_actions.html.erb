@@ -5,9 +5,15 @@
 <% actions = @workflow[:available_actions] & Pgbus::WorkflowsHelper::DASHBOARD_ACTIONS %>
 <% if actions.any? %>
   <% id = @workflow[:workflow_id] %>
+  <%# The form's own action is the first button's, so Enter in the reason box
+      does what the first button does (and asks to confirm it). %>
+  <% paths = { resume: pgbus.resume_workflow_path(id), run_now: pgbus.run_now_workflow_path(id),
+               skip: pgbus.skip_step_workflow_path(id), rerun: pgbus.rerun_workflow_path(id),
+               cancel: pgbus.cancel_workflow_path(id), resume_at: pgbus.resume_at_workflow_path(id) } %>
+  <% default_path = paths.fetch(paths.keys.find { |action| actions.include?(action) }) %>
   <section class="mb-8 rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700" aria-labelledby="workflow-actions-title" data-testid="workflow-actions">
     <h2 id="workflow-actions-title" class="text-lg font-medium text-gray-900 dark:text-white"><%= t("pgbus.workflows.show.actions") %></h2>
-    <form action="<%= pgbus.cancel_workflow_path(id) %>" method="post" data-turbo-frame="_top" class="mt-3">
+    <form action="<%= default_path %>" method="post" data-turbo-frame="_top" class="mt-3">
       <%= hidden_field_tag :authenticity_token, form_authenticity_token, id: nil %>
       <div class="max-w-xl">
         <label for="workflow-action-reason" class="block text-sm font-medium text-gray-700 dark:text-gray-300"><%= t("pgbus.workflows.show.reason_label") %></label>
