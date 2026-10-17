@@ -1,0 +1,60 @@
+spec/pgbus/active_job/adapter_deferred_batch_spec.rb
+  s_d101c94f64af21::t_80f5189fd7ae78 99
+  s_d101c94f64af21::t_0b182fb7c8fc0a 1-7,9-37,39-98,100-109,111-154
+  s_d101c94f64af21::t_d8dadeecafe2cc 38
+  s_d101c94f64af21::t_1668971dc7e2c6 8
+  s_d101c94f64af21::t_861f3572de1e17 110
+spec/pgbus/batch/builder_spec.rb
+  s_d101c94f64af21::t_b6414ee9a0ba5f 186-194
+lib/pgbus/batch/builder.rb
+  s_d101c94f64af21::t_439165d74c978d 62
+lib/pgbus/batch.rb
+  s_d101c94f64af21::t_0b12de76462cce 134
+  s_d101c94f64af21::t_1cb2a8f06d8807 484-499
+  s_d101c94f64af21::t_64c6f993ce5b3e 656-659
+  s_d101c94f64af21::t_82642a63962acf 48-54
+  s_d101c94f64af21::t_3fe74925bf5031 149
+spec/pgbus/active_job/batch_id_spec.rb
+  s_d101c94f64af21::t_f05fe60e521d37 46-48,60-74,76-84,86-87,89-102
+  s_d101c94f64af21::t_095e19de145d7a 49-51,53-55,57-59,75,85
+  s_d101c94f64af21::t_567c68bef12442 52,56
+  s_d101c94f64af21::t_cc5f7615c44c7a 88
+docs/app/views/docs/pages/batches.rb
+  s_d101c94f64af21::t_bb0988e5815d2b 58-72
+CHANGELOG.md
+  s_d101c94f64af21::t_6556f6983e6da3 16
+lib/pgbus/active_job/batch_id.rb
+  s_d101c94f64af21::t_d00e33467a4236 19-26,31-42
+lib/pgbus/active_job/adapter.rb
+  s_d101c94f64af21::t_f4d917336a0d4e 138
+  s_d101c94f64af21::t_80e3260e97a71a 217
+  s_d101c94f64af21::t_8632be26d04f3e 390-391
+  s_d101c94f64af21::t_b54bf1aa8ad6e0 32,36,41-42
+  s_d101c94f64af21::t_1e30b9a84bdaf0 121
+  s_d101c94f64af21::t_b16a603558237c 337-340,343,347,355-361,366,368-371
+  s_d101c94f64af21::t_5446a2e919ea6b 14,17,22-23
+  s_d101c94f64af21::t_9c8459a286fbac 290-292,296,298,305-322
+spec/pgbus/batch_spec.rb
+  s_d101c94f64af21::t_0782a9cc782d75 247-256
+  s_d101c94f64af21::t_b781770a3f7b9a 146-194
+spec/integration/batch_transaction_spec.rb
+  s_d101c94f64af21::t_86e455df101e4c 62-72,93-98,102,104,108,110,114,146,148,152,154,161,166,169,172-176,182,194-195,205-206,209-210,213,215,219-222,224-225,227-231,235,237,240,255
+  s_d101c94f64af21::t_e5669d8629b161 31-32,44-61
+  s_d101c94f64af21::t_a5cdfc4b912cd9 1-30,33-43,73-92,99-101,103,105-107,109,111-113,115-145,147,149-151,153,155-160,162-165,167-168,170-171,177-181,183-193,196-204,207-208,211-212,214,216-218,223,226,232-234,236,238-239,241-254,256-262
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "7536ed9bab17ff0510e5ee6d092dd67833277d07",
+  "prompts": {},
+  "sessions": {
+    "s_d101c94f64af21": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ce136a73-ff2f-4961-a39f-3f0fd9bc3705",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
