@@ -33,6 +33,7 @@ to guess.
 | NOTIFY wake path | every job-insert wake-up (direct listener vs supervisor hub, issue #381) | `notify_wake_bench.rb` |
 | NotifyHub failure modes | killed LISTEN backend, wedged fork, FD churn, fan-out cost (issue #381) | `notify_chaos_bench.rb` |
 | Streams master-hub hop | broadcast→SSE roundtrip, per-worker vs master hub (issue #382) | `streams_hub_bench.rb` |
+| Workflow step (`Workflow::StepExecution#call`) | every workflow step attempt: claim, guards, body, outcome, next row, events (issue #540) | `workflow_step_bench.rb` |
 
 ## Measuring
 
@@ -270,6 +271,35 @@ Evaluated 2026-10-05 for issue #484; recorded so the question stays answered.
 - The table above is the reason none of this is the lever: locally the CPU that
   a compiler could speed up is shared with Rails and the driver, and under real
   network latency the ceiling is a read round trip, which no compiler removes.
+
+### Workflow steps (issue #540)
+
+Every workflow step is one `Pgbus::Workflow::StepJob`, and its `perform` is one
+`StepExecution#call`: the claim under the run's row lock, the guards
+(`cancel_if`, `skip_if`), the body, the outcome, the next step row and the
+audit events. `rake bench:one[workflow_step_bench]` runs it with the three
+models replaced by in-memory fakes, so it measures pgbus's own cost per step,
+not the database round trips (claim, finish, next-row insert, events) that
+dominate a real step. A new hot path, so **measured after only** (local arm64,
+Ruby 3.4.2 + YJIT):
+
+| | Per step |
+|---|---|
+| Throughput | 75.3k i/s (13.3 µs) |
+| Allocated | ~79 objects, ~9 KB |
+| Retained | 0 objects (4 across 1 000 steps: one-time memos) |
+
+Method-level, not system-level: a step that does nothing still pays several
+round trips and the StepJob's own enqueue and execution, so this is the part
+pgbus adds on top of those, not a step rate.
+
+`Executor#execute` exposes the running message to the StepJob
+(`Pgbus::ActiveJob::Delivery`, for crash detection on redelivery). Same
+machine, `rake bench:one[executor_bench]`: `main` 50.7k / 51.3k i/s, this branch
+58.9k i/s (inside the ±16% run-to-run noise); 69 objects / 6 608 bytes per job
+on both; pgbus-owned objects per job 9 on both (`executor_allocation_budget_spec.rb`).
+The three fiber-locals it sets allocate nothing; an earlier Hash-per-job
+version cost one object and tripped the budget.
 
 ### Fair share reads (issue #426)
 

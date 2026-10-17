@@ -117,6 +117,12 @@ main_only:
   - name: Pgbus::Web::Streamer.@current_mutex
     reason: >-
       guards the per-process streamer instance (its threads and PG connection); the streamer runs on the main Ractor
+  - name: Pgbus::Workflow::Registry.@lock
+    reason: >-
+      guards the workflow class registry (a frozen Array of classes replaced whole); taken when a Pgbus::Workflow subclass is defined and when the registry is listed, both on the main Ractor
+  - name: Pgbus::Workflow::Sweep.@schema_lock
+    reason: >-
+      guards the workflow tables' schema-probe memo; taken by the dispatcher's workflow sweep on the main Ractor
   # Rails' own class state on the engine
   - ancestor: Rails::Engine
     ivars: ["@called_from", "@initializers", "@instance", "@railtie_name", "@rake_tasks"]
