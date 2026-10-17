@@ -105,7 +105,9 @@ For each unresolved comment, read the full body and categorise it:
 | Incorrect suggestion | Push back with technical reasoning |
 | Suggestion conflicts with architecture | Push back, reference existing patterns |
 | Over-engineering / YAGNI | Push back, explain why it's unnecessary |
-| Unclear | Ask for clarification (do NOT implement) |
+| Unclear | Read the code until it is clear, then treat it as one of the rows above |
+
+Every comment ends fixed or answered in this pass, whatever its severity (P1 to P3, docs, nits). Nothing is deferred to a follow-up, and no comment is left for the user to decide.
 
 **Before categorising**, always:
 1. Read the actual file and line being commented on
@@ -256,6 +258,6 @@ When pushing back:
 - If a comment reveals a genuine bug you missed, fix it without defensiveness
 - If multiple comments suggest the same change, implement it once and reference the fix in all replies
 - Bot reviewers (cubic, etc.) sometimes suggest changes that conflict with project conventions -- verify against AGENTS.md, and push back citing code
-- If a new round of review comments appears after your push (from re-review), report that to the user rather than entering an infinite loop
+- A new round of review comments after your push (cubic re-reviews every head) is more work: run this command again on it. A comment that re-raises something already fixed or answered gets one reply pointing at that commit or answer, and is resolved.
 
 Now begin by determining the PR number from `$ARGUMENTS` or the current branch.

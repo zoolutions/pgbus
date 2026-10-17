@@ -228,7 +228,7 @@ Re-read the original requirements and verify:
 
 ## Phase 6.5: Fable validation
 
-Spawn the `fable-validator` agent (it is pinned to Fable) with the issue, the acceptance criteria from Phase 1 and the base branch. On **BLOCK**, fix every blocker (back to Phase 4 for code, with a failing test first), re-verify, and run the validator again. On **PASS WITH NOTES**, fix the risks you agree with and list the rest in the pull request under "Accepted risks". Put the validator's one-line verdict and its "Not verified" list in the pull request body. Do not open the pull request before a PASS or PASS WITH NOTES.
+Spawn the `fable-validator` agent (it is pinned to Fable) with the issue, the acceptance criteria from Phase 1 and the base branch. On **BLOCK**, fix every blocker (back to Phase 4 for code, with a failing test first), re-verify, and run the validator again. On **PASS WITH NOTES**, fix every note the same way and run the validator again. A note that is factually wrong gets a one-line rebuttal in the pull request body. Nothing is accepted as a risk or deferred to a follow-up. Put the validator's one-line verdict and its "Not verified" list in the pull request body. Do not open the pull request before a PASS, or a PASS WITH NOTES whose notes are all fixed or rebutted.
 
 ---
 
@@ -323,7 +323,7 @@ The tests prove the CODE is right; this phase keeps the USER's mental model righ
 - [ ] `bundle exec rspec` passes
 - [ ] Backwards compatibility maintained
 - [ ] PGMQ operations go through Client wrapper
-- [ ] `fable-validator` returned PASS or PASS WITH NOTES (Phase 6.5)
+- [ ] `fable-validator` returned PASS, or PASS WITH NOTES with every note fixed or rebutted (Phase 6.5)
 - [ ] PR created with description
 - [ ] PR labelled: one `type` + at least one `area`, no `status` (`.github/LABELS.md`)
 - [ ] PR body ends with `## Deviations & judgment calls` (from implementation-notes.md, since deleted)
