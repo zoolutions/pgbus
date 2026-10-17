@@ -1,0 +1,27 @@
+spec/pgbus/configuration/snapshot_spec.rb
+  s_f234afa89e512b::t_a56f9736102324 83-92
+lib/pgbus/configuration/snapshot.rb
+  s_f234afa89e512b::t_ab3032e61f1c20 16-18,20-23
+sig/pgbus/configuration/snapshot.rbs
+  s_f234afa89e512b::t_d94486ac27f70b 9
+lib/pgbus.rb
+  s_f234afa89e512b::t_ab3032e61f1c20 378-380,382-388
+docs/concurrency.md
+  s_f234afa89e512b::t_fbe9aba32f4b1d 110-113,142-144
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "741b3709d0684ad63ff67adca50983bc7f3266b8",
+  "prompts": {},
+  "sessions": {
+    "s_f234afa89e512b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e05be020-94a5-4fe1-9fcb-7746985d0de2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
