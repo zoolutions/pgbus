@@ -1,0 +1,99 @@
+class AddPgbusWorkflows < ActiveRecord::Migration<%= migration_version %>
+  # if_not_exists throughout: pgbus:update queues this migration when any of
+  # the three tables is missing, so a half-present schema must not fail it.
+  def change
+    # One row per workflow run (Pgbus::WorkflowEntry).
+    create_table :pgbus_workflows, if_not_exists: true do |t|
+      t.string :workflow_id, null: false
+      t.string :workflow_class, null: false
+      t.string :subject_type
+      t.string :subject_id
+      t.string :subject_gid
+      t.jsonb :arguments, null: false, default: {}
+      t.string :status, null: false, default: "ready"
+      t.string :current_step
+      t.jsonb :step_job_options, null: false, default: {}
+      t.string :error_class
+      t.text :error_message
+      t.text :error_backtrace
+      t.datetime :paused_at
+      t.datetime :finished_at
+      t.datetime :cancelled_at
+      t.string :idempotency_key
+      t.string :definition_digest, null: false
+      t.string :rerun_of_workflow_id
+      t.datetime :created_at, null: false
+      t.datetime :updated_at, null: false
+    end
+
+    add_index :pgbus_workflows, :workflow_id,
+      unique: true, name: "idx_pgbus_workflows_workflow_id", if_not_exists: true
+    add_index :pgbus_workflows, [:workflow_class, :subject_type, :subject_id],
+      unique: true, where: "status IN ('ready','performing','waiting','paused')",
+      name: "idx_pgbus_workflows_one_ongoing", if_not_exists: true
+    add_index :pgbus_workflows, [:workflow_class, :idempotency_key],
+      unique: true, where: "idempotency_key IS NOT NULL",
+      name: "idx_pgbus_workflows_idempotency", if_not_exists: true
+    add_index :pgbus_workflows, :status,
+      name: "idx_pgbus_workflows_status", if_not_exists: true
+    add_index :pgbus_workflows, [:workflow_class, :status, :created_at],
+      name: "idx_pgbus_workflows_class_status", if_not_exists: true
+    add_index :pgbus_workflows, [:subject_type, :subject_id],
+      name: "idx_pgbus_workflows_subject", if_not_exists: true
+
+    # One row per step attempt (Pgbus::WorkflowStep).
+    create_table :pgbus_workflow_steps, if_not_exists: true do |t|
+      t.string :workflow_id, null: false
+      t.string :workflow_class, null: false
+      t.string :step_name, null: false
+      t.integer :attempt, null: false, default: 1
+      t.string :status, null: false, default: "scheduled"
+      t.string :job_id
+      t.bigint :msg_id
+      t.datetime :scheduled_at, null: false
+      t.datetime :enqueued_at
+      t.datetime :started_at
+      t.datetime :finished_at
+      t.datetime :stall_at
+      t.string :outcome
+      t.jsonb :output
+      t.string :error_class
+      t.text :error_message
+      t.text :error_backtrace
+      t.jsonb :error_causes
+      t.string :worker
+      t.string :app_revision
+      t.datetime :created_at, null: false
+    end
+
+    add_index :pgbus_workflow_steps, [:workflow_id, :step_name, :attempt],
+      unique: true, name: "idx_pgbus_workflow_steps_attempt", if_not_exists: true
+    add_index :pgbus_workflow_steps, [:status, :scheduled_at],
+      name: "idx_pgbus_workflow_steps_scheduled", if_not_exists: true
+    add_index :pgbus_workflow_steps, [:status, :stall_at],
+      name: "idx_pgbus_workflow_steps_stall", if_not_exists: true
+    add_index :pgbus_workflow_steps, [:workflow_class, :step_name, :finished_at],
+      name: "idx_pgbus_workflow_steps_insights", if_not_exists: true
+    add_foreign_key :pgbus_workflow_steps, :pgbus_workflows,
+      column: :workflow_id, primary_key: :workflow_id, on_delete: :cascade, if_not_exists: true
+
+    # Append-only audit trail: one row per transition or operator action
+    # (Pgbus::WorkflowEvent).
+    create_table :pgbus_workflow_events, if_not_exists: true do |t|
+      t.string :workflow_id, null: false
+      t.bigint :step_id
+      t.string :step_name
+      t.integer :attempt
+      t.string :event, null: false
+      t.string :actor, null: false
+      t.text :reason
+      t.jsonb :details, null: false, default: {}
+      t.datetime :created_at, null: false
+    end
+
+    add_index :pgbus_workflow_events, [:workflow_id, :id],
+      name: "idx_pgbus_workflow_events_workflow", if_not_exists: true
+    add_foreign_key :pgbus_workflow_events, :pgbus_workflows,
+      column: :workflow_id, primary_key: :workflow_id, on_delete: :cascade, if_not_exists: true
+  end
+end

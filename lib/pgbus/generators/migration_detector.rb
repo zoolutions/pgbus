@@ -57,6 +57,9 @@ module Pgbus
         pgbus_batches
       ].freeze
 
+      # The three tables pgbus:add_workflows creates (issue #540).
+      WORKFLOW_TABLES = %w[pgbus_workflows pgbus_workflow_steps pgbus_workflow_events].freeze
+
       # generator_key → Rails generator name. Passed to Thor's invoke.
       #
       # Note: uniqueness_keys invokes add_uniqueness_keys, which only
@@ -78,6 +81,7 @@ module Pgbus
         add_outbox: "pgbus:add_outbox",
         add_recurring: "pgbus:add_recurring",
         add_deploy_tasks: "pgbus:add_deploy_tasks",
+        add_workflows: "pgbus:add_workflows",
         add_failed_events_index: "pgbus:add_failed_events_index",
         add_processed_event_completion: "pgbus:add_processed_event_completion",
         add_batch_executions: "pgbus:add_batch_executions",
@@ -101,6 +105,7 @@ module Pgbus
         add_outbox: "outbox entries table (transactional outbox)",
         add_recurring: "recurring tasks + executions tables",
         add_deploy_tasks: "deploy tasks + runs tables (one-time jobs run after a rollover)",
+        add_workflows: "workflow tables (durable multi-step workflows: runs, step attempts, audit trail)",
         add_failed_events_index: "unique index on pgbus_failed_events (queue_name, msg_id)",
         add_processed_event_completion: "completed_at on pgbus_processed_events (two-phase idempotency claim)",
         add_batch_executions: "batch execution-row tracking (self-healing completion, on_failure rename)",
@@ -130,6 +135,7 @@ module Pgbus
           *outbox_migrations,
           *recurring_migrations,
           *deploy_tasks_migrations,
+          *workflows_migrations,
           *failed_events_index_migrations,
           *processed_event_completion_migrations,
           *batch_executions_migrations,
@@ -224,6 +230,14 @@ module Pgbus
         return [] if table_exists?("pgbus_deploy_tasks") && table_exists?("pgbus_deploy_task_runs")
 
         [:add_deploy_tasks]
+      end
+
+      # The add_workflows template uses if_not_exists throughout, so a
+      # half-present set of the three tables is safe to queue again.
+      def workflows_migrations
+        return [] if WORKFLOW_TABLES.all? { |table| table_exists?(table) }
+
+        [:add_workflows]
       end
 
       def failed_events_index_migrations
