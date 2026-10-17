@@ -1,0 +1,22 @@
+docs/app/views/docs/pages/dashboard.rb
+  s_e3a487096d49a3::t_b76f3868f20e16 42
+docs/app/views/docs/pages/workflows.rb
+  s_e3a487096d49a3::t_b76f3868f20e16 3,21
+  s_e3a487096d49a3::t_3d777e90959dd8 539-608
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "f9c81ab86e3ce14c8f9f19b6851c9077cf138b65",
+  "prompts": {},
+  "sessions": {
+    "s_e3a487096d49a3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "faf1faea-af65-4cb2-b526-81aed7772ead",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
