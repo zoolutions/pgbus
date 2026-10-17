@@ -1,0 +1,16 @@
+<%# The pipeline (issue #549): the class's steps in order, one card each,
+    side by side and scrolled sideways when they do not fit. Locals:
+    definition. %>
+<section class="mb-8" aria-labelledby="workflow-pipeline-title">
+  <h2 id="workflow-pipeline-title" class="text-lg font-medium text-gray-900 dark:text-white"><%= t("pgbus.workflow_insights.show.pipeline.title") %></h2>
+  <p class="mt-1 text-sm text-gray-600 dark:text-gray-300"><%= t("pgbus.workflow_insights.show.pipeline.caption") %></p>
+  <% if definition[:steps].empty? %>
+    <p class="mt-3 rounded-lg bg-white dark:bg-gray-800 p-6 text-center text-sm text-gray-500 dark:text-gray-400 shadow ring-1 ring-gray-200 dark:ring-gray-700"><%= t("pgbus.workflow_insights.show.pipeline.empty") %></p>
+  <% else %>
+    <ol class="mt-3 flex gap-4 overflow-x-auto pb-2" data-testid="workflow-pipeline" tabindex="0" aria-labelledby="workflow-pipeline-title">
+      <% definition[:steps].each_with_index do |step, index| %>
+        <%= render "pgbus/workflows/definitions/step_card", step: step, position: index + 1, name: definition[:workflow_class] %>
+      <% end %>
+    </ol>
+  <% end %>
+</section>

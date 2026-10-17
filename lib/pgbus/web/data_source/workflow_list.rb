@@ -10,7 +10,8 @@ module Pgbus
       # lists and zero counts, not an error per refresh.
       module WorkflowList
         STATUSES = (%w[ongoing] + Workflow::States::WORKFLOW + %w[all]).freeze
-        FILTERS = %i[workflow_class step error_class subject_type subject_id workflow_id created_from created_to].freeze
+        FILTERS = %i[workflow_class step error_class subject_type subject_id workflow_id created_from created_to
+                     ended_from ended_to].freeze
         STEP_HISTORY = 100
         EVENT_HISTORY = 200
         # The pause events the timeline pairs, read on their own so a long
@@ -118,6 +119,16 @@ module Pgbus
           end
           scope = scope.where(created_at: filters[:created_from]..) if filters[:created_from]
           scope = scope.where(created_at: ..filters[:created_to]) if filters[:created_to]
+          ended_scope(scope, filters)
+        end
+
+        # When a finished or cancelled run ended (issue #549): what the
+        # insights' "finished / cancelled in the window" counts link to.
+        def ended_scope(scope, filters)
+          table = WorkflowEntry.arel_table
+          ended_at = Arel::Nodes::NamedFunction.new("COALESCE", [table[:finished_at], table[:cancelled_at]])
+          scope = scope.where(ended_at.gteq(filters[:ended_from])) if filters[:ended_from]
+          scope = scope.where(ended_at.lteq(filters[:ended_to])) if filters[:ended_to]
           scope
         end
 

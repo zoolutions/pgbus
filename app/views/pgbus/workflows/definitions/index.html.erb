@@ -1,0 +1,70 @@
+<%# The workflow insights' class list (issue #549): every registered
+    workflow class and every class still in the rows, with its runs going on
+    now, the runs that ended in the window and how long a run takes end to
+    end. Each count links to the Workflows list filtered to those runs. %>
+<div class="flex flex-wrap items-start justify-between gap-4 mb-6">
+  <div>
+    <div class="mb-2"><%= pgbus_link_to t("pgbus.workflow_insights.back_to_runs"), pgbus.workflows_path %></div>
+    <h1 class="text-2xl font-bold text-gray-900 dark:text-white"><%= t("pgbus.workflow_insights.index.title") %></h1>
+    <p class="mt-1 text-sm text-gray-600 dark:text-gray-300"><%= t("pgbus.workflow_insights.index.description", window: pgbus_insight_window_name(@window)) %></p>
+  </div>
+  <%= render "pgbus/workflows/definitions/window", path: ->(name) { pgbus.workflow_definitions_path(window: name) } %>
+</div>
+
+<% since = @window.since(Time.current) %>
+<div class="rounded-lg bg-white dark:bg-gray-800 shadow ring-1 ring-gray-200 dark:ring-gray-700">
+  <table class="pgbus-table min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+    <thead class="bg-gray-50 dark:bg-gray-900">
+      <tr>
+        <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.workflow_insights.index.headers.workflow_class") %></th>
+        <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.workflow_insights.index.headers.ongoing") %></th>
+        <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.workflow_insights.index.headers.paused") %></th>
+        <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.workflow_insights.index.headers.attention") %></th>
+        <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.workflow_insights.index.headers.finished") %></th>
+        <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.workflow_insights.index.headers.cancelled") %></th>
+        <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.workflow_insights.index.headers.duration_p50") %></th>
+        <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.workflow_insights.index.headers.duration_p95") %></th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+      <% @definitions.each do |row| %>
+        <% name = row[:workflow_class] %>
+        <tr data-workflow-class="<%= name %>" class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+          <td data-label="<%= t("pgbus.workflow_insights.index.headers.workflow_class") %>" class="px-4 py-3 text-sm">
+            <div><%= pgbus_link_to name, pgbus_insight_definition_path(name, @window), class: "font-mono" %></div>
+            <div class="mt-1 flex flex-wrap gap-1">
+              <%= pgbus_insight_not_loaded_badge unless row[:loaded] %>
+              <%= pgbus_insight_removed_badge(row[:removed_in_flight]) %>
+            </div>
+          </td>
+          <td data-label="<%= t("pgbus.workflow_insights.index.headers.ongoing") %>" class="px-4 py-3 text-sm text-right font-mono text-gray-700 dark:text-gray-300">
+            <%= pgbus_insight_count(row[:ongoing], pgbus_insight_runs_path(workflow_class: name), t("pgbus.workflow_insights.links.ongoing", workflow: name)) %>
+          </td>
+          <td data-label="<%= t("pgbus.workflow_insights.index.headers.paused") %>" class="px-4 py-3 text-sm text-right font-mono text-gray-700 dark:text-gray-300">
+            <%= pgbus_insight_count(row[:paused], pgbus_insight_runs_path(status: "paused", workflow_class: name), t("pgbus.workflow_insights.links.paused", workflow: name)) %>
+          </td>
+          <td data-label="<%= t("pgbus.workflow_insights.index.headers.attention") %>" class="px-4 py-3 text-sm text-right font-mono text-gray-700 dark:text-gray-300">
+            <%= pgbus_insight_count(row[:attention], pgbus.attention_workflows_path, t("pgbus.workflow_insights.links.attention", workflow: name)) %>
+          </td>
+          <td data-label="<%= t("pgbus.workflow_insights.index.headers.finished") %>" class="px-4 py-3 text-sm text-right font-mono text-gray-700 dark:text-gray-300">
+            <%= pgbus_insight_count(row[:finished], pgbus_insight_runs_path(status: "finished", workflow_class: name, ended_from: since), t("pgbus.workflow_insights.links.finished", workflow: name)) %>
+          </td>
+          <td data-label="<%= t("pgbus.workflow_insights.index.headers.cancelled") %>" class="px-4 py-3 text-sm text-right font-mono text-gray-700 dark:text-gray-300">
+            <%= pgbus_insight_count(row[:cancelled], pgbus_insight_runs_path(status: "cancelled", workflow_class: name, ended_from: since), t("pgbus.workflow_insights.links.cancelled", workflow: name)) %>
+          </td>
+          <td data-label="<%= t("pgbus.workflow_insights.index.headers.duration_p50") %>" class="px-4 py-3 text-sm text-right font-mono text-gray-700 dark:text-gray-300">
+            <%= pgbus_insight_ms(row[:e2e_ms][:p50]) %>
+          </td>
+          <td data-label="<%= t("pgbus.workflow_insights.index.headers.duration_p95") %>" class="px-4 py-3 text-sm text-right font-mono text-gray-700 dark:text-gray-300">
+            <%= pgbus_insight_ms(row[:e2e_ms][:p95]) %>
+          </td>
+        </tr>
+      <% end %>
+      <% if @definitions.empty? %>
+        <%= render "pgbus/shared/empty_row", colspan: 8,
+              message: safe_join([content_tag(:p, t("pgbus.workflow_insights.index.empty_title"), class: "text-lg font-medium"),
+                                  content_tag(:p, t("pgbus.workflow_insights.index.empty_hint"), class: "mt-1")]) %>
+      <% end %>
+    </tbody>
+  </table>
+</div>

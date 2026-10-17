@@ -49,6 +49,8 @@ ignore_unused:
   - "pgbus.workflows.attention.confirm.*"
   - "pgbus.workflows.flash.bulk_resume.*"
   - "pgbus.workflows.flash.bulk_cancel.*"
+  # Workflow insights (issue #549): plural forms reached through a dynamic key.
+  - "pgbus.workflow_insights.show.funnel.here.*"
   # Plural forms reached through the dynamic summary.<key> lookup (issue #491).
   - "pgbus.queues.show.summary.drained_by_html.*"
   - "pgbus.queues.show.summary.drained_wildcard_html.*"

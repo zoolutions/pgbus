@@ -15,6 +15,7 @@ module Pgbus
       include DeployTaskList
       include WorkflowList
       include WorkflowActions
+      include WorkflowInsights
 
       # pgbus_failed_events rows outside the EventBus handler queues; binds
       # handler_queue_names_literal as $1.

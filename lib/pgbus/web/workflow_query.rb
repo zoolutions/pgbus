@@ -10,14 +10,15 @@ module Pgbus
     # The Workflows list's query string (issue #542), checked: a status from
     # DataSource::WorkflowList::STATUSES, the text filters stripped (blank
     # ones dropped, each at most MAX_LENGTH characters) and the created-at
-    # range parsed in Time.zone (a bare date as the start or the end of that
-    # day). Anything else raises Invalid, which the controller answers with
-    # 400. #to_param is the same query back, for links that keep it.
+    # and ended-at (issue #549: finished_at or cancelled_at) ranges parsed in
+    # Time.zone (a bare date as the start or the end of that day). Anything
+    # else raises Invalid, which the controller answers with 400. #to_param
+    # is the same query back, for links that keep it.
     class WorkflowQuery
       class Invalid < StandardError; end
 
       TEXT_FILTERS = %i[workflow_class step error_class subject_type subject_id workflow_id].freeze
-      DATE_FILTERS = %i[created_from created_to].freeze
+      DATE_FILTERS = %i[created_from created_to ended_from ended_to].freeze
       MAX_LENGTH = 255
       DATE_ONLY = /\A\d{4}-\d{2}-\d{2}\z/
       # A date (what <input type="date"> sends) or an ISO 8601 date and time.
@@ -56,7 +57,7 @@ module Pgbus
         return if value.empty?
 
         time = parse_time(value) || raise(Invalid, "#{key} #{value.inspect} is not a date")
-        time = time.end_of_day if key == :created_to && value.match?(DATE_ONLY)
+        time = time.end_of_day if key.end_with?("_to") && value.match?(DATE_ONLY)
         @raw[key] = value
         @filters[key] = time
       end

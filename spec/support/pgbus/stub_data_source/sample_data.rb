@@ -54,6 +54,7 @@ module Pgbus
           fill_sample_events!(now.utc)
           fill_sample_deploy_tasks!(now)
           fill_sample_workflows!(now)
+          fill_sample_workflow_insights!(now)
           @outbox_entries_list = sample_outbox_entries(now)
           @outbox_stats_hash = { unpublished: @outbox_entries_list.count { |e| e.published_at.nil? },
                                  total: @outbox_entries_list.size, oldest_unpublished_age: 45 }

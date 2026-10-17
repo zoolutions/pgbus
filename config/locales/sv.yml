@@ -1029,6 +1029,158 @@ sv:
         disabled: Uppgift inaktiverad
         enabled: Uppgift aktiverad
         failed: Kunde inte ändra uppgift
+    workflow_insights:
+      back_to_classes: Alla arbetsflödesklasser
+      back_to_runs: Alla arbetsflödeskörningar
+      bad_request: 'Felaktig begäran: %{reason}'
+      capped: 'Begränsat till workflow_retention (%{retention}): slutförda och avbrutna körningar äldre än så raderas.'
+      few_samples:
+        one: n=%{count}, få mätvärden
+        other: n=%{count}, få mätvärden
+      index:
+        description: 'Hur varje arbetsflödesklass gick under %{window}: körningarna som pågår nu, körningarna som avslutades och hur lång tid en körning tar från start till slut.'
+        empty_hint: 'Definiera en underklass till Pgbus::Workflow och starta en körning: YourWorkflow.start!(subject, **arguments).'
+        empty_title: Ingen arbetsflödesklass har körts än.
+        headers:
+          attention: Behöver åtgärd
+          cancelled: Avbrutna
+          duration_p50: Varaktighet p50
+          duration_p95: Varaktighet p95
+          finished: Slutförda
+          ongoing: Pågående
+          paused: Pausade
+          workflow_class: Arbetsflödesklass
+        title: Arbetsflödesinsikter
+      links:
+        at_step: "%{status} körningar vid %{step}"
+        attention: körningar av %{workflow} som behöver åtgärd
+        cancelled: körningar av %{workflow} som avbröts i fönstret
+        cancelled_bucket: körningar som avbröts under perioden
+        finished: körningar av %{workflow} som slutfördes i fönstret
+        finished_bucket: körningar som slutfördes under perioden
+        ongoing: pågående körningar av %{workflow}
+        paused: pausade körningar av %{workflow}
+        started: körningar av %{workflow} som startade i fönstret
+        started_bucket: körningar som startade under perioden
+      not_found:
+        hint: Ingen underklass till Pgbus::Workflow och ingen körning heter %{workflow} (eller så misslyckades läsningen, se loggen).
+        title: Okänd arbetsflödesklass
+      not_loaded: Definitionen är inte laddad
+      not_loaded_hint: 'Klassen laddas inte längre i appen: stegen kommer från körningarnas rader, i den ordning körningarna nådde dem.'
+      percentile: "%{name} %{value}"
+      removed_in_flight:
+        one: "%{count} körning på ett borttaget steg"
+        other: "%{count} körningar på borttagna steg"
+      show:
+        by_revision:
+          all_steps: Alla steg
+          caption: 'Samma siffror för de fem senaste appversionerna som avslutade ett försök i fönstret, nyast först: en försämring efter en driftsättning syns som en rad.'
+          empty: Inget försök i det här fönstret registrerade en appversion (config.app_revision).
+          headers:
+            attempts: Försök
+            failed: Misslyckade
+            reattempted: Nya försök
+            revision: Version
+            run_time: Körtid
+            skipped: Överhoppade
+            step: Steg
+          seen_html: sedd %{from} till %{to}
+          title: Per appversion
+          worse: upp från %{rate} på %{revision}
+        charts:
+          durations:
+            between: "%{from}–%{to}"
+            caption:
+              one: Hur lång tid den %{count} körning som slutfördes i fönstret tog, från start till slut.
+              other: Hur lång tid de %{count} körningar som slutfördes i fönstret tog, från start till slut.
+            headers:
+              range: Varaktighet
+              runs: Körningar
+            over: "%{from} eller mer"
+            title: Varaktighet från start till slut
+            under: under %{to}
+          series:
+            cancelled: Avbrutna
+            finished: Slutförda
+            runs: Körningar
+            started: Startade
+          throughput:
+            caption: 'Körningar som startade, slutfördes och avbröts per %{bucket} under %{window}: %{started} startade, %{finished} slutförda, %{cancelled} avbrutna.'
+            headers:
+              cancelled: Avbrutna
+              finished: Slutförda
+              from: Från
+              started: Startade
+            title: Körningar per %{bucket}
+        description: 'Under %{window}: var körningarna är nu, hur varje steg presterar och var körningar stannar.'
+        funnel:
+          caption:
+            one: 'Av den %{count} körning som startade i fönstret: hur många som nådde varje steg och var den är nu.'
+            other: 'Av de %{count} körningar som startade i fönstret: hur många som nådde varje steg och var var och en är nu.'
+          empty: Ingen körning startade i det här fönstret.
+          headers:
+            now_here: Nu vid steget
+            reached: Nådde
+            share: Av startade
+            step: Steg
+          here:
+            cancelled:
+              one: "%{count} avbruten"
+              other: "%{count} avbrutna"
+            finished:
+              one: "%{count} slutförd"
+              other: "%{count} slutförda"
+            paused:
+              one: "%{count} pausad"
+              other: "%{count} pausade"
+            performing:
+              one: "%{count} körs"
+              other: "%{count} körs"
+            ready:
+              one: "%{count} schemalagd"
+              other: "%{count} schemalagda"
+            waiting:
+              one: "%{count} väntar"
+              other: "%{count} väntar"
+          title: Tratt
+        pipeline:
+          attempts:
+            one: "%{count} försök"
+            other: "%{count} försök"
+          caption: 'Varje steg i ordning: körningarna som står vid det nu, och hur dess försök som avslutades i fönstret gick.'
+          empty: 'Inga steg än: ingen körning av klassen har ett steg i fönstret och ingen pågår.'
+          failed: Misslyckade
+          kinds:
+            fan_out: Fan-out
+            removed: Borttaget
+            signal: Väntar på en signal
+            undeclared: Inte i definitionen
+          live:
+            paused: Pausade
+            performing: Körs
+            ready: Schemalagda
+            waiting: Väntar
+          now_label: Körningar vid steget nu
+          pickup: Upphämtning
+          reattempted: Nya försök
+          run_time: Körtid
+          skipped: Överhoppade
+          step_link: Pågående körningar vid %{step}
+          title: Pipeline
+          window_label: Försök som avslutades i fönstret
+        summary:
+          attention: Behöver åtgärd
+          cancelled: Avbrutna
+          duration: Varaktighet p50
+          finished: Slutförda
+          ongoing: Pågående
+          started: Startade
+      window_label: Tidsfönster
+      windows:
+        1h: den senaste timmen
+        24h: de senaste 24 timmarna
+        30d: de senaste 30 dagarna
+        7d: de senaste 7 dagarna
     workflows:
       actions:
         bulk_cancel: Avbryt alla
@@ -1128,6 +1280,8 @@ sv:
         clear: Rensa
         created_from: Skapad från
         created_to: Skapad till
+        ended_from: Avslutad från
+        ended_to: Avslutad till
         error_class: Felklass
         step: Aktuellt steg
         subject_id: Ämnes-ID
@@ -1176,6 +1330,7 @@ sv:
         description: 'Varaktiga körningar i flera steg: vad var och en gör och vad som händer härnäst.'
         empty_hint: Välj en annan status eller rensa filtren. En körning startar med YourWorkflow.start!(subject, **arguments).
         empty_title: Inga arbetsflöden matchar.
+        insights_link: Insikter per klass
         status_label: Filtrera på status
         title: Arbetsflöden
       next:

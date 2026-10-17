@@ -1029,6 +1029,158 @@ nl:
         disabled: Taak uitgeschakeld
         enabled: Taak ingeschakeld
         failed: Kon taak niet omschakelen
+    workflow_insights:
+      back_to_classes: Alle workflowklassen
+      back_to_runs: Alle workflowruns
+      bad_request: 'Ongeldig verzoek: %{reason}'
+      capped: 'Beperkt tot workflow_retention (%{retention}): oudere voltooide en geannuleerde runs worden verwijderd.'
+      few_samples:
+        one: n=%{count}, weinig metingen
+        other: n=%{count}, weinig metingen
+      index:
+        description: 'Hoe elke workflowklasse het deed in %{window}: de runs die nu lopen, de runs die eindigden en hoe lang een run van begin tot eind duurt.'
+        empty_hint: 'Definieer een subklasse van Pgbus::Workflow en start een run: YourWorkflow.start!(subject, **arguments).'
+        empty_title: Er heeft nog geen workflowklasse gedraaid.
+        headers:
+          attention: Aandacht nodig
+          cancelled: Geannuleerd
+          duration_p50: Duur p50
+          duration_p95: Duur p95
+          finished: Voltooid
+          ongoing: Lopend
+          paused: Gepauzeerd
+          workflow_class: Workflowklasse
+        title: Workflow-inzicht
+      links:
+        at_step: "%{status} runs bij %{step}"
+        attention: runs van %{workflow} die aandacht nodig hebben
+        cancelled: runs van %{workflow} die in het venster zijn geannuleerd
+        cancelled_bucket: runs geannuleerd in deze periode
+        finished: runs van %{workflow} die in het venster zijn voltooid
+        finished_bucket: runs voltooid in deze periode
+        ongoing: lopende runs van %{workflow}
+        paused: gepauzeerde runs van %{workflow}
+        started: runs van %{workflow} die in het venster zijn gestart
+        started_bucket: runs gestart in deze periode
+      not_found:
+        hint: Geen subklasse van Pgbus::Workflow en geen run heet %{workflow} (of het lezen mislukte, zie de log).
+        title: Onbekende workflowklasse
+      not_loaded: Definitie niet geladen
+      not_loaded_hint: 'Deze klasse laadt niet meer in de app: de stappen komen uit de rijen van de runs, in de volgorde waarin de runs ze bereikten.'
+      percentile: "%{name} %{value}"
+      removed_in_flight:
+        one: "%{count} run op een verwijderde stap"
+        other: "%{count} runs op verwijderde stappen"
+      show:
+        by_revision:
+          all_steps: Alle stappen
+          caption: 'Dezelfde cijfers voor de laatste vijf app-revisies die in het venster een poging afrondden, nieuwste eerst: een achteruitgang na een deploy verschijnt als een rij.'
+          empty: Geen poging in dit venster registreerde een app-revisie (config.app_revision).
+          headers:
+            attempts: Pogingen
+            failed: Mislukt
+            reattempted: Opnieuw geprobeerd
+            revision: Revisie
+            run_time: Looptijd
+            skipped: Overgeslagen
+            step: Stap
+          seen_html: gezien %{from} tot %{to}
+          title: Per app-revisie
+          worse: gestegen van %{rate} op %{revision}
+        charts:
+          durations:
+            between: "%{from}–%{to}"
+            caption:
+              one: Hoe lang de %{count} run die in het venster werd voltooid, duurde van begin tot eind.
+              other: Hoe lang de %{count} runs die in het venster werden voltooid, duurden van begin tot eind.
+            headers:
+              range: Duur
+              runs: Runs
+            over: "%{from} of meer"
+            title: Duur van begin tot eind
+            under: minder dan %{to}
+          series:
+            cancelled: Geannuleerd
+            finished: Voltooid
+            runs: Runs
+            started: Gestart
+          throughput:
+            caption: 'Gestarte, voltooide en geannuleerde runs per %{bucket} in %{window}: %{started} gestart, %{finished} voltooid, %{cancelled} geannuleerd.'
+            headers:
+              cancelled: Geannuleerd
+              finished: Voltooid
+              from: Vanaf
+              started: Gestart
+            title: Runs per %{bucket}
+        description: 'In %{window}: waar de runs nu zijn, hoe elke stap presteert en waar runs stoppen.'
+        funnel:
+          caption:
+            one: 'Van de %{count} run die in het venster startte: hoeveel elke stap bereikten en waar hij nu is.'
+            other: 'Van de %{count} runs die in het venster startten: hoeveel elke stap bereikten en waar elk nu is.'
+          empty: Er is in dit venster geen run gestart.
+          headers:
+            now_here: Nu bij deze stap
+            reached: Bereikt
+            share: Van gestart
+            step: Stap
+          here:
+            cancelled:
+              one: "%{count} geannuleerd"
+              other: "%{count} geannuleerd"
+            finished:
+              one: "%{count} voltooid"
+              other: "%{count} voltooid"
+            paused:
+              one: "%{count} gepauzeerd"
+              other: "%{count} gepauzeerd"
+            performing:
+              one: "%{count} bezig"
+              other: "%{count} bezig"
+            ready:
+              one: "%{count} gepland"
+              other: "%{count} gepland"
+            waiting:
+              one: "%{count} wachtend"
+              other: "%{count} wachtend"
+          title: Trechter
+        pipeline:
+          attempts:
+            one: "%{count} poging"
+            other: "%{count} pogingen"
+          caption: 'Elke stap op volgorde: de runs die er nu staan, en hoe de pogingen die in het venster eindigden, verliepen.'
+          empty: 'Nog geen stappen: geen run van deze klasse heeft een stap in het venster en er loopt er geen.'
+          failed: Mislukt
+          kinds:
+            fan_out: Fan-out
+            removed: Verwijderd
+            signal: Wacht op een signaal
+            undeclared: Niet in de definitie
+          live:
+            paused: Gepauzeerd
+            performing: Bezig
+            ready: Gepland
+            waiting: Wachtend
+          now_label: Runs nu bij deze stap
+          pickup: Oppakken
+          reattempted: Opnieuw geprobeerd
+          run_time: Looptijd
+          skipped: Overgeslagen
+          step_link: Lopende runs bij %{step}
+          title: Pipeline
+          window_label: Pogingen die in het venster eindigden
+        summary:
+          attention: Aandacht nodig
+          cancelled: Geannuleerd
+          duration: Duur p50
+          finished: Voltooid
+          ongoing: Lopend
+          started: Gestart
+      window_label: Tijdvenster
+      windows:
+        1h: het afgelopen uur
+        24h: de afgelopen 24 uur
+        30d: de afgelopen 30 dagen
+        7d: de afgelopen 7 dagen
     workflows:
       actions:
         bulk_cancel: Alles annuleren
@@ -1128,6 +1280,8 @@ nl:
         clear: Wissen
         created_from: Aangemaakt vanaf
         created_to: Aangemaakt tot
+        ended_from: Beëindigd vanaf
+        ended_to: Beëindigd tot
         error_class: Foutklasse
         step: Huidige stap
         subject_id: Onderwerp-ID
@@ -1176,6 +1330,7 @@ nl:
         description: 'Duurzame runs met meerdere stappen: wat elke run doet en wat er hierna gebeurt.'
         empty_hint: Kies een andere status of wis de filters. Een run start met YourWorkflow.start!(subject, **arguments).
         empty_title: Geen workflows gevonden.
+        insights_link: Inzicht per klasse
         status_label: Filteren op status
         title: Workflows
       next:

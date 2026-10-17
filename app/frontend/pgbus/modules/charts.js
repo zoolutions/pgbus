@@ -1,4 +1,5 @@
-// Charts module for the Pgbus Insights page and the workflow timeline.
+// Charts module for the Pgbus Insights page, the workflow timeline and the
+// workflow insights.
 // Loaded only on those pages via an inline <script type="module">, which
 // passes it the series the page embeds. ApexCharts is fetched here, on first
 // draw, so no other dashboard page downloads it (issue #517). The page renders each chart's caption,
@@ -235,11 +236,48 @@ export async function renderTimeline(data, i18n) {
   });
 }
 
+// The workflow insights (issue #549): runs started, finished and cancelled
+// per bucket, and the end-to-end duration histogram of the finished runs.
+export async function renderWorkflowInsights(data, i18n) {
+  const ApexCharts = await loadApexCharts();
+  const colors = palette(document.documentElement.classList.contains("dark"));
+  const throughput = data.throughput || [];
+
+  draw(ApexCharts, "workflow-throughput-chart", {
+    ...baseOptions("workflow-throughput-chart", "line", colors),
+    series: [
+      { name: i18n.started, data: points(throughput, "started") },
+      { name: i18n.finished, data: points(throughput, "finished") },
+      { name: i18n.cancelled, data: points(throughput, "cancelled") },
+    ],
+    stroke: { curve: "smooth", width: [2, 2, 2], dashArray: [0, 0, 5] },
+    colors: [colors.throughput, colors.status.success, colors.status.failed],
+    xaxis: timeAxis(colors),
+    yaxis: valueAxis(colors, (v) => Math.round(v)),
+    legend: { position: "top", labels: { colors: colors.text } },
+  });
+
+  const durations = data.durations || [];
+  draw(ApexCharts, "workflow-duration-chart", {
+    ...baseOptions("workflow-duration-chart", "bar", colors),
+    series: [{ name: i18n.runs, data: durations.map((bin) => bin.count) }],
+    colors: [colors.throughput],
+    plotOptions: { bar: { columnWidth: "70%", borderRadius: 2 } },
+    xaxis: {
+      categories: durations.map((bin) => bin.label),
+      labels: { style: { colors: colors.text } },
+      axisBorder: { color: colors.axis },
+      axisTicks: { color: colors.axis },
+    },
+    yaxis: valueAxis(colors, (v) => Math.round(v)),
+  });
+}
+
 let themeObserver = null;
 
 // The page toggles dark mode with a class on <html>; redraw in the new palette.
 // render is the page's draw function (renderCharts on Insights, renderTimeline
-// on a workflow).
+// on a workflow, renderWorkflowInsights on a workflow class).
 export function observeThemeChanges(getDataFn, i18n, render = renderCharts) {
   if (themeObserver) themeObserver.disconnect();
 

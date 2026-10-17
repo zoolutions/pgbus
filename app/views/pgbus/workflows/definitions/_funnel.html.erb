@@ -1,0 +1,49 @@
+<%# The funnel (issue #549): of the runs started in the window, how many
+    reached each step (have a row for it), and where each run is now, by
+    status, each count linked to those runs. Locals: definition. %>
+<% name = definition[:workflow_class] %>
+<% since = definition[:window][:since] %>
+<% started = definition[:started] %>
+<section class="mb-8" aria-labelledby="workflow-funnel-title">
+  <h2 id="workflow-funnel-title" class="text-lg font-medium text-gray-900 dark:text-white"><%= t("pgbus.workflow_insights.show.funnel.title") %></h2>
+  <p class="mt-1 text-sm text-gray-600 dark:text-gray-300"><%= t("pgbus.workflow_insights.show.funnel.caption", count: started) %></p>
+  <div class="mt-3 rounded-lg bg-white dark:bg-gray-800 shadow ring-1 ring-gray-200 dark:ring-gray-700" data-testid="workflow-funnel">
+    <table class="pgbus-table min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+      <thead class="bg-gray-50 dark:bg-gray-900">
+        <tr>
+          <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.workflow_insights.show.funnel.headers.step") %></th>
+          <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.workflow_insights.show.funnel.headers.reached") %></th>
+          <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.workflow_insights.show.funnel.headers.share") %></th>
+          <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.workflow_insights.show.funnel.headers.now_here") %></th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+        <% if started.positive? %>
+          <% definition[:funnel].each do |step| %>
+            <% here = Pgbus::WorkflowInsightsHelper::STOPPED_STATUSES.select { |status| step[:stopped][status.to_sym].positive? } %>
+            <tr data-step="<%= step[:name] %>" class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+              <td data-label="<%= t("pgbus.workflow_insights.show.funnel.headers.step") %>" class="px-4 py-3 text-sm font-mono text-gray-900 dark:text-white"><%= step[:name] %></td>
+              <td data-label="<%= t("pgbus.workflow_insights.show.funnel.headers.reached") %>" class="px-4 py-3 text-sm text-right font-mono text-gray-700 dark:text-gray-300"><%= pgbus_number(step[:reached]) %></td>
+              <td data-label="<%= t("pgbus.workflow_insights.show.funnel.headers.share") %>" class="px-4 py-3 text-sm text-right font-mono text-gray-700 dark:text-gray-300"><%= pgbus_percent(step[:reached].to_f / started) %></td>
+              <td data-label="<%= t("pgbus.workflow_insights.show.funnel.headers.now_here") %>" class="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
+                <% if here.empty? %>
+                  <%= Pgbus::Web::TimeFormat::NONE %>
+                <% else %>
+                  <ul class="flex flex-wrap gap-x-3">
+                    <% here.each do |status| %>
+                      <li><%= pgbus_link_to t("pgbus.workflow_insights.show.funnel.here.#{status}", count: step[:stopped][status.to_sym]),
+                                            pgbus_insight_runs_path(status: status, workflow_class: name, step: step[:name], created_from: since),
+                                            data: { turbo_frame: "_top" } %></li>
+                    <% end %>
+                  </ul>
+                <% end %>
+              </td>
+            </tr>
+          <% end %>
+        <% else %>
+          <%= render "pgbus/shared/empty_row", colspan: 4, message: t("pgbus.workflow_insights.show.funnel.empty") %>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+</section>

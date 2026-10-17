@@ -95,6 +95,8 @@ module Pgbus
             rows = case filter
                    when :created_from then rows.select { |w| w[:created_at] >= value }
                    when :created_to then rows.select { |w| w[:created_at] <= value }
+                   when :ended_from then rows.select { |w| (ended = w[:finished_at] || w[:cancelled_at]) && ended >= value }
+                   when :ended_to then rows.select { |w| (ended = w[:finished_at] || w[:cancelled_at]) && ended <= value }
                    else rows.select { |w| w[FILTER_COLUMNS.fetch(filter)] == value }
                    end
           end

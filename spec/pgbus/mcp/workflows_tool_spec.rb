@@ -33,7 +33,8 @@ RSpec.describe Pgbus::MCP::Tools::WorkflowsTool do
     props = described_class.input_schema.to_h[:properties]
 
     expect(props.keys).to include(:status, :workflow_class, :step, :error_class, :subject_type, :subject_id, :workflow_id,
-                                  :created_from, :created_to, :page, :per_page, :include_payloads)
+                                  :created_from, :created_to, :ended_from, :ended_to, :page, :per_page,
+                                  :include_payloads)
     expect(props[:status][:enum]).to eq(Pgbus::Web::DataSource::WorkflowList::STATUSES)
   end
 
@@ -55,6 +56,13 @@ RSpec.describe Pgbus::MCP::Tools::WorkflowsTool do
     expect(data_source).to have_received(:workflows_count)
       .with(status: "paused", workflow_class: "CheckoutWorkflow", error_class: "Timeout::Error",
             created_from: Time.zone.parse("2026-10-01"))
+  end
+
+  it "filters by when a run ended (issue #549)" do
+    result(status: "finished", ended_from: "2026-10-16T12:00:00Z")
+
+    expect(data_source).to have_received(:workflows)
+      .with(status: "finished", page: 1, per_page: 25, ended_from: Time.utc(2026, 10, 16, 12))
   end
 
   it "clamps the pager" do

@@ -1,0 +1,80 @@
+<%# One workflow class's insights (issue #549) over a window: the runs it
+    started and ended, its pipeline (each step with the runs at it now and
+    how its attempts did), the throughput and duration charts, the funnel of
+    the runs started in the window and the same numbers per app revision. %>
+<% definition = @definition %>
+<% name = definition[:workflow_class] %>
+<% since = definition[:window][:since] %>
+<div class="flex flex-wrap items-start justify-between gap-4 mb-6">
+  <div>
+    <div class="mb-2"><%= pgbus_link_to t("pgbus.workflow_insights.back_to_classes"), pgbus.workflow_definitions_path(window: @window.name) %></div>
+    <h1 class="text-2xl font-bold font-mono text-gray-900 dark:text-white"><%= name %></h1>
+    <p class="mt-1 text-sm text-gray-600 dark:text-gray-300"><%= t("pgbus.workflow_insights.show.description", window: pgbus_insight_window_name(@window)) %></p>
+    <div class="mt-2 flex flex-wrap gap-1">
+      <%= pgbus_insight_not_loaded_badge unless definition[:loaded] %>
+      <%= pgbus_insight_removed_badge(definition[:removed_in_flight]) %>
+    </div>
+    <% unless definition[:loaded] %>
+      <p class="mt-2 max-w-2xl text-sm text-gray-600 dark:text-gray-300"><%= t("pgbus.workflow_insights.not_loaded_hint") %></p>
+    <% end %>
+  </div>
+  <%= render "pgbus/workflows/definitions/window", path: ->(window) { pgbus.workflow_definition_path(name, window: window) } %>
+</div>
+
+<div class="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6 mb-8" data-testid="workflow-insights-summary">
+  <% summary = {
+       started: pgbus_insight_count(definition[:started], pgbus_insight_runs_path(status: "all", workflow_class: name, created_from: since), t("pgbus.workflow_insights.links.started", workflow: name)),
+       finished: pgbus_insight_count(definition[:finished], pgbus_insight_runs_path(status: "finished", workflow_class: name, ended_from: since), t("pgbus.workflow_insights.links.finished", workflow: name)),
+       cancelled: pgbus_insight_count(definition[:cancelled], pgbus_insight_runs_path(status: "cancelled", workflow_class: name, ended_from: since), t("pgbus.workflow_insights.links.cancelled", workflow: name)),
+       ongoing: pgbus_insight_count(definition[:ongoing], pgbus_insight_runs_path(workflow_class: name), t("pgbus.workflow_insights.links.ongoing", workflow: name)),
+       attention: pgbus_insight_count(definition[:attention], pgbus.attention_workflows_path, t("pgbus.workflow_insights.links.attention", workflow: name))
+     } %>
+  <% summary.each do |key, value| %>
+    <dl class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
+      <dt class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.workflow_insights.show.summary.#{key}") %></dt>
+      <dd class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white"><%= value %></dd>
+    </dl>
+  <% end %>
+  <dl class="rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
+    <dt class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.workflow_insights.show.summary.duration") %></dt>
+    <dd class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white"><%= pgbus_insight_ms(definition[:e2e_ms][:p50]) %></dd>
+    <dd class="mt-1 text-xs text-gray-600 dark:text-gray-300"><%= pgbus_insight_percentiles(definition[:e2e_ms], %i[p95 p99]) %></dd>
+  </dl>
+</div>
+
+<%= render "pgbus/workflows/definitions/pipeline", definition: definition %>
+
+<% payload = pgbus_insight_chart_payload(definition) %>
+<% totals = definition[:throughput].each_with_object(Hash.new(0)) { |bucket, sums| %i[started finished cancelled].each { |key| sums[key] += bucket[key] } } %>
+<% bucket = pgbus_insight_span(definition[:bucket_seconds]) %>
+<div class="grid grid-cols-1 gap-6 lg:grid-cols-2 mb-8">
+  <%= render layout: "pgbus/insights/chart_card",
+             locals: { id: "workflow-throughput-chart", title: t("pgbus.workflow_insights.show.charts.throughput.title", bucket: bucket),
+                       caption: t("pgbus.workflow_insights.show.charts.throughput.caption", bucket: bucket, window: pgbus_insight_window_name(@window),
+                                  started: totals[:started], finished: totals[:finished], cancelled: totals[:cancelled]),
+                       empty: totals.values.sum.zero? } do %>
+    <%= render "pgbus/workflows/definitions/throughput_table", definition: definition %>
+  <% end %>
+  <% finished = definition[:duration_histogram].sum { |bin| bin[:count] } %>
+  <%= render layout: "pgbus/insights/chart_card",
+             locals: { id: "workflow-duration-chart", title: t("pgbus.workflow_insights.show.charts.durations.title"),
+                       caption: t("pgbus.workflow_insights.show.charts.durations.caption", count: finished),
+                       empty: finished.zero? } do %>
+    <%= render "pgbus/workflows/definitions/duration_table", definition: definition %>
+  <% end %>
+</div>
+
+<%= render "pgbus/workflows/definitions/funnel", definition: definition %>
+<%= render "pgbus/workflows/definitions/by_revision", definition: definition %>
+
+<%# The chart series, embedded once; json_escape keeps a value from closing the tag. %>
+<%= tag.script(json_escape(payload.to_json).html_safe, type: "application/json", id: "pgbus-workflow-insights-data") %> <%# herb:disable erb-no-unsafe-raw %>
+<script type="module" nonce="<%= content_security_policy_nonce %>">
+  import { renderWorkflowInsights, observeThemeChanges } from "charts";
+
+  const i18n = <%= json_escape(pgbus_insight_chart_i18n.to_json).html_safe %>;
+  const data = JSON.parse(document.getElementById("pgbus-workflow-insights-data").textContent);
+
+  renderWorkflowInsights(data, i18n);
+  observeThemeChanges(() => data, i18n, renderWorkflowInsights);
+</script>

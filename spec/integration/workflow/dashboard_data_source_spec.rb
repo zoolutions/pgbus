@@ -79,6 +79,20 @@ RSpec.describe "Pgbus::Web::DataSource workflows", :integration do
       expect(rows.sole).to include(subject_type: "WorkflowSpecUser", subject_id: user.id.to_s)
     end
 
+    it "filters by when a run ended, finished or cancelled (issue #549)" do
+      finished = run_until(CheckoutWorkflow.start!(n: 1))
+      cancelled = ReminderWorkflow.start!.tap { |wf| wf.cancel!(actor: "spec") }
+      earlier = run_until(CheckoutWorkflow.start!(n: 2))
+      Pgbus::WorkflowEntry.where(workflow_id: earlier.workflow_id).update_all(finished_at: 3.days.ago)
+      ReminderWorkflow.start! # ongoing: it never ended
+
+      expect(data_source.workflows(status: "all", ended_from: 1.day.ago).map { |r| r[:workflow_id] })
+        .to contain_exactly(finished.workflow_id, cancelled.workflow_id)
+      expect(data_source.workflows(status: "all", ended_to: 1.day.ago).map { |r| r[:workflow_id] })
+        .to eq([earlier.workflow_id])
+      expect(data_source.workflows_count(status: "finished", ended_from: 1.day.ago).total).to eq(1)
+    end
+
     it "pages, and counts with a bound" do
       3.times { ReminderWorkflow.start! }
 

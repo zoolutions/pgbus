@@ -1029,6 +1029,158 @@ pt:
         disabled: Tarefa desativada
         enabled: Tarefa ativada
         failed: Falha ao alternar tarefa
+    workflow_insights:
+      back_to_classes: Todas as classes de workflow
+      back_to_runs: Todas as execuções de workflow
+      bad_request: 'Requisição inválida: %{reason}'
+      capped: 'Limitado a workflow_retention (%{retention}): execuções terminadas e canceladas mais antigas são apagadas.'
+      few_samples:
+        one: n=%{count}, poucas amostras
+        other: n=%{count}, poucas amostras
+      index:
+        description: 'Como correu cada classe de workflow em %{window}: as execuções em curso, as que terminaram e quanto tempo uma execução leva do início ao fim.'
+        empty_hint: 'Defina uma subclasse de Pgbus::Workflow e inicie uma execução: YourWorkflow.start!(subject, **arguments).'
+        empty_title: Nenhuma classe de workflow foi executada ainda.
+        headers:
+          attention: Precisam de atenção
+          cancelled: Canceladas
+          duration_p50: Duração p50
+          duration_p95: Duração p95
+          finished: Terminadas
+          ongoing: Em curso
+          paused: Em pausa
+          workflow_class: Classe de workflow
+        title: Análise de workflows
+      links:
+        at_step: "%{status} execuções em %{step}"
+        attention: execuções de %{workflow} que precisam de atenção
+        cancelled: execuções de %{workflow} canceladas na janela
+        cancelled_bucket: execuções canceladas neste período
+        finished: execuções de %{workflow} terminadas na janela
+        finished_bucket: execuções terminadas neste período
+        ongoing: execuções em curso de %{workflow}
+        paused: execuções em pausa de %{workflow}
+        started: execuções de %{workflow} iniciadas na janela
+        started_bucket: execuções iniciadas neste período
+      not_found:
+        hint: Nenhuma subclasse de Pgbus::Workflow nem nenhuma execução se chama %{workflow} (ou a leitura falhou, veja o registo).
+        title: Classe de workflow desconhecida
+      not_loaded: Definição não carregada
+      not_loaded_hint: 'Esta classe já não carrega na aplicação: os passos vêm das linhas das suas execuções, na ordem em que as execuções os alcançaram.'
+      percentile: "%{name} %{value}"
+      removed_in_flight:
+        one: "%{count} execução num passo removido"
+        other: "%{count} execuções em passos removidos"
+      show:
+        by_revision:
+          all_steps: Todos os passos
+          caption: 'Os mesmos números para as últimas cinco revisões da aplicação que terminaram uma tentativa na janela, a mais recente primeiro: uma regressão após um deploy aparece como uma linha.'
+          empty: Nenhuma tentativa nesta janela registou uma revisão da aplicação (config.app_revision).
+          headers:
+            attempts: Tentativas
+            failed: Falhadas
+            reattempted: Repetidas
+            revision: Revisão
+            run_time: Tempo de execução
+            skipped: Ignoradas
+            step: Passo
+          seen_html: vista de %{from} a %{to}
+          title: Por revisão da aplicação
+          worse: subiu de %{rate} em %{revision}
+        charts:
+          durations:
+            between: "%{from}–%{to}"
+            caption:
+              one: Quanto tempo levou a %{count} execução terminada na janela, do início ao fim.
+              other: Quanto tempo levaram as %{count} execuções terminadas na janela, do início ao fim.
+            headers:
+              range: Duração
+              runs: Execuções
+            over: "%{from} ou mais"
+            title: Duração do início ao fim
+            under: menos de %{to}
+          series:
+            cancelled: Canceladas
+            finished: Terminadas
+            runs: Execuções
+            started: Iniciadas
+          throughput:
+            caption: 'Execuções iniciadas, terminadas e canceladas por %{bucket} em %{window}: %{started} iniciadas, %{finished} terminadas, %{cancelled} canceladas.'
+            headers:
+              cancelled: Canceladas
+              finished: Terminadas
+              from: Desde
+              started: Iniciadas
+            title: Execuções por %{bucket}
+        description: 'Em %{window}: onde estão as execuções agora, como cada passo se comporta e onde as execuções param.'
+        funnel:
+          caption:
+            one: 'Da %{count} execução iniciada na janela: quantas alcançaram cada passo e onde está agora.'
+            other: 'Das %{count} execuções iniciadas na janela: quantas alcançaram cada passo e onde está cada uma agora.'
+          empty: Nenhuma execução foi iniciada nesta janela.
+          headers:
+            now_here: Agora neste passo
+            reached: Alcançado
+            share: Das iniciadas
+            step: Passo
+          here:
+            cancelled:
+              one: "%{count} cancelada"
+              other: "%{count} canceladas"
+            finished:
+              one: "%{count} terminada"
+              other: "%{count} terminadas"
+            paused:
+              one: "%{count} em pausa"
+              other: "%{count} em pausa"
+            performing:
+              one: "%{count} em execução"
+              other: "%{count} em execução"
+            ready:
+              one: "%{count} agendada"
+              other: "%{count} agendadas"
+            waiting:
+              one: "%{count} aguardando"
+              other: "%{count} aguardando"
+          title: Funil
+        pipeline:
+          attempts:
+            one: "%{count} tentativa"
+            other: "%{count} tentativas"
+          caption: 'Cada passo por ordem: as execuções que estão nele agora e como correram as suas tentativas terminadas na janela.'
+          empty: 'Ainda sem passos: nenhuma execução desta classe tem um passo na janela e nenhuma está em curso.'
+          failed: Falhadas
+          kinds:
+            fan_out: Fan-out
+            removed: Removido
+            signal: Aguarda um sinal
+            undeclared: Fora da definição
+          live:
+            paused: Em pausa
+            performing: Em execução
+            ready: Agendadas
+            waiting: Aguardando
+          now_label: Execuções neste passo agora
+          pickup: Recolha
+          reattempted: Repetidas
+          run_time: Tempo de execução
+          skipped: Ignoradas
+          step_link: Execuções em curso em %{step}
+          title: Pipeline
+          window_label: Tentativas terminadas na janela
+        summary:
+          attention: Precisam de atenção
+          cancelled: Canceladas
+          duration: Duração p50
+          finished: Terminadas
+          ongoing: Em curso
+          started: Iniciadas
+      window_label: Janela de tempo
+      windows:
+        1h: a última hora
+        24h: as últimas 24 horas
+        30d: os últimos 30 dias
+        7d: os últimos 7 dias
     workflows:
       actions:
         bulk_cancel: Cancelar todos
@@ -1128,6 +1280,8 @@ pt:
         clear: Limpar
         created_from: Criado a partir de
         created_to: Criado até
+        ended_from: Terminado desde
+        ended_to: Terminado até
         error_class: Classe de erro
         step: Etapa atual
         subject_id: ID do sujeito
@@ -1176,6 +1330,7 @@ pt:
         description: 'Execuções duráveis de várias etapas: o que cada uma está fazendo e o que acontece a seguir.'
         empty_hint: Escolha outro status ou limpe os filtros. Uma execução começa com YourWorkflow.start!(subject, **arguments).
         empty_title: Nenhum workflow corresponde.
+        insights_link: Análise por classe
         status_label: Filtrar por status
         title: Workflows
       next:

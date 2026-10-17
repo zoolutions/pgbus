@@ -1029,6 +1029,158 @@ fi:
         disabled: Tehtävä poistettu käytöstä
         enabled: Tehtävä otettu käyttöön
         failed: Tehtävän vaihto epäonnistui
+    workflow_insights:
+      back_to_classes: Kaikki työnkulkuluokat
+      back_to_runs: Kaikki työnkulkujen ajot
+      bad_request: 'Virheellinen pyyntö: %{reason}'
+      capped: 'Rajattu workflow_retention-arvoon (%{retention}): tätä vanhemmat valmistuneet ja perutut ajot poistetaan.'
+      few_samples:
+        one: n=%{count}, vähän näytteitä
+        other: n=%{count}, vähän näytteitä
+      index:
+        description: 'Miten kukin työnkulkuluokka on toiminut %{window}: nyt käynnissä olevat ajot, päättyneet ajot ja kuinka kauan ajo kestää alusta loppuun.'
+        empty_hint: 'Määrittele Pgbus::Workflow-aliluokka ja käynnistä ajo: YourWorkflow.start!(subject, **arguments).'
+        empty_title: Yhtään työnkulkuluokkaa ei ole vielä ajettu.
+        headers:
+          attention: Vaatii toimia
+          cancelled: Peruttu
+          duration_p50: Kesto p50
+          duration_p95: Kesto p95
+          finished: Valmistunut
+          ongoing: Käynnissä
+          paused: Keskeytetty
+          workflow_class: Työnkulkuluokka
+        title: Työnkulkujen näkymä
+      links:
+        at_step: "%{status} ajot vaiheessa %{step}"
+        attention: luokan %{workflow} toimenpiteitä vaativat ajot
+        cancelled: luokan %{workflow} ikkunassa perutut ajot
+        cancelled_bucket: jaksolla perutut ajot
+        finished: luokan %{workflow} ikkunassa valmistuneet ajot
+        finished_bucket: jaksolla valmistuneet ajot
+        ongoing: luokan %{workflow} käynnissä olevat ajot
+        paused: luokan %{workflow} keskeytetyt ajot
+        started: luokan %{workflow} ikkunassa alkaneet ajot
+        started_bucket: jaksolla alkaneet ajot
+      not_found:
+        hint: Pgbus::Workflow-aliluokkaa tai ajoa nimeltä %{workflow} ei ole (tai lukeminen epäonnistui, katso loki).
+        title: Tuntematon työnkulkuluokka
+      not_loaded: Määrittelyä ei ole ladattu
+      not_loaded_hint: 'Luokka ei enää lataudu sovelluksessa: vaiheet tulevat ajojen riveiltä siinä järjestyksessä, jossa ajot saavuttivat ne.'
+      percentile: "%{name} %{value}"
+      removed_in_flight:
+        one: "%{count} ajo poistetussa vaiheessa"
+        other: "%{count} ajoa poistetuissa vaiheissa"
+      show:
+        by_revision:
+          all_steps: Kaikki vaiheet
+          caption: 'Samat luvut viidelle viimeisimmälle sovellusversiolle, jotka päättivät yrityksen ikkunassa, uusin ensin: heikkeneminen julkaisun jälkeen näkyy rivinä.'
+          empty: Yksikään yritys tässä ikkunassa ei tallentanut sovellusversiota (config.app_revision).
+          headers:
+            attempts: Yritykset
+            failed: Epäonnistui
+            reattempted: Yritetty uudelleen
+            revision: Versio
+            run_time: Ajoaika
+            skipped: Ohitettu
+            step: Vaihe
+          seen_html: nähty %{from} – %{to}
+          title: Sovellusversioittain
+          worse: nousua arvosta %{rate} versiossa %{revision}
+        charts:
+          durations:
+            between: "%{from}–%{to}"
+            caption:
+              one: Kuinka kauan ikkunassa valmistunut %{count} ajo kesti alusta loppuun.
+              other: Kuinka kauan ikkunassa valmistuneet %{count} ajoa kestivät alusta loppuun.
+            headers:
+              range: Kesto
+              runs: Ajot
+            over: "%{from} tai enemmän"
+            title: Kesto alusta loppuun
+            under: alle %{to}
+          series:
+            cancelled: Perutut
+            finished: Valmistuneet
+            runs: Ajot
+            started: Alkaneet
+          throughput:
+            caption: 'Alkaneet, valmistuneet ja perutut ajot jaksoittain (%{bucket}) %{window}: %{started} alkoi, %{finished} valmistui, %{cancelled} peruttiin.'
+            headers:
+              cancelled: Perutut
+              finished: Valmistuneet
+              from: Alkaen
+              started: Alkaneet
+            title: Ajot / %{bucket}
+        description: 'Aikaikkuna %{window}: missä ajot ovat nyt, miten kukin vaihe toimii ja mihin ajot pysähtyvät.'
+        funnel:
+          caption:
+            one: 'Ikkunassa alkaneesta %{count} ajosta: kuinka moni saavutti kunkin vaiheen ja missä se on nyt.'
+            other: 'Ikkunassa alkaneista %{count} ajosta: kuinka moni saavutti kunkin vaiheen ja missä kukin on nyt.'
+          empty: Yksikään ajo ei alkanut tässä ikkunassa.
+          headers:
+            now_here: Nyt tässä vaiheessa
+            reached: Saavuttanut
+            share: Alkaneista
+            step: Vaihe
+          here:
+            cancelled:
+              one: "%{count} peruttu"
+              other: "%{count} peruttu"
+            finished:
+              one: "%{count} valmistunut"
+              other: "%{count} valmistunut"
+            paused:
+              one: "%{count} keskeytetty"
+              other: "%{count} keskeytetty"
+            performing:
+              one: "%{count} käynnissä"
+              other: "%{count} käynnissä"
+            ready:
+              one: "%{count} ajastettu"
+              other: "%{count} ajastettu"
+            waiting:
+              one: "%{count} odottaa"
+              other: "%{count} odottaa"
+          title: Suppilo
+        pipeline:
+          attempts:
+            one: "%{count} yritys"
+            other: "%{count} yritystä"
+          caption: 'Vaiheet järjestyksessä: ajot, jotka ovat vaiheessa nyt, ja miten sen ikkunassa päättyneet yritykset menivät.'
+          empty: 'Ei vielä vaiheita: luokan yhdelläkään ajolla ei ole vaihetta ikkunassa eikä mikään ole käynnissä.'
+          failed: Epäonnistui
+          kinds:
+            fan_out: Fan-out
+            removed: Poistettu
+            signal: Odottaa signaalia
+            undeclared: Ei määrittelyssä
+          live:
+            paused: Keskeytetty
+            performing: Käynnissä
+            ready: Ajastettu
+            waiting: Odottaa
+          now_label: Ajot tässä vaiheessa nyt
+          pickup: Nouto
+          reattempted: Yritetty uudelleen
+          run_time: Ajoaika
+          skipped: Ohitettu
+          step_link: Käynnissä olevat ajot vaiheessa %{step}
+          title: Putki
+          window_label: Ikkunassa päättyneet yritykset
+        summary:
+          attention: Vaatii toimia
+          cancelled: Perutut
+          duration: Kesto p50
+          finished: Valmistuneet
+          ongoing: Käynnissä
+          started: Alkaneet
+      window_label: Aikaikkuna
+      windows:
+        1h: viimeisen tunnin aikana
+        24h: viimeisen 24 tunnin aikana
+        30d: viimeisen 30 päivän aikana
+        7d: viimeisen 7 päivän aikana
     workflows:
       actions:
         bulk_cancel: Peru kaikki
@@ -1128,6 +1280,8 @@ fi:
         clear: Tyhjennä
         created_from: Luotu alkaen
         created_to: Luotu asti
+        ended_from: Päättynyt alkaen
+        ended_to: Päättynyt asti
         error_class: Virheluokka
         step: Nykyinen vaihe
         subject_id: Kohteen ID
@@ -1176,6 +1330,7 @@ fi:
         description: 'Pitkäkestoiset monivaiheiset ajot: mitä kukin tekee ja mitä seuraavaksi tapahtuu.'
         empty_hint: Valitse toinen tila tai tyhjennä suodattimet. Ajo alkaa komennolla YourWorkflow.start!(subject, **arguments).
         empty_title: Ei työnkulkuja.
+        insights_link: Näkymä luokittain
         status_label: Suodata tilan mukaan
         title: Työnkulut
       next:
