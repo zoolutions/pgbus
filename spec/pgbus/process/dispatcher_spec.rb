@@ -350,12 +350,13 @@ RSpec.describe Pgbus::Process::Dispatcher do
     it "logs timed-out waits, and stays quiet when the sweep found nothing" do
       lines = []
       allow(Pgbus.logger).to receive(:info) { |&block| lines << block.call }
-      allow(Pgbus::Workflow::Sweep).to receive(:repair).and_return({ stalled: 0, resent: 0, timed_out: 2 },
-                                                                   { stalled: 0, resent: 0, timed_out: 0 })
+      allow(Pgbus::Workflow::Sweep).to receive(:repair).and_return({ stalled: 0, resent: 0, timed_out: 2, fan_outs: 1 },
+                                                                   { stalled: 0, resent: 0, timed_out: 0, fan_outs: 0 })
 
       2.times { dispatcher.send(:sweep_workflows) }
 
-      expect(lines).to eq(["[Pgbus] Workflow sweep: 0 stalled step(s) repaired, 0 overdue step(s) re-sent, 2 wait(s) timed out"])
+      expect(lines).to eq(["[Pgbus] Workflow sweep: 0 stalled step(s) repaired, 0 overdue step(s) re-sent, " \
+                           "2 wait(s) timed out, 1 fan-out(s) resolved"])
     end
   end
 

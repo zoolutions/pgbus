@@ -145,6 +145,20 @@ RSpec.describe "Workflow wait timeouts (integration)", :integration do
     expect(wf.reload.status).to eq("cancelled")
   end
 
+  it "does not count the time a run spent paused against its wait_timeout:" do
+    wf = park(define("PausedLong", on_timeout: :cancel!))
+    step = steps_of(wf).last
+    deadline = step.timeout_at
+    wf.pause!
+    Pgbus::WorkflowEntry.where(workflow_id: wf.workflow_id).update_all(paused_at: 2.hours.ago)
+    step.update_columns(waiting_since: 3.hours.ago)
+
+    wf.resume!
+
+    expect(step.reload.timeout_at).to be_within(5).of(deadline + 2.hours)
+    expect(sweep).to include(timed_out: 0)
+  end
+
   it "applies on_timeout inline through expire_wait" do
     wf = park(define("InlineTimeout", on_timeout: :run))
 

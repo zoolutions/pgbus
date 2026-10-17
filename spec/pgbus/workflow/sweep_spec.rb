@@ -34,21 +34,23 @@ RSpec.describe Pgbus::Workflow::Sweep do
   end
 
   describe ".waiting_ready?" do
-    it "needs the signals table and the waiting-step columns, and keeps a true answer" do
-      connection = double("connection")
-      allow(Pgbus::WorkflowStep).to receive(:connection).and_return(connection)
-      allow(Pgbus::WorkflowSignal).to receive(:table_exists?).and_return(true)
+    let(:connection) { double("connection") }
+
+    before { allow(Pgbus::WorkflowStep).to receive(:connection).and_return(connection) }
+
+    it "asks the database (not the schema cache) for the signals table and the step columns, and keeps a true answer" do
+      allow(connection).to receive(:table_exists?).with("pgbus_workflow_signals").and_return(true)
       allow(connection).to receive(:column_exists?).with("pgbus_workflow_steps", :timeout_at).and_return(false)
       expect(described_class.waiting_ready?).to be(false)
 
       allow(connection).to receive(:column_exists?).and_return(true)
       expect(described_class.waiting_ready?).to be(true)
-      allow(Pgbus::WorkflowSignal).to receive(:table_exists?).and_raise(StandardError, "db down")
+      allow(connection).to receive(:table_exists?).and_raise(StandardError, "db down")
       expect(described_class.waiting_ready?).to be(true)
     end
 
     it "treats a failing probe as false" do
-      allow(Pgbus::WorkflowSignal).to receive(:table_exists?).and_raise(StandardError, "db down")
+      allow(connection).to receive(:table_exists?).and_raise(StandardError, "db down")
 
       expect(described_class.waiting_ready?).to be(false)
     end
@@ -72,7 +74,7 @@ RSpec.describe Pgbus::Workflow::Sweep do
     it "emits the gauge zero-filled across every status and stuck reason" do
       allow(described_class).to receive(:waiting_ready?).and_return(false)
 
-      expect(described_class.repair(config: config)).to eq(stalled: 0, resent: 0, timed_out: 0)
+      expect(described_class.repair(config: config)).to eq(stalled: 0, resent: 0, timed_out: 0, fan_outs: 0)
 
       statuses = gauges.last[:statuses].select { |row| row[:workflow_class] == "SignupWorkflow" }
       stuck = gauges.last[:stuck].select { |row| row[:workflow_class] == "SignupWorkflow" }
@@ -85,9 +87,12 @@ RSpec.describe Pgbus::Workflow::Sweep do
     it "times out waits and counts waiting_overdue once the waiting-step schema exists" do
       allow(described_class).to receive(:waiting_ready?).and_return(true)
       allow(Pgbus::Workflow::WaitTimeout).to receive(:expire_due).and_return(2)
+      allow(Pgbus::Workflow::FanOut).to receive(:resolve_lost).and_return(1)
       config.workflow_waiting_visibility_threshold = 3600
 
-      expect(described_class.repair(config: config)).to eq(stalled: 0, resent: 0, timed_out: 2)
+      expect(described_class.repair(config: config)).to eq(stalled: 0, resent: 0, timed_out: 2, fan_outs: 1)
+      expect(Pgbus::Workflow::FanOut).to have_received(:resolve_lost)
+        .with(now: a_kind_of(Time), grace: config.workflow_stall_threshold)
       expect(Pgbus::WorkflowEntry).to have_received(:stuck_reason_counts)
         .with(threshold: config.workflow_stall_threshold, now: a_kind_of(Time), waiting_threshold: 3600)
     end

@@ -187,7 +187,10 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
         `on_batch_failure` applies (`:pause!` by default, `:cancel!` or
         `:skip!`) and `Pgbus::Workflow::FanOutFailed` ("3 of 12 jobs
         dead-lettered") is recorded on the step. A batch that stalls is
-        repaired by the batch sweep, whose finish fires the same callback.
+        repaired by the batch sweep, whose finish fires the same callback; a
+        callback that is lost (dead-lettered, or never sent) is made up by the
+        workflow sweep once its batch has been finished for
+        `config.workflow_stall_threshold`.
 
         - The workflow owns the batch's callbacks: `b.on_complete`,
           `b.on_success` and `b.on_failure` raise `ArgumentError` in the body.
@@ -280,9 +283,11 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
         nil and `timed_out?` true). `timeout:` keeps its meaning on every
         step: it bounds the run once the body starts, while `wait_timeout:`
         bounds the wait before it. The sweep fires timeouts, so one fires
-        within `config.workflow_sweep_interval` of its deadline; a paused run's
-        wait does not time out until it is resumed. A signal that arrives
-        after the timeout fired stays pending.
+        within `config.workflow_sweep_interval` of its deadline. A paused run's
+        wait does not time out while it is paused, and the time spent paused
+        does not count against it: `resume!` moves the deadline by the length
+        of the pause. A signal that arrives after the timeout fired stays
+        pending.
 
         **A wait without a timeout** has three escape hatches: `skip!` (the
         run moves on), `cancel!`, or `pause!` then `resume_at!`. One waiting
@@ -434,6 +439,9 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
           the threshold ago and not sent within it — is sent again.
         - **A wait past its `wait_timeout:`** gets its `on_timeout:` (see
           Signals). A waiting step is never treated as stalled.
+        - **A lost fan-out callback** — a `fan_out` step still waiting on a
+          batch that finished more than the threshold ago — is resolved as
+          its `BatchFinishedJob` would have.
         - **Retention**: finished and cancelled runs older than
           `config.workflow_retention` (30 days) are deleted hourly, with their
           steps and events.

@@ -17,6 +17,9 @@ module Pgbus
     # - a waiting step of a waiting run past its timeout_at (wait_timeout:)
     #   gets its on_timeout (WaitTimeout), so a timeout fires within one
     #   workflow_sweep_interval of its deadline.
+    # - a fan_out step still waiting on a batch that finished more than
+    #   workflow_stall_threshold ago lost its BatchFinishedJob (dead-lettered,
+    #   or never sent): the sweep resolves it as the callback would have.
     # - pgbus.workflow.gauge: runs by class and status, and by class and stuck
     #   reason (waiting_overdue: waiting longer than
     #   workflow_waiting_visibility_threshold on a step without a timeout).
@@ -42,6 +45,7 @@ module Pgbus
           summary = { stalled: repair_stalled(now: now, config: config), resent: resend_overdue(now: now, threshold: threshold) }
           waiting = waiting_ready?
           summary[:timed_out] = waiting ? WaitTimeout.expire_due(now: now) : 0
+          summary[:fan_outs] = waiting ? FanOut.resolve_lost(now: now, grace: threshold) : 0
           emit_gauge(now: now, threshold: threshold, waiting_threshold: (config.workflow_waiting_visibility_threshold if waiting))
           summary
         end
@@ -76,13 +80,16 @@ module Pgbus
 
         # True once the waiting-step schema exists (pgbus:add_workflow_signals,
         # or an add_workflows that carries it): the signals table and the
-        # step columns. Asked of the database itself, not the schema cache,
-        # so a process that was running during the migration sees it.
+        # step columns. Asked of the database through the connection, not the
+        # schema cache (which keeps a negative answer). A process that loaded
+        # the step model before the migration still needs a restart to see
+        # the new columns, as for any column added under a running app.
         def waiting_ready?
           return true if @schema_lock.synchronize { @waiting_ready }
 
           ready = begin
-            WorkflowSignal.table_exists? && WorkflowStep.connection.column_exists?(WorkflowStep.table_name, :timeout_at)
+            connection = WorkflowStep.connection
+            connection.table_exists?(WorkflowSignal.table_name) && connection.column_exists?(WorkflowStep.table_name, :timeout_at)
           rescue StandardError => e
             Pgbus.logger.debug { "[Pgbus] Workflow waiting-step schema probe failed: #{e.class}: #{e.message}" }
             false

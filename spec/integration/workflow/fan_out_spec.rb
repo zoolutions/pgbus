@@ -192,6 +192,21 @@ RSpec.describe "Workflow fan_out (integration)", :integration do
     expect(Pgbus::BatchEntry.find_by(batch_id: batch.batch_id)).to have_attributes(total_jobs: 1, status: "finished")
   end
 
+  it "has the sweep resolve a step whose batch finished but whose callback was lost" do
+    wf = run_until(VendorWorkflow.start!(vendors: %w[a]), statuses: %w[waiting])
+    drain_members
+    lost = read_step_message
+    Pgbus.client.delete_message(WorkflowIntegration::QUEUE, lost.msg_id.to_i)
+    batch_id = waiting_step(wf).batch_id
+
+    expect(Pgbus::Workflow::Sweep.repair).to include(fan_outs: 0)
+    Pgbus::BatchEntry.where(batch_id: batch_id).update_all(finished_at: 2.hours.ago)
+    expect(Pgbus::Workflow::Sweep.repair).to include(fan_outs: 1)
+
+    expect(waiting_step(wf).reload.status).to eq("completed")
+    run_until(wf, statuses: %w[finished])
+  end
+
   it "lets an operator skip a step waiting on its batch; the callback then leaves the run alone" do
     wf = run_until(VendorWorkflow.start!(vendors: %w[a]), statuses: %w[waiting])
     wf.skip!(actor: "ops")

@@ -89,7 +89,8 @@ module Pgbus
         resolve(record, step, entry, notes) if entry&.status == "finished"
       end
 
-      # BatchFinishedJob#perform.
+      # BatchFinishedJob#perform (and the sweep, for a lost one). Truthy when
+      # it resolved the step.
       def finished(step_id)
         step = WorkflowStep.find_by(id: step_id)
         return log("step #{step_id} no longer exists (its run was deleted)") unless step
@@ -105,7 +106,15 @@ module Pgbus
 
           resolve(record, step, entry, notes)
         end
-        nil
+      end
+
+      # The sweep's repair for a lost callback: fan_out steps still waiting on
+      # a batch that finished more than +grace+ ago. Returns how many it
+      # resolved.
+      def resolve_lost(now:, grace:, limit: Sweep::BATCH_SIZE)
+        finished_batches = BatchEntry.finished.where(finished_at: ...(now - grace)).select(:batch_id)
+        WorkflowStep.where(status: "waiting", batch_id: finished_batches).order(:id).limit(limit).pluck(:id)
+                    .count { |step_id| finished(step_id) }
       end
 
       def resolve(record, step, entry, notes)

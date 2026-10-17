@@ -138,8 +138,7 @@ RSpec.describe "Workflow signals (integration)", :integration do
       wf.signal!(:shipped, payload: { at: "while paused" })
       expect(wf.status).to eq("paused")
       expect(steps_of(wf).last.status).to eq("scheduled")
-      drain_visible
-      expect(steps_of(wf).last.status).to eq("scheduled")
+      expect(queue_depth).to eq(0)
 
       wf.resume!
       run_until(wf, statuses: %w[finished])

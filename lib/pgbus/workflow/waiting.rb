@@ -38,9 +38,16 @@ module Pgbus
         true
       end
 
+      # A paused run's step is written without the model callback, so no
+      # StepJob goes out that its claim would only drop; resume! sends it.
       def wake!(record, step, now:, **attrs)
-        step.update!(status: "scheduled", scheduled_at: now, **attrs)
-        Runner.transition!(record, paused?(record) ? :hold : :wake)
+        if paused?(record)
+          step.update_columns(status: "scheduled", scheduled_at: now, **attrs)
+          Runner.transition!(record, :hold)
+        else
+          step.update!(status: "scheduled", scheduled_at: now, **attrs)
+          Runner.transition!(record, :wake)
+        end
       end
 
       # Returns false when the row was no longer waiting.

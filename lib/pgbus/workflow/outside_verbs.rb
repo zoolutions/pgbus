@@ -37,6 +37,7 @@ module Pgbus
           Runner.transition!(record, :unpause, **resumed)
           resumed_event(record, actor, reason, latest)
         when "waiting"
+          extend_wait(record, latest)
           Runner.transition!(record, :rewait, **resumed)
           resumed_event(record, actor, reason, latest)
         when "scheduled"
@@ -112,6 +113,16 @@ module Pgbus
         Runner.transition!(record, :resume, current_step: following.name, **resumed)
         resumed_event(record, actor, reason, latest)
         Runner.schedule!(record, following.name, at: Time.current + following.wait, actor: actor)
+      end
+
+      # The time a run spent paused does not count against its waiting
+      # step's wait_timeout: the deadline moves by the length of the pause
+      # (from when the step started waiting, if that came later).
+      def extend_wait(record, step, now: Time.current)
+        return unless step.timeout_at && record.paused_at
+
+        paused_for = now - [record.paused_at, step.waiting_since].compact.max
+        step.update_columns(timeout_at: step.timeout_at + paused_for) if paused_for.positive?
       end
 
       def resumed_event(record, actor, reason, step)
