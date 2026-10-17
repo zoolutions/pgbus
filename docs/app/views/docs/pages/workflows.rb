@@ -321,7 +321,8 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
         `resumed`, `cancelled`, `finished`, `run_now`, `rescheduled`, `rerun`,
         `stall_detected`, `late_completion_ignored`.
 
-        **Metrics** reach Prometheus/StatsD and AppSignal with the same names:
+        **Metrics** reach Prometheus, StatsD and AppSignal with the same names
+        (one exception for StatsD, below the table):
       MD
       DocsUI::Table(
         [ "Metric", "Kind", "Labels" ],

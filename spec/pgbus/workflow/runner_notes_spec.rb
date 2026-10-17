@@ -13,8 +13,8 @@ RSpec.describe Pgbus::Workflow::Runner::Notes do
   before do
     allow(Pgbus::Instrumentation).to receive(:instrument)
     allow(Pgbus::ErrorReporter).to receive(:report)
-    notes.instrument("pgbus.workflow_paused", workflow_id: "wf-1")
-    notes.report(RuntimeError.new("boom"), workflow_id: "wf-1")
+    notes.instrument("pgbus.workflow_paused", { workflow_id: "wf-1" })
+    notes.report(RuntimeError.new("boom"), { workflow_id: "wf-1" })
   end
 
   it "sends at once when no transaction is open any more" do
@@ -22,8 +22,8 @@ RSpec.describe Pgbus::Workflow::Runner::Notes do
 
     notes.flush_after_commit(connection)
 
-    expect(Pgbus::Instrumentation).to have_received(:instrument).with("pgbus.workflow_paused", workflow_id: "wf-1")
-    expect(Pgbus::ErrorReporter).to have_received(:report).with(an_instance_of(RuntimeError), workflow_id: "wf-1")
+    expect(Pgbus::Instrumentation).to have_received(:instrument).with("pgbus.workflow_paused", { workflow_id: "wf-1" })
+    expect(Pgbus::ErrorReporter).to have_received(:report).with(an_instance_of(RuntimeError), { workflow_id: "wf-1" })
   end
 
   context "with an enclosing transaction still open" do
