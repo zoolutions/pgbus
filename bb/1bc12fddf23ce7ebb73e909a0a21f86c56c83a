@@ -1,0 +1,33 @@
+lib/generators/pgbus/templates/add_workflows.rb.erb
+  s_e3a487096d49a3::t_0a2f9d2e1a8f35 1-99
+spec/integration_helper.rb
+  s_e3a487096d49a3::t_327032088b3d1b 224-319
+  s_e3a487096d49a3::t_99919a19068334 491
+lib/generators/pgbus/templates/migration.rb.erb
+  s_e3a487096d49a3::t_092dc808141697 214-305
+  s_e3a487096d49a3::t_60585f61e1d044 340-342
+spec/generators/pgbus/add_workflows_generator_spec.rb
+  s_e3a487096d49a3::t_008c0d8d5e692a 1-70
+lib/generators/pgbus/add_workflows_generator.rb
+  s_e3a487096d49a3::t_d652bb49e11f4d 1-54
+spec/generators/pgbus/install_generator_spec.rb
+  s_e3a487096d49a3::t_6cef5f4cd2a47e 40-51
+spec/pgbus/generators/migration_detector_spec.rb
+  s_e3a487096d49a3::t_2e3b38843b366b 316-336
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "bb1bc12fddf23ce7ebb73e909a0a21f86c56c83a",
+  "prompts": {},
+  "sessions": {
+    "s_e3a487096d49a3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "faf1faea-af65-4cb2-b526-81aed7772ead",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
