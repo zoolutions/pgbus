@@ -13,9 +13,14 @@ module Pgbus
     # needs it.
     Snapshot = Data.define(:queue_prefix) do
       # A shareable snapshot of +configuration+. The configuration's own
-      # values are copied, never frozen in place.
+      # values are copied, never frozen in place. Nil when a setting is not
+      # plain data (Shareable.data?), which only a configuration that skipped
+      # validation can hold: the caller keeps the snapshot it has.
       def self.of(configuration)
-        new(queue_prefix: Shareable.freeze_copy(configuration.queue_prefix))
+        prefix = configuration.queue_prefix
+        return unless Shareable.data?(prefix)
+
+        new(queue_prefix: Shareable.freeze_copy(prefix))
       end
     end
   end

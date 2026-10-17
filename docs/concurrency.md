@@ -107,8 +107,10 @@ place:
   Ractor-safe code reads (today the `queue_prefix`), which any Ractor can read.
   `Pgbus.stream_key`, `Pgbus.stream_key!` and `Pgbus.stream_name_budget` read
   the live configuration on the main Ractor and the snapshot elsewhere, so a
-  non-main Ractor sees the prefix as the last `Pgbus.finalize!` or
-  `Pgbus.configure` left it: a setter alone does not publish.
+  non-main Ractor sees the prefix as the last finalize left it (`Pgbus.finalize!`,
+  or a `Pgbus.configure` that finalizes: not one a Rails app runs while it
+  boots, which the engine's `after_initialize` publishes), and `Pgbus.reset!`
+  publishes the defaults. A setter alone does not publish.
 - **A shareable seam.** The values the LISTEN thread hands the dispatcher, and
   the frames the dispatcher hands a connection (`WakeMessage`,
   `StreamEnvelope`, `ReadAfter::Envelope`), are `Ractor.shareable?`, so a
@@ -137,9 +139,9 @@ place:
 The blockers, in order:
 
 1. `Pgbus.configuration` is main-only: it holds the logger and the app's
-   callables. Code that reads a setting runs in a non-main Ractor only once it
-   reads that setting through `Pgbus.configuration_snapshot`, as the stream
-   keys do; the snapshot gains a setting when such code needs it.
+   callables. Code that reads a setting from it runs in a non-main Ractor only
+   once it reads that setting through `Pgbus.configuration_snapshot`, as the
+   stream keys do; the snapshot gains a setting when such code needs it.
 2. The PGMQ client and its connection pools are per process.
 3. ActiveRecord itself is reachable from non-main Ractors only through Rails'
    own proxying, which is not there yet.

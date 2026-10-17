@@ -375,12 +375,17 @@ module Pgbus
     attr_reader :stream_cache
 
     # Freezes the configuration's plain-data settings and publishes the
-    # snapshot non-main Ractors read.
+    # snapshot non-main Ractors read, unless a reset! replaced the
+    # configuration meanwhile (its own snapshot stands) or the snapshot could
+    # not be taken (the last one stands).
     def finalize_configuration!
-      configuration.finalize!
-      snapshot = Configuration::Snapshot.of(configuration)
-      @state_lock.synchronize { @configuration_snapshot = snapshot }
-      configuration
+      config = configuration
+      config.finalize!
+      snapshot = Configuration::Snapshot.of(config)
+      @state_lock.synchronize do
+        @configuration_snapshot = snapshot if snapshot && @configuration.equal?(config)
+      end
+      config
     end
   end
 

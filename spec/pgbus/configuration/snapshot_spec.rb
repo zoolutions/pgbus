@@ -18,6 +18,13 @@ RSpec.describe Pgbus::Configuration::Snapshot do
       expect(Ractor.shareable?(snapshot)).to be(true)
       expect(config.queue_prefix).not_to be_frozen
     end
+
+    it "is nil when the queue_prefix is not plain data" do
+      config = Pgbus::Configuration.new
+      config.queue_prefix = -> { "tenant_a" }
+
+      expect(described_class.of(config)).to be_nil
+    end
   end
 
   describe "Pgbus.configuration_snapshot" do
@@ -58,6 +65,36 @@ RSpec.describe Pgbus::Configuration::Snapshot do
       Pgbus.configuration.queue_prefix = "unpublished"
 
       expect(Pgbus.configuration_snapshot.queue_prefix).to eq("published")
+    end
+
+    it "keeps the last published settings when the queue_prefix is not plain data" do
+      Pgbus.configure { |c| c.queue_prefix = "published" }
+
+      expect do
+        Pgbus.configure do |c|
+          c.eager_validation = false
+          c.queue_prefix = -> { "tenant_a" }
+        end
+      end.not_to raise_error
+      expect(Pgbus.configuration_snapshot.queue_prefix).to eq("published")
+    end
+
+    it "does not publish a configuration a concurrent Pgbus.reset! replaced" do
+      Pgbus.configuration.queue_prefix = +"stale"
+      reset = false
+      # The reset lands after the stale snapshot is built, before it is published.
+      allow(described_class).to receive(:of).and_wrap_original do |original, config|
+        original.call(config).tap do
+          next if reset
+
+          reset = true
+          Pgbus.reset!
+        end
+      end
+
+      Pgbus.finalize!
+
+      expect(Pgbus.configuration_snapshot.queue_prefix).to eq(Pgbus::Configuration.new.queue_prefix)
     end
 
     it "is the defaults again after Pgbus.reset!" do

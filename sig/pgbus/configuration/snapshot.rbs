@@ -6,7 +6,7 @@ module Pgbus
       attr_reader queue_prefix: String
       def self.new: (queue_prefix: String) -> instance
                   | (String queue_prefix) -> instance
-      def self.of: (Configuration configuration) -> Snapshot
+      def self.of: (Configuration configuration) -> Snapshot?
     end
   end
 end

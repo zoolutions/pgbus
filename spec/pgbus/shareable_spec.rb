@@ -59,9 +59,11 @@ RSpec.describe Pgbus::Shareable do
     end
 
     it "is false inside a non-main Ractor", :ractor do
-      skip "needs Ruby 4.0+ (Ractor#value)" unless Ractor.method_defined?(:value)
+      ractor = Ractor.new(described_class, &:main_ractor?)
+      # Ractor#value is Ruby 4.0+; Ractor#take before it.
+      result = Ractor.method_defined?(:value) ? ractor.value : ractor.take
 
-      expect(Ractor.new(described_class, &:main_ractor?).value).to be(false)
+      expect(result).to be(false)
     end
   end
 
