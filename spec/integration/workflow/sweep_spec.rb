@@ -131,6 +131,35 @@ RSpec.describe Pgbus::Workflow::Sweep, :integration do
       expect(counts).to eq([error_run.workflow_class, "paused_error"] => 1, [manual_run.workflow_class, "paused_manual"] => 1,
                            %w[SweptWorkflow overdue] => 1)
     end
+
+    # Issue #541, step 5.
+    it "counts waiting_overdue for a long wait without a wait_timeout:, never a wait that has one" do
+      stub_const("ParkedWorkflow", Class.new(Pgbus::Workflow) do
+        step(:forever, wait_for: :never) { nil }
+        step(:bounded, wait_for: :never, wait_timeout: 30.days) { nil }
+      end)
+      old = run_until(ParkedWorkflow.start!, statuses: %w[waiting])
+      steps_of(old).last.update_columns(waiting_since: 8.days.ago)
+      fresh = run_until(ParkedWorkflow.start!, statuses: %w[waiting])
+      bounded = run_until(ParkedWorkflow.start!, statuses: %w[waiting])
+      Pgbus::WorkflowStep.where(workflow_id: bounded.workflow_id)
+                         .update_all(step_name: "bounded", waiting_since: 8.days.ago, timeout_at: 22.days.from_now)
+
+      counts = Pgbus::WorkflowEntry.stuck_reason_counts(threshold: config.workflow_stall_threshold,
+                                                        waiting_threshold: config.workflow_waiting_visibility_threshold)
+      expect(counts).to eq(%w[ParkedWorkflow waiting_overdue] => 1)
+      expect(fresh.reload.status).to eq("waiting")
+    end
+
+    it "never treats a waiting step as stalled, and counts no waiting_overdue without a waiting_threshold:" do
+      stub_const("ParkedWorkflow", Class.new(Pgbus::Workflow) { step(:forever, wait_for: :never) { nil } })
+      wf = run_until(ParkedWorkflow.start!, statuses: %w[waiting])
+      steps_of(wf).last.update_columns(waiting_since: 30.days.ago)
+
+      expect(described_class.repair(config: config)).to include(stalled: 0, resent: 0, timed_out: 0)
+      expect(wf.reload.status).to eq("waiting")
+      expect(Pgbus::WorkflowEntry.stuck_reason_counts(threshold: config.workflow_stall_threshold)).to be_empty
+    end
   end
 
   describe ".cleanup" do

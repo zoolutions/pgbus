@@ -71,20 +71,23 @@ RSpec.describe Pgbus::Workflow::FlowControl do
 
   describe "outside a step body" do
     it "raises NotInStep for the step-only verbs" do
-      %i[reattempt! skip! finished!].each do |verb|
+      %i[reattempt! finished!].each do |verb|
         expect { workflow.public_send(verb) }.to raise_error(Pgbus::Workflow::NotInStep, /#{Regexp.escape(verb.to_s)}/)
       end
     end
 
-    it "routes pause! and cancel! to the Runner with the actor and reason" do
+    it "routes pause!, cancel! and skip! to the Runner with the actor and reason" do
       updated = double("WorkflowEntry", workflow_id: "wf-1", status: "paused")
       allow(Pgbus::Workflow::Runner).to receive(:apply).and_return(updated)
 
       workflow.pause!(actor: "alice", reason: "SMTP down")
       workflow.cancel!
+      workflow.skip!(actor: "bob", reason: "the carrier lost the parcel")
 
       expect(Pgbus::Workflow::Runner).to have_received(:apply).with(workflow, :pause, actor: "alice", reason: "SMTP down")
       expect(Pgbus::Workflow::Runner).to have_received(:apply).with(workflow, :cancel, actor: "app", reason: nil)
+      expect(Pgbus::Workflow::Runner).to have_received(:apply)
+        .with(workflow, :skip, actor: "bob", reason: "the carrier lost the parcel")
       expect(workflow.record).to be(updated)
     end
   end

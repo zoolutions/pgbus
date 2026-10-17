@@ -215,10 +215,10 @@ RSpec.describe "Workflow start! and outside verbs (integration)", :integration d
   describe "available_actions" do
     it "follows the States table" do
       wf = OrderWorkflow.start!
-      expect(wf.available_actions).to match_array(%i[pause cancel run_now reschedule])
+      expect(wf.available_actions).to match_array(%i[pause cancel run_now reschedule signal])
 
       wf.pause!
-      expect(wf.available_actions).to match_array(%i[resume resume_at cancel])
+      expect(wf.available_actions).to match_array(%i[resume resume_at cancel signal])
     end
   end
 end

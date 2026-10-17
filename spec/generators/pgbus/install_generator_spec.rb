@@ -50,6 +50,14 @@ RSpec.describe Pgbus::Generators::InstallGenerator do
       expect(content.index("drop_table :pgbus_workflow_events")).to be < content.index("drop_table :pgbus_workflows\n")
       expect(content.index("drop_table :pgbus_workflow_steps")).to be < content.index("drop_table :pgbus_workflows\n")
     end
+
+    it "carries the waiting-step columns and the signals table (issue #541)" do
+      content = File.read(template_path)
+      expect(content).to include("t.datetime :timeout_at", "t.string :batch_id", "t.bigint :signal_id")
+      expect(content).to include("create_table :pgbus_workflow_signals do |t|")
+      expect(content).to include('name: "idx_pgbus_workflow_signals_idempotency"')
+      expect(content.index("drop_table :pgbus_workflow_signals")).to be < content.index("drop_table :pgbus_workflows\n")
+    end
   end
 
   describe "initializer template" do

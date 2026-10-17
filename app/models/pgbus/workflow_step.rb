@@ -42,6 +42,26 @@ module Pgbus
       where(id: id, status: "in_progress").update_all(attrs)
     end
 
+    # in_progress → waiting: the step parks on a signal or its fan-out batch
+    # (Workflow::Waiting). Returns the number of rows moved.
+    def self.park!(id, **attrs)
+      where(id: id, status: "in_progress").update_all(attrs.merge(status: "waiting"))
+    end
+
+    # waiting → in_progress, so the outcome of a finished wait (the batch
+    # finished, the wait timed out, an operator skipped it) is applied like
+    # any attempt's. Returns the number of rows moved.
+    def self.unpark!(id)
+      where(id: id, status: "waiting").update_all(status: "in_progress")
+    end
+
+    # waiting rows of waiting runs past their timeout_at (the sweep applies
+    # their on_timeout).
+    def self.wait_expired(now: Time.current)
+      where(status: "waiting").where(timeout_at: ...now)
+                              .where(workflow_id: WorkflowEntry.where(status: "waiting").select(:workflow_id))
+    end
+
     # The scheduled, waiting and in_progress rows of a run, cancelled (an
     # outside cancel!, a resume_at!).
     def self.cancel_open!(workflow_id, now: Time.current)

@@ -80,6 +80,34 @@ module Pgbus
         "pgbus-wf:#{workflow_id}:#{step_context!(:step_idempotency_key).step_name}"
       end
 
+      # Inside a wait_for: step: the Pgbus::WorkflowSignal the step took (its
+      # +payload+ has indifferent access), or nil when its wait timed out.
+      def received_signal
+        step_context!(:received_signal)
+        @received_signal
+      end
+
+      # Inside a wait_for: step: true when the body runs because the wait
+      # timed out (on_timeout: :run) rather than for a signal.
+      def timed_out?
+        step_context!(:timed_out?)
+        @timed_out == true
+      end
+
+      # Deliver a signal to this run. Stored under the run's lock; a step
+      # waiting for it (wait_for:) is woken at once, otherwise it waits,
+      # pending, for the step that claims it. With an idempotency_key a
+      # redelivery stores nothing and returns the first signal
+      # (duplicate_delivery? true). Raises NotOngoing on a finished or
+      # cancelled run.
+      #
+      #   wf.signal!(:payment_confirmed, payload: { amount: 42 }, idempotency_key: event.id)
+      def signal!(name, payload: {}, idempotency_key: nil, actor: nil)
+        @record, signal = Signals.deliver(workflow_id, name, payload: payload, idempotency_key: idempotency_key,
+                                                             actor: actor || Runner::DEFAULT_ACTOR)
+        signal
+      end
+
       # Differs per attempt, for the rare call that must not be deduplicated
       # across attempts.
       def attempt_idempotency_key
@@ -141,6 +169,14 @@ module Pgbus
         @step_context = context
         @output_values = nil
         @pending_output = nil
+        @received_signal = nil
+        @timed_out = false
+      end
+
+      # Used by the StepJob's signal gate only.
+      def enter_wait(signal:, timed_out:)
+        @received_signal = signal
+        @timed_out = timed_out
       end
     end
   end

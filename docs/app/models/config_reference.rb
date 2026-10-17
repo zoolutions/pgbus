@@ -78,7 +78,8 @@ module ConfigReference
       { name: "workflow_stall_threshold", type: "Duration", default: "1.hour", desc: "Default deadline for an in_progress step (a step's own timeout: overrides it), and how long a scheduled step may be overdue and unsent before the sweep sends it again." },
       { name: "workflow_stall_action", type: "Symbol", default: ":pause", desc: "What happens to a stalled step: :pause the workflow, :reattempt the step, or :cancel the workflow." },
       { name: "workflow_max_payload_size", type: "Integer", default: "131_072", desc: "Byte cap on a workflow's serialized arguments and on each step's output; larger raises Pgbus::Workflow::PayloadTooLarge." },
-      { name: "workflow_error_backtrace_lines", type: "Integer", default: "50", desc: "Backtrace lines kept on a failed step row (cleaned through Rails.backtrace_cleaner when Rails is loaded)." }
+      { name: "workflow_error_backtrace_lines", type: "Integer", default: "50", desc: "Backtrace lines kept on a failed step row (cleaned through Rails.backtrace_cleaner when Rails is loaded)." },
+      { name: "workflow_waiting_visibility_threshold", type: "Duration", default: "7.days", desc: "A step waiting this long for a signal or its batch, without a wait_timeout:, counts as stuck (the waiting_overdue reason in the pgbus_workflows_stuck gauge)." }
     ],
     "Outbox" => [
       { name: "outbox_enabled", type: "Boolean", default: "false", desc: "Enable the transactional outbox poller." },

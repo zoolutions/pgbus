@@ -27,7 +27,8 @@ module Pgbus
       # (an exception or a stall) runs again as a new attempt; a completed or
       # skipped one (the step called pause!) is followed by the next step, or
       # finishes the run when it was the last; a scheduled one (an outside
-      # pause! before it ran) is sent again; one still running goes on.
+      # pause! before it ran) is sent again; one still running goes on; one
+      # still waiting (for a signal or its batch) waits again.
       def resume(record, notes, actor:, reason:)
         latest = WorkflowStep.latest_for(record.workflow_id)
         resumed = { paused_at: nil, **ErrorCapture.cleared }
@@ -35,10 +36,14 @@ module Pgbus
         when "in_progress"
           Runner.transition!(record, :unpause, **resumed)
           resumed_event(record, actor, reason, latest)
-        when "scheduled", "waiting"
+        when "waiting"
+          extend_wait(record, latest)
+          Runner.transition!(record, :rewait, **resumed)
+          resumed_event(record, actor, reason, latest)
+        when "scheduled"
           Runner.transition!(record, :resume, **resumed)
           resumed_event(record, actor, reason, latest)
-          latest.update!(enqueued_at: Time.current) if latest.status == "scheduled"
+          latest.update!(enqueued_at: Time.current)
         when "failed"
           Runner.transition!(record, :resume, **resumed)
           resumed_event(record, actor, reason, latest)
@@ -46,6 +51,19 @@ module Pgbus
         else
           resume_after(record, notes, latest, resumed, actor: actor, reason: reason)
         end
+      end
+
+      # The step a waiting run waits on is skipped (a signal it holds is
+      # consumed), as if it had called skip!; the next step is scheduled, or
+      # the run finishes after the last. Its fan-out batch, if any, runs on and
+      # its callback finds nothing to resume.
+      def skip(record, notes, actor:, reason:)
+        step = WorkflowStep.latest_for(record.workflow_id)
+        unless step&.status == "waiting"
+          raise InvalidTransition, "workflow #{record.workflow_id} has no waiting step to skip (latest: #{step&.status || "none"})"
+        end
+
+        Waiting.resolve!(record, step, FlowControl::Outcome.skip(actor: actor, reason: reason), notes: notes)
       end
 
       def resume_at(record, _notes, actor:, reason:, step_name:)
@@ -95,6 +113,16 @@ module Pgbus
         Runner.transition!(record, :resume, current_step: following.name, **resumed)
         resumed_event(record, actor, reason, latest)
         Runner.schedule!(record, following.name, at: Time.current + following.wait, actor: actor)
+      end
+
+      # The time a run spent paused does not count against its waiting
+      # step's wait_timeout: the deadline moves by the length of the pause
+      # (from when the step started waiting, if that came later).
+      def extend_wait(record, step, now: Time.current)
+        return unless step.timeout_at && record.paused_at
+
+        paused_for = now - [record.paused_at, step.waiting_since].compact.max
+        step.update_columns(timeout_at: step.timeout_at + paused_for) if paused_for.positive?
       end
 
       def resumed_event(record, actor, reason, step)

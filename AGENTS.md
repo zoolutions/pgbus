@@ -101,7 +101,7 @@ Layer 5: CLI             lib/pgbus/cli.rb
 Layer 4: Process Model   lib/pgbus/process/ (supervisor, worker, dispatcher, consumer)
          Execution Pools lib/pgbus/execution_pools/ (thread_pool, async_pool)
 Layer 3: Event Bus       lib/pgbus/event_bus/ (publisher, subscriber, registry, handler)
-Layer 3b: Workflows      lib/pgbus/workflow.rb, lib/pgbus/workflow/ (DSL, States, runner, StepJob, sweep)
+Layer 3b: Workflows      lib/pgbus/workflow.rb, lib/pgbus/workflow/ (DSL, States, runner, StepJob, signals, fan_out, sweep)
 Layer 2: ActiveJob       lib/pgbus/active_job/ (adapter, executor)
 Layer 1: Client          lib/pgbus/client.rb (PGMQ wrapper)
 Layer 0: Config          lib/pgbus/configuration.rb, config_loader.rb
@@ -126,6 +126,7 @@ ActiveRecord models live in `app/models/pgbus/` and inherit from `Pgbus::Applica
 | `Pgbus::WorkflowEntry` | `pgbus_workflows` | `Pgbus::Workflow` is the DSL base class |
 | `Pgbus::WorkflowStep` | `pgbus_workflow_steps` | — |
 | `Pgbus::WorkflowEvent` | `pgbus_workflow_events` | — |
+| `Pgbus::WorkflowSignal` | `pgbus_workflow_signals` | — |
 
 When a model name collides with a service/module name, prefer `Entry` suffix or a descriptive alternative over `Record`.
 

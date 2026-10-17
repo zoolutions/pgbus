@@ -392,13 +392,14 @@ module Pgbus
         e
       end
 
-      # Stalled and overdue workflow steps, and the workflow gauges.
+      # Stalled and overdue workflow steps, timed-out waits, and the workflow gauges.
       def sweep_workflows
         summary = Workflow::Sweep.repair(config: config)
-        return unless summary && (summary[:stalled].positive? || summary[:resent].positive?)
+        return unless summary && summary.values_at(:stalled, :resent, :timed_out, :fan_outs).compact.any?(&:positive?)
 
         Pgbus.logger.info do
-          "[Pgbus] Workflow sweep: #{summary[:stalled]} stalled step(s) repaired, #{summary[:resent]} overdue step(s) re-sent"
+          "[Pgbus] Workflow sweep: #{summary[:stalled]} stalled step(s) repaired, #{summary[:resent]} overdue step(s) re-sent, " \
+            "#{summary[:timed_out].to_i} wait(s) timed out, #{summary[:fan_outs].to_i} fan-out(s) resolved"
         end
       rescue StandardError => e
         log_maintenance_failure("Workflow sweep", e)

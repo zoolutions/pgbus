@@ -317,6 +317,45 @@ def bootstrap_integration_tables(conn)
     SQL
   end
 
+  # Waiting steps (issue #541) — mirrors add_workflow_signals.rb.erb. Applied
+  # separately so a database bootstrapped for the core tables upgrades.
+  unless conn.column_exists?("pgbus_workflow_steps", "timeout_at")
+    conn.execute(<<~SQL)
+      ALTER TABLE pgbus_workflow_steps ADD COLUMN IF NOT EXISTS batch_id VARCHAR;
+      ALTER TABLE pgbus_workflow_steps ADD COLUMN IF NOT EXISTS wait_for VARCHAR;
+      ALTER TABLE pgbus_workflow_steps ADD COLUMN IF NOT EXISTS signal_id BIGINT;
+      ALTER TABLE pgbus_workflow_steps ADD COLUMN IF NOT EXISTS waiting_since TIMESTAMP;
+      ALTER TABLE pgbus_workflow_steps ADD COLUMN IF NOT EXISTS timeout_at TIMESTAMP;
+      CREATE INDEX IF NOT EXISTS idx_pgbus_workflow_steps_batch ON pgbus_workflow_steps (batch_id);
+      CREATE INDEX IF NOT EXISTS idx_pgbus_workflow_steps_timeout ON pgbus_workflow_steps (status, timeout_at);
+    SQL
+  end
+
+  unless conn.table_exists?("pgbus_workflow_signals")
+    conn.execute(<<~SQL)
+      CREATE TABLE pgbus_workflow_signals (
+        id BIGSERIAL PRIMARY KEY,
+        workflow_id VARCHAR NOT NULL
+          REFERENCES pgbus_workflows (workflow_id) ON DELETE CASCADE,
+        name VARCHAR NOT NULL,
+        payload JSONB NOT NULL DEFAULT '{}',
+        idempotency_key VARCHAR,
+        status VARCHAR NOT NULL DEFAULT 'pending',
+        claimed_by_step_id BIGINT,
+        created_at TIMESTAMP NOT NULL,
+        claimed_at TIMESTAMP,
+        consumed_at TIMESTAMP
+      );
+      CREATE UNIQUE INDEX idx_pgbus_workflow_signals_idempotency
+        ON pgbus_workflow_signals (workflow_id, idempotency_key) WHERE idempotency_key IS NOT NULL;
+      CREATE INDEX idx_pgbus_workflow_signals_pending ON pgbus_workflow_signals (workflow_id, name, status);
+    SQL
+  end
+  conn.execute(<<~SQL) if conn.table_exists?("pgbus_workflow_signals")
+    CREATE INDEX IF NOT EXISTS idx_pgbus_workflow_signals_claimed
+      ON pgbus_workflow_signals (workflow_id, status, claimed_by_step_id);
+  SQL
+
   if conn.table_exists?("pgbus_batches")
     cols = conn.columns("pgbus_batches").map(&:name)
     if cols.include?("on_discard_class") && !cols.include?("on_failure_class")
@@ -488,7 +527,7 @@ def cleanup_tables
     pgbus_presence_members pgbus_outbox_entries pgbus_processed_events
     pgbus_batch_executions pgbus_batches pgbus_stream_queues
     pgbus_deploy_tasks pgbus_deploy_task_runs
-    pgbus_workflow_events pgbus_workflow_steps pgbus_workflows
+    pgbus_workflow_signals pgbus_workflow_events pgbus_workflow_steps pgbus_workflows
   ]
   tables.each do |table|
     conn.execute("DELETE FROM #{table}")
