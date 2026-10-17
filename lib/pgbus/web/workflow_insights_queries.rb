@@ -95,7 +95,7 @@ module Pgbus
           SELECT bucket, SUM(started), SUM(finished), SUM(cancelled) FROM (
             SELECT #{wall_bucket("created_at")} AS bucket, 1 AS started, 0 AS finished, 0 AS cancelled
             FROM #{runs}
-            WHERE workflow_class = $2 AND status IN (#{list(ALL)}) AND created_at >= $1
+            WHERE workflow_class = $2 AND status IN (#{list(ALL)}) AND created_at BETWEEN $1 AND $5
             UNION ALL
             SELECT #{wall_bucket("ended_at")}, 0, (status = 'finished')::int, (status = 'cancelled')::int
             FROM (#{ended_runs(until_bind: "$5", class_bind: "$2")}) ended
@@ -125,34 +125,35 @@ module Pgbus
         end
       end
 
-      # Per step, over the runs started since +since+: how many have a row
+      # Per step, over the runs started between +since+ and +until_time+: how many have a row
       # for it (reached) and its mean position in their runs (the step order
       # of a class that no longer loads). Partitioned by the run's bigint id:
       # sorting 50k workflow_id strings under a locale collation costs ~4x.
-      def funnel_reached(workflow_class, since:)
+      def funnel_reached(workflow_class, since:, until_time:)
         sql = <<~SQL
           SELECT step_name, COUNT(*), AVG(position) FROM (
             SELECT s.step_name, RANK() OVER (PARTITION BY w.id ORDER BY MIN(s.id)) AS position
             FROM #{runs} w JOIN #{steps} s ON s.workflow_id = w.workflow_id
-            WHERE w.workflow_class = $1 AND w.status IN (#{list(ALL)}) AND w.created_at >= $2
+            WHERE w.workflow_class = $1 AND w.status IN (#{list(ALL)}) AND w.created_at BETWEEN $2 AND $3
             GROUP BY w.id, s.step_name
           ) reached
           GROUP BY step_name
         SQL
-        select(sql, "Funnel", [workflow_class, since]).rows.to_h do |name, reached, position|
+        select(sql, "Funnel", [workflow_class, since, until_time]).rows.to_h do |name, reached, position|
           [name, { reached: reached.to_i, position: position.to_f }]
         end
       end
 
-      # Where each run started since +since+ is now: { [step, status] => runs }.
-      def funnel_stopped(workflow_class, since:)
+      # Where each run started between +since+ and +until_time+ is now:
+      # { [step, status] => runs }.
+      def funnel_stopped(workflow_class, since:, until_time:)
         sql = <<~SQL
           SELECT current_step, status, COUNT(*)
           FROM #{runs}
-          WHERE workflow_class = $1 AND status IN (#{list(ALL)}) AND created_at >= $2
+          WHERE workflow_class = $1 AND status IN (#{list(ALL)}) AND created_at BETWEEN $2 AND $3
           GROUP BY current_step, status
         SQL
-        select(sql, "Stopped", [workflow_class, since]).rows.to_h { |step, status, runs| [[step, status], runs.to_i] }
+        select(sql, "Stopped", [workflow_class, since, until_time]).rows.to_h { |step, status, runs| [[step, status], runs.to_i] }
       end
 
       # The step stats of the REVISIONS app revisions that finished an

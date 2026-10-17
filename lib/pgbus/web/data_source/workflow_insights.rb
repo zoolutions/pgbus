@@ -68,7 +68,8 @@ module Pgbus
             throughput: queries.throughput(name, since: since, until_time: now, bucket: window.bucket_seconds,
                                                  zone: zone.tzinfo.identifier),
             zone: zone,
-            reached: queries.funnel_reached(name, since: since), stopped: queries.funnel_stopped(name, since: since),
+            reached: queries.funnel_reached(name, since: since, until_time: now),
+            stopped: queries.funnel_stopped(name, since: since, until_time: now),
             revisions: queries.by_revision(name, since: since, until_time: now)
           )
         end

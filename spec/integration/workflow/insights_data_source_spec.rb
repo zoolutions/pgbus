@@ -188,8 +188,11 @@ RSpec.describe "Pgbus::Web::DataSource workflow insights", :integration do
     it "does not count runs dated after now (a skewed clock)" do
       run!(created_at: now - 600, finished_at: now + 3600)
       run!(created_at: now - 600, finished_at: now - 60)
+      run!(status: "ready", created_at: now + 600, current_step: "reserve")
 
-      expect(definition).to include(finished: 1)
+      expect(definition).to include(finished: 1, started: 2)
+      expect(definition[:funnel].sum { |s| s[:stopped].values.sum }).to eq(2)
+      expect(definition[:throughput].sum { |b| b[:started] }).to eq(2)
       expect(data_source.workflow_definitions(window: window).find { |r| r[:workflow_class] == "CheckoutWorkflow" })
         .to include(finished: 1)
     end
