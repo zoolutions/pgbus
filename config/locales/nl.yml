@@ -1296,6 +1296,7 @@ nl:
       timeline:
         caption: 'Elke poging, oudste bovenaan: gewacht (de wachttijd), in wachtrij (aan de beurt, nog niet opgepakt), uitgevoerd (gekleurd naar hoe het afliep) en wachtend (op een signaal of de groep), met de pauzes op een eigen rij. De pogingentabel hieronder toont dezelfde duren.'
         empty: Nog geen pogingen.
+        paused_period_html: Gepauzeerd op %{from} gedurende %{duration}
         paused_row: Gepauzeerd
         series:
           paused: Gepauzeerd

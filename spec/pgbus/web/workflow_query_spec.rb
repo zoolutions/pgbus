@@ -12,6 +12,13 @@ RSpec.describe Pgbus::Web::WorkflowQuery do
     expect([query.status, query.filters, query.filtered?]).to eq(["ongoing", {}, false])
   end
 
+  it "ignores parameters that are not filters" do
+    query = described_class.new(page: "2", frame: "list", locale: "de", workflow_class: "A")
+
+    expect(query.filters).to eq(workflow_class: "A")
+    expect(query.to_param).to eq(status: "ongoing", workflow_class: "A")
+  end
+
   it "keeps each known status" do
     expect(Pgbus::Web::DataSource::WorkflowList::STATUSES.map { |s| described_class.new(status: s).status })
       .to eq(Pgbus::Web::DataSource::WorkflowList::STATUSES)

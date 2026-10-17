@@ -30,6 +30,10 @@ RSpec.describe Pgbus::Web::WorkflowActionPlan do
       end
     end
 
+    it "plans nothing for a completed step the class no longer declares" do
+      expect(described_class.resume_plan(paused, step("completed", "renamed"), klass)).to eq([nil, nil])
+    end
+
     it "finishes a run paused after its last step" do
       expect(described_class.resume_plan(paused, step("completed", "receipt"), klass)).to eq([:finish, nil])
     end

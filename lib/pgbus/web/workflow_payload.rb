@@ -16,14 +16,18 @@ module Pgbus
         case value
         when nil then {}
         when Hash then display_hash(value)
-        when Array then value.map { |element| display(element) }
+        when Array then value.map { |element| element.nil? ? nil : display(element) }
         else value
         end
       end
 
       def display_hash(hash)
         return hash["_aj_globalid"] if hash.size == 1 && hash.key?("_aj_globalid")
-        return display(hash["value"]) if hash.key?("_aj_serialized")
+        if hash.key?("_aj_serialized")
+          # A serializer that stores one "value" shows it; one that stores
+          # several fields (a Range: begin, end, exclude_end) shows those.
+          return hash.key?("value") ? display(hash["value"]) : display_hash(hash.except("_aj_serialized"))
+        end
 
         hash.except(*BOOKKEEPING).transform_values { |nested| nested.nil? ? nil : display(nested) }
       end

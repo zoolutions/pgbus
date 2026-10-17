@@ -1296,6 +1296,7 @@ fi:
       timeline:
         caption: 'Jokainen yritys, vanhin ylimpänä: odotettu (sen odotus), jonossa (erääntynyt, ei vielä otettu), ajettu (väri kertoo lopputuloksen) ja odottaa (signaalia tai erää), keskeytykset omalla rivillään. Alla oleva yritystaulukko listaa samat kestot.'
         empty: Ei vielä yrityksiä.
+        paused_period_html: Keskeytetty %{from} ajaksi %{duration}
         paused_row: Keskeytetty
         series:
           paused: Keskeytetty

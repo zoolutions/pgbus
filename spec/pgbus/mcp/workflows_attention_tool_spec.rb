@@ -37,6 +37,7 @@ RSpec.describe Pgbus::MCP::Tools::WorkflowsAttentionTool do
 
   it "redacts the newest error message unless payloads are allowed and asked for" do
     expect(result["groups"].first["error_message"]).to eq("[redacted]")
+    expect(result(include_payloads: true)["groups"].first["error_message"]).to eq("[redacted]")
     expect(result["groups"].last["error_message"]).to be_nil
   end
 

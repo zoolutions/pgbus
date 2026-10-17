@@ -14,6 +14,7 @@ module Pgbus
     REQUIRES = %w[
       pgbus/mcp/redactor
       pgbus/mcp/base_tool
+      pgbus/mcp/serialization
       pgbus/mcp/health_analyzer
       pgbus/mcp/tools/health_tool
       pgbus/mcp/tools/queues_tool

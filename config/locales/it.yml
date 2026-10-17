@@ -1296,6 +1296,7 @@ it:
       timeline:
         caption: 'Ogni tentativo, il più vecchio in alto: atteso (la sua attesa), in coda (previsto, non ancora preso), eseguito (colorato in base a come è finito) e in attesa (di un segnale o del suo lotto), con le pause su una riga a parte. La tabella dei tentativi qui sotto riporta le stesse durate.'
         empty: Ancora nessun tentativo.
+        paused_period_html: In pausa dalle %{from} per %{duration}
         paused_row: In pausa
         series:
           paused: In pausa

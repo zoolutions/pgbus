@@ -97,9 +97,9 @@ RSpec.describe "Pgbus::Web::DataSource workflows", :integration do
       Pgbus::BatchEntry.where(batch_id: batch_id).update_all(completed_jobs: 1)
 
       queries = []
-      subscription = ActiveSupport::Notifications.subscribe("sql.active_record") { |*, payload| queries << payload[:sql] }
-      row = data_source.workflows(status: "waiting").sole
-      ActiveSupport::Notifications.unsubscribe(subscription)
+      row = ActiveSupport::Notifications.subscribed(->(*, payload) { queries << payload[:sql] }, "sql.active_record") do
+        data_source.workflows(status: "waiting").sole
+      end
 
       expect(row).to include(batch_id: batch_id, batch_progress: { done: 1, total: 2 })
       expect(queries.count { |sql| sql.include?("pgbus_batches") }).to eq(1)

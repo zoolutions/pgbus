@@ -106,13 +106,13 @@ RSpec.describe Pgbus::Web::WorkflowTimeline do
     end
 
     it "colours ran by how the attempt ended" do
-      series = %w[completed skipped failed in_progress cancelled].map do |status|
-        row = described_class.chart([step(status: status, finished_at: (now - 400 unless status == "in_progress"))], [],
+      series = %w[completed skipped failed in_progress waiting cancelled].map do |status|
+        row = described_class.chart([step(status: status, finished_at: (now - 400 unless %w[in_progress waiting].include?(status)))], [],
                                     status: "ready", now: now)[:rows].first
         row[:segments].last[:series]
       end
 
-      expect(series).to eq(%w[ran_ok ran_ok ran_failed ran_open ran_cancelled])
+      expect(series).to eq(%w[ran_ok ran_ok ran_failed ran_open ran_open ran_cancelled])
     end
   end
 end

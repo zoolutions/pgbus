@@ -36,6 +36,13 @@ RSpec.describe "Pgbus::WorkflowsController", type: :request do
       expect(args[:created_to]).to eq(Time.zone.parse("2026-10-17").end_of_day)
     end
 
+    it "keeps a date-time filter in a text field, so the next Apply keeps it" do
+      get "/pgbus/workflows", params: { created_from: "2026-10-01T10:00:00Z", created_to: "2026-10-17" }
+
+      expect(response.body).to include('type="text" autocomplete="off" id="workflow-filter-created_from"')
+      expect(response.body).to include('type="date" autocomplete="off" id="workflow-filter-created_to"')
+    end
+
     it "renders only the list frame when asked" do
       get "/pgbus/workflows", params: { frame: "list" }
 
@@ -84,6 +91,22 @@ RSpec.describe "Pgbus::WorkflowsController", type: :request do
 
       expect(response).to have_http_status(:ok)
       expect(response.body).to include("CheckoutWorkflow", "pgbus-workflow-timeline-data")
+    end
+
+    it "lists the pauses as text under the timeline" do
+      get "/pgbus/workflows/#{paused_id}"
+
+      expect(response.body).to include('data-testid="workflow-pauses"').and include("Paused at")
+    end
+
+    it "offers no Resume when the run's class is not loaded here, but keeps Cancel" do
+      row = @stub_data_source.workflows_list.find { |w| w[:workflow_id] == paused_id }
+      row[:class_loaded] = false
+
+      get "/pgbus/workflows/#{paused_id}"
+
+      expect(response.body).not_to include("Resume: retry capture", "Resume at step")
+      expect(response.body).to include(">Cancel</button>")
     end
 
     it "answers 404 for an unknown run" do
@@ -193,7 +216,7 @@ RSpec.describe "Pgbus::WorkflowsController", type: :request do
       expect(flash[:notice]).to eq("Signal shipped sent.")
       expect(@stub_data_source.calls[:signal_workflow].last)
         .to eq([samples::SIGNAL_ID, { name: "shipped", payload: { "carrier" => "DHL" }, idempotency_key: "k-1",
-                                      actor: "dashboard", reason: nil }])
+                                      actor: "dashboard" }])
     end
 
     it "sends an empty payload as {}" do
@@ -241,9 +264,10 @@ RSpec.describe "Pgbus::WorkflowsController", type: :request do
     end
 
     it "bulk-cancels, a group without an error class too" do
-      post "/pgbus/workflows/bulk_cancel", params: { group: group.merge(error_class: "") }
+      overdue = { workflow_class: "SignupWorkflow", step_name: "welcome", reason: "overdue", error_class: "" }
+      post "/pgbus/workflows/bulk_cancel", params: { group: overdue }
 
-      expect(flash[:notice]).to eq("Cancelled 3.")
+      expect(flash[:notice]).to eq("Cancelled 1.")
       expect(@stub_data_source.calls[:bulk_cancel_workflows].last.first[:group]).to include(error_class: nil)
     end
 

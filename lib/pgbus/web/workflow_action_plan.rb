@@ -38,6 +38,9 @@ module Pgbus
 
       def following_plan(latest, klass)
         return [nil, nil] unless klass
+        # resume! raises StepNotDefined for a step the class no longer
+        # declares (and no removed_step covers): no plan to promise.
+        return [nil, nil] unless klass.workflow_steps.entries.any? { |entry| entry.name == latest.step_name }
 
         following = klass.workflow_steps.next_after(latest.step_name)
         following ? [:continue, following.name] : [:finish, nil]

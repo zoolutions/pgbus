@@ -1296,6 +1296,7 @@ en:
       timeline:
         caption: 'Each attempt, oldest at the top: waited (its wait), queued (due, not yet picked up), ran (coloured by how it ended) and waiting (for a signal or its batch), with the pauses on their own row. The attempts table below lists the same durations.'
         empty: No attempts yet.
+        paused_period_html: Paused at %{from} for %{duration}
         paused_row: Paused
         series:
           paused: Paused

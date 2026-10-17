@@ -8,7 +8,7 @@ module Pgbus
     # application data, and the Redactor only blanks known payload keys
     # holding a leaf value, so these tools gate them explicitly: replaced by
     # Redactor::REDACTED unless BaseTool.payloads_allowed? says otherwise.
-    # Times go out as ISO 8601 UTC, symbols as strings, keys as strings.
+    # Written out through MCP::Serialization.
     module WorkflowPayloads
       REDACTED = Redactor::REDACTED
       STEP_SECRETS = %i[output error_message error_backtrace].freeze
@@ -47,15 +47,7 @@ module Pgbus
       # { key => REDACTED } when the value is there, so a nil stays nil.
       def redact(hash, key) = hash[key].nil? ? {} : { key => REDACTED }
 
-      def serialize(value)
-        case value
-        when Hash then value.to_h { |key, nested| [key.to_s, serialize(nested)] }
-        when Array then value.map { |nested| serialize(nested) }
-        when Symbol then value.to_s
-        when Time, DateTime, ActiveSupport::TimeWithZone then value.utc.iso8601
-        else value
-        end
-      end
+      def serialize(value) = Serialization.serialize(value)
     end
   end
 end

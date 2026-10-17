@@ -14,7 +14,9 @@
     <% Pgbus::Web::WorkflowQuery::DATE_FILTERS.each do |filter| %>
       <div>
         <label for="workflow-filter-<%= filter %>" class="block text-xs font-medium text-gray-700 dark:text-gray-300"><%= t("pgbus.workflows.filters.#{filter}") %></label>
-        <input type="date" autocomplete="off" id="workflow-filter-<%= filter %>" name="<%= filter %>" value="<%= @query.raw[filter] %>" class="<%= input_css %>">
+        <% value = @query.raw[filter] %>
+        <%# A date-time from a shared URL stays a text field, so it survives the next Apply. %>
+        <input type="<%= value.nil? || value.match?(Pgbus::Web::WorkflowQuery::DATE_ONLY) ? "date" : "text" %>" autocomplete="off" id="workflow-filter-<%= filter %>" name="<%= filter %>" value="<%= @query.raw[filter] %>" class="<%= input_css %>">
       </div>
     <% end %>
   </div>

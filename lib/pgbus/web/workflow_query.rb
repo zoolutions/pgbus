@@ -1,6 +1,9 @@
 # frozen_string_literal: true
 
 require "date"
+require "time"
+require "active_support/core_ext/object/blank"
+require "active_support/core_ext/time"
 
 module Pgbus
   module Web

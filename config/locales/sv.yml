@@ -1296,6 +1296,7 @@ sv:
       timeline:
         caption: 'Varje försök, äldst överst: väntade (dess väntetid), köad (förfallen, ännu inte hämtad), körde (färgad efter utfall) och väntar (på en signal eller sin grupp), med pauserna på en egen rad. Försökstabellen nedan visar samma tider.'
         empty: Inga försök ännu.
+        paused_period_html: Pausad %{from} i %{duration}
         paused_row: Pausad
         series:
           paused: Pausad

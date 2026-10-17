@@ -59,8 +59,9 @@ module Pgbus
       payload = signal_payload
       return back_to_workflow(alert: payload) if payload.is_a?(String)
 
-      member_action(:signal, name: name) do |id, **who|
-        data_source.signal_workflow(id, name: name, payload: payload, idempotency_key: params[:idempotency_key].presence, **who)
+      member_action(:signal, name: name) do |id, actor:, **|
+        data_source.signal_workflow(id, name: name, payload: payload, idempotency_key: params[:idempotency_key].presence,
+                                        actor: actor)
       end
     end
 

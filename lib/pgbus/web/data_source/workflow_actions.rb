@@ -42,9 +42,9 @@ module Pgbus
         end
 
         # A redelivery with the same idempotency_key stores nothing: ok, with
-        # duplicate: true. The signal itself carries no reason (signal! takes
-        # none); the actor is on its signal_received event.
-        def signal_workflow(workflow_id, name:, payload:, idempotency_key:, actor:, reason: nil) # rubocop:disable Lint/UnusedMethodArgument -- every action takes reason:
+        # duplicate: true. signal! takes no reason, so this action takes none;
+        # the actor is on the signal_received event.
+        def signal_workflow(workflow_id, name:, payload:, idempotency_key:, actor:)
           duplicate = false
           result = workflow_action(workflow_id) do |wf|
             duplicate = wf.signal!(name, payload: payload, idempotency_key: idempotency_key, actor: actor).duplicate_delivery?

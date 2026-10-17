@@ -39,7 +39,7 @@ RSpec.describe Pgbus::Web::DataSource::WorkflowList do
 
   describe "a failing query" do
     before do
-      allow(Pgbus::WorkflowEntry).to receive_messages(all: Pgbus::WorkflowEntry.none)
+      allow(Pgbus::WorkflowEntry).to receive(:all).and_raise(ActiveRecord::StatementInvalid, "db down")
       allow(Pgbus::WorkflowEntry).to receive(:where).and_raise(ActiveRecord::StatementInvalid, "db down")
       allow(Pgbus::WorkflowEntry).to receive(:find_by).and_raise(ActiveRecord::StatementInvalid, "db down")
       allow(Pgbus::WorkflowEntry).to receive(:stuck_reason_counts).and_raise(ActiveRecord::StatementInvalid, "db down")

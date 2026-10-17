@@ -30,6 +30,13 @@ RSpec.describe Pgbus::Web::WorkflowPayload do
       expect(described_class.display(stored)).to eq("items" => [{ "sku" => "A" }])
     end
 
+    it "keeps nil elements and shows a multi-field serializer's fields" do
+      stored = { "ids" => [1, nil], "window" => { "_aj_serialized" => "ActiveJob::Serializers::RangeSerializer",
+                                                  "begin" => 1, "end" => 5, "exclude_end" => false } }
+
+      expect(described_class.display(stored)).to eq("ids" => [1, nil], "window" => { "begin" => 1, "end" => 5, "exclude_end" => false })
+    end
+
     it "returns {} for nil" do
       expect(described_class.display(nil)).to eq({})
     end

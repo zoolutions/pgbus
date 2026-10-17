@@ -2,7 +2,7 @@
     available_actions (Workflow::States), never view logic; every button
     submits the one form, to its own formaction, so the reason typed once
     goes with whichever is pressed. %>
-<% actions = @workflow[:available_actions] & Pgbus::WorkflowsHelper::DASHBOARD_ACTIONS %>
+<% actions = pgbus_workflow_dashboard_actions(@workflow) %>
 <% if actions.any? %>
   <% id = @workflow[:workflow_id] %>
   <%# The form's own action is the first button's, so Enter in the reason box

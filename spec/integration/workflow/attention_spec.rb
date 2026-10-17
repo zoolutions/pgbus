@@ -48,7 +48,8 @@ RSpec.describe "Workflow needs-attention groups", :integration do
     groups = Pgbus::WorkflowEntry.attention_groups(threshold: threshold)
     counts = Pgbus::WorkflowEntry.stuck_reason_counts(threshold: threshold)
 
-    expect(groups.to_h { |g| [[g[:workflow_class], g[:reason]], g[:count]] }).to eq(counts)
+    totals = groups.group_by { |g| [g[:workflow_class], g[:reason]] }.transform_values { |rows| rows.sum { |g| g[:count] } }
+    expect(totals).to eq(counts)
   end
 
   it "bounds the number of groups" do

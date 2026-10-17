@@ -15,6 +15,15 @@
            style="min-height: <%= [160, (rows * 36) + 90].max %>px;"></div>
       <figcaption class="mt-3 text-sm text-gray-700 dark:text-gray-300"><%= t("pgbus.workflows.timeline.caption") %></figcaption>
     </figure>
+    <%# The pauses as text: the chart's paused row, for those who cannot see it. %>
+    <% if timeline[:paused].any? %>
+      <ul class="mt-2 space-y-1 text-sm text-gray-700 dark:text-gray-300" data-testid="workflow-pauses">
+        <% timeline[:paused].each do |period| %>
+          <li><%= t("pgbus.workflows.timeline.paused_period_html", from: pgbus_absolute_time(Time.at(period[:from] / 1000.0)),
+                    duration: period[:duration]) %></li>
+        <% end %>
+      </ul>
+    <% end %>
     <%# json_escape keeps a value from closing the tag; a data block needs no nonce. %>
     <%= tag.script(json_escape(timeline.to_json).html_safe, type: "application/json", id: "pgbus-workflow-timeline-data") %> <%# herb:disable erb-no-unsafe-raw %>
     <script type="module" nonce="<%= content_security_policy_nonce %>">

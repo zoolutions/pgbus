@@ -21,7 +21,7 @@
             <% if payload.any? %>
               <details class="mt-1">
                 <summary class="inline-flex min-h-6 cursor-pointer items-center text-xs font-medium text-indigo-700 hover:text-indigo-900 dark:text-indigo-300 dark:hover:text-indigo-200"><%= t("pgbus.workflows.signals.payload") %></summary>
-                <pre class="mt-1 overflow-auto rounded bg-gray-50 p-2 text-xs text-gray-800 dark:bg-gray-900 dark:text-gray-200"><%= JSON.pretty_generate(payload) %></pre>
+                <pre tabindex="0" class="mt-1 overflow-auto rounded bg-gray-50 p-2 text-xs text-gray-800 dark:bg-gray-900 dark:text-gray-200"><%= JSON.pretty_generate(payload) %></pre>
               </details>
             <% end %>
           </td>

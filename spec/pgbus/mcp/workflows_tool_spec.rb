@@ -61,6 +61,13 @@ RSpec.describe Pgbus::MCP::Tools::WorkflowsTool do
     expect(result(page: 0, per_page: 5_000)).to include("page" => 1, "per_page" => 100)
   end
 
+  it "never says has_more at the page ceiling" do
+    allow(data_source).to receive_messages(workflows: Array.new(25) { row },
+                                           workflows_count: count_class.new(total: 10_000, capped: true))
+
+    expect(result(page: described_class::MAX_PAGE)).to include("page" => described_class::MAX_PAGE, "has_more" => false)
+  end
+
   it "says has_more when the next page has rows" do
     allow(data_source).to receive(:workflows_count).and_return(count_class.new(total: 30, capped: false))
 

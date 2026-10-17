@@ -60,9 +60,9 @@ module Pgbus
           @workflow_action_result
         end
 
-        def signal_workflow(workflow_id, name:, payload:, idempotency_key:, actor:, reason: nil)
+        def signal_workflow(workflow_id, name:, payload:, idempotency_key:, actor:)
           record(:signal_workflow, workflow_id, { name: name, payload: payload, idempotency_key: idempotency_key,
-                                                  actor: actor, reason: reason })
+                                                  actor: actor })
           @workflow_action_result[:ok] ? @workflow_action_result.merge(duplicate: false) : @workflow_action_result
         end
 
@@ -78,7 +78,7 @@ module Pgbus
         %i[bulk_resume_workflows bulk_cancel_workflows].each do |action|
           define_method(action) do |group:, actor:, reason: nil|
             record(action, { group: group, actor: actor, reason: reason })
-            @workflow_bulk_result || { ok: true, done: workflow_group_size(group), skipped: 0 }
+            @workflow_bulk_result || { ok: true, done: workflow_group_size(group), skipped: 0, failed: 0 }
           end
         end
 
@@ -102,7 +102,7 @@ module Pgbus
         end
 
         def workflow_group_size(group)
-          keys = %i[workflow_class step_name reason]
+          keys = %i[workflow_class step_name reason error_class]
           @workflow_attention_groups_list.find { |g| g.slice(*keys) == group.slice(*keys) }&.fetch(:count) || 0
         end
       end

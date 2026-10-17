@@ -1296,6 +1296,7 @@ da:
       timeline:
         caption: 'Hvert forsøg, ældste øverst: ventede (dets ventetid), i kø (forfalden, endnu ikke hentet), kørte (farvet efter udfald) og venter (på et signal eller sin batch), med pauserne i en egen række. Forsøgstabellen nedenfor viser de samme varigheder.'
         empty: Ingen forsøg endnu.
+        paused_period_html: Sat på pause %{from} i %{duration}
         paused_row: På pause
         series:
           paused: På pause

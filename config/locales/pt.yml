@@ -1296,6 +1296,7 @@ pt:
       timeline:
         caption: 'Cada tentativa, a mais antiga no topo: esperou (sua espera), na fila (vencida, ainda não pega), executou (colorida conforme terminou) e aguardando (um sinal ou seu lote), com as pausas em linha própria. A tabela de tentativas abaixo lista as mesmas durações.'
         empty: Ainda não há tentativas.
+        paused_period_html: Em pausa desde %{from} durante %{duration}
         paused_row: Em pausa
         series:
           paused: Em pausa

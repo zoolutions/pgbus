@@ -489,7 +489,7 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
         A run's page shows its arguments, a **timeline** (one range bar per
         attempt, split into waited, queued and ran, coloured by how it ended,
         with waits and pauses as their own segments; zoom for runs that span
-        days), every attempt with the same durations as text, its worker, app
+        days), its newest 100 attempts with the same durations as text, its worker, app
         revision, error, backtrace and cause chain, the signals it received,
         and the audit trail ("Resumed by dashboard:alice: SMTP fixed"). A run
         that started on an older step list says so.
@@ -505,7 +505,8 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
 
         **Needs attention** (`/pgbus/workflows/attention`) groups every stuck
         run by class, step, stuck reason and error class, with a count, when
-        the group was first and last seen and the newest error message. Once
+        the group was first and last seen and the newest error message (the
+        200 biggest groups; past that the page is not exhaustive). Once
         the cause is fixed, Resume or Cancel the whole group (at most 500 runs
         per press, each through its own guarded transition): "Resumed 212; 2
         had already moved on". The home page counts ongoing, paused and stuck

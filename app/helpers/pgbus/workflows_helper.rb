@@ -35,6 +35,14 @@ module Pgbus
 
     SIGNAL_TONES = { "pending" => :yellow, "claimed" => :blue, "consumed" => :green }.freeze
 
+    # The show page's buttons: available_actions it has a button for, without
+    # Resume and Resume at when the run's class is not loaded here (resume!
+    # needs its step list and raises StepNotDefined without it).
+    def pgbus_workflow_dashboard_actions(workflow)
+      actions = Array(workflow[:available_actions]) & DASHBOARD_ACTIONS
+      workflow[:class_loaded] == false ? actions - %i[resume resume_at] : actions
+    end
+
     def pgbus_workflow_state(row)
       Web::WorkflowState.present(row, threshold: Pgbus.configuration.workflow_stall_threshold)
     end

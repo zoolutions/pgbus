@@ -1296,6 +1296,7 @@ fr:
       timeline:
         caption: 'Chaque tentative, la plus ancienne en haut : attente (son délai), en file (due, pas encore prise), exécution (colorée selon son issue) et en attente (d''un signal ou de son lot), avec les pauses sur leur propre ligne. Le tableau des tentatives ci-dessous donne les mêmes durées.'
         empty: Aucune tentative pour l'instant.
+        paused_period_html: En pause à %{from} pendant %{duration}
         paused_row: En pause
         series:
           paused: En pause

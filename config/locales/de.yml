@@ -1296,6 +1296,7 @@ de:
       timeline:
         caption: 'Jeder Versuch, der älteste oben: gewartet (seine Wartezeit), eingereiht (fällig, noch nicht abgeholt), gelaufen (nach Ausgang eingefärbt) und wartend (auf ein Signal oder seinen Stapel), die Pausen in einer eigenen Zeile. Die Versuchstabelle darunter listet dieselben Dauern.'
         empty: Noch keine Versuche.
+        paused_period_html: Pausiert ab %{from} für %{duration}
         paused_row: Pausiert
         series:
           paused: Pausiert
