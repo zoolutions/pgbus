@@ -10,7 +10,8 @@ module Pgbus
       # lists and zero counts, not an error per refresh.
       module WorkflowList
         STATUSES = (%w[ongoing] + Workflow::States::WORKFLOW + %w[all]).freeze
-        FILTERS = %i[workflow_class step error_class subject_type subject_id workflow_id created_from created_to].freeze
+        FILTERS = %i[workflow_class step error_class subject_type subject_id workflow_id created_from created_to
+                     ended_from ended_to].freeze
         STEP_HISTORY = 100
         EVENT_HISTORY = 200
         # The pause events the timeline pairs, read on their own so a long
@@ -65,11 +66,13 @@ module Pgbus
         end
 
         # The stuck runs grouped by (class, step, reason, error class), each
-        # with the status its runs are in and the actions that status allows.
-        def workflow_attention_groups
+        # with the status its runs are in and the actions that status allows;
+        # with +workflow_class+, that class's groups only (issue #549).
+        def workflow_attention_groups(workflow_class: nil)
           return [] unless Workflow::Sweep.tables_ready?
 
-          WorkflowEntry.attention_groups(**attention_thresholds, limit: ATTENTION_GROUPS).map do |group|
+          groups = WorkflowEntry.attention_groups(**attention_thresholds, limit: ATTENTION_GROUPS, workflow_class: workflow_class)
+          groups.map do |group|
             status = WorkflowActionPlan.group_status(group[:reason])
             group.merge(status: status, available_actions: Workflow::States.available_actions(status))
           end
@@ -118,6 +121,20 @@ module Pgbus
           end
           scope = scope.where(created_at: filters[:created_from]..) if filters[:created_from]
           scope = scope.where(created_at: ..filters[:created_to]) if filters[:created_to]
+          ended_scope(scope, filters)
+        end
+
+        # When a finished or cancelled run ended (issue #549): what the
+        # insights' "finished / cancelled in the window" counts link to. A run
+        # ends in the UPDATE that sets its updated_at, so the updated_at bound
+        # keeps every match and lets idx_pgbus_workflows_status serve it.
+        def ended_scope(scope, filters)
+          table = WorkflowEntry.arel_table
+          ended_at = Arel::Nodes::NamedFunction.new("COALESCE", [table[:finished_at], table[:cancelled_at]])
+          if filters[:ended_from]
+            scope = scope.where(table[:updated_at].gteq(filters[:ended_from])).where(ended_at.gteq(filters[:ended_from]))
+          end
+          scope = scope.where(ended_at.lteq(filters[:ended_to])) if filters[:ended_to]
           scope
         end
 

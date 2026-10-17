@@ -28,8 +28,10 @@ module Pgbus
       @attention_count = data_source.workflow_attention_count
     end
 
+    # ?workflow_class= narrows the groups to one class (the insights' link).
     def attention
-      @groups = data_source.workflow_attention_groups
+      @workflow_class = attention_class
+      @groups = data_source.workflow_attention_groups(workflow_class: @workflow_class)
     end
 
     def show
@@ -88,14 +90,25 @@ module Pgbus
       end
     end
 
+    # Back to the attention page it was posted from, narrowed to the same
+    # class when it was (issue #549).
     def bulk_action(action)
+      back = pgbus.attention_workflows_path(workflow_class: attention_class)
       group = attention_group
-      return redirect_to(pgbus.attention_workflows_path, alert: t("pgbus.workflows.flash.bad_group")) unless valid_group?(group)
+      return redirect_to(back, alert: t("pgbus.workflows.flash.bad_group")) unless valid_group?(group)
 
       result = yield(group)
-      return redirect_to(pgbus.attention_workflows_path, alert: failure_message(action, result)) unless result[:ok]
+      return redirect_to(back, alert: failure_message(action, result)) unless result[:ok]
 
-      redirect_to pgbus.attention_workflows_path, notice: bulk_notice(action, result)
+      redirect_to back, notice: bulk_notice(action, result)
+    end
+
+    def attention_class
+      name = params[:workflow_class]
+      return nil if name.nil? || name == ""
+      return name if name.is_a?(String) && Web::DataSource::WorkflowInsights::CLASS_NAME.match?(name)
+
+      raise Web::WorkflowQuery::Invalid, "workflow_class must be a class name"
     end
 
     def valid_group?(group)

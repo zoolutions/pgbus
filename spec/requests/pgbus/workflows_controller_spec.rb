@@ -83,6 +83,20 @@ RSpec.describe "Pgbus::WorkflowsController", type: :request do
       expect(response).to have_http_status(:ok)
       expect(response.body).to include("Needs attention", "Paused on an error", "Timeout::Error")
     end
+
+    it "narrows the groups to one workflow class (issue #549)" do
+      get "/pgbus/workflows/attention", params: { workflow_class: "ImportWorkflow" }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include("ImportWorkflow", "Show every class")
+      expect(response.body).not_to include("Timeout::Error")
+    end
+
+    it "answers 400 for a workflow_class that is not a class name" do
+      get "/pgbus/workflows/attention", params: { workflow_class: "Kernel.exit" }
+
+      expect(response).to have_http_status(:bad_request)
+    end
   end
 
   describe "GET /pgbus/workflows/:workflow_id" do
@@ -280,6 +294,18 @@ RSpec.describe "Pgbus::WorkflowsController", type: :request do
       expect(flash[:notice]).to eq("Resumed 212; 2 had already moved on.")
       expect(@stub_data_source.calls[:bulk_resume_workflows].last)
         .to eq([{ group: group, actor: "dashboard", reason: "fix deployed" }])
+    end
+
+    it "goes back to the attention page narrowed to the class it was posted from (issue #549)" do
+      post "/pgbus/workflows/bulk_resume", params: { group: group, workflow_class: "CheckoutWorkflow" }
+
+      expect(response).to redirect_to("/pgbus/workflows/attention?workflow_class=CheckoutWorkflow")
+    end
+
+    it "keeps the class filter in the bulk forms" do
+      get "/pgbus/workflows/attention", params: { workflow_class: "CheckoutWorkflow" }
+
+      expect(response.body).to include('<input type="hidden" name="workflow_class" value="CheckoutWorkflow">')
     end
 
     it "bulk-cancels, a group without an error class too" do

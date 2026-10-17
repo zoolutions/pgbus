@@ -1,0 +1,5 @@
+<div class="mb-6">
+  <div class="mb-2"><%= pgbus_link_to t("pgbus.workflow_insights.back_to_classes"), pgbus.workflow_definitions_path(window: @window.name) %></div>
+  <h1 class="text-2xl font-bold text-gray-900 dark:text-white"><%= t("pgbus.workflow_insights.not_found.title") %></h1>
+  <p class="mt-1 text-sm text-gray-600 dark:text-gray-300"><%= t("pgbus.workflow_insights.not_found.hint", workflow: params[:workflow_class]) %></p>
+</div>

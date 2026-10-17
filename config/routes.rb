@@ -54,6 +54,13 @@ Pgbus::Engine.routes.draw do
 
   resources :batches, only: %i[index show]
 
+  # The workflow insights (issue #549), declared before the workflows
+  # resource so /workflows/definitions is never read as a workflow_id. The
+  # class name is a constant path: OrderWorkflow or Billing::OrderWorkflow.
+  get "workflows/definitions", to: "workflow_definitions#index", as: :workflow_definitions
+  get "workflows/definitions/:workflow_class", to: "workflow_definitions#show", as: :workflow_definition,
+                                               constraints: { workflow_class: /[A-Z][A-Za-z0-9_]*(::[A-Z][A-Za-z0-9_]*)*/ }
+
   # attention is a collection route, declared before the member routes so
   # /workflows/attention is never read as a workflow_id.
   resources :workflows, only: %i[index show], param: :workflow_id do

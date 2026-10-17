@@ -7,6 +7,12 @@
     <div class="mb-2"><%= pgbus_link_to t("pgbus.workflows.attention.back"), pgbus.workflows_path %></div>
     <h1 class="text-2xl font-bold text-gray-900 dark:text-white"><%= t("pgbus.workflows.attention.title") %></h1>
     <p class="mt-1 text-sm text-gray-500 dark:text-gray-400"><%= t("pgbus.workflows.attention.description") %></p>
+    <% if @workflow_class %>
+      <p class="mt-2 flex flex-wrap items-center gap-2 text-sm text-gray-700 dark:text-gray-300" data-testid="attention-class-filter">
+        <span><%= t("pgbus.workflows.attention.only_class_html", workflow: tag.code(@workflow_class, class: "font-mono")) %></span>
+        <%= pgbus_link_to t("pgbus.workflows.attention.show_all"), pgbus.attention_workflows_path %>
+      </p>
+    <% end %>
   </div>
 </div>
 
@@ -48,6 +54,9 @@
             <% if actions.any? %>
               <form action="<%= pgbus.bulk_cancel_workflows_path %>" method="post" data-turbo-frame="_top" class="space-y-2">
                 <%= hidden_field_tag :authenticity_token, form_authenticity_token, id: nil %>
+                <% if @workflow_class %>
+                  <input type="hidden" name="workflow_class" value="<%= @workflow_class %>">
+                <% end %>
                 <% Pgbus::WorkflowsController::GROUP_FIELDS.each do |field| %>
                   <input type="hidden" name="group[<%= field %>]" value="<%= group[field] %>">
                 <% end %>

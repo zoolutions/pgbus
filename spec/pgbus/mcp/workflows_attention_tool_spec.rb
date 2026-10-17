@@ -41,6 +41,18 @@ RSpec.describe Pgbus::MCP::Tools::WorkflowsAttentionTool do
     expect(result["groups"].last["error_message"]).to be_nil
   end
 
+  it "narrows the groups to one workflow class (issue #549)" do
+    result(workflow_class: "SignupWorkflow")
+
+    expect(data_source).to have_received(:workflow_attention_groups).with(workflow_class: "SignupWorkflow")
+  end
+
+  it "refuses a workflow_class that is not a class name" do
+    response = described_class.call(workflow_class: "Kernel.exit", server_context: context)
+
+    expect(response.error?).to be(true)
+  end
+
   context "when the server allows payloads" do
     let(:allow_payloads) { true }
 

@@ -57,14 +57,18 @@ module Pgbus
     #   waiting_overdue waiting longer than +waiting_threshold+ on a step
     #                 without a wait_timeout: (only with +waiting_threshold+,
     #                 which needs the waiting-step columns)
-    def self.stuck_reason_counts(threshold:, now: Time.current, waiting_threshold: nil)
+    # With +workflow_class+, that class's runs only (the workflow insights,
+    # issue #549).
+    def self.stuck_reason_counts(threshold:, now: Time.current, waiting_threshold: nil, workflow_class: nil)
+      binds = stuck_binds(threshold, now, waiting_threshold)
+      class_bind = "$#{binds.size + 1}" if workflow_class
       sql = <<~SQL
         SELECT stuck.workflow_class, stuck.reason, COUNT(*) AS runs
-        FROM (#{stuck_runs_sql(waiting: !waiting_threshold.nil?)}) stuck
+        FROM (#{stuck_runs_sql(waiting: !waiting_threshold.nil?, class_bind: class_bind)}) stuck
         WHERE stuck.reason IS NOT NULL
         GROUP BY stuck.workflow_class, stuck.reason
       SQL
-      connection.exec_query(sql, "WorkflowEntry Stuck", stuck_binds(threshold, now, waiting_threshold)).rows.to_h do |klass, reason, count|
+      connection.exec_query(sql, "WorkflowEntry Stuck", binds + [workflow_class].compact).rows.to_h do |klass, reason, count|
         [[klass, reason], count.to_i]
       end
     end
@@ -74,19 +78,21 @@ module Pgbus
     # biggest group first, at most +limit+ groups. first_seen_at/last_seen_at
     # bound when the group's runs got stuck (paused_at, the overdue step's
     # scheduled_at, or the waiting step's waiting_since); error_message is
-    # the newest one's.
-    def self.attention_groups(threshold:, now: Time.current, waiting_threshold: nil, limit: 200)
+    # the newest one's. With +workflow_class+, that class's groups only.
+    def self.attention_groups(threshold:, now: Time.current, waiting_threshold: nil, limit: 200, workflow_class: nil)
+      binds = stuck_binds(threshold, now, waiting_threshold)
+      class_bind = "$#{binds.size + 1}" if workflow_class
       sql = <<~SQL
         SELECT stuck.workflow_class, stuck.step_name, stuck.reason, stuck.error_class, COUNT(*) AS runs,
                MIN(stuck.since) AS first_seen_at, MAX(stuck.since) AS last_seen_at,
                (ARRAY_AGG(stuck.error_message ORDER BY stuck.since DESC NULLS LAST, stuck.id DESC))[1] AS error_message
-        FROM (#{stuck_runs_sql(waiting: !waiting_threshold.nil?)}) stuck
+        FROM (#{stuck_runs_sql(waiting: !waiting_threshold.nil?, class_bind: class_bind)}) stuck
         WHERE stuck.reason IS NOT NULL
         GROUP BY stuck.workflow_class, stuck.step_name, stuck.reason, stuck.error_class
         ORDER BY runs DESC, last_seen_at DESC NULLS LAST, stuck.workflow_class
         LIMIT #{Integer(limit)}
       SQL
-      result = connection.exec_query(sql, "WorkflowEntry Attention", stuck_binds(threshold, now, waiting_threshold))
+      result = connection.exec_query(sql, "WorkflowEntry Attention", binds + [workflow_class].compact)
       result.cast_values.map do |klass, step_name, reason, error_class, count, first_seen, last_seen, message|
         { workflow_class: klass, step_name: step_name, reason: reason, error_class: error_class, count: count.to_i,
           first_seen_at: first_seen, last_seen_at: last_seen, error_message: message }
@@ -113,8 +119,9 @@ module Pgbus
 
     # Each paused or ready run (and, when +waiting+, each waiting run) with
     # its latest step row and why it is stuck (NULL when it is not). Binds
-    # $1 (the overdue cutoff) and, when +waiting+, $2 (the waiting cutoff).
-    def self.stuck_runs_sql(waiting:)
+    # $1 (the overdue cutoff) and, when +waiting+, $2 (the waiting cutoff);
+    # +class_bind+ names the placeholder that narrows it to one class.
+    def self.stuck_runs_sql(waiting:, class_bind: nil)
       <<~SQL
         SELECT w.id, w.workflow_id, w.workflow_class, COALESCE(s.step_name, w.current_step) AS step_name,
                s.error_class, s.error_message, stuck_reason.reason,
@@ -138,7 +145,7 @@ module Pgbus
                    #{"WHEN w.status = 'waiting' AND s.status = 'waiting' AND s.timeout_at IS NULL AND s.waiting_since < $2 THEN 'waiting_overdue'" if waiting}
                  END AS reason
         ) stuck_reason
-        WHERE w.status IN ('paused', 'ready'#{", 'waiting'" if waiting})
+        WHERE w.status IN ('paused', 'ready'#{", 'waiting'" if waiting})#{" AND w.workflow_class = #{class_bind}" if class_bind}
       SQL
     end
     private_class_method :stuck_runs_sql

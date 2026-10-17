@@ -1029,6 +1029,158 @@ de:
         disabled: Aufgabe deaktiviert
         enabled: Aufgabe aktiviert
         failed: Aufgabe konnte nicht umgeschaltet werden
+    workflow_insights:
+      back_to_classes: Alle Workflow-Klassen
+      back_to_runs: Alle Workflow-Läufe
+      bad_request: 'Ungültige Anfrage: %{reason}'
+      capped: 'Begrenzt auf workflow_retention (%{retention}): ältere beendete und abgebrochene Läufe werden gelöscht.'
+      few_samples:
+        one: n=%{count}, wenige Messwerte
+        other: n=%{count}, wenige Messwerte
+      index:
+        description: 'Wie jede Workflow-Klasse in %{window} lief: die Läufe, die gerade laufen, die beendeten Läufe und wie lange ein Lauf von Anfang bis Ende dauert.'
+        empty_hint: 'Definieren Sie eine Unterklasse von Pgbus::Workflow und starten Sie einen Lauf: YourWorkflow.start!(subject, **arguments).'
+        empty_title: Noch keine Workflow-Klasse ist gelaufen.
+        headers:
+          attention: Brauchen Aufmerksamkeit
+          cancelled: Abgebrochen
+          duration_p50: Dauer p50
+          duration_p95: Dauer p95
+          finished: Beendet
+          ongoing: Laufend
+          paused: Pausiert
+          workflow_class: Workflow-Klasse
+        title: Workflow-Einblicke
+      links:
+        at_step: "%{status} Läufe bei %{step}"
+        attention: Läufe von %{workflow}, die Aufmerksamkeit brauchen
+        cancelled: im Zeitfenster abgebrochene Läufe von %{workflow}
+        cancelled_bucket: in diesem Zeitraum abgebrochene Läufe
+        finished: im Zeitfenster beendete Läufe von %{workflow}
+        finished_bucket: in diesem Zeitraum beendete Läufe
+        ongoing: laufende Läufe von %{workflow}
+        paused: pausierte Läufe von %{workflow}
+        started: im Zeitfenster gestartete Läufe von %{workflow}
+        started_bucket: in diesem Zeitraum gestartete Läufe
+      not_found:
+        hint: Keine Unterklasse von Pgbus::Workflow und kein Lauf heißt %{workflow} (oder das Lesen ist fehlgeschlagen, siehe Log).
+        title: Unbekannte Workflow-Klasse
+      not_loaded: Definition nicht geladen
+      not_loaded_hint: 'Diese Klasse lädt in der App nicht mehr: Die Schritte stammen aus den Zeilen ihrer Läufe, in der Reihenfolge, in der die Läufe sie erreicht haben.'
+      percentile: "%{name} %{value}"
+      removed_in_flight:
+        one: "%{count} Lauf auf dem entfernten Schritt %{step}"
+        other: "%{count} Läufe auf dem entfernten Schritt %{step}"
+      show:
+        by_revision:
+          all_steps: Alle Schritte
+          caption: 'Dieselben Zahlen für die letzten fünf App-Revisionen, die im Zeitfenster einen Versuch beendet haben, die neueste zuerst: Eine Verschlechterung nach einem Deploy zeigt sich als Zeile.'
+          empty: Kein Versuch in diesem Zeitfenster hat eine App-Revision aufgezeichnet (config.app_revision).
+          headers:
+            attempts: Versuche
+            failed: Fehlgeschlagen
+            reattempted: Wiederholt
+            revision: Revision
+            run_time: Laufzeit
+            skipped: Übersprungen
+            step: Schritt
+          seen_html: gesehen %{from} bis %{to}
+          title: Nach App-Revision
+          worse: gestiegen von %{rate} auf %{revision}
+        charts:
+          durations:
+            between: "%{from}–%{to}"
+            caption:
+              one: Wie lange der %{count} im Zeitfenster beendete Lauf von Anfang bis Ende gedauert hat.
+              other: Wie lange die %{count} im Zeitfenster beendeten Läufe von Anfang bis Ende gedauert haben.
+            headers:
+              range: Dauer
+              runs: Läufe
+            over: "%{from} oder mehr"
+            title: Dauer von Anfang bis Ende
+            under: unter %{to}
+          series:
+            cancelled: Abgebrochen
+            finished: Beendet
+            runs: Läufe
+            started: Gestartet
+          throughput:
+            caption: 'Gestartete, beendete und abgebrochene Läufe pro %{bucket} in %{window}: %{started} gestartet, %{finished} beendet, %{cancelled} abgebrochen.'
+            headers:
+              cancelled: Abgebrochen
+              finished: Beendet
+              from: Ab
+              started: Gestartet
+            title: Läufe pro %{bucket}
+        description: 'In %{window}: wo die Läufe gerade sind, wie jeder Schritt abschneidet und wo Läufe stehen bleiben.'
+        funnel:
+          caption:
+            one: 'Von dem %{count} im Zeitfenster gestarteten Lauf: wie viele jeden Schritt erreicht haben und wo er jetzt ist.'
+            other: 'Von den %{count} im Zeitfenster gestarteten Läufen: wie viele jeden Schritt erreicht haben und wo jeder jetzt ist.'
+          empty: In diesem Zeitfenster wurde kein Lauf gestartet.
+          headers:
+            now_here: Jetzt bei diesem Schritt
+            reached: Erreicht
+            share: Der gestarteten
+            step: Schritt
+          here:
+            cancelled:
+              one: "%{count} abgebrochen"
+              other: "%{count} abgebrochen"
+            finished:
+              one: "%{count} beendet"
+              other: "%{count} beendet"
+            paused:
+              one: "%{count} pausiert"
+              other: "%{count} pausiert"
+            performing:
+              one: "%{count} läuft"
+              other: "%{count} laufen"
+            ready:
+              one: "%{count} geplant"
+              other: "%{count} geplant"
+            waiting:
+              one: "%{count} wartet"
+              other: "%{count} warten"
+          title: Trichter
+        pipeline:
+          attempts:
+            one: "%{count} Versuch"
+            other: "%{count} Versuche"
+          caption: 'Jeder Schritt der Reihe nach: die Läufe, die gerade bei ihm stehen, und wie seine im Zeitfenster beendeten Versuche liefen.'
+          empty: 'Noch keine Schritte: Kein Lauf dieser Klasse hat einen Schritt im Zeitfenster, und keiner läuft.'
+          failed: Fehlgeschlagen
+          kinds:
+            fan_out: Fan-out
+            removed: Entfernt
+            signal: Wartet auf ein Signal
+            undeclared: Nicht in der Definition
+          live:
+            paused: Pausiert
+            performing: Läuft
+            ready: Geplant
+            waiting: Wartet
+          now_label: Läufe bei diesem Schritt
+          pickup: Abholung
+          reattempted: Wiederholt
+          run_time: Laufzeit
+          skipped: Übersprungen
+          step_link: Laufende Läufe bei %{step}
+          title: Pipeline
+          window_label: Im Zeitfenster beendete Versuche
+        summary:
+          attention: Brauchen Aufmerksamkeit
+          cancelled: Abgebrochen
+          duration: Dauer p50
+          finished: Beendet
+          ongoing: Laufend
+          started: Gestartet
+      window_label: Zeitfenster
+      windows:
+        1h: der letzten Stunde
+        24h: der letzten 24 Stunden
+        30d: der letzten 30 Tage
+        7d: der letzten 7 Tage
     workflows:
       actions:
         bulk_cancel: Alle abbrechen
@@ -1071,6 +1223,7 @@ de:
           seen: Gesehen
           workflow: Workflow
         last_seen_html: zuletzt %{time}
+        only_class_html: Nur %{workflow}.
         reasons:
           overdue: 'Überfällig: fällig, aber nicht abgeholt'
           paused_error: Wegen eines Fehlers pausiert
@@ -1080,6 +1233,7 @@ de:
         resume_all:
           one: Alle %{count} fortsetzen
           other: Alle %{count} fortsetzen
+        show_all: Alle Klassen anzeigen
         show_runs: Läufe anzeigen
         title: Braucht Aufmerksamkeit
       audit:
@@ -1128,6 +1282,8 @@ de:
         clear: Zurücksetzen
         created_from: Erstellt ab
         created_to: Erstellt bis
+        ended_from: Beendet ab
+        ended_to: Beendet bis
         error_class: Fehlerklasse
         step: Aktueller Schritt
         subject_id: Subjekt-ID
@@ -1176,6 +1332,7 @@ de:
         description: 'Dauerhafte mehrstufige Läufe: was jeder gerade tut und was als Nächstes passiert.'
         empty_hint: Wähle einen anderen Status oder entferne die Filter. Ein Lauf startet mit YourWorkflow.start!(subject, **arguments).
         empty_title: Keine passenden Workflows.
+        insights_link: Einblicke nach Klasse
         status_label: Nach Status filtern
         title: Workflows
       next:

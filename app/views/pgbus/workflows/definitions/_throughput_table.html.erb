@@ -1,0 +1,32 @@
+<%# The throughput chart's data table (issue #549): one row per bucket, each
+    count linked to those runs (from the bucket's first moment to just before
+    the next one's, so a 23- or 25-hour DST day links exactly). Locals: definition. %>
+<% name = definition[:workflow_class] %>
+<table class="pgbus-table min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+  <thead class="bg-gray-50 dark:bg-gray-900">
+    <tr>
+      <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.workflow_insights.show.charts.throughput.headers.from") %></th>
+      <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.workflow_insights.show.charts.throughput.headers.started") %></th>
+      <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.workflow_insights.show.charts.throughput.headers.finished") %></th>
+      <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.workflow_insights.show.charts.throughput.headers.cancelled") %></th>
+    </tr>
+  </thead>
+  <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+    <% definition[:throughput].each do |bucket| %>
+      <% from = bucket[:from] %>
+      <% to = bucket[:to] - Rational(1, 1_000_000) %>
+      <tr>
+        <td data-label="<%= t("pgbus.workflow_insights.show.charts.throughput.headers.from") %>" class="px-4 py-2 text-sm text-gray-700 dark:text-gray-300"><%= pgbus_absolute_time(from) %></td>
+        <td data-label="<%= t("pgbus.workflow_insights.show.charts.throughput.headers.started") %>" class="px-4 py-2 text-sm text-right font-mono text-gray-700 dark:text-gray-300">
+          <%= pgbus_insight_count(bucket[:started], pgbus_insight_runs_path(status: "all", workflow_class: name, created_from: from, created_to: to), t("pgbus.workflow_insights.links.started_bucket")) %>
+        </td>
+        <td data-label="<%= t("pgbus.workflow_insights.show.charts.throughput.headers.finished") %>" class="px-4 py-2 text-sm text-right font-mono text-gray-700 dark:text-gray-300">
+          <%= pgbus_insight_count(bucket[:finished], pgbus_insight_runs_path(status: "finished", workflow_class: name, ended_from: from, ended_to: to), t("pgbus.workflow_insights.links.finished_bucket")) %>
+        </td>
+        <td data-label="<%= t("pgbus.workflow_insights.show.charts.throughput.headers.cancelled") %>" class="px-4 py-2 text-sm text-right font-mono text-gray-700 dark:text-gray-300">
+          <%= pgbus_insight_count(bucket[:cancelled], pgbus_insight_runs_path(status: "cancelled", workflow_class: name, ended_from: from, ended_to: to), t("pgbus.workflow_insights.links.cancelled_bucket")) %>
+        </td>
+      </tr>
+    <% end %>
+  </tbody>
+</table>

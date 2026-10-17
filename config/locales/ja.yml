@@ -1029,6 +1029,158 @@ ja:
         disabled: タスクが無効になりました
         enabled: タスクが有効になりました
         failed: タスクの切り替えに失敗しました
+    workflow_insights:
+      back_to_classes: すべてのワークフロークラス
+      back_to_runs: すべてのワークフロー実行
+      bad_request: '不正なリクエスト: %{reason}'
+      capped: 'workflow_retention（%{retention}）で上限を設定: それより古い完了・キャンセル済みの実行は削除されます。'
+      few_samples:
+        one: n=%{count}、サンプル少
+        other: n=%{count}、サンプル少
+      index:
+        description: "%{window}の各ワークフロークラスの状況: 現在進行中の実行、終了した実行、開始から終了までの所要時間。"
+        empty_hint: 'Pgbus::Workflow のサブクラスを定義して実行を開始してください: YourWorkflow.start!(subject, **arguments)。'
+        empty_title: まだ実行されたワークフロークラスはありません。
+        headers:
+          attention: 要対応
+          cancelled: キャンセル
+          duration_p50: 所要時間 p50
+          duration_p95: 所要時間 p95
+          finished: 完了
+          ongoing: 進行中
+          paused: 一時停止
+          workflow_class: ワークフロークラス
+        title: ワークフローインサイト
+      links:
+        at_step: "%{step} の%{status}の実行"
+        attention: "%{workflow} の要対応の実行"
+        cancelled: "%{workflow} の期間内にキャンセルされた実行"
+        cancelled_bucket: この区間にキャンセルされた実行
+        finished: "%{workflow} の期間内に完了した実行"
+        finished_bucket: この区間に完了した実行
+        ongoing: "%{workflow} の進行中の実行"
+        paused: "%{workflow} の一時停止中の実行"
+        started: "%{workflow} の期間内に開始した実行"
+        started_bucket: この区間に開始した実行
+      not_found:
+        hint: "%{workflow} という名前の Pgbus::Workflow サブクラスも実行もありません（または読み込みに失敗しました。ログを確認してください）。"
+        title: 不明なワークフロークラス
+      not_loaded: 定義が読み込まれていません
+      not_loaded_hint: 'このクラスはアプリで読み込まれなくなりました: ステップは実行の行から取得し、実行が到達した順に並べています。'
+      percentile: "%{name} %{value}"
+      removed_in_flight:
+        one: 削除済みステップ %{step} 上の実行 %{count}件
+        other: 削除済みステップ %{step} 上の実行 %{count}件
+      show:
+        by_revision:
+          all_steps: すべてのステップ
+          caption: '期間内に試行を終了した直近5つのアプリリビジョンの同じ数値（新しい順）: デプロイ後の悪化は行として現れます。'
+          empty: この期間の試行にはアプリのリビジョンが記録されていません（config.app_revision）。
+          headers:
+            attempts: 試行
+            failed: 失敗
+            reattempted: 再試行
+            revision: リビジョン
+            run_time: 実行時間
+            skipped: スキップ
+            step: ステップ
+          seen_html: "%{from}〜%{to}に確認"
+          title: アプリのリビジョン別
+          worse: "%{revision} の %{rate} から上昇"
+        charts:
+          durations:
+            between: "%{from}–%{to}"
+            caption:
+              one: 期間内に完了した %{count} 件の実行が開始から終了までにかかった時間。
+              other: 期間内に完了した %{count} 件の実行が開始から終了までにかかった時間。
+            headers:
+              range: 所要時間
+              runs: 実行
+            over: "%{from}以上"
+            title: 開始から終了までの所要時間
+            under: "%{to}未満"
+          series:
+            cancelled: キャンセル
+            finished: 完了
+            runs: 実行
+            started: 開始
+          throughput:
+            caption: "%{window}の%{bucket}ごとの開始・完了・キャンセルされた実行: 開始 %{started}、完了 %{finished}、キャンセル %{cancelled}。"
+            headers:
+              cancelled: キャンセル
+              finished: 完了
+              from: 開始時刻
+              started: 開始
+            title: "%{bucket}ごとの実行"
+        description: "%{window}: 実行が今どこにあるか、各ステップの性能、実行が止まる場所。"
+        funnel:
+          caption:
+            one: 期間内に開始した %{count} 件の実行のうち、各ステップに到達した数と、各実行の現在地。
+            other: 期間内に開始した %{count} 件の実行のうち、各ステップに到達した数と、各実行の現在地。
+          empty: この期間に開始した実行はありません。
+          headers:
+            now_here: 現在このステップ
+            reached: 到達
+            share: 開始に対する割合
+            step: ステップ
+          here:
+            cancelled:
+              one: キャンセル %{count}
+              other: キャンセル %{count}
+            finished:
+              one: 完了 %{count}
+              other: 完了 %{count}
+            paused:
+              one: 一時停止 %{count}
+              other: 一時停止 %{count}
+            performing:
+              one: 実行中 %{count}
+              other: 実行中 %{count}
+            ready:
+              one: 予定 %{count}
+              other: 予定 %{count}
+            waiting:
+              one: 待機中 %{count}
+              other: 待機中 %{count}
+          title: ファネル
+        pipeline:
+          attempts:
+            one: "%{count}回の試行"
+            other: "%{count}回の試行"
+          caption: '各ステップを順に: 現在そのステップにある実行と、期間内に終了した試行の結果。'
+          empty: 'ステップはまだありません: このクラスの実行には期間内のステップがなく、進行中のものもありません。'
+          failed: 失敗
+          kinds:
+            fan_out: ファンアウト
+            removed: 削除済み
+            signal: シグナル待ち
+            undeclared: 定義にない
+          live:
+            paused: 一時停止
+            performing: 実行中
+            ready: 予定
+            waiting: 待機中
+          now_label: 現在このステップにある実行
+          pickup: 取得までの時間
+          reattempted: 再試行
+          run_time: 実行時間
+          skipped: スキップ
+          step_link: "%{step} の進行中の実行"
+          title: パイプライン
+          window_label: 期間内に終了した試行
+        summary:
+          attention: 要対応
+          cancelled: キャンセル
+          duration: 所要時間 p50
+          finished: 完了
+          ongoing: 進行中
+          started: 開始
+      window_label: 期間
+      windows:
+        1h: 直近1時間
+        24h: 直近24時間
+        30d: 直近30日間
+        7d: 直近7日間
     workflows:
       actions:
         bulk_cancel: すべてキャンセル
@@ -1071,6 +1223,7 @@ ja:
           seen: 検出
           workflow: ワークフロー
         last_seen_html: 最終 %{time}
+        only_class_html: "%{workflow} のみ。"
         reasons:
           overdue: '期限超過: 期限は到来したが未取得'
           paused_error: エラーで一時停止
@@ -1080,6 +1233,7 @@ ja:
         resume_all:
           one: "%{count} 件すべて再開"
           other: "%{count} 件すべて再開"
+        show_all: すべてのクラスを表示
         show_runs: 実行を表示
         title: 要対応
       audit:
@@ -1128,6 +1282,8 @@ ja:
         clear: クリア
         created_from: 作成日（開始）
         created_to: 作成日（終了）
+        ended_from: 終了日（開始）
+        ended_to: 終了日（終了）
         error_class: エラークラス
         step: 現在のステップ
         subject_id: 対象ID
@@ -1176,6 +1332,7 @@ ja:
         description: '永続的な複数ステップの実行: 各実行の現在の処理と次に起きることを表示します。'
         empty_hint: 別のステータスを選ぶか、フィルターをクリアしてください。実行は YourWorkflow.start!(subject, **arguments) で開始します。
         empty_title: 該当するワークフローはありません。
+        insights_link: クラス別インサイト
         status_label: ステータスで絞り込み
         title: ワークフロー
       next:

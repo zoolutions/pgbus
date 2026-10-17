@@ -34,6 +34,9 @@ module Pgbus
       pgbus/mcp/tools/workflows_tool
       pgbus/mcp/tools/workflow_detail_tool
       pgbus/mcp/tools/workflows_attention_tool
+      pgbus/mcp/workflow_insights_payload
+      pgbus/mcp/tools/workflow_definitions_tool
+      pgbus/mcp/tools/workflow_stats_tool
       pgbus/mcp/server
       pgbus/mcp/runner
       pgbus/mcp/rack_app

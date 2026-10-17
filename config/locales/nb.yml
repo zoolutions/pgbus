@@ -1029,6 +1029,158 @@ nb:
         disabled: Oppgave deaktivert
         enabled: Oppgave aktivert
         failed: Kunne ikke endre oppgave
+    workflow_insights:
+      back_to_classes: Alle arbeidsflytklasser
+      back_to_runs: Alle arbeidsflytkjøringer
+      bad_request: 'Ugyldig forespørsel: %{reason}'
+      capped: 'Begrenset til workflow_retention (%{retention}): fullførte og avbrutte kjøringer som er eldre, slettes.'
+      few_samples:
+        one: n=%{count}, få målinger
+        other: n=%{count}, få målinger
+      index:
+        description: 'Hvordan hver arbeidsflytklasse gjorde det over %{window}: kjøringene som pågår nå, kjøringene som ble avsluttet, og hvor lang tid en kjøring tar fra start til slutt.'
+        empty_hint: 'Definer en underklasse av Pgbus::Workflow og start en kjøring: YourWorkflow.start!(subject, **arguments).'
+        empty_title: Ingen arbeidsflytklasse har kjørt ennå.
+        headers:
+          attention: Trenger tiltak
+          cancelled: Avbrutt
+          duration_p50: Varighet p50
+          duration_p95: Varighet p95
+          finished: Fullført
+          ongoing: Pågående
+          paused: Pauset
+          workflow_class: Arbeidsflytklasse
+        title: Arbeidsflytinnsikt
+      links:
+        at_step: "%{status} kjøringer ved %{step}"
+        attention: kjøringer av %{workflow} som trenger tiltak
+        cancelled: kjøringer av %{workflow} som ble avbrutt i vinduet
+        cancelled_bucket: kjøringer avbrutt i perioden
+        finished: kjøringer av %{workflow} som ble fullført i vinduet
+        finished_bucket: kjøringer fullført i perioden
+        ongoing: pågående kjøringer av %{workflow}
+        paused: pausede kjøringer av %{workflow}
+        started: kjøringer av %{workflow} som startet i vinduet
+        started_bucket: kjøringer startet i perioden
+      not_found:
+        hint: Ingen underklasse av Pgbus::Workflow og ingen kjøring heter %{workflow} (eller lesingen feilet, se loggen).
+        title: Ukjent arbeidsflytklasse
+      not_loaded: Definisjonen er ikke lastet
+      not_loaded_hint: 'Klassen lastes ikke lenger i appen: stegene kommer fra kjøringenes rader, i den rekkefølgen kjøringene nådde dem.'
+      percentile: "%{name} %{value}"
+      removed_in_flight:
+        one: "%{count} kjøring på fjernet steg %{step}"
+        other: "%{count} kjøringer på fjernet steg %{step}"
+      show:
+        by_revision:
+          all_steps: Alle steg
+          caption: 'De samme tallene for de fem siste appversjonene som avsluttet et forsøk i vinduet, nyeste først: en forverring etter en utrulling vises som en rad.'
+          empty: Ingen forsøk i dette vinduet registrerte en appversjon (config.app_revision).
+          headers:
+            attempts: Forsøk
+            failed: Feilet
+            reattempted: Forsøkt på nytt
+            revision: Versjon
+            run_time: Kjøretid
+            skipped: Hoppet over
+            step: Steg
+          seen_html: sett %{from} til %{to}
+          title: Per appversjon
+          worse: opp fra %{rate} på %{revision}
+        charts:
+          durations:
+            between: "%{from}–%{to}"
+            caption:
+              one: Hvor lang tid den %{count} kjøringen som ble fullført i vinduet, tok fra start til slutt.
+              other: Hvor lang tid de %{count} kjøringene som ble fullført i vinduet, tok fra start til slutt.
+            headers:
+              range: Varighet
+              runs: Kjøringer
+            over: "%{from} eller mer"
+            title: Varighet fra start til slutt
+            under: under %{to}
+          series:
+            cancelled: Avbrutt
+            finished: Fullført
+            runs: Kjøringer
+            started: Startet
+          throughput:
+            caption: 'Kjøringer startet, fullført og avbrutt per %{bucket} over %{window}: %{started} startet, %{finished} fullført, %{cancelled} avbrutt.'
+            headers:
+              cancelled: Avbrutt
+              finished: Fullført
+              from: Fra
+              started: Startet
+            title: Kjøringer per %{bucket}
+        description: 'Over %{window}: hvor kjøringene er nå, hvordan hvert steg presterer, og hvor kjøringer stopper.'
+        funnel:
+          caption:
+            one: 'Av den %{count} kjøringen som startet i vinduet: hvor mange som nådde hvert steg, og hvor den er nå.'
+            other: 'Av de %{count} kjøringene som startet i vinduet: hvor mange som nådde hvert steg, og hvor hver av dem er nå.'
+          empty: Ingen kjøring startet i dette vinduet.
+          headers:
+            now_here: Nå ved steget
+            reached: Nådd
+            share: Av startede
+            step: Steg
+          here:
+            cancelled:
+              one: "%{count} avbrutt"
+              other: "%{count} avbrutt"
+            finished:
+              one: "%{count} fullført"
+              other: "%{count} fullført"
+            paused:
+              one: "%{count} pauset"
+              other: "%{count} pauset"
+            performing:
+              one: "%{count} kjører"
+              other: "%{count} kjører"
+            ready:
+              one: "%{count} planlagt"
+              other: "%{count} planlagt"
+            waiting:
+              one: "%{count} venter"
+              other: "%{count} venter"
+          title: Trakt
+        pipeline:
+          attempts:
+            one: "%{count} forsøk"
+            other: "%{count} forsøk"
+          caption: 'Hvert steg i rekkefølge: kjøringene som står ved det nå, og hvordan forsøkene som ble avsluttet i vinduet, gikk.'
+          empty: 'Ingen steg ennå: ingen kjøring av klassen har et steg i vinduet, og ingen pågår.'
+          failed: Feilet
+          kinds:
+            fan_out: Fan-out
+            removed: Fjernet
+            signal: Venter på et signal
+            undeclared: Ikke i definisjonen
+          live:
+            paused: Pauset
+            performing: Kjører
+            ready: Planlagt
+            waiting: Venter
+          now_label: Kjøringer ved steget nå
+          pickup: Henting
+          reattempted: Forsøkt på nytt
+          run_time: Kjøretid
+          skipped: Hoppet over
+          step_link: Pågående kjøringer ved %{step}
+          title: Pipeline
+          window_label: Forsøk som ble avsluttet i vinduet
+        summary:
+          attention: Trenger tiltak
+          cancelled: Avbrutt
+          duration: Varighet p50
+          finished: Fullført
+          ongoing: Pågående
+          started: Startet
+      window_label: Tidsvindu
+      windows:
+        1h: den siste timen
+        24h: de siste 24 timene
+        30d: de siste 30 dagene
+        7d: de siste 7 dagene
     workflows:
       actions:
         bulk_cancel: Avbryt alle
@@ -1071,6 +1223,7 @@ nb:
           seen: Sett
           workflow: Arbeidsflyt
         last_seen_html: sist %{time}
+        only_class_html: Bare %{workflow}.
         reasons:
           overdue: 'Forsinket: forfalt, men ikke hentet'
           paused_error: På pause på grunn av en feil
@@ -1080,6 +1233,7 @@ nb:
         resume_all:
           one: Gjenoppta alle %{count}
           other: Gjenoppta alle %{count}
+        show_all: Vis alle klasser
         show_runs: Vis kjøringer
         title: Trenger oppmerksomhet
       audit:
@@ -1128,6 +1282,8 @@ nb:
         clear: Fjern
         created_from: Opprettet fra
         created_to: Opprettet til
+        ended_from: Avsluttet fra
+        ended_to: Avsluttet til
         error_class: Feilklasse
         step: Gjeldende trinn
         subject_id: Emne-ID
@@ -1176,6 +1332,7 @@ nb:
         description: 'Varige kjøringer i flere trinn: hva hver enkelt gjør og hva som skjer videre.'
         empty_hint: Velg en annen status eller fjern filtrene. En kjøring starter med YourWorkflow.start!(subject, **arguments).
         empty_title: Ingen arbeidsflyter samsvarer.
+        insights_link: Innsikt per klasse
         status_label: Filtrer på status
         title: Arbeidsflyter
       next:

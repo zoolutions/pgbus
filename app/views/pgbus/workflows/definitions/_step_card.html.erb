@@ -1,0 +1,31 @@
+<%# One step of the pipeline (issue #549): the runs sitting at it now, each
+    count linked to those runs, then how its attempts that finished in the
+    window did. Locals: step, position, name (the workflow class). %>
+<li data-step="<%= step[:name] %>" class="w-72 shrink-0 rounded-lg bg-white dark:bg-gray-800 p-4 shadow ring-1 ring-gray-200 dark:ring-gray-700">
+  <div class="flex items-start justify-between gap-2">
+    <h3 class="text-sm font-medium text-gray-900 dark:text-white">
+      <span class="text-gray-600 dark:text-gray-300"><%= position %>.</span>
+      <%= pgbus_link_to step[:name], pgbus_insight_runs_path(workflow_class: name, step: step[:name]), class: "font-mono",
+            aria: { label: t("pgbus.workflow_insights.show.pipeline.step_link", step: step[:name]) } %>
+    </h3>
+    <%= pgbus_insight_kind(step) %>
+  </div>
+  <ul class="mt-3 grid grid-cols-2 gap-x-3 gap-y-1 text-sm" aria-label="<%= t("pgbus.workflow_insights.show.pipeline.now_label") %>">
+    <% Pgbus::WorkflowInsightsHelper::LIVE_STATUSES.each do |status| %>
+      <% count = step[:counts][status.to_sym] %>
+      <li class="flex items-center justify-between gap-2">
+        <span class="text-gray-600 dark:text-gray-300"><%= t("pgbus.workflow_insights.show.pipeline.live.#{status}") %></span>
+        <span class="font-mono text-gray-900 dark:text-white"><%= pgbus_insight_count(count, pgbus_insight_runs_path(status: status, workflow_class: name, step: step[:name]),
+                                                                                       t("pgbus.workflow_insights.links.at_step", status: t("pgbus.workflow_insights.show.pipeline.live.#{status}").downcase, step: step[:name])) %></span>
+      </li>
+    <% end %>
+  </ul>
+  <ul class="mt-3 space-y-1 border-t border-gray-200 pt-3 text-sm dark:border-gray-700" aria-label="<%= t("pgbus.workflow_insights.show.pipeline.window_label") %>">
+    <li><span class="text-gray-600 dark:text-gray-300"><%= t("pgbus.workflow_insights.show.pipeline.run_time") %></span> <span class="font-mono text-gray-900 dark:text-white"><%= pgbus_insight_percentiles(step[:run_ms]) %></span></li>
+    <li><span class="text-gray-600 dark:text-gray-300"><%= t("pgbus.workflow_insights.show.pipeline.pickup") %></span> <span class="font-mono text-gray-900 dark:text-white"><%= pgbus_insight_percentiles(step[:pickup_ms], %i[p50 p95]) %></span></li>
+    <% %i[failed reattempted skipped].each do |rate| %>
+      <li><span class="text-gray-600 dark:text-gray-300"><%= t("pgbus.workflow_insights.show.pipeline.#{rate}") %></span> <span class="font-mono text-gray-900 dark:text-white"><%= pgbus_insight_rate(step[:rates][rate]) %></span></li>
+    <% end %>
+    <li class="text-xs text-gray-600 dark:text-gray-300"><%= t("pgbus.workflow_insights.show.pipeline.attempts", count: step[:sample_size]) %></li>
+  </ul>
+</li>

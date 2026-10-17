@@ -44,14 +44,16 @@ module Pgbus
     }.freeze
 
     # Links keep their type size; the padding on sm gives the 24 px target.
+    # lg is a summary card's number (the workflow insights, issue #549).
     LINK_SIZES = {
       sm: "rounded px-1.5 py-1 text-xs",
-      md: "text-sm"
+      md: "text-sm",
+      lg: "text-2xl"
     }.freeze
 
     def pgbus_button_classes(variant, size = :md, tone: :indigo, extra: nil)
       raise ArgumentError, "unknown button variant: #{variant.inspect}" unless VARIANTS.key?(variant)
-      raise ArgumentError, "unknown button size: #{size.inspect}" unless SIZES.key?(size)
+      raise ArgumentError, "unknown button size: #{size.inspect}" unless (variant == :link ? LINK_SIZES : SIZES).key?(size)
 
       colours = variant == :link ? TONES.fetch(tone) { raise ArgumentError, "unknown link tone: #{tone.inspect}" } : VARIANTS[variant]
       sizing = variant == :link ? LINK_SIZES[size] : SIZES[size]

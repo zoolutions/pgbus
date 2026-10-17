@@ -1029,6 +1029,158 @@ da:
         disabled: Opgave deaktiveret
         enabled: Opgave aktiveret
         failed: Kunne ikke ændre opgave
+    workflow_insights:
+      back_to_classes: Alle workflow-klasser
+      back_to_runs: Alle workflow-kørsler
+      bad_request: 'Ugyldig forespørgsel: %{reason}'
+      capped: 'Begrænset til workflow_retention (%{retention}): færdige og annullerede kørsler, der er ældre, slettes.'
+      few_samples:
+        one: n=%{count}, få målinger
+        other: n=%{count}, få målinger
+      index:
+        description: 'Hvordan hver workflow-klasse klarede sig over %{window}: kørslerne i gang nu, kørslerne der sluttede, og hvor lang tid en kørsel tager fra start til slut.'
+        empty_hint: 'Definér en underklasse af Pgbus::Workflow og start en kørsel: YourWorkflow.start!(subject, **arguments).'
+        empty_title: Ingen workflow-klasse har kørt endnu.
+        headers:
+          attention: Kræver handling
+          cancelled: Annullerede
+          duration_p50: Varighed p50
+          duration_p95: Varighed p95
+          finished: Færdige
+          ongoing: Igangværende
+          paused: Pausede
+          workflow_class: Workflow-klasse
+        title: Workflow-indsigt
+      links:
+        at_step: "%{status} kørsler ved %{step}"
+        attention: kørsler af %{workflow}, der kræver handling
+        cancelled: kørsler af %{workflow}, der blev annulleret i vinduet
+        cancelled_bucket: kørsler annulleret i perioden
+        finished: kørsler af %{workflow}, der blev færdige i vinduet
+        finished_bucket: kørsler færdige i perioden
+        ongoing: igangværende kørsler af %{workflow}
+        paused: pausede kørsler af %{workflow}
+        started: kørsler af %{workflow}, der startede i vinduet
+        started_bucket: kørsler startet i perioden
+      not_found:
+        hint: Ingen underklasse af Pgbus::Workflow og ingen kørsel hedder %{workflow} (eller læsningen fejlede, se loggen).
+        title: Ukendt workflow-klasse
+      not_loaded: Definitionen er ikke indlæst
+      not_loaded_hint: 'Klassen indlæses ikke længere i appen: trinene kommer fra kørslernes rækker, i den rækkefølge kørslerne nåede dem.'
+      percentile: "%{name} %{value}"
+      removed_in_flight:
+        one: "%{count} kørsel på fjernet trin %{step}"
+        other: "%{count} kørsler på fjernet trin %{step}"
+      show:
+        by_revision:
+          all_steps: Alle trin
+          caption: 'De samme tal for de seneste fem app-versioner, der afsluttede et forsøg i vinduet, nyeste først: en forringelse efter en udrulning ses som en række.'
+          empty: Intet forsøg i dette vindue registrerede en app-version (config.app_revision).
+          headers:
+            attempts: Forsøg
+            failed: Fejlet
+            reattempted: Forsøgt igen
+            revision: Version
+            run_time: Køretid
+            skipped: Sprunget over
+            step: Trin
+          seen_html: set %{from} til %{to}
+          title: Pr. app-version
+          worse: op fra %{rate} på %{revision}
+        charts:
+          durations:
+            between: "%{from}–%{to}"
+            caption:
+              one: Hvor lang tid den %{count} kørsel, der blev færdig i vinduet, tog fra start til slut.
+              other: Hvor lang tid de %{count} kørsler, der blev færdige i vinduet, tog fra start til slut.
+            headers:
+              range: Varighed
+              runs: Kørsler
+            over: "%{from} eller mere"
+            title: Varighed fra start til slut
+            under: under %{to}
+          series:
+            cancelled: Annullerede
+            finished: Færdige
+            runs: Kørsler
+            started: Startet
+          throughput:
+            caption: 'Kørsler startet, færdige og annulleret pr. %{bucket} over %{window}: %{started} startet, %{finished} færdige, %{cancelled} annulleret.'
+            headers:
+              cancelled: Annullerede
+              finished: Færdige
+              from: Fra
+              started: Startet
+            title: Kørsler pr. %{bucket}
+        description: 'Over %{window}: hvor kørslerne er nu, hvordan hvert trin klarer sig, og hvor kørsler stopper.'
+        funnel:
+          caption:
+            one: 'Af den %{count} kørsel, der startede i vinduet: hvor mange der nåede hvert trin, og hvor den er nu.'
+            other: 'Af de %{count} kørsler, der startede i vinduet: hvor mange der nåede hvert trin, og hvor hver enkelt er nu.'
+          empty: Ingen kørsel startede i dette vindue.
+          headers:
+            now_here: Nu ved trinnet
+            reached: Nået
+            share: Af startede
+            step: Trin
+          here:
+            cancelled:
+              one: "%{count} annulleret"
+              other: "%{count} annulleret"
+            finished:
+              one: "%{count} færdig"
+              other: "%{count} færdige"
+            paused:
+              one: "%{count} pauset"
+              other: "%{count} pauset"
+            performing:
+              one: "%{count} kører"
+              other: "%{count} kører"
+            ready:
+              one: "%{count} planlagt"
+              other: "%{count} planlagt"
+            waiting:
+              one: "%{count} venter"
+              other: "%{count} venter"
+          title: Tragt
+        pipeline:
+          attempts:
+            one: "%{count} forsøg"
+            other: "%{count} forsøg"
+          caption: 'Hvert trin i rækkefølge: kørslerne der står ved det nu, og hvordan dets forsøg, der sluttede i vinduet, gik.'
+          empty: 'Ingen trin endnu: ingen kørsel af klassen har et trin i vinduet, og ingen er i gang.'
+          failed: Fejlet
+          kinds:
+            fan_out: Fan-out
+            removed: Fjernet
+            signal: Venter på et signal
+            undeclared: Ikke i definitionen
+          live:
+            paused: Pauset
+            performing: Kører
+            ready: Planlagt
+            waiting: Venter
+          now_label: Kørsler ved trinnet nu
+          pickup: Afhentning
+          reattempted: Forsøgt igen
+          run_time: Køretid
+          skipped: Sprunget over
+          step_link: Igangværende kørsler ved %{step}
+          title: Pipeline
+          window_label: Forsøg der sluttede i vinduet
+        summary:
+          attention: Kræver handling
+          cancelled: Annullerede
+          duration: Varighed p50
+          finished: Færdige
+          ongoing: Igangværende
+          started: Startet
+      window_label: Tidsvindue
+      windows:
+        1h: den seneste time
+        24h: de seneste 24 timer
+        30d: de seneste 30 dage
+        7d: de seneste 7 dage
     workflows:
       actions:
         bulk_cancel: Annullér alle
@@ -1071,6 +1223,7 @@ da:
           seen: Set
           workflow: Workflow
         last_seen_html: senest %{time}
+        only_class_html: Kun %{workflow}.
         reasons:
           overdue: 'Forsinket: forfalden, men ikke hentet'
           paused_error: På pause pga. en fejl
@@ -1080,6 +1233,7 @@ da:
         resume_all:
           one: Genoptag alle %{count}
           other: Genoptag alle %{count}
+        show_all: Vis alle klasser
         show_runs: Vis kørsler
         title: Kræver opmærksomhed
       audit:
@@ -1128,6 +1282,8 @@ da:
         clear: Ryd
         created_from: Oprettet fra
         created_to: Oprettet til
+        ended_from: Afsluttet fra
+        ended_to: Afsluttet til
         error_class: Fejlklasse
         step: Nuværende trin
         subject_id: Emne-ID
@@ -1176,6 +1332,7 @@ da:
         description: 'Varige kørsler i flere trin: hvad hver enkelt gør, og hvad der sker derefter.'
         empty_hint: Vælg en anden status, eller ryd filtrene. En kørsel starter med YourWorkflow.start!(subject, **arguments).
         empty_title: Ingen workflows matcher.
+        insights_link: Indsigt pr. klasse
         status_label: Filtrér efter status
         title: Workflows
       next:

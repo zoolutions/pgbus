@@ -90,6 +90,17 @@ RSpec.describe "Dashboard sample data", type: :system do
     expect(page).to have_no_text(I18n.t("pgbus.workflows.signals.empty"))
   end
 
+  it "fills the workflow insights: every class, and a class page without an empty block" do
+    visit "/pgbus/workflows/definitions"
+    expect(page).to have_css("tr[data-workflow-class]", count: 4)
+
+    visit "/pgbus/workflows/definitions/OrderWorkflow"
+    expect(page).to have_css("[data-testid=workflow-pipeline] > li", count: 4)
+    expect(page).to have_no_css("[data-testid=chart-empty]")
+    expect(page).to have_no_text(I18n.t("pgbus.workflow_insights.show.funnel.empty"))
+    expect(page).to have_no_text(I18n.t("pgbus.workflow_insights.show.by_revision.empty"))
+  end
+
   it "shows recurring task executions" do
     visit "/pgbus/recurring_tasks/1"
     expect(page).to have_no_text(I18n.t("pgbus.recurring_tasks.show.no_executions"))

@@ -1,0 +1,17 @@
+<%# The window selector (issue #549): 1h, 24h, 7d, 30d. Locals: path, a
+    lambda from a window name to the same page over that window. A window
+    longer than workflow_retention is capped, and the page says so. %>
+<div>
+  <nav class="flex flex-wrap gap-2" aria-label="<%= t("pgbus.workflow_insights.window_label") %>" data-testid="workflow-insights-window">
+    <% Pgbus::Web::WorkflowWindow::CHOICES.each_key do |name| %>
+      <% active = name == @window.name %>
+      <a href="<%= path.call(name) %>" aria-current="<%= active ? "page" : "false" %>"
+         class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium <%= active ? 'bg-gray-800 text-white dark:bg-gray-700' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white' %>">
+        <%= name %>
+      </a>
+    <% end %>
+  </nav>
+  <% if @window.capped? %>
+    <p class="mt-2 text-xs text-gray-600 dark:text-gray-300"><%= t("pgbus.workflow_insights.capped", retention: pgbus_duration(@window.seconds)) %></p>
+  <% end %>
+</div>

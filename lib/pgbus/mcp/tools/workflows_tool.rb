@@ -10,7 +10,7 @@ module Pgbus
         tool_name "pgbus_workflows"
         title "Pgbus Workflows"
         description <<~DESC
-          List Pgbus::Workflow runs, newest first: class, subject, status, current step and attempt, what a waiting step waits for (signal name, fan-out batch progress), when a scheduled step runs, and the error class of a paused one. status is "ongoing" (default: ready, performing, waiting or paused), one state, or "all"; the other filters combine with AND. created_from/created_to take an ISO 8601 date or time. Paginated (default 25, max 100); total is capped at 10000. The error message is redacted unless the server allows payloads and include_payloads is set.
+          List Pgbus::Workflow runs, newest first: class, subject, status, current step and attempt, what a waiting step waits for (signal name, fan-out batch progress), when a scheduled step runs, and the error class of a paused one. status is "ongoing" (default: ready, performing, waiting or paused), one state, or "all"; the other filters combine with AND. created_from/created_to and ended_from/ended_to (when a run finished or was cancelled) take an ISO 8601 date or time. Paginated (default 25, max 100); total is capped at 10000. The error message is redacted unless the server allows payloads and include_payloads is set.
         DESC
 
         MAX_PER_PAGE = 100
@@ -24,6 +24,10 @@ module Pgbus
             **TEXT.to_h { |name| [name.to_sym, { type: "string", description: "Exact #{name.tr("_", " ")}." }] },
             created_from: { type: "string", description: "Created at or after this ISO 8601 date or time." },
             created_to: { type: "string", description: "Created at or before this ISO 8601 date (the whole day) or time." },
+            ended_from: { type: "string", description: "Finished or cancelled at or after this ISO 8601 date or time." },
+            ended_to: {
+              type: "string", description: "Finished or cancelled at or before this ISO 8601 date (the whole day) or time."
+            },
             page: { type: "integer", description: "1-based page number (default 1, max 1000).", minimum: 1 },
             per_page: { type: "integer", description: "Rows per page (default 25, max 100).", minimum: 1 },
             include_payloads: {

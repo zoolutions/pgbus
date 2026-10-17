@@ -38,6 +38,14 @@ RSpec.describe Pgbus::Web::WorkflowQuery do
     expect(query.filters[:created_to]).to eq(Time.zone.parse("2026-10-17").end_of_day)
   end
 
+  it "reads the ended-at range the same way (issue #549)" do
+    query = described_class.new(ended_from: "2026-10-16T12:00:00Z", ended_to: "2026-10-17")
+
+    expect(query.filters[:ended_from]).to eq(Time.utc(2026, 10, 16, 12))
+    expect(query.filters[:ended_to]).to eq(Time.zone.parse("2026-10-17").end_of_day)
+    expect(query.to_param).to eq(status: "ongoing", ended_from: "2026-10-16T12:00:00Z", ended_to: "2026-10-17")
+  end
+
   it "takes an ISO 8601 time as it is" do
     expect(described_class.new(created_to: "2026-10-17T10:00:00Z").filters[:created_to]).to eq(Time.utc(2026, 10, 17, 10))
   end
@@ -53,6 +61,7 @@ RSpec.describe Pgbus::Web::WorkflowQuery do
     { status: "stuck" } => /unknown status/,
     { created_from: "last tuesday" } => /not a date/,
     { created_to: "2026-02-30" } => /not a date/,
+    { ended_from: "yesterday" } => /not a date/,
     { workflow_class: %w[A B] } => /single value/,
     { error_class: "x" * 256 } => /longer than 255/
   }.each do |params, message|

@@ -1029,6 +1029,158 @@ en:
         disabled: Task disabled
         enabled: Task enabled
         failed: Failed to toggle task
+    workflow_insights:
+      back_to_classes: All workflow classes
+      back_to_runs: All workflow runs
+      bad_request: 'Bad request: %{reason}'
+      capped: 'Capped at workflow_retention (%{retention}): finished and cancelled runs older than that are deleted.'
+      few_samples:
+        one: n=%{count}, few samples
+        other: n=%{count}, few samples
+      index:
+        description: 'How each workflow class did over %{window}: the runs going on now, the runs that ended, and how long a run takes end to end.'
+        empty_hint: 'Define a Pgbus::Workflow subclass and start a run: YourWorkflow.start!(subject, **arguments).'
+        empty_title: No workflow class has run yet.
+        headers:
+          attention: Need attention
+          cancelled: Cancelled
+          duration_p50: Duration p50
+          duration_p95: Duration p95
+          finished: Finished
+          ongoing: Ongoing
+          paused: Paused
+          workflow_class: Workflow class
+        title: Workflow insights
+      links:
+        at_step: "%{status} runs at %{step}"
+        attention: runs of %{workflow} that need attention
+        cancelled: runs of %{workflow} cancelled in the window
+        cancelled_bucket: runs cancelled in this period
+        finished: runs of %{workflow} that finished in the window
+        finished_bucket: runs finished in this period
+        ongoing: ongoing runs of %{workflow}
+        paused: paused runs of %{workflow}
+        started: runs of %{workflow} started in the window
+        started_bucket: runs started in this period
+      not_found:
+        hint: No Pgbus::Workflow subclass and no run is called %{workflow} (or reading it failed, see the log).
+        title: Unknown workflow class
+      not_loaded: Definition not loaded
+      not_loaded_hint: 'This class does not load in this app any more: its steps come from its runs'' rows, in the order the runs reached them.'
+      percentile: "%{name} %{value}"
+      removed_in_flight:
+        one: "%{count} run on removed step %{step}"
+        other: "%{count} runs on removed step %{step}"
+      show:
+        by_revision:
+          all_steps: All steps
+          caption: 'The same numbers for the last five app revisions that finished an attempt in the window, newest first: a regression after a deploy shows as a row.'
+          empty: No attempt in this window recorded an app revision (config.app_revision).
+          headers:
+            attempts: Attempts
+            failed: Failed
+            reattempted: Reattempted
+            revision: Revision
+            run_time: Run time
+            skipped: Skipped
+            step: Step
+          seen_html: seen %{from} to %{to}
+          title: By app revision
+          worse: up from %{rate} on %{revision}
+        charts:
+          durations:
+            between: "%{from}–%{to}"
+            caption:
+              one: How long the %{count} run that finished in the window took, from start to finish.
+              other: How long the %{count} runs that finished in the window took, from start to finish.
+            headers:
+              range: Duration
+              runs: Runs
+            over: "%{from} or more"
+            title: End-to-end duration
+            under: under %{to}
+          series:
+            cancelled: Cancelled
+            finished: Finished
+            runs: Runs
+            started: Started
+          throughput:
+            caption: 'Runs started, finished and cancelled per %{bucket} over %{window}: %{started} started, %{finished} finished, %{cancelled} cancelled.'
+            headers:
+              cancelled: Cancelled
+              finished: Finished
+              from: From
+              started: Started
+            title: Runs per %{bucket}
+        description: 'Over %{window}: where its runs are now, how each step performs, and where runs stop.'
+        funnel:
+          caption:
+            one: 'Of the %{count} run started in the window: how many reached each step, and where it is now.'
+            other: 'Of the %{count} runs started in the window: how many reached each step, and where each one is now.'
+          empty: No run started in this window.
+          headers:
+            now_here: Now at this step
+            reached: Reached
+            share: Of started
+            step: Step
+          here:
+            cancelled:
+              one: "%{count} cancelled"
+              other: "%{count} cancelled"
+            finished:
+              one: "%{count} finished"
+              other: "%{count} finished"
+            paused:
+              one: "%{count} paused"
+              other: "%{count} paused"
+            performing:
+              one: "%{count} running"
+              other: "%{count} running"
+            ready:
+              one: "%{count} scheduled"
+              other: "%{count} scheduled"
+            waiting:
+              one: "%{count} waiting"
+              other: "%{count} waiting"
+          title: Funnel
+        pipeline:
+          attempts:
+            one: "%{count} attempt"
+            other: "%{count} attempts"
+          caption: 'Each step in order: the runs sitting at it now, and how its attempts that finished in the window did.'
+          empty: 'No step yet: no run of this class has a step in the window and none is going on.'
+          failed: Failed
+          kinds:
+            fan_out: Fan-out
+            removed: Removed
+            signal: Waits for a signal
+            undeclared: Not in the definition
+          live:
+            paused: Paused
+            performing: Running
+            ready: Scheduled
+            waiting: Waiting
+          now_label: Runs at this step now
+          pickup: Pickup
+          reattempted: Reattempted
+          run_time: Run time
+          skipped: Skipped
+          step_link: Ongoing runs at %{step}
+          title: Pipeline
+          window_label: Attempts that finished in the window
+        summary:
+          attention: Need attention
+          cancelled: Cancelled
+          duration: Duration p50
+          finished: Finished
+          ongoing: Ongoing
+          started: Started
+      window_label: Time window
+      windows:
+        1h: the last hour
+        24h: the last 24 hours
+        30d: the last 30 days
+        7d: the last 7 days
     workflows:
       actions:
         bulk_cancel: Cancel all
@@ -1071,6 +1223,7 @@ en:
           seen: Seen
           workflow: Workflow
         last_seen_html: last %{time}
+        only_class_html: "%{workflow} only."
         reasons:
           overdue: 'Overdue: due, but not picked up'
           paused_error: Paused on an error
@@ -1080,6 +1233,7 @@ en:
         resume_all:
           one: Resume all %{count}
           other: Resume all %{count}
+        show_all: Show every class
         show_runs: Show runs
         title: Needs attention
       audit:
@@ -1128,6 +1282,8 @@ en:
         clear: Clear
         created_from: Created from
         created_to: Created to
+        ended_from: Ended from
+        ended_to: Ended to
         error_class: Error class
         step: Current step
         subject_id: Subject ID
@@ -1176,6 +1332,7 @@ en:
         description: 'Durable multi-step runs: what each one is doing and what happens next.'
         empty_hint: Pick another status or clear the filters. A run starts with YourWorkflow.start!(subject, **arguments).
         empty_title: No workflows match.
+        insights_link: Insights by class
         status_label: Filter by status
         title: Workflows
       next:

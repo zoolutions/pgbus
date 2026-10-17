@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# Durable multi-step workflows: Pgbus::Workflow (issues #540, #541).
+# Durable multi-step workflows: Pgbus::Workflow (issues #540, #541, #542, #549).
 class Views::Docs::Pages::Workflows < DocsUI::Page
   title "Workflows"
   eyebrow "Guide"
@@ -18,6 +18,7 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
     removing_steps
     housekeeping
     operating
+    monitoring
     observability
     testing
     how_it_works
@@ -531,6 +532,84 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
         `available_actions`) and `pgbus_workflows_attention`. Arguments, step
         outputs, signal payloads and error text are redacted unless the server
         allows payloads and the call sets `include_payloads`.
+      MD
+    end
+  end
+
+  def monitoring
+    DocsUI::Section("Monitoring") do
+      md <<~'MD'
+        **Workflow insights** (`/pgbus/workflows/definitions`, linked from the
+        Workflows page as "Insights by class") answers how a workflow class is
+        doing, not where one run is. The list has one row per class (every
+        registered `Pgbus::Workflow` subclass and every class name still in
+        `pgbus_workflows`): runs going on now, paused, needing attention, the
+        runs that finished or were cancelled in the window, and the p50/p95
+        end-to-end duration (created → finished). A class that no longer loads
+        says "definition not loaded"; one with ongoing runs on a
+        `removed_step` says how many.
+
+        A class's page (`/pgbus/workflows/definitions/OrderWorkflow`, or
+        `Billing::OrderWorkflow`) shows its steps in order as a **pipeline**:
+        each step with the runs sitting at it now (scheduled, running,
+        waiting, paused), the p50/p95/p99 run time and the pickup latency
+        (scheduled → started) of its attempts that finished in the window,
+        and their failure (an error was recorded), reattempt and skip rates.
+        Percentiles over fewer than 20 attempts carry their sample size and a
+        "few samples" note. Below: runs started, finished and cancelled per
+        bucket (5 min for 1 h, 1 h for 24 h, 6 h for 7 d, 1 d for 30 d), the
+        end-to-end duration distribution, a **funnel** (of the runs started
+        in the window, how many reached each step and where each one is now)
+        and the same numbers for the last five app revisions that finished an
+        attempt, newest first, so a regression after a deploy shows as a row
+        (a failure rate more than five points above the revision before is
+        marked). The window is 1 h, 24 h (default), 7 d or 30 d, capped at
+        `workflow_retention`. Every count of runs a list filter can express
+        (runs at a step now, by status, started or ended in the window, where
+        the funnel's runs are now) links to the Workflows list filtered to
+        exactly those runs; attempt-level numbers (percentiles, rates, the
+        funnel's "reached", the per-revision rows) are text. The list gained `ended_from`/`ended_to`
+        (when a run finished or was cancelled) for it, and the need-attention
+        counts open Needs attention narrowed to the class
+        (`/pgbus/workflows/attention?workflow_class=OrderWorkflow`).
+
+        The numbers come from the step and run rows, on the indexes the
+        tables already have: on about 1 M step rows over 20 classes a class's
+        page reads in about 25 ms and the list in about 100 ms over 24 hours
+        (the budgets `rake bench:workflow_insights` checks: 250 and 500 ms);
+        over 30 days both take about 300 ms, which the bench reports without
+        a budget. The read-only MCP server has the same:
+        `pgbus_workflow_definitions(window:)` and
+        `pgbus_workflow_stats(workflow_class:, window:)`, and
+        `pgbus_workflows_attention` takes `workflow_class:`.
+
+        **Alerts** belong in Prometheus or AppSignal, on the metrics below.
+        Two starting points: a step whose attempts end in a reattempt or a
+        pause (an exception, or the body's own `reattempt!`/`pause!`) more
+        than 5 % of the time for 15 minutes, and runs needing a person for an
+        hour:
+      MD
+      DocsUI::Code(<<~'YAML', filename: "prometheus/rules/pgbus_workflows.yml", lexer: :yaml)
+        groups:
+          - name: pgbus-workflows
+            rules:
+              - alert: PgbusWorkflowStepFailing
+                expr: |
+                  sum by (workflow_class, step) (rate(pgbus_workflow_steps_total{outcome=~"reattempted|paused"}[15m]))
+                    / sum by (workflow_class, step) (rate(pgbus_workflow_steps_total[15m])) > 0.05
+                for: 15m
+                annotations:
+                  summary: "{{ $labels.workflow_class }}#{{ $labels.step }} fails on {{ $value | humanizePercentage }} of its attempts"
+              - alert: PgbusWorkflowsNeedAttention
+                expr: sum by (workflow_class) (pgbus_workflows_stuck) > 0
+                for: 1h
+                annotations:
+                  summary: "{{ $value }} {{ $labels.workflow_class }} runs need a person: /pgbus/workflows/attention"
+      YAML
+      md <<~'MD'
+        On AppSignal, the bundled `main` dashboard (`pgbus dashboard main`) has
+        a workflows row: steps per outcome, step run time, workflows by status
+        and stuck workflows.
       MD
     end
   end

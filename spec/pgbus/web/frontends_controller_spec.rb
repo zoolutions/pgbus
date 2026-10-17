@@ -1,8 +1,11 @@
 # frozen_string_literal: true
 
-require "spec_helper"
-require "action_controller"
-require_relative "../../../app/controllers/pgbus/frontends_controller"
+# rails_helper, not a bare require of the controller: loaded before the dummy
+# app initializes, the controller's skip of verify_same_origin_request would
+# run before ActionController::Base gains protect_from_forgery, which then
+# appends the check to every descendant and 422s the request specs that load
+# a JS module (a run of spec/pgbus/web before spec/requests).
+require "rails_helper"
 
 RSpec.describe Pgbus::FrontendsController do
   describe "STATIC_ASSETS" do
