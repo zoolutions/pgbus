@@ -85,10 +85,18 @@ RSpec.describe Pgbus::Workflow::TestHelpers do
       expect(described_class).to have_received(:perform).once
     end
 
-    it "raises on waiting" do
-      statuses.replace(%w[waiting])
+    it "raises StepWaiting on waiting, naming the signal or the batch the step waits for" do
+      statuses.replace(%w[waiting waiting])
+      parked = double(step_name: "ship", batch_id: nil, wait_for: "shipped", timeout_at: nil)
+      allow(described_class).to receive(:waiting_step).with(workflow).and_return(parked)
 
-      expect { speedrun_workflow(workflow) }.to raise_error(described_class::Error, /is waiting/)
+      expect { speedrun_workflow(workflow) }
+        .to raise_error(Pgbus::Workflow::StepWaiting, /waiting on step ship for signal shipped: deliver_signal/)
+
+      fanned_out = double(step_name: "notify", batch_id: "b-1", wait_for: nil)
+      allow(described_class).to receive(:waiting_step).with(workflow).and_return(fanned_out)
+      expect { speedrun_workflow(workflow) }
+        .to raise_error(Pgbus::Workflow::StepWaiting, /notify's batch b-1: complete_fan_out/)
     end
 
     it "returns a run that finishes on the last allowed step" do
@@ -101,6 +109,66 @@ RSpec.describe Pgbus::Workflow::TestHelpers do
       allow(workflow).to receive(:status).and_return("ready")
 
       expect { speedrun_workflow(workflow, max_steps: 3) }.to raise_error(described_class::Error, /still ready after 3 steps/)
+    end
+  end
+
+  describe "#deliver_signal" do
+    it "signals the run and runs the step that signal scheduled" do
+      statuses.replace(%w[ready])
+      allow(workflow).to receive(:signal!)
+      allow(described_class).to receive(:scheduled_step).and_return(scheduled)
+
+      deliver_signal(workflow, :shipped, payload: { at: "today" })
+
+      expect(workflow).to have_received(:signal!).with(:shipped, payload: { at: "today" }, idempotency_key: nil,
+                                                                 actor: "test_helpers")
+      expect(described_class).to have_received(:perform).with(scheduled, workflow)
+    end
+  end
+
+  describe "#complete_fan_out" do
+    let(:waiting) { double("WorkflowStep", id: 9, batch_id: "b-1") }
+
+    it "completes every member of the waiting step's batch and runs its BatchFinishedJob inline" do
+      allow(described_class).to receive(:waiting_step).with(workflow).and_return(waiting)
+      allow(Pgbus::Batch).to receive(:executions_migrated?).and_return(true)
+      relation = double(pluck: %w[j-1 j-2])
+      allow(Pgbus::BatchExecution).to receive(:where).with(batch_id: "b-1").and_return(double(order: relation))
+      allow(Pgbus::Batch).to receive(:job_completed)
+      job = instance_double(Pgbus::Workflow::BatchFinishedJob, perform_now: nil)
+      allow(Pgbus::Workflow::BatchFinishedJob).to receive(:new).with(9).and_return(job)
+
+      expect(complete_fan_out(workflow)).to be(workflow)
+      expect(Pgbus::Batch).to have_received(:job_completed).with("b-1", job_id: "j-1")
+      expect(Pgbus::Batch).to have_received(:job_completed).with("b-1", job_id: "j-2")
+      expect(job).to have_received(:perform_now)
+    end
+
+    it "counts the members complete through the counters before the executions table exists" do
+      allow(described_class).to receive(:waiting_step).with(workflow).and_return(waiting)
+      allow(Pgbus::Batch).to receive(:executions_migrated?).and_return(false)
+      allow(Pgbus::Batch).to receive(:find).with("b-1").and_return(instance_double(Pgbus::Batch, pending_jobs: 2))
+      allow(Pgbus::Batch).to receive(:job_completed)
+      job = instance_double(Pgbus::Workflow::BatchFinishedJob, perform_now: nil)
+      allow(Pgbus::Workflow::BatchFinishedJob).to receive(:new).with(9).and_return(job)
+
+      complete_fan_out(workflow)
+
+      expect(Pgbus::Batch).to have_received(:job_completed).with("b-1").twice
+    end
+
+    it "raises when the run is not waiting on a batch" do
+      allow(described_class).to receive(:waiting_step).and_return(nil)
+
+      expect { complete_fan_out(workflow) }.to raise_error(described_class::Error, /not waiting on a fan_out batch/)
+    end
+  end
+
+  describe "#expire_wait" do
+    it "raises when no waiting step has a wait_timeout:" do
+      allow(described_class).to receive(:waiting_step).and_return(double(timeout_at: nil))
+
+      expect { expire_wait(workflow) }.to raise_error(described_class::Error, /no waiting step with a wait_timeout:/)
     end
   end
 

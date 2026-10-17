@@ -325,6 +325,35 @@ RSpec.describe Pgbus::Generators::MigrationDetector do
         expect(detector.missing_migrations).to include(:add_workflows)
       end
 
+      it "queues add_workflow_signals, not add_workflows, when the core tables predate waiting steps" do
+        add_table("pgbus_workflows")
+        add_table("pgbus_workflow_steps")
+        add_table("pgbus_workflow_events")
+        stub_columns("pgbus_workflow_steps", %w[id workflow_id step_name status])
+
+        expect(detector.missing_migrations).to include(:add_workflow_signals)
+        expect(detector.missing_migrations).not_to include(:add_workflows)
+      end
+
+      it "queues add_workflow_signals when the steps have the columns but the signals table is missing" do
+        %w[pgbus_workflows pgbus_workflow_steps pgbus_workflow_events].each { |table| add_table(table) }
+        stub_columns("pgbus_workflow_steps", %w[id batch_id wait_for signal_id waiting_since timeout_at])
+
+        expect(detector.missing_migrations).to include(:add_workflow_signals)
+      end
+
+      it "queues only add_workflows (which carries the waiting columns) on an install without workflow tables" do
+        expect(detector.missing_migrations).to include(:add_workflows)
+        expect(detector.missing_migrations).not_to include(:add_workflow_signals)
+      end
+
+      it "queues nothing for workflows when every table and column is present" do
+        %w[pgbus_workflows pgbus_workflow_steps pgbus_workflow_events pgbus_workflow_signals].each { |table| add_table(table) }
+        stub_columns("pgbus_workflow_steps", %w[id batch_id wait_for signal_id waiting_since timeout_at])
+
+        expect(detector.missing_migrations).not_to include(:add_workflows, :add_workflow_signals)
+      end
+
       it "does not queue add_workflows when all three tables exist" do
         add_table("pgbus_workflows")
         add_table("pgbus_workflow_steps")
@@ -534,7 +563,7 @@ RSpec.describe Pgbus::Generators::MigrationDetector do
         add_queue_states add_outbox add_recurring add_failed_events_index
         add_processed_event_completion add_batch_executions add_batch_callback_jobs
         add_stream_queues tune_autovacuum tune_fillfactor add_presence_seats add_deploy_tasks
-        add_workflows
+        add_workflows add_workflow_signals
       ]
 
       keys.each do |key|

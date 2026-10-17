@@ -121,7 +121,20 @@ module Pgbus
         rescue StandardError => e
           return claim.with(guard_error: e)
         end
-        verdict ? outcome!(record, step, notes, klass, verdict) : claim
+        return outcome!(record, step, notes, klass, verdict) if verdict
+
+        gate(record, step, definition, workflow, claim)
+      end
+
+      # A wait_for: step runs only with a signal (or once its wait timed
+      # out); without one it parks and this delivery ends. A matcher that
+      # raises is handed to the exception policies, like a guard.
+      def gate(record, step, definition, workflow, claim)
+        return claim unless definition.waits_for_signal?
+
+        Signals.gate(record, step, definition, workflow) ? claim : nil
+      rescue StandardError => e
+        claim.with(guard_error: e)
       end
 
       def cancel?(klass, workflow)
@@ -169,6 +182,7 @@ module Pgbus
         outcome = decision.outcome if decision
         Runner.locked(claim.record.workflow_id) do |record, notes|
           next debug("step #{claim.step.id}'s run was deleted while the step ran") unless record
+          next park_fan_out(record, claim, outcome, notes) if outcome&.action == :fan_out
 
           notes.report(decision.handler_error, handler_context(claim)) if decision&.handler_error
           StepOutcome.apply(record, claim.step, outcome, notes: notes, error: error, output: claim.workflow.pending_output,
@@ -177,8 +191,13 @@ module Pgbus
         end
       end
 
-      # A row moves away from in_progress and never back, so an attempt that
-      # finds it gone has been declared stalled (or its run cancelled): late.
+      def park_fan_out(record, claim, outcome, notes)
+        FanOut.park(record, claim.step, outcome, notes: notes, output: claim.workflow.pending_output)
+      end
+
+      # While its body runs, a row leaves in_progress only for a terminal
+      # status (a parked row went waiting before any body ran), so an attempt
+      # that finds it gone has been declared stalled (or its run cancelled): late.
       def attempt_active?(claim) = WorkflowStep.where(id: claim.step.id, status: "in_progress").exists?
 
       # A late attempt that raised: its outcome is ignored either way, so an

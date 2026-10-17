@@ -15,7 +15,8 @@ RSpec.describe Pgbus::Configuration::WorkflowSettings do
         workflow_stall_threshold: 3600,
         workflow_stall_action: :pause,
         workflow_max_payload_size: 131_072,
-        workflow_error_backtrace_lines: 50
+        workflow_error_backtrace_lines: 50,
+        workflow_waiting_visibility_threshold: 7 * 24 * 3600
       )
     end
 
@@ -33,10 +34,13 @@ RSpec.describe Pgbus::Configuration::WorkflowSettings do
       expect(config.workflow_retention).to eq(7 * 24 * 3600)
       expect(config.workflow_sweep_interval).to eq(60)
       expect(config.workflow_stall_threshold).to eq(600)
+      config.workflow_waiting_visibility_threshold = 2.days
+      expect(config.workflow_waiting_visibility_threshold).to eq(2 * 24 * 3600)
     end
 
     it "reject zero and non-numeric values on assignment" do
-      %i[workflow_retention workflow_sweep_interval workflow_stall_threshold].each do |setting|
+      %i[workflow_retention workflow_sweep_interval workflow_stall_threshold
+         workflow_waiting_visibility_threshold].each do |setting|
         expect { config.public_send("#{setting}=", 0) }.to raise_error(Pgbus::ConfigurationError, /#{setting}/)
         expect { config.public_send("#{setting}=", "soon") }.to raise_error(Pgbus::ConfigurationError, /#{setting}/)
       end
@@ -49,8 +53,9 @@ RSpec.describe Pgbus::Configuration::WorkflowSettings do
       expect { config.validate! }.not_to raise_error
     end
 
-    it "rejects an infinite sweep interval, stall threshold or retention" do
-      %i[workflow_sweep_interval workflow_stall_threshold workflow_retention].each do |setting|
+    it "rejects an infinite sweep interval, stall threshold, waiting threshold or retention" do
+      %i[workflow_sweep_interval workflow_stall_threshold workflow_retention
+         workflow_waiting_visibility_threshold].each do |setting|
         fresh = Pgbus::Configuration.new
         fresh.public_send("#{setting}=", Float::INFINITY)
 
@@ -65,6 +70,10 @@ RSpec.describe Pgbus::Configuration::WorkflowSettings do
       config.workflow_sweep_interval = 300
       config.instance_variable_set(:@workflow_stall_threshold, nil)
       expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /workflow_stall_threshold/)
+
+      config.workflow_stall_threshold = 3600
+      config.instance_variable_set(:@workflow_waiting_visibility_threshold, nil)
+      expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /workflow_waiting_visibility_threshold/)
     end
   end
 

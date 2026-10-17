@@ -54,7 +54,11 @@ module Pgbus
     #   paused_error  paused on a step that failed with any other error
     #   paused_manual paused otherwise (the step called pause!, or an outside pause!)
     #   overdue       ready, its scheduled step due more than +threshold+ ago
-    def self.stuck_reason_counts(threshold:, now: Time.current)
+    #   waiting_overdue waiting longer than +waiting_threshold+ on a step
+    #                 without a wait_timeout: (only with +waiting_threshold+,
+    #                 which needs the waiting-step columns)
+    def self.stuck_reason_counts(threshold:, now: Time.current, waiting_threshold: nil)
+      waiting = !waiting_threshold.nil?
       sql = <<~SQL
         SELECT stuck.workflow_class, stuck.reason, COUNT(*) AS runs
         FROM (
@@ -64,18 +68,20 @@ module Pgbus
                    WHEN w.status = 'paused' AND s.status = 'failed' THEN 'paused_error'
                    WHEN w.status = 'paused' THEN 'paused_manual'
                    WHEN w.status = 'ready' AND s.status = 'scheduled' AND s.scheduled_at < $1 THEN 'overdue'
+                   #{"WHEN w.status = 'waiting' AND s.status = 'waiting' AND s.timeout_at IS NULL AND s.waiting_since < $2 THEN 'waiting_overdue'" if waiting}
                  END AS reason
           FROM #{table_name} w
           LEFT JOIN LATERAL (
-            SELECT status, error_class, scheduled_at FROM #{WorkflowStep.table_name}
+            SELECT status, error_class, scheduled_at#{", timeout_at, waiting_since" if waiting} FROM #{WorkflowStep.table_name}
             WHERE workflow_id = w.workflow_id ORDER BY id DESC LIMIT 1
           ) s ON TRUE
-          WHERE w.status IN ('paused', 'ready')
+          WHERE w.status IN ('paused', 'ready'#{", 'waiting'" if waiting})
         ) stuck
         WHERE stuck.reason IS NOT NULL
         GROUP BY stuck.workflow_class, stuck.reason
       SQL
-      connection.exec_query(sql, "WorkflowEntry Stuck", [now - threshold]).rows.to_h do |klass, reason, count|
+      binds = waiting ? [now - threshold, now - waiting_threshold] : [now - threshold]
+      connection.exec_query(sql, "WorkflowEntry Stuck", binds).rows.to_h do |klass, reason, count|
         [[klass, reason], count.to_i]
       end
     end

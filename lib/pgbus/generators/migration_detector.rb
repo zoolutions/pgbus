@@ -60,6 +60,10 @@ module Pgbus
       # The three tables pgbus:add_workflows creates (issue #540).
       WORKFLOW_TABLES = %w[pgbus_workflows pgbus_workflow_steps pgbus_workflow_events].freeze
 
+      # The waiting-step columns pgbus:add_workflow_signals adds to
+      # pgbus_workflow_steps (issue #541), with the pgbus_workflow_signals table.
+      WORKFLOW_WAITING_COLUMNS = %w[batch_id wait_for signal_id waiting_since timeout_at].freeze
+
       # generator_key → Rails generator name. Passed to Thor's invoke.
       #
       # Note: uniqueness_keys invokes add_uniqueness_keys, which only
@@ -82,6 +86,7 @@ module Pgbus
         add_recurring: "pgbus:add_recurring",
         add_deploy_tasks: "pgbus:add_deploy_tasks",
         add_workflows: "pgbus:add_workflows",
+        add_workflow_signals: "pgbus:add_workflow_signals",
         add_failed_events_index: "pgbus:add_failed_events_index",
         add_processed_event_completion: "pgbus:add_processed_event_completion",
         add_batch_executions: "pgbus:add_batch_executions",
@@ -106,6 +111,7 @@ module Pgbus
         add_recurring: "recurring tasks + executions tables",
         add_deploy_tasks: "deploy tasks + runs tables (one-time jobs run after a rollover)",
         add_workflows: "workflow tables (durable multi-step workflows: runs, step attempts, audit trail)",
+        add_workflow_signals: "waiting workflow steps (fan_out, wait_for: signals, wait timeouts)",
         add_failed_events_index: "unique index on pgbus_failed_events (queue_name, msg_id)",
         add_processed_event_completion: "completed_at on pgbus_processed_events (two-phase idempotency claim)",
         add_batch_executions: "batch execution-row tracking (self-healing completion, on_failure rename)",
@@ -234,10 +240,19 @@ module Pgbus
 
       # The add_workflows template uses if_not_exists throughout, so a
       # half-present set of the three tables is safe to queue again.
+      #
+      # add_workflows carries the waiting-step schema too, so a database with
+      # no steps table needs only that one; a steps table without the columns
+      # (or a missing signals table) predates waiting steps.
       def workflows_migrations
-        return [] if WORKFLOW_TABLES.all? { |table| table_exists?(table) }
+        migrations = []
+        migrations << :add_workflows unless WORKFLOW_TABLES.all? { |table| table_exists?(table) }
+        return migrations unless table_exists?("pgbus_workflow_steps")
 
-        [:add_workflows]
+        columns = column_names("pgbus_workflow_steps")
+        waiting = WORKFLOW_WAITING_COLUMNS.all? { |column| columns.include?(column) } && table_exists?("pgbus_workflow_signals")
+        migrations << :add_workflow_signals unless waiting
+        migrations
       end
 
       def failed_events_index_migrations

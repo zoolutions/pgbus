@@ -15,14 +15,34 @@ module Pgbus
       def step(name = nil, before_step: nil, after_step: nil, **options, &block)
         raise ArgumentError, "a step needs a name or a block" if name.nil? && block.nil?
 
-        unknown = options.keys - StepDefinition::OPTIONS
-        if unknown.any?
-          raise ArgumentError,
-                "unknown step option #{unknown.first.inspect} (accepted: #{StepDefinition::OPTIONS.join(", ")})"
-        end
-
+        reject_unknown_options!(options)
         name ||= _workflow_steps.anonymous_name
         definition = StepDefinition.new(name: name, body: block || name.to_sym, **options)
+        self._workflow_steps = _workflow_steps.add(definition, before: before_step, after: after_step)
+        definition.name.to_sym
+      end
+
+      # fan_out :name, on_batch_failure: :pause!, **step_options do |b| ... end
+      #
+      # A step that adds a group of jobs with b.add and waits for them as one
+      # batch: the step parks as waiting, and the batch's on_complete resumes
+      # the run once every member finished. Any dead-lettered member applies
+      # on_batch_failure (:pause!, :cancel! or :skip!) with
+      # Pgbus::Workflow::FanOutFailed recorded. Takes every step option but
+      # wait_for:, wait_timeout: and on_timeout:. Without a block it runs the
+      # instance method of the same name, which gets the builder.
+      def fan_out(name = nil, on_batch_failure: :pause!, before_step: nil, after_step: nil, **options, &block)
+        raise ArgumentError, "a fan_out needs a name or a block" if name.nil? && block.nil?
+
+        name ||= _workflow_steps.anonymous_name
+        waits = options.keys & %i[wait_for wait_timeout on_timeout]
+        if waits.any?
+          raise ArgumentError, "fan_out #{name.to_s.to_sym.inspect} cannot take #{waits.first}: it waits for its batch, " \
+                               "not for a signal"
+        end
+
+        reject_unknown_options!(options)
+        definition = FanOutDefinition.new(name: name, body: block || name.to_sym, on_batch_failure: on_batch_failure, **options)
         self._workflow_steps = _workflow_steps.add(definition, before: before_step, after: after_step)
         definition.name.to_sym
       end
@@ -70,6 +90,15 @@ module Pgbus
       def step_job_options_for(step_name)
         own = _workflow_steps.fetch(step_name)&.job_options || {}
         _step_job_options.merge(own)
+      end
+
+      private
+
+      def reject_unknown_options!(options)
+        unknown = options.keys - StepDefinition::OPTIONS
+        return if unknown.empty?
+
+        raise ArgumentError, "unknown step option #{unknown.first.inspect} (accepted: #{StepDefinition::OPTIONS.join(", ")})"
       end
     end
   end

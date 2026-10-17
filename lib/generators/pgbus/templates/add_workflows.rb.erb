@@ -1,6 +1,8 @@
 class AddPgbusWorkflows < ActiveRecord::Migration<%= migration_version %>
   # if_not_exists throughout: pgbus:update queues this migration when any of
-  # the three tables is missing, so a half-present schema must not fail it.
+  # the three core tables is missing, so a half-present schema must not fail
+  # it. The waiting-step columns and pgbus_workflow_signals (issue #541) are
+  # here too, so a fresh install needs no pgbus:add_workflow_signals.
   # up/down rather than change: Rails 7.1 cannot reverse an add_foreign_key
   # that names its primary_key, and dropping the tables drops the keys.
   def up
@@ -65,6 +67,12 @@ class AddPgbusWorkflows < ActiveRecord::Migration<%= migration_version %>
       t.jsonb :error_causes
       t.string :worker
       t.string :app_revision
+      # Waiting steps (fan_out, wait_for:): also added by pgbus:add_workflow_signals.
+      t.string :batch_id
+      t.string :wait_for
+      t.bigint :signal_id
+      t.datetime :waiting_since
+      t.datetime :timeout_at
       t.datetime :created_at, null: false
     end
 
@@ -76,6 +84,10 @@ class AddPgbusWorkflows < ActiveRecord::Migration<%= migration_version %>
       name: "idx_pgbus_workflow_steps_stall", if_not_exists: true
     add_index :pgbus_workflow_steps, [:workflow_class, :step_name, :finished_at],
       name: "idx_pgbus_workflow_steps_insights", if_not_exists: true
+    add_index :pgbus_workflow_steps, :batch_id,
+      name: "idx_pgbus_workflow_steps_batch", if_not_exists: true
+    add_index :pgbus_workflow_steps, [:status, :timeout_at],
+      name: "idx_pgbus_workflow_steps_timeout", if_not_exists: true
     add_foreign_key :pgbus_workflow_steps, :pgbus_workflows,
       column: :workflow_id, primary_key: :workflow_id, on_delete: :cascade, if_not_exists: true
 
@@ -97,9 +109,32 @@ class AddPgbusWorkflows < ActiveRecord::Migration<%= migration_version %>
       name: "idx_pgbus_workflow_events_workflow", if_not_exists: true
     add_foreign_key :pgbus_workflow_events, :pgbus_workflows,
       column: :workflow_id, primary_key: :workflow_id, on_delete: :cascade, if_not_exists: true
+
+    # One row per signal delivered to a run (Pgbus::WorkflowSignal):
+    # pending → claimed → consumed.
+    create_table :pgbus_workflow_signals, if_not_exists: true do |t|
+      t.string :workflow_id, null: false
+      t.string :name, null: false
+      t.jsonb :payload, null: false, default: {}
+      t.string :idempotency_key
+      t.string :status, null: false, default: "pending"
+      t.bigint :claimed_by_step_id
+      t.datetime :created_at, null: false
+      t.datetime :claimed_at
+      t.datetime :consumed_at
+    end
+
+    add_index :pgbus_workflow_signals, [:workflow_id, :idempotency_key],
+      unique: true, where: "idempotency_key IS NOT NULL",
+      name: "idx_pgbus_workflow_signals_idempotency", if_not_exists: true
+    add_index :pgbus_workflow_signals, [:workflow_id, :name, :status],
+      name: "idx_pgbus_workflow_signals_pending", if_not_exists: true
+    add_foreign_key :pgbus_workflow_signals, :pgbus_workflows,
+      column: :workflow_id, primary_key: :workflow_id, on_delete: :cascade, if_not_exists: true
   end
 
   def down
+    drop_table :pgbus_workflow_signals, if_exists: true
     drop_table :pgbus_workflow_events, if_exists: true
     drop_table :pgbus_workflow_steps, if_exists: true
     drop_table :pgbus_workflows, if_exists: true

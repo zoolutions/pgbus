@@ -21,7 +21,7 @@ module Pgbus
 
       # Why an ongoing run needs a person (the sweep's gauge, and the
       # dashboard's needs-attention view later).
-      STUCK_REASONS = %w[paused_error stalled paused_manual overdue].freeze
+      STUCK_REASONS = %w[paused_error stalled paused_manual overdue waiting_overdue].freeze
 
       Transition = Data.define(:verb, :from, :to, :outside, :error, :effect)
 
@@ -33,7 +33,7 @@ module Pgbus
                          effect: "a running step finishes and records its outcome; nothing new is claimed"),
           Transition.new(verb: :resume, from: %w[paused], to: "ready", outside: true, error: :NotPaused,
                          effect: "a failed step runs again as a new attempt; a completed or skipped one is " \
-                                 "followed by the next step; a scheduled one is sent again"),
+                                 "followed by the next step; a scheduled one is sent again; a waiting one waits again"),
           Transition.new(verb: :resume_at, from: %w[paused], to: "ready", outside: true, error: :NotPaused,
                          effect: "the named step runs as a new attempt"),
           Transition.new(verb: :cancel, from: ONGOING, to: "cancelled", outside: true, error: :InvalidTransition,
@@ -44,6 +44,13 @@ module Pgbus
                          effect: "the scheduled step moves to the given time"),
           Transition.new(verb: :rerun, from: TERMINAL, to: "ready", outside: true, error: :InvalidTransition,
                          effect: "a new run starts with the same subject and arguments"),
+          Transition.new(verb: :skip, from: %w[waiting], to: "ready", outside: true, error: :InvalidTransition,
+                         effect: "the waiting step is skipped (a signal it holds is consumed) and the next step is " \
+                                 "scheduled, or the run finishes after the last"),
+          # signal leaves the state alone unless it wakes a waiting step (wake).
+          Transition.new(verb: :signal, from: ONGOING, to: nil, outside: true, error: :NotOngoing,
+                         effect: "the signal is stored; a waiting step it matches is scheduled again, otherwise it " \
+                                 "stays pending until a step claims it"),
           # Runner verbs
           Transition.new(verb: :claim, from: %w[ready], to: "performing", outside: false, error: :InvalidTransition,
                          effect: "the scheduled step moves to in_progress"),
@@ -64,7 +71,19 @@ module Pgbus
           Transition.new(verb: :hold, from: %w[paused], to: "paused", outside: false, error: :InvalidTransition,
                          effect: "an outcome that arrived after an outside pause!: recorded on the step; a " \
                                  "completed, skipped or reattempted step has its next row scheduled; the workflow " \
-                                 "stays paused")
+                                 "stays paused"),
+          Transition.new(verb: :park, from: %w[performing], to: "waiting", outside: false, error: :InvalidTransition,
+                         effect: "the step waits for a matching signal or for its fan-out batch; nothing is sent " \
+                                 "until it is woken"),
+          Transition.new(verb: :wake, from: %w[waiting], to: "ready", outside: false, error: :InvalidTransition,
+                         effect: "a matching signal arrived, or the wait timed out with on_timeout: :run: the " \
+                                 "waiting step is scheduled again"),
+          Transition.new(verb: :resolve, from: %w[waiting], to: "performing", outside: false,
+                         error: :InvalidTransition,
+                         effect: "the fan-out batch finished, the wait timed out, or an operator skipped the step: " \
+                                 "its outcome is applied as for a finished attempt"),
+          Transition.new(verb: :rewait, from: %w[paused], to: "waiting", outside: false, error: :NotPaused,
+                         effect: "resume! on a run paused while its step was waiting: it waits again")
         ].to_h { |transition| [transition.verb, transition] }
       )
 

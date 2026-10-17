@@ -18,6 +18,7 @@ module Pgbus
     EVENTS = %w[
       started step_scheduled step_started step_completed step_failed step_skipped step_reattempted
       paused resumed cancelled finished run_now rescheduled rerun stall_detected late_completion_ignored
+      signal_received signal_claimed step_waiting wait_timed_out fan_out_opened fan_out_finished
     ].freeze
 
     def self.record!(workflow_id:, event:, actor:, reason: nil, step: nil, details: {})

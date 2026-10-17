@@ -97,6 +97,8 @@ module Pgbus
         first = klass.workflow_steps.first
         raise ArgumentError, "#{klass.name} declares no steps" unless first
 
+        Waiting.check_schema!(klass)
+
         now = Time.current
         { workflow_id: SecureRandom.uuid, workflow_class: klass.name, status: "ready", current_step: first.name,
           step_job_options: klass.step_job_options.transform_keys(&:to_s), idempotency_key: idempotency_key&.to_s,
