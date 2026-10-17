@@ -259,6 +259,9 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
         - **Idempotency.** With an `idempotency_key`, a redelivery stores
           nothing, wakes nothing and returns the stored signal, whose
           `duplicate_delivery?` is true.
+        - **Audit.** `actor:` and `reason:` (both optional) go on the run's
+          `signal_received` event: `wf.signal!(:shipped, actor: "webhook",
+          reason: "carrier callback")`.
         - **Matchers.** `wait_for:` takes a signal name, a
           `Pgbus::Workflow::SignalMatcher.new(:shipped) { |payload| payload[:region] == "eu" }`,
           or any object answering `matches?(signal)`. A matcher runs under the
@@ -532,6 +535,42 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
         `available_actions`) and `pgbus_workflows_attention`. Arguments, step
         outputs, signal payloads and error text are redacted unless the server
         allows payloads and the call sets `include_payloads`.
+
+        **Acting over MCP** is a separate opt-in. With the write tools on, an
+        agent that found the paused runs can resume them after the fix:
+      MD
+      DocsUI::Code(<<~'RUBY', filename: "config/initializers/pgbus.rb")
+        Pgbus.configure do |config|
+          # Default false: the write tools do not exist at all. Read when the
+          # MCP server is built (pgbus mcp, Pgbus::MCP.rack_app).
+          config.mcp_write_tools = true
+        end
+      RUBY
+      md <<~'MD'
+        That adds `pgbus_workflow_resume`, `pgbus_workflow_cancel`,
+        `pgbus_workflow_skip_step`, `pgbus_workflow_resume_at` (with `step`),
+        `pgbus_workflow_run_now` and `pgbus_workflow_signal` (with `name`, a
+        JSON object `payload` of at most `workflow_max_payload_size` and an
+        optional `idempotency_key`, which a retried call should pass). Each
+        takes `workflow_id`, a required `reason` (1–500 characters) and an
+        optional `expected_status`: the call acts only if the run is still in
+        that status, so an agent acting on a stale read gets `ok: false`
+        instead of a surprise. A verb the run's `available_actions` does not
+        allow answers `ok: false` with the allowed list. Otherwise the call
+        goes through the same action as the dashboard's button, lands on the
+        audit trail with its reason as actor `mcp` (`mcp:<client name>` when
+        the transport knows the client), and answers
+        `{ ok:, reason:, workflow: }` with the run after the action (payloads
+        always redacted; a refused action adds `code` and the `status` the run
+        is in now). They are marked `destructiveHint: true`, and there are no
+        bulk tools: loop over `pgbus_workflows_attention`, one audited call
+        per run.
+
+        Enable them only on an authenticated endpoint: `Pgbus::MCP.rack_app`
+        with `token:` or `auth:`, or mounted inside your app's authenticated
+        routes, never public. An unauthenticated `rack_app` with the write
+        tools on logs a warning saying anyone who reaches it can change
+        workflow runs.
       MD
     end
   end

@@ -37,6 +37,13 @@ module Pgbus
       pgbus/mcp/workflow_insights_payload
       pgbus/mcp/tools/workflow_definitions_tool
       pgbus/mcp/tools/workflow_stats_tool
+      pgbus/mcp/write_tool
+      pgbus/mcp/tools/workflow_resume_tool
+      pgbus/mcp/tools/workflow_cancel_tool
+      pgbus/mcp/tools/workflow_skip_step_tool
+      pgbus/mcp/tools/workflow_resume_at_tool
+      pgbus/mcp/tools/workflow_run_now_tool
+      pgbus/mcp/tools/workflow_signal_tool
       pgbus/mcp/server
       pgbus/mcp/runner
       pgbus/mcp/rack_app

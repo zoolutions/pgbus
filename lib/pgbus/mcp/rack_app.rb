@@ -19,7 +19,8 @@ module Pgbus
     #
     # Security: requests are rejected with 401 unless they carry the configured
     # token (or pass the supplied auth callable). Run it on an internal network
-    # / behind your VPN, never internet-exposed.
+    # / behind your VPN, never internet-exposed. With config.mcp_write_tools on
+    # it also serves the workflow write tools (issue #550): gate it.
     #
     # DNS-rebinding protection: since mcp 0.23 the transport validates the Host
     # header (loopback only, by default) and the Origin header (same-origin
@@ -123,9 +124,13 @@ module Pgbus
         @token.nil? && @auth.nil?
       end
 
+      # With config.mcp_write_tools on, an unauthenticated mount can change
+      # workflow runs. Warned, not refused: a mount inside the app's own
+      # authenticated routes is gated where this class cannot see it.
       def warn_unauthenticated!
         Pgbus.logger.warn do
-          "[Pgbus::MCP] HTTP diagnostic server mounted without authentication. " \
+          writes = Server.write_tools? ? " config.mcp_write_tools is on: anyone who reaches it can change workflow runs." : ""
+          "[Pgbus::MCP] HTTP diagnostic server mounted without authentication.#{writes} " \
             "Pass token: or auth: to Pgbus::MCP.rack_app, and keep it on an internal network."
         end
       end

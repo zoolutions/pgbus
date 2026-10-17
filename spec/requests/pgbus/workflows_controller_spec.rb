@@ -249,7 +249,7 @@ RSpec.describe "Pgbus::WorkflowsController", type: :request do
       expect(flash[:notice]).to eq("Signal shipped sent.")
       expect(@stub_data_source.calls[:signal_workflow].last)
         .to eq([samples::SIGNAL_ID, { name: "shipped", payload: { "carrier" => "DHL" }, idempotency_key: "k-1",
-                                      actor: "dashboard" }])
+                                      actor: "dashboard", reason: nil }])
     end
 
     it "sends an empty payload as {}" do

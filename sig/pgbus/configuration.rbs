@@ -104,6 +104,8 @@ module Pgbus
     def max_retries=: (untyped) -> untyped
     def max_worker_lifetime: () -> untyped
     def max_worker_lifetime=: (untyped) -> untyped
+    def mcp_write_tools: () -> bool
+    def mcp_write_tools=: (untyped) -> untyped
     def metrics_backend: () -> untyped
     def metrics_backend=: (untyped) -> untyped
     def metrics_enabled: () -> bool

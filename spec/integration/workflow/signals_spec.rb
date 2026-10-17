@@ -92,6 +92,14 @@ RSpec.describe "Workflow signals (integration)", :integration do
       expect(signal.reload.status).to eq("consumed")
     end
 
+    it "records the caller's reason on the signal_received event" do
+      wf = ShipmentWorkflow.start!
+      wf.signal!(:shipped, actor: "mcp", reason: "carrier webhook lost")
+
+      received = wf.events.find { |event| event.event == "signal_received" }
+      expect([received.actor, received.reason]).to eq(["mcp", "carrier webhook lost"])
+    end
+
     it "sends nothing until the application transaction around signal! commits" do
       wf = run_until_waiting(ShipmentWorkflow.start!)
 
