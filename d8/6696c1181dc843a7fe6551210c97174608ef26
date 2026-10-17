@@ -1,0 +1,22 @@
+docs/performance.md
+  s_e3a487096d49a3::t_3971284c41df0e 296-303
+benchmarks/workflow_step_bench.rb
+  s_e3a487096d49a3::t_d95adb6f442646 45
+  s_e3a487096d49a3::t_5593d7e5971bf1 34-37
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "d86696c1181dc843a7fe6551210c97174608ef26",
+  "prompts": {},
+  "sessions": {
+    "s_e3a487096d49a3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "faf1faea-af65-4cb2-b526-81aed7772ead",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
