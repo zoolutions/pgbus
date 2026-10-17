@@ -17,7 +17,7 @@ RSpec.describe "Pgbus::DashboardController" do
     helpers = stdout.lines.map(&:strip).grep(/\APgbus::\w+Helper\z/)
     expect(helpers).to eq(%w[
       Pgbus::ApplicationHelper Pgbus::ButtonHelper Pgbus::DashboardHelper Pgbus::DeployTasksHelper
-      Pgbus::EventsHelper Pgbus::InsightsHelper Pgbus::ProcessesHelper Pgbus::StreamsHelper
+      Pgbus::EventsHelper Pgbus::InsightsHelper Pgbus::ProcessesHelper Pgbus::StreamsHelper Pgbus::WorkflowsHelper
     ].sort)
   end
 end

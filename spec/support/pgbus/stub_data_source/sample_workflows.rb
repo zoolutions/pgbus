@@ -151,10 +151,10 @@ module Pgbus
 
         def sample_scheduled(now)
           wf_row(now, SCHEDULED_ID, "SignupWorkflow", "ready", "reminder",
-                 subject_type: "User", subject_id: "42", step_status: "scheduled", scheduled_at: now + 172_800,
+                 subject_type: "User", subject_id: "42", step_status: "scheduled", scheduled_at: now + 176_400,
                  created_at: now - 600, updated_at: now - 595, step_names: %w[welcome reminder],
                  arguments: { "plan" => "pro", "user" => "gid://shop/User/42" },
-                 steps: [wf_step(53, "reminder", 1, "scheduled", now - 595, scheduled_at: now + 172_800),
+                 steps: [wf_step(53, "reminder", 1, "scheduled", now - 595, scheduled_at: now + 176_400),
                          ran(52, "welcome", 1, now - 600, 2)],
                  events: [wf_event(42, "step_scheduled", "system", now - 595, step_name: "reminder", attempt: 1),
                           wf_event(41, "started", "app", now - 600)])
