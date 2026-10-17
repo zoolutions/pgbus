@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
-require "time"
+require "pgbus/integrations/appsignal/job_span"
+require "pgbus/integrations/appsignal/event_span"
 
 module Pgbus
   module Integrations
@@ -10,16 +11,23 @@ module Pgbus
       #
       # Job and event-handler events open a BACKGROUND_JOB transaction so they
       # appear under AppSignal's "Performance > Background jobs" view, with
-      # action `<JobClass>#perform` or `<HandlerClass>#handle`. All other
-      # events are reported as counters or distributions only.
+      # action `<JobClass>#perform` or `<HandlerClass>#handle`. The transaction
+      # is opened when pgbus.executor.execute / pgbus.event_processed starts and
+      # completed when it finishes (JobSpan, EventSpan), so it is current while the
+      # job or handler runs and carries the error the execution raised. All
+      # other events are reported as counters or distributions only.
       #
       # All metric names are prefixed `pgbus_`. Tag keys avoid high-cardinality
       # values (no msg_id, no event_id) so AppSignal's metric storage stays
       # efficient.
       module Subscriber
-        BACKGROUND_JOB = "background_job"
         METRIC_PREFIX = "pgbus_"
-        private_constant :BACKGROUND_JOB, :METRIC_PREFIX
+
+        # Built once, at load: a span keeps its state in a fiber-local frame,
+        # never in itself.
+        JOB_SPAN = JobSpan.new.freeze
+        EVENT_SPAN = EventSpan.new.freeze
+        private_constant :METRIC_PREFIX, :JOB_SPAN, :EVENT_SPAN
 
         # Tracked so we can detach in reset! (used by specs). Installed once
         # at boot (the engine's after_initialize); @install_lock makes the
@@ -54,11 +62,11 @@ module Pgbus
 
           def subscribe_all
             [
-              subscribe("pgbus.executor.execute") { |event| on_executor_execute(event) },
+              ActiveSupport::Notifications.subscribe("pgbus.executor.execute", JOB_SPAN),
               subscribe("pgbus.job_completed") { |event| on_job_completed(event) },
               subscribe("pgbus.job_failed") { |event| on_job_failed(event) },
               subscribe("pgbus.job_dead_lettered") { |event| on_job_dead_lettered(event) },
-              subscribe("pgbus.event_processed") { |event| on_event_processed(event) },
+              ActiveSupport::Notifications.subscribe("pgbus.event_processed", EVENT_SPAN),
               subscribe("pgbus.event_failed") { |event| on_event_failed(event) },
               subscribe("pgbus.event_dead_lettered") { |event| on_event_dead_lettered(event) },
               subscribe("pgbus.client.send_message") { |event| on_send_message(event) },
@@ -98,22 +106,6 @@ module Pgbus
 
           # ── Job execution ───────────────────────────────────────────────
 
-          def on_executor_execute(event)
-            payload = event.payload
-            transaction = ::Appsignal::Transaction.create(BACKGROUND_JOB)
-            transaction.set_action_if_nil("#{payload[:job_class] || "UnknownJob"}#perform")
-            apply_queue_start(transaction, payload[:enqueued_at])
-            transaction.add_tags(job_tags(payload))
-            transaction.add_params_if_nil { { arguments: payload[:arguments] } }
-            ::Appsignal.add_distribution_value(
-              "#{METRIC_PREFIX}job_duration_ms",
-              event.duration,
-              { queue: payload[:queue], job_class: payload[:job_class] }
-            )
-          ensure
-            ::Appsignal::Transaction.complete_current!
-          end
-
           def on_job_completed(event)
             payload = event.payload
             ::Appsignal.increment_counter(
@@ -123,15 +115,18 @@ module Pgbus
             )
           end
 
+          # The counter has its own guard so a raise there cannot keep the
+          # error from being reported.
           def on_job_failed(event)
             payload = event.payload
-            ::Appsignal.increment_counter(
-              "#{METRIC_PREFIX}queue_job_count",
-              1,
-              { queue: payload[:queue], job_class: payload[:job_class], status: "failed" }
-            )
-            err = payload[:exception_object]
-            ::Appsignal.set_error(err) if err && ::Appsignal.respond_to?(:set_error)
+            safely do
+              ::Appsignal.increment_counter(
+                "#{METRIC_PREFIX}queue_job_count",
+                1,
+                { queue: payload[:queue], job_class: payload[:job_class], status: "failed" }
+              )
+            end
+            JOB_SPAN.report_unattached(payload[:exception_object], payload)
           end
 
           def on_job_dead_lettered(event)
@@ -145,40 +140,23 @@ module Pgbus
 
           # ── Event handler ───────────────────────────────────────────────
 
-          def on_event_processed(event)
-            payload = event.payload
-            transaction = ::Appsignal::Transaction.create(BACKGROUND_JOB)
-            transaction.set_action_if_nil("#{payload[:handler] || "UnknownHandler"}#handle")
-            apply_queue_start(transaction, payload[:published_at])
-            transaction.add_tags(handler_tags(payload))
-            ::Appsignal.add_distribution_value(
-              "#{METRIC_PREFIX}event_duration_ms",
-              event.duration,
-              { handler: payload[:handler], routing_key: payload[:routing_key] }
-            )
-            ::Appsignal.increment_counter(
-              "#{METRIC_PREFIX}event_count",
-              1,
-              { handler: payload[:handler], routing_key: payload[:routing_key], status: "processed" }
-            )
-          ensure
-            ::Appsignal::Transaction.complete_current!
-          end
-
+          # The counter has its own guard so a raise there cannot keep the
+          # error from being reported.
           def on_event_failed(event)
             payload = event.payload
-            ::Appsignal.increment_counter(
-              "#{METRIC_PREFIX}event_count",
-              1,
-              { handler: payload[:handler], routing_key: payload[:routing_key], status: "failed" }
-            )
-            err = payload[:exception_object]
-            ::Appsignal.set_error(err) if err && ::Appsignal.respond_to?(:set_error)
+            safely do
+              ::Appsignal.increment_counter(
+                "#{METRIC_PREFIX}event_count",
+                1,
+                { handler: payload[:handler], routing_key: payload[:routing_key], status: "failed" }
+              )
+            end
+            EVENT_SPAN.report_unattached(payload[:exception_object], payload)
           end
 
           # A counter only, like on_job_dead_lettered: nothing is raised at
-          # move time, and the handler's error already went out through
-          # pgbus.event_failed on the attempt that raised (issue #543). A body
+          # move time, and the handler's error already went out on the
+          # attempt that raised (issues #543, #552). A body
           # that is not JSON leaves handler and routing_key nil; compact drops
           # those tags, as Metrics::Subscriber does.
           def on_event_dead_lettered(event)
@@ -294,49 +272,6 @@ module Pgbus
               1,
               { reason: payload[:reason], kind: "consumer" }
             )
-          end
-
-          # ── Helpers ─────────────────────────────────────────────────────
-
-          # AppSignal expects queue-start as Unix epoch milliseconds. Pgbus
-          # carries it as either an ISO-8601 String or a Time — both happen
-          # in practice (executor passes the JSON string, handler passes a
-          # parsed Time).
-          def apply_queue_start(transaction, value)
-            return unless value
-
-            millis =
-              case value
-              when Time
-                (value.to_f * 1_000).to_i
-              when String
-                (Time.parse(value).to_f * 1_000).to_i
-              when Numeric
-                value.to_i
-              end
-            transaction.set_queue_start(millis) if millis
-          rescue ArgumentError
-            # Unparseable timestamp — skip rather than blow up.
-          end
-
-          def job_tags(payload)
-            tags = {
-              "queue" => payload[:queue],
-              "job_class" => payload[:job_class],
-              "attempts" => payload[:read_ct]
-            }
-            tags["active_job_id"] = payload[:job_id] if payload[:job_id]
-            tags["provider_job_id"] = payload[:provider_job_id] if payload[:provider_job_id]
-            tags["request_id"] = payload[:provider_job_id] || payload[:job_id]
-            tags.compact
-          end
-
-          def handler_tags(payload)
-            {
-              "handler" => payload[:handler],
-              "routing_key" => payload[:routing_key],
-              "attempts" => payload[:read_ct]
-            }.compact
           end
         end
       end
