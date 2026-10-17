@@ -53,6 +53,10 @@ module Pgbus
     # database, the batch row is gone with the rest (a separate pgbus
     # database commits the row on its own connection). A bare
     # ActiveJob.perform_all_later in the block does not keep it: use b.add.
+    # Add jobs that defer: one sent at once, on a connection other than the
+    # caller's, can run before the batch commits and is then accounted for
+    # only by the stalled-execution sweep. A job instance is one member (one
+    # job_id): enqueue it once.
     #
     #   Pgbus::Batch.start(description: "Import") do |b|
     #     b.on_complete ImportDoneJob

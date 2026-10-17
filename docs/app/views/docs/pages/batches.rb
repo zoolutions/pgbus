@@ -67,7 +67,13 @@ class Views::Docs::Pages::Batches < DocsUI::Page
         (`config.connects_to`) the batch row is written on its own connection
         and commits on its own: a rollback leaves a pending batch with no
         jobs, which the stalled-batch sweep later starts and finishes empty,
-        firing its callbacks. A bare
+        firing its callbacks. Inside a transaction, add jobs that defer: a
+        job without `enqueue_after_transaction_commit` is sent at once, and
+        unless pgbus sends on the caller's own connection a worker can run it
+        before the transaction commits the batch, so the batch waits for the
+        stalled-execution sweep to account for it. Enqueue a job instance
+        once: an instance is one member (one `job_id`), and a second enqueue
+        of it runs outside the batch. A bare
         `ActiveJob.perform_all_later` inside the block does not record the
         batch on its jobs, so use `b.add` there. A `batch.add` inside a
         transaction raises `Pgbus::Batch::AlreadyFinished` when the
