@@ -174,7 +174,9 @@ class Views::Docs::Pages::Observability < DocsUI::Page
     DocsUI::Section("AppSignal", description: "Auto-installs when the gem is present.") do
       md <<~'MD'
         Load the `appsignal` gem and pgbus auto-installs a subscriber and a minutely
-        probe — background-job transactions for every job and handler, `pgbus_`
+        probe — background-job transactions for every job and handler (current for
+        the whole execution, so `Appsignal.add_tags` or `Appsignal.set_error` from
+        job code attach to them, and carrying the error the execution raised), `pgbus_`
         counters and distributions, and gauges for queue depth, oldest-message age,
         DLQ depth, dead tuples, and MVCC horizon. `pgbus_queue_latency` is computed
         from the oldest *claimable* message (visibility timeout elapsed), so a

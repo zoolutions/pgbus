@@ -917,12 +917,18 @@ By default, Pgbus logs caught exceptions and continues. To route them to your AP
 ```ruby
 Pgbus.configure do |c|
   c.error_reporters << ->(ex, ctx) {
-    Appsignal.set_error(ex) { |t| t.set_tags(ctx) }
+    Appsignal.report_error(ex) do |t|
+      t.set_namespace("background_job") if ctx[:job_class]
+      t.set_action("#{ctx[:job_class]}#perform") if ctx[:job_class]
+      t.add_tags(ctx)
+    end
   }
 end
 ```
 
 Each reporter receives `(exception, context_hash)`. The context hash includes keys like `action`, `queue`, `job_class`, and `msg_id` depending on the call site. Reporters that accept a third argument also receive the Pgbus configuration object.
+
+Use `Appsignal.report_error`, not `Appsignal.set_error`: a reporter may run from a rescue where no AppSignal transaction is current, and there `set_error` does nothing. `report_error` works whether a transaction is current or not. With the [AppSignal integration](#appsignal-integration) installed, job and handler errors already reach AppSignal on their own transaction, so a reporter like the one above is only needed for the other rescue paths. It does not report those job errors a second time: AppSignal marks an exception once it is on a transaction (`Transaction#add_error`) and does not add a marked exception to another one.
 
 Reporters are wired into all critical rescue paths: job execution failures, worker fetch/process errors, dispatcher maintenance, supervisor fork failures, circuit breaker trips, outbox publish errors, and failed event recording. Non-critical paths (dashboard queries, stat recording) remain log-only.
 
@@ -951,7 +957,7 @@ If you upgraded from 0.9.x and previously did `rescue ArgumentError` around `Pgb
 
 When the `appsignal` gem is loaded in your app, Pgbus auto-installs a subscriber and a minutely probe that report into AppSignal:
 
-- **Background-job transactions** for every ActiveJob run and every event-bus handler invocation. Action names follow the AppSignal convention: `MyJob#perform`, `MyHandler#handle`. Tags include `queue`, `job_class`/`handler`, `routing_key`, `attempts`, and the `active_job_id` / `provider_job_id`. `enqueued_at` becomes the AppSignal `queue_start` timestamp so "time on queue" shows up correctly in the timeline.
+- **Background-job transactions** for every ActiveJob run and every event-bus handler invocation. Action names follow the AppSignal convention: `MyJob#perform`, `MyHandler#handle`. Tags include `queue`, `job_class`/`handler`, `routing_key`, `attempts`, and the `active_job_id` / `provider_job_id`. `enqueued_at` becomes the AppSignal `queue_start` timestamp so "time on queue" shows up correctly in the timeline. The transaction is current for the whole execution (deserialize, `perform`/`handle`, archive), so `Appsignal.add_tags`, `Appsignal.set_error` and `Appsignal.instrument` called from job or handler code attach to it, and the error an execution raised is reported on it, also when it was raised before `perform` (an unknown job class, arguments that cannot be deserialized).
 - **Custom counters and distributions** for sends, reads, broadcasts, outbox publishes, recurring scheduling, and worker recycles. All metric names are prefixed `pgbus_`.
 - **A minutely probe** that gauges queue depth (visible vs total), oldest message age per queue, DLQ depth, failed events count, dead-tuple totals, MVCC horizon age, active processes, and stream connection estimates.
 
