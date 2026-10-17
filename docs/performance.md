@@ -293,6 +293,14 @@ Method-level, not system-level: a step that does nothing still pays several
 round trips and the StepJob's own enqueue and execution, so this is the part
 pgbus adds on top of those, not a step rate.
 
+Waiting steps (issue #541) add a signal gate and a signal settle to every
+attempt; a step that does not wait skips both without a query. Same machine,
+same (fixed) bench, two runs each: `main` 82.3k / 81.4k i/s, the #541 branch
+81.7k / 81.2k i/s (inside the run-to-run noise); 85 objects / 9 744 bytes per
+step and 0 retained on both. The bench's fakes now answer
+`WorkflowEntry.connection` (`Runner.locked` asks it whether an app transaction
+is open); without it the bench raised `ConnectionNotDefined` on `main`.
+
 `Executor#execute` exposes the running message to the StepJob
 (`Pgbus::ActiveJob::Delivery`, for crash detection on redelivery). Same
 machine, `rake bench:one[executor_bench]`: `main` 50.7k / 51.3k i/s, this branch
