@@ -1,0 +1,11 @@
+docs/app/views/docs/pages/workflows.rb
+  ai_agent 580
+CHANGELOG.md
+  ai_agent 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "44a485a7f601e34dd24042f08bec53cca1ae994d",
+  "prompts": {}
+}
