@@ -109,6 +109,15 @@ RSpec.describe "Pgbus::WorkflowsController", type: :request do
       expect(response.body).to include(">Cancel</button>")
     end
 
+    it "offers no Rerun when the finished run's class is not loaded here" do
+      row = @stub_data_source.workflows_list.find { |w| w[:workflow_id] == samples::FINISHED_ID }
+      row[:class_loaded] = false
+
+      get "/pgbus/workflows/#{samples::FINISHED_ID}"
+
+      expect(response.body).not_to include(">Rerun</button>")
+    end
+
     it "answers 404 for an unknown run" do
       get "/pgbus/workflows/nope"
 
