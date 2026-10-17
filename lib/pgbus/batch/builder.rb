@@ -59,6 +59,7 @@ module Pgbus
         raise ArgumentError, UNTAGGED_MESSAGE unless Thread.current[:pgbus_batch_id] == @batch.batch_id
 
         jobs = self.class.job_instances(jobs)
+        Pgbus::ActiveJob::BatchId.capture(jobs, @batch.batch_id)
         ::ActiveJob.perform_all_later(jobs) if jobs.any?
         yield if block_given?
         jobs

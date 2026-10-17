@@ -55,6 +55,21 @@ class Views::Docs::Pages::Batches < DocsUI::Page
         the batch, so the batch can finish before that job runs. Enqueue from
         the block itself.
 
+        A batch can be opened inside a database transaction, for example to
+        store `batch.batch_id` on the rows the transaction writes. Jobs with
+        `enqueue_after_transaction_commit` are sent once the transaction
+        commits, and they still join the batch: `b.add`, `batch.add` and
+        `perform_later` record the batch on the job instance, each job counts
+        itself in at commit, and only then does the batch start processing.
+        If the transaction rolls back, no job is sent, no callback fires and
+        the batch row is rolled back with everything else. A bare
+        `ActiveJob.perform_all_later` inside the block does not record the
+        batch on its jobs, so use `b.add` there. A `batch.add` inside a
+        transaction raises `Pgbus::Batch::AlreadyFinished` when the
+        transaction commits if the batch finished in the meantime. A member
+        job that adds siblings from its own `perform` is safe, because its
+        own run keeps the batch open.
+
         `Pgbus.batch` returns the `Pgbus::Batch` handle. Usually it is
         started; when `on_conflict: :discard` or `:log` finds the
         `uniqueness_key` held, the block never runs and the handle answers

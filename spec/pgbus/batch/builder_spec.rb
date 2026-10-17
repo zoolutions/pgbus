@@ -183,6 +183,15 @@ RSpec.describe Pgbus::Batch::Builder do
       expect(tag).to eq(batch.batch_id)
     end
 
+    it "tags each instance with the batch, so an enqueue deferred past the block still joins it" do
+      tagged_job = Class.new(work_job) { include Pgbus::ActiveJob::BatchId }
+      jobs = [tagged_job.new(1), tagged_job.new(2)]
+
+      batch = Pgbus.batch { |b| b.add(*jobs) }
+
+      expect(jobs.map(&:enqueue_batch_id)).to eq([batch.batch_id, batch.batch_id])
+    end
+
     it "flattens arrays and returns the jobs" do
       jobs = [work_job.new(1), work_job.new(2), work_job.new(3)]
       returned = nil

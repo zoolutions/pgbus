@@ -11,14 +11,16 @@ module Pgbus
         payload_hash = Concurrency.inject_metadata(active_job, payload_hash)
         payload_hash = Uniqueness.inject_metadata(active_job, payload_hash)
         payload_hash = FairShare.inject_metadata(active_job, payload_hash)
-        payload_hash = inject_batch_metadata(payload_hash, active_job: active_job)
+        payload_hash = inject_batch_metadata(payload_hash, active_job)
 
         if uniqueness_rejected?(active_job, payload_hash, queue: queue)
-          uncount_batch_job(payload_hash)
+          uncount_batch_job(payload_hash, active_job)
           return active_job
         end
 
         enqueue_with_concurrency(active_job, queue, payload_hash)
+      ensure
+        forget_enqueue_batch_id(active_job)
       end
 
       def enqueue_at(active_job, timestamp)
@@ -27,15 +29,17 @@ module Pgbus
         payload_hash = Concurrency.inject_metadata(active_job, payload_hash)
         payload_hash = Uniqueness.inject_metadata(active_job, payload_hash)
         payload_hash = FairShare.inject_metadata(active_job, payload_hash)
-        payload_hash = inject_batch_metadata(payload_hash, active_job: active_job)
+        payload_hash = inject_batch_metadata(payload_hash, active_job)
         delay = [(timestamp - Time.current.to_f).ceil, 0].max
 
         if uniqueness_rejected?(active_job, payload_hash, queue: queue)
-          uncount_batch_job(payload_hash)
+          uncount_batch_job(payload_hash, active_job)
           return active_job
         end
 
         enqueue_with_concurrency(active_job, queue, payload_hash, delay: delay)
+      ensure
+        forget_enqueue_batch_id(active_job)
       end
 
       def enqueue_all(active_jobs)
@@ -114,7 +118,7 @@ module Pgbus
         Batch.backfill_execution(payload_hash, msg_id, physical_queue(queue, priority)) if msg_id
         # A retry re-enqueue that is now live (sent, or parked as a blocked
         # execution) must stop the original attempt from signalling completion.
-        Batch.note_retry_reenqueued(payload_hash["job_id"]) if (msg_id || blocked) && retry_retagged?(payload_hash)
+        Batch.note_retry_reenqueued(payload_hash["job_id"]) if (msg_id || blocked) && retry_retagged?(payload_hash, active_job)
         uniqueness_key = Thread.current[:pgbus_acquired_uniqueness_key]
         UniquenessKey.clear_bind_stamp!(uniqueness_key) if uniqueness_key
         Thread.current[:pgbus_acquired_uniqueness_key] = nil
@@ -131,7 +135,7 @@ module Pgbus
         # database error from the slot upsert or the park is not ambiguous.
         if msg_id.nil? && !(sending && ambiguous_delivery?(e))
           rollback_acquired_uniqueness_lock
-          uncount_batch_job(payload_hash)
+          uncount_batch_job(payload_hash, active_job)
         else
           # Drop the thread-local so a later discard on this thread cannot
           # release that job's uniqueness lock, but do not DELETE the
@@ -210,7 +214,7 @@ module Pgbus
           # acquired earlier in this enqueue (no executor will release it), and
           # uncount it from its batch so completion is not waited on forever.
           rollback_acquired_uniqueness_lock
-          uncount_batch_job(payload_hash)
+          uncount_batch_job(payload_hash, active_job)
         when :raise
           raise ConcurrencyLimitExceeded, "Concurrency limit reached for key: #{key}"
         end
@@ -283,25 +287,39 @@ module Pgbus
 
       # Reverses inject_batch_metadata for a job discarded at enqueue time
       # (uniqueness duplicate or concurrency :discard conflict): the message is
-      # never sent, so it can never signal completion. Only applies while the
-      # tagging batch's block is still active on this thread.
-      def uncount_batch_job(payload_hash)
+      # never sent, so it can never signal completion. Only applies to a job
+      # counted in as a member (see #member_batch_id).
+      def uncount_batch_job(payload_hash, active_job)
         batch_id = payload_hash[Batch::METADATA_KEY]
         return unless batch_id
 
-        if batch_id == Thread.current[:pgbus_batch_id]
+        if batch_id == member_batch_id(active_job)
           Batch.untrack_enqueue(payload_hash)
-        elsif retry_retagged?(payload_hash)
+        elsif retry_retagged?(payload_hash, active_job)
           # The retry never became live; the original attempt's row and its
           # normal completion signal stand.
           Batch.forget_retry_reenqueued(payload_hash["job_id"])
         end
       end
 
-      # Tagged for a batch while no Batch#enqueue block is active on this
-      # thread — only a retry_on re-enqueue gets there (issue #424).
-      def retry_retagged?(payload_hash)
-        payload_hash[Batch::METADATA_KEY] && Thread.current[:pgbus_batch_id].nil?
+      # Tagged for a batch the job was neither added to nor enqueued inside
+      # the block of — only a retry_on re-enqueue gets there (issue #424).
+      def retry_retagged?(payload_hash, active_job)
+        payload_hash[Batch::METADATA_KEY] && member_batch_id(active_job).nil?
+      end
+
+      # The batch a job joins as a new member: the one it was added to, kept
+      # on the instance so it survives an enqueue deferred to after commit
+      # (issue #553), else the Batch#enqueue block active on this thread. The
+      # instance wins: a deferred enqueue can run while another batch's
+      # block is open on the committing thread.
+      def member_batch_id(active_job)
+        (active_job.enqueue_batch_id if active_job.respond_to?(:enqueue_batch_id)) ||
+          Thread.current[:pgbus_batch_id]
+      end
+
+      def forget_enqueue_batch_id(active_job)
+        active_job.enqueue_batch_id = nil if active_job.respond_to?(:enqueue_batch_id=)
       end
 
       # A retry_on re-enqueue of a job that is already a batch member: same
@@ -316,18 +334,17 @@ module Pgbus
         active_job.batch_id
       end
 
-      # Tag the payload with the active batch and count it in (guarded
-      # increment + execution row, before the send — Batch.track_enqueue). Pass
-      # track: false to only tag, when the caller counts a bulk once.
-      def inject_batch_metadata(payload_hash, active_job: nil, track: true)
-        batch_id = Thread.current[:pgbus_batch_id]
+      # Tag the payload with the job's batch and count it in (guarded
+      # increment + execution row, before the send — Batch.track_enqueue).
+      def inject_batch_metadata(payload_hash, active_job)
+        batch_id = member_batch_id(active_job)
         if batch_id
           tagged = payload_hash.merge(Batch::METADATA_KEY => batch_id)
-          Batch.track_enqueue(tagged) if track
+          Batch.track_enqueue(tagged)
           return tagged
         end
 
-        retry_batch_id = active_job && retry_batch_id_for(active_job)
+        retry_batch_id = retry_batch_id_for(active_job)
         return payload_hash unless retry_batch_id
 
         tagged = payload_hash.merge(Batch::METADATA_KEY => retry_batch_id)
@@ -335,14 +352,23 @@ module Pgbus
         tagged
       end
 
+      # Only tags: the bulk is counted once per batch below. A retry re-enqueue
+      # never takes the bulk path (retry_on enqueues one job at a time).
+      def tag_bulk_member(payload_hash, active_job)
+        batch_id = member_batch_id(active_job)
+        batch_id ? payload_hash.merge(Batch::METADATA_KEY => batch_id) : payload_hash
+      end
+
       def enqueue_immediate(queue, jobs, priority: nil)
         return if jobs.empty?
 
         payloads = jobs.map do |j|
-          inject_batch_metadata(FairShare.inject_metadata(j, Serializer.serialize_job_hash(j)), track: false)
+          tag_bulk_member(FairShare.inject_metadata(j, Serializer.serialize_job_hash(j)), j)
         end
-        # One guarded increment for the whole bulk, not one per job.
-        Batch.track_enqueue(payloads) if Thread.current[:pgbus_batch_id]
+        # One guarded increment per batch for the whole bulk, not one per job.
+        payloads.select { |p| p[Batch::METADATA_KEY] }
+                .group_by { |p| p[Batch::METADATA_KEY] }
+                .each_value { |members| Batch.track_enqueue(members) }
         physical = physical_queue(queue, priority)
         msg_ids = nil
         msg_ids = Pgbus.client.send_batch(queue, payloads, priority: priority)
@@ -361,6 +387,8 @@ module Pgbus
       rescue Pgbus::SchemaNotReady => e
         Pgbus.logger.error { "[Pgbus] #{e.message}" }
         raise
+      ensure
+        jobs.each { |j| forget_enqueue_batch_id(j) }
       end
 
       def scheduled_in_future?(job)
