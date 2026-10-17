@@ -1,0 +1,36 @@
+spec/pgbus/deploy/runner_spec.rb
+  s_e96e270ce76923::t_0e604cf3b8e55e 197-200,202-246
+  s_e96e270ce76923::t_6bab99d42a0687 201
+spec/pgbus/web/data_source_deploy_task_list_spec.rb
+  s_e96e270ce76923::t_59703b2d4ef2f9 17-18,57-63
+spec/pgbus/process/dispatcher_spec.rb
+  s_e96e270ce76923::t_59703b2d4ef2f9 561-571
+lib/pgbus/process/dispatcher.rb
+  s_e96e270ce76923::t_e9cb6e4a3409e9 687-688,691
+lib/pgbus/web/data_source/deploy_task_list.rb
+  s_e96e270ce76923::t_e9cb6e4a3409e9 12-14,16-17,29-30
+spec/integration/deploy_tasks_spec.rb
+  s_e96e270ce76923::t_a413a5ce971285 112-136
+lib/pgbus/deploy/runner.rb
+  s_e96e270ce76923::t_645c1222c88b9f 16-21,34,71,119,152,158,160,166-184
+docs/app/views/docs/pages/deploy_tasks.rb
+  s_e96e270ce76923::t_448cf5b8486554 120-124,172-180
+README.md
+  s_e96e270ce76923::t_448cf5b8486554 2245
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "28064bd1f2740fd4f377b146af335f58f929cd62",
+  "prompts": {},
+  "sessions": {
+    "s_e96e270ce76923": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5914cabb-29d8-407e-aea9-b5a4a5f09dbf",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}

@@ -1,0 +1,23 @@
+app/helpers/pgbus/processes_helper.rb
+  s_e96e270ce76923::t_e049d15f14544d 54
+spec/pgbus/helpers/processes_helper_spec.rb
+  s_e96e270ce76923::t_d4ed70a40a5892 140-148
+spec/support/pgbus/stub_data_source/sample_processes.rb
+  s_e96e270ce76923::t_e049d15f14544d 31-32,37-38,47
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "be41212400afac2325b94fc261185c8c94912415",
+  "prompts": {},
+  "sessions": {
+    "s_e96e270ce76923": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5914cabb-29d8-407e-aea9-b5a4a5f09dbf",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
