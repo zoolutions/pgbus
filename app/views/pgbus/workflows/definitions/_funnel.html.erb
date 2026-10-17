@@ -32,7 +32,7 @@
                   <ul class="flex flex-wrap gap-x-3">
                     <% here.each do |status| %>
                       <li><%= pgbus_link_to t("pgbus.workflow_insights.show.funnel.here.#{status}", count: step[:stopped][status.to_sym]),
-                                            pgbus_insight_runs_path(status: status, workflow_class: name, step: step[:name], created_from: since),
+                                            pgbus_insight_runs_path(status: status, workflow_class: name, step: step[:name], created_from: since, created_to: @window.now),
                                             data: { turbo_frame: "_top" } %></li>
                     <% end %>
                   </ul>

@@ -23,9 +23,9 @@
 
 <div class="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6 mb-8" data-testid="workflow-insights-summary">
   <% summary = {
-       started: pgbus_insight_count(definition[:started], pgbus_insight_runs_path(status: "all", workflow_class: name, created_from: since), t("pgbus.workflow_insights.links.started", workflow: name), size: :lg),
-       finished: pgbus_insight_count(definition[:finished], pgbus_insight_runs_path(status: "finished", workflow_class: name, ended_from: since), t("pgbus.workflow_insights.links.finished", workflow: name), size: :lg),
-       cancelled: pgbus_insight_count(definition[:cancelled], pgbus_insight_runs_path(status: "cancelled", workflow_class: name, ended_from: since), t("pgbus.workflow_insights.links.cancelled", workflow: name), size: :lg),
+       started: pgbus_insight_count(definition[:started], pgbus_insight_runs_path(status: "all", workflow_class: name, created_from: since, created_to: @window.now), t("pgbus.workflow_insights.links.started", workflow: name), size: :lg),
+       finished: pgbus_insight_count(definition[:finished], pgbus_insight_runs_path(status: "finished", workflow_class: name, ended_from: since, ended_to: @window.now), t("pgbus.workflow_insights.links.finished", workflow: name), size: :lg),
+       cancelled: pgbus_insight_count(definition[:cancelled], pgbus_insight_runs_path(status: "cancelled", workflow_class: name, ended_from: since, ended_to: @window.now), t("pgbus.workflow_insights.links.cancelled", workflow: name), size: :lg),
        ongoing: pgbus_insight_count(definition[:ongoing], pgbus_insight_runs_path(workflow_class: name), t("pgbus.workflow_insights.links.ongoing", workflow: name), size: :lg),
        attention: pgbus_insight_count(definition[:attention], pgbus.attention_workflows_path(workflow_class: name), t("pgbus.workflow_insights.links.attention", workflow: name), size: :lg)
      } %>

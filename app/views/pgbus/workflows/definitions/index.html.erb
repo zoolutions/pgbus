@@ -48,10 +48,10 @@
             <%= pgbus_insight_count(row[:attention], pgbus.attention_workflows_path(workflow_class: name), t("pgbus.workflow_insights.links.attention", workflow: name)) %>
           </td>
           <td data-label="<%= t("pgbus.workflow_insights.index.headers.finished") %>" class="px-4 py-3 text-sm text-right font-mono text-gray-700 dark:text-gray-300">
-            <%= pgbus_insight_count(row[:finished], pgbus_insight_runs_path(status: "finished", workflow_class: name, ended_from: since), t("pgbus.workflow_insights.links.finished", workflow: name)) %>
+            <%= pgbus_insight_count(row[:finished], pgbus_insight_runs_path(status: "finished", workflow_class: name, ended_from: since, ended_to: @window.now), t("pgbus.workflow_insights.links.finished", workflow: name)) %>
           </td>
           <td data-label="<%= t("pgbus.workflow_insights.index.headers.cancelled") %>" class="px-4 py-3 text-sm text-right font-mono text-gray-700 dark:text-gray-300">
-            <%= pgbus_insight_count(row[:cancelled], pgbus_insight_runs_path(status: "cancelled", workflow_class: name, ended_from: since), t("pgbus.workflow_insights.links.cancelled", workflow: name)) %>
+            <%= pgbus_insight_count(row[:cancelled], pgbus_insight_runs_path(status: "cancelled", workflow_class: name, ended_from: since, ended_to: @window.now), t("pgbus.workflow_insights.links.cancelled", workflow: name)) %>
           </td>
           <td data-label="<%= t("pgbus.workflow_insights.index.headers.duration_p50") %>" class="px-4 py-3 text-sm text-right font-mono text-gray-700 dark:text-gray-300">
             <%= pgbus_insight_ms(row[:e2e_ms][:p50]) %>

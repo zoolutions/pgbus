@@ -11,6 +11,7 @@ RSpec.describe "Workflow insights", type: :system do
 
   let(:now) { Time.zone.now.change(usec: 0) }
   let(:since) { (now - 86_400).utc.iso8601 }
+  let(:until_now) { now.utc.iso8601 }
 
   before do
     travel_to(now)
@@ -34,8 +35,8 @@ RSpec.describe "Workflow insights", type: :system do
       within(class_row("OrderWorkflow")) do
         expect(page).to have_link("11", href: runs_path(workflow_class: "OrderWorkflow"))
         expect(page).to have_link("1", href: runs_path(status: "paused", workflow_class: "OrderWorkflow"), match: :first)
-        expect(page).to have_link("412", href: runs_path(ended_from: since, status: "finished", workflow_class: "OrderWorkflow"))
-        expect(page).to have_link("9", href: runs_path(ended_from: since, status: "cancelled", workflow_class: "OrderWorkflow"))
+        expect(page).to have_link("412", href: runs_path(ended_from: since, ended_to: until_now, status: "finished", workflow_class: "OrderWorkflow"))
+        expect(page).to have_link("9", href: runs_path(ended_from: since, ended_to: until_now, status: "cancelled", workflow_class: "OrderWorkflow"))
         expect(page).to have_link("1", href: "/pgbus/workflows/attention?workflow_class=OrderWorkflow")
         expect(page).to have_text("48.2s")
         expect(page).to have_text("5m 12s")
@@ -119,8 +120,8 @@ RSpec.describe "Workflow insights", type: :system do
       visit "/pgbus/workflows/definitions/OrderWorkflow"
 
       within("[data-testid=workflow-insights-summary]") do
-        expect(page).to have_link("432", href: runs_path(created_from: since, status: "all", workflow_class: "OrderWorkflow"))
-        expect(page).to have_link("412", href: runs_path(ended_from: since, status: "finished", workflow_class: "OrderWorkflow"))
+        expect(page).to have_link("432", href: runs_path(created_from: since, created_to: until_now, status: "all", workflow_class: "OrderWorkflow"))
+        expect(page).to have_link("412", href: runs_path(ended_from: since, ended_to: until_now, status: "finished", workflow_class: "OrderWorkflow"))
         expect(page).to have_text("48.2s")
       end
     end
@@ -157,7 +158,7 @@ RSpec.describe "Workflow insights", type: :system do
         end
         within("tr[data-step=capture]") do
           expect(page).to have_link("6 cancelled",
-                                    href: runs_path(created_from: since, status: "cancelled", step: "capture",
+                                    href: runs_path(created_from: since, created_to: until_now, status: "cancelled", step: "capture",
                                                     workflow_class: "OrderWorkflow"))
         end
         within("tr[data-step=confirm]") { expect(page).to have_text("412 finished") }
