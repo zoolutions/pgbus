@@ -1,0 +1,25 @@
+docs/app/models/workflow_states_reference.rb
+  s_e3a487096d49a3::t_fcffb817967b08 1-41
+docs/app/views/docs/pages/workflows.rb
+  s_e3a487096d49a3::t_6c6f23dfdf88b2 1-32,34-47,49-124,126-152,154-192,194-244,246-352,354-421
+docs/spec/workflow_states_reference_spec.rb
+  s_e3a487096d49a3::t_41eb539948a7cc 1-25
+benchmarks/workflow_step_bench.rb
+  s_e3a487096d49a3::t_4e1cbd95ede96d 1-18,21-36,39-82
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "251f144d584026b34cdae2e046bc03fbdbf056d7",
+  "prompts": {},
+  "sessions": {
+    "s_e3a487096d49a3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "faf1faea-af65-4cb2-b526-81aed7772ead",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
