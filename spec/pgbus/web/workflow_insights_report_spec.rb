@@ -58,14 +58,22 @@ RSpec.describe Pgbus::Web::WorkflowInsightsReport do
     expect(buckets.find { |b| b[:from].to_i == busy }).to include(started: 2, finished: 1, cancelled: 0)
   end
 
-  it "starts day buckets at midnight in the zone's offset, not UTC's" do
-    window = Pgbus::Web::WorkflowWindow.parse("30d", retention: nil)
-    offset = 2 * 3600
-    buckets = described_class.detail("ReportSpecWorkflow", klass, window: window, since: window.since(now), now: now,
-                                                                  offset: offset, **inputs)[:throughput]
+  it "starts day buckets at the zone's midnight, on both sides of a DST change" do
+    zone = ActiveSupport::TimeZone["Europe/Stockholm"]
+    month = Pgbus::Web::WorkflowWindow.parse("30d", retention: nil)
+    after_dst = Time.utc(2026, 11, 5, 12)
+    buckets = described_class.detail("ReportSpecWorkflow", klass, window: month, since: month.since(after_dst), now: after_dst,
+                                                                  zone: zone, **inputs)[:throughput]
 
-    expect(buckets.map { |b| (b[:from].to_i + offset) % 86_400 }.uniq).to eq([0])
-    expect(buckets.last[:from]).to eq(Time.utc(2026, 10, 16, 22))
+    expect(buckets.map { |b| b[:from].in_time_zone(zone).strftime("%H:%M") }.uniq).to eq(["00:00"])
+    expect(buckets.map { |b| b[:from] }).to include(Time.utc(2026, 10, 20, 22), Time.utc(2026, 10, 26, 23))
+  end
+
+  it "keys the buckets by the zone's wall clock, as the query does" do
+    zone = ActiveSupport::TimeZone["Asia/Kolkata"]
+    wall = described_class.wall_epoch(Time.utc(2026, 10, 17, 0, 0), zone)
+
+    expect(wall).to eq(Time.utc(2026, 10, 17, 5, 30).to_i)
   end
 
   it "labels the duration bins with their bounds" do

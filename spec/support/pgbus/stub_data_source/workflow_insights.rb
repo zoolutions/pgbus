@@ -26,7 +26,7 @@ module Pgbus
           since = window.since(now)
           Pgbus::Web::WorkflowInsightsReport.detail(
             workflow_class, sample[:klass],
-            window: window, since: since, now: now, offset: now.utc_offset,
+            window: window, since: since, now: now, zone: Time.zone,
             throughput: sample_throughput(sample, since, now, window.bucket_seconds),
             **sample.slice(:ongoing, :ended, :attention, :stats, :histogram, :reached, :stopped, :revisions)
           )
@@ -36,7 +36,7 @@ module Pgbus
 
         # A steady hourly rate with a daily swell, scaled to the bucket.
         def sample_throughput(sample, since, now, bucket)
-          starts = Pgbus::Web::WorkflowInsightsReport.bucket_starts(since: since, now: now, bucket: bucket, offset: now.utc_offset)
+          starts = Pgbus::Web::WorkflowInsightsReport.bucket_starts(since: since, now: now, bucket: bucket, zone: Time.zone)
           starts.each_with_index.to_h do |start, i|
             started = (sample[:hourly] * bucket / 3600.0 * (0.6 + (0.4 * Math.sin(i / 3.0).abs))).round
             [start, [started, (started * 0.85).round, (started * 0.05).round]]

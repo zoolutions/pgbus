@@ -296,6 +296,18 @@ RSpec.describe "Pgbus::WorkflowsController", type: :request do
         .to eq([{ group: group, actor: "dashboard", reason: "fix deployed" }])
     end
 
+    it "goes back to the attention page narrowed to the class it was posted from (issue #549)" do
+      post "/pgbus/workflows/bulk_resume", params: { group: group, workflow_class: "CheckoutWorkflow" }
+
+      expect(response).to redirect_to("/pgbus/workflows/attention?workflow_class=CheckoutWorkflow")
+    end
+
+    it "keeps the class filter in the bulk forms" do
+      get "/pgbus/workflows/attention", params: { workflow_class: "CheckoutWorkflow" }
+
+      expect(response.body).to include('<input type="hidden" name="workflow_class" value="CheckoutWorkflow">')
+    end
+
     it "bulk-cancels, a group without an error class too" do
       overdue = { workflow_class: "SignupWorkflow", step_name: "welcome", reason: "overdue", error_class: "" }
       post "/pgbus/workflows/bulk_cancel", params: { group: overdue }

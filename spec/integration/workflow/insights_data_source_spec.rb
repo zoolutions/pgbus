@@ -2,6 +2,7 @@
 
 require_relative "support"
 require "securerandom"
+require "active_support/testing/time_helpers"
 
 # Web::DataSource's workflow insights (issue #549) against a real database:
 # the percentiles, pickup latency and rates per step, the live counts, the
@@ -10,6 +11,7 @@ require "securerandom"
 # timestamps (insert_all: no StepJob is sent).
 RSpec.describe "Pgbus::Web::DataSource workflow insights", :integration do
   include WorkflowIntegration
+  include ActiveSupport::Testing::TimeHelpers
 
   subject(:data_source) { Pgbus::Web::DataSource.new }
 
@@ -148,6 +150,22 @@ RSpec.describe "Pgbus::Web::DataSource workflow insights", :integration do
         expect(buckets.map { |b| b[:from].in_time_zone.strftime("%H:%M") }.uniq).to eq(["00:00"])
         expect(buckets.sum { |b| b[:started] }).to eq(1)
         expect(buckets.sum { |b| b[:finished] }).to eq(1)
+      end
+    end
+
+    it "starts each day bucket at the zone's midnight on both sides of a DST change" do
+      travel_to(Time.utc(2026, 11, 5, 12)) do
+        # 00:30 on 21 October in Stockholm, summer time (UTC+2)
+        run!(created_at: Time.utc(2026, 10, 20, 22, 30), finished_at: Time.utc(2026, 10, 20, 22, 31))
+        day = Pgbus::Web::WorkflowWindow.parse("30d", retention: nil)
+
+        Time.use_zone("Europe/Stockholm") do
+          buckets = data_source.workflow_definition("CheckoutWorkflow", window: day)[:throughput]
+          busy = buckets.find { |b| b[:started].positive? }
+
+          expect(busy[:from]).to eq(Time.utc(2026, 10, 20, 22))
+          expect(busy[:finished]).to eq(1)
+        end
       end
     end
 

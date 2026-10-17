@@ -84,26 +84,32 @@ module Pgbus
         select(sql, "Durations", [since, workflow_class]).rows.to_h { |bin, runs| [bin.to_i, runs.to_i] }
       end
 
-      # { bucket start (epoch seconds) => [started, finished, cancelled] }.
-      # Buckets start at multiples of +bucket+ in a zone +offset+ seconds
-      # from UTC (a day bucket at the zone's midnight).
-      def throughput(workflow_class, since:, bucket:, offset: 0)
+      # { bucket start => [started, finished, cancelled] }. Buckets are
+      # multiples of +bucket+ seconds on the wall clock of +zone+ (an IANA
+      # name), so a day bucket starts at that zone's midnight on both sides
+      # of a DST change; a bucket start is that wall clock's epoch seconds
+      # (WorkflowInsightsReport.wall_epoch).
+      def throughput(workflow_class, since:, bucket:, zone: "UTC")
         sql = <<~SQL
           SELECT bucket, SUM(started), SUM(finished), SUM(cancelled) FROM (
-            SELECT FLOOR((EXTRACT(EPOCH FROM created_at) + $4) / $3)::bigint AS bucket, 1 AS started, 0 AS finished,
-                   0 AS cancelled
+            SELECT #{wall_bucket("created_at")} AS bucket, 1 AS started, 0 AS finished, 0 AS cancelled
             FROM #{runs}
             WHERE workflow_class = $2 AND status IN (#{list(ALL)}) AND created_at >= $1
             UNION ALL
-            SELECT FLOOR((EXTRACT(EPOCH FROM ended_at) + $4) / $3)::bigint, 0, (status = 'finished')::int,
-                   (status = 'cancelled')::int
+            SELECT #{wall_bucket("ended_at")}, 0, (status = 'finished')::int, (status = 'cancelled')::int
             FROM (#{ended_runs(workflow_class)}) ended
           ) buckets
           GROUP BY bucket
         SQL
-        select(sql, "Throughput", [since, workflow_class, bucket, offset]).rows.to_h do |start, started, finished, cancelled|
-          [(start.to_i * bucket) - offset, [started.to_i, finished.to_i, cancelled.to_i]]
+        select(sql, "Throughput", [since, workflow_class, bucket, zone]).rows.to_h do |start, started, finished, cancelled|
+          [start.to_i * bucket, [started.to_i, finished.to_i, cancelled.to_i]]
         end
+      end
+
+      # The bucket number of a UTC timestamp column on the wall clock of the
+      # zone bound as $4, in buckets of $3 seconds.
+      def wall_bucket(column)
+        "FLOOR(EXTRACT(EPOCH FROM (#{column} AT TIME ZONE 'UTC' AT TIME ZONE $4)) / $3)::bigint"
       end
 
       # Per step: the attempts that finished since +since+.

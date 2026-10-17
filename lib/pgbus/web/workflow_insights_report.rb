@@ -30,14 +30,14 @@ module Pgbus
       end
 
       def detail(name, klass, window:, since:, now:, ongoing:, ended:, attention:, stats:, histogram:, throughput:, reached:,
-                 stopped:, revisions:, offset: 0)
+                 stopped:, revisions:, zone: nil)
         names = step_list(klass, stats, ongoing, reached, stopped)
         summary(name, klass, ongoing, ended, attention).merge(
           window: window.to_h.merge(since: since), bucket_seconds: window.bucket_seconds,
           started: stopped.values.sum, e2e_ms: ended ? ended[:e2e_ms] : empty_percentiles(%i[p50 p95 p99]),
           steps: names.map { |entry| step(entry, stats[entry[:name]], ongoing) },
           duration_histogram: duration_histogram(histogram),
-          throughput: throughput_buckets(throughput, since: since, now: now, bucket: window.bucket_seconds, offset: offset),
+          throughput: throughput_buckets(throughput, since: since, now: now, bucket: window.bucket_seconds, zone: zone),
           funnel: names.map { |entry| funnel_step(entry[:name], reached, stopped) },
           by_revision: by_revision(revisions, names.map { |entry| entry[:name] })
         )
@@ -97,21 +97,38 @@ module Pgbus
         end
       end
 
-      # Every bucket of the window, oldest first, empty ones as zeros.
-      def throughput_buckets(counts, since:, now:, bucket:, offset: 0)
-        bucket_starts(since: since, now: now, bucket: bucket, offset: offset).map do |start|
+      # Every bucket of the window, oldest first, empty ones as zeros. +from+
+      # is the real time its wall-clock start falls on in +zone+.
+      def throughput_buckets(counts, since:, now:, bucket:, zone: nil)
+        zone ||= utc_zone
+        bucket_starts(since: since, now: now, bucket: bucket, zone: zone).map do |start|
           started, finished, cancelled = counts.fetch(start, [0, 0, 0])
-          { from: Time.at(start).utc, started: started, finished: finished, cancelled: cancelled }
+          { from: from_wall(start, zone), started: started, finished: finished, cancelled: cancelled }
         end
       end
 
-      # The epoch seconds each bucket from +since+ to +now+ starts at, at
-      # multiples of +bucket+ in a zone +offset+ seconds from UTC (what
-      # WorkflowInsightsQueries.throughput keys its rows by).
-      def bucket_starts(since:, now:, bucket:, offset: 0)
-        first = ((since.to_i + offset) / bucket * bucket) - offset
-        (first..now.to_i).step(bucket).to_a
+      # The wall-clock epoch seconds (in +zone+) each bucket from +since+ to
+      # +now+ starts at: what WorkflowInsightsQueries.throughput keys by.
+      def bucket_starts(since:, now:, bucket:, zone: nil)
+        zone ||= utc_zone
+        first = wall_epoch(since, zone) / bucket * bucket
+        (first..wall_epoch(now, zone)).step(bucket).to_a
       end
+
+      # +time+'s wall clock in +zone+, as epoch seconds.
+      def wall_epoch(time, zone)
+        local = time.in_time_zone(zone)
+        local.to_i + local.utc_offset
+      end
+
+      # The real (UTC) time a wall-clock epoch in +zone+ falls on; a wall
+      # time a DST change skips moves forward, as ActiveSupport does.
+      def from_wall(wall, zone)
+        year, month, day, hour, min, sec = Time.at(wall).utc.to_a.first(6).reverse
+        zone.local(year, month, day, hour, min, sec).utc
+      end
+
+      def utc_zone = ActiveSupport::TimeZone["UTC"]
 
       def funnel_step(name, reached, stopped)
         { name: name, reached: reached.dig(name, :reached) || 0,
