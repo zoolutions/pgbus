@@ -13,9 +13,11 @@ RSpec.describe Pgbus::ActiveJob::Adapter do
   let(:job) { build_job_double(job_class: "TestJob", queue_name: "default", job_id: job_id) }
   let(:serialized_hash) { { "job_class" => "TestJob", "job_id" => job_id, "queue_name" => "default", "arguments" => [] } }
 
+  # Models the accessor's state, so a cleared id really stops tagging.
   def added_to(job, batch_id)
-    allow(job).to receive(:enqueue_batch_id).and_return(batch_id)
-    allow(job).to receive(:enqueue_batch_id=)
+    state = { id: batch_id }
+    allow(job).to receive(:enqueue_batch_id) { state[:id] }
+    allow(job).to receive(:enqueue_batch_id=) { |value| state[:id] = value }
     job
   end
 
@@ -59,8 +61,12 @@ RSpec.describe Pgbus::ActiveJob::Adapter do
       added_to(job, "b-1")
 
       adapter.enqueue(job)
+      adapter.enqueue(job)
 
-      expect(job).to have_received(:enqueue_batch_id=).with(nil)
+      expect(job).to have_received(:enqueue_batch_id=).with(nil).twice
+      expect(Pgbus::Batch).to have_received(:track_enqueue).once
+      expect(mock_client).to have_received(:send_message)
+        .with("default", serialized_hash, delay: 0, priority: nil).once
     end
 
     it "forgets the batch when the enqueue raises too" do
@@ -139,6 +145,18 @@ RSpec.describe Pgbus::ActiveJob::Adapter do
       expect(Pgbus::Batch).to have_received(:track_enqueue).with([tagged(serialized_hash, "b-1")]).once
       expect(mock_client).to have_received(:send_batch)
         .with("default", [tagged(serialized_hash, "b-1"), second_hash], priority: nil)
+    end
+
+    it "uncounts the batches already counted when counting a later one raises, and sends nothing" do
+      added_to(job, "b-1")
+      added_to(job2, "b-2")
+      refused = [tagged(second_hash, "b-2")]
+      allow(Pgbus::Batch).to receive(:track_enqueue).with(refused).and_raise(Pgbus::Batch::AlreadyFinished)
+
+      expect { adapter.enqueue_all([job, job2]) }.to raise_error(Pgbus::Batch::AlreadyFinished)
+      expect(Pgbus::Batch).to have_received(:untrack_enqueue).with(tagged(serialized_hash, "b-1")).once
+      expect(Pgbus::Batch).not_to have_received(:untrack_enqueue).with(tagged(second_hash, "b-2"))
+      expect(mock_client).not_to have_received(:send_batch)
     end
 
     it "never re-tags a retry on the bulk path" do

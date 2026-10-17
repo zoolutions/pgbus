@@ -61,8 +61,13 @@ class Views::Docs::Pages::Batches < DocsUI::Page
         commits, and they still join the batch: `b.add`, `batch.add` and
         `perform_later` record the batch on the job instance, each job counts
         itself in at commit, and only then does the batch start processing.
-        If the transaction rolls back, no job is sent, no callback fires and
-        the batch row is rolled back with everything else. A bare
+        If the transaction rolls back, no job is sent, no callback fires and,
+        when pgbus shares the application's database, the batch row is rolled
+        back with everything else. With a separate pgbus database
+        (`config.connects_to`) the batch row is written on its own connection
+        and commits on its own: a rollback leaves a pending batch with no
+        jobs, which the stalled-batch sweep later starts and finishes empty,
+        firing its callbacks. A bare
         `ActiveJob.perform_all_later` inside the block does not record the
         batch on its jobs, so use `b.add` there. A `batch.add` inside a
         transaction raises `Pgbus::Batch::AlreadyFinished` when the

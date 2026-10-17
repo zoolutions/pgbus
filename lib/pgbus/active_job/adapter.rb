@@ -365,10 +365,7 @@ module Pgbus
         payloads = jobs.map do |j|
           tag_bulk_member(FairShare.inject_metadata(j, Serializer.serialize_job_hash(j)), j)
         end
-        # One guarded increment per batch for the whole bulk, not one per job.
-        payloads.select { |p| p[Batch::METADATA_KEY] }
-                .group_by { |p| p[Batch::METADATA_KEY] }
-                .each_value { |members| Batch.track_enqueue(members) }
+        track_bulk(payloads)
         physical = physical_queue(queue, priority)
         msg_ids = nil
         msg_ids = Pgbus.client.send_batch(queue, payloads, priority: priority)
@@ -389,6 +386,22 @@ module Pgbus
         raise
       ensure
         jobs.each { |j| forget_enqueue_batch_id(j) }
+      end
+
+      # One guarded increment per batch for the whole bulk, not one per job.
+      # When a later batch refuses (finished), the batches already counted are
+      # uncounted before the error goes up: nothing has been sent yet.
+      def track_bulk(payloads)
+        tracked = []
+        payloads.select { |p| p[Batch::METADATA_KEY] }
+                .group_by { |p| p[Batch::METADATA_KEY] }
+                .each_value do |members|
+                  Batch.track_enqueue(members)
+                  tracked.concat(members)
+                end
+      rescue StandardError
+        tracked.each { |payload| Batch.untrack_enqueue(payload) }
+        raise
       end
 
       def scheduled_in_future?(job)

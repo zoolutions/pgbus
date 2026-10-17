@@ -32,6 +32,11 @@ RSpec.describe "Batch inside a transaction with enqueue_after_transaction_commit
   let(:counted_and_open) { { jobs_sent: 2, tagged: 2, total_jobs: 2, status: "processing", callbacks_sent: 0 } }
 
   before do
+    # enqueue_after_transaction_commit arrived in Active Job 7.2; Rails 7.1 has
+    # no deferred enqueue, so there is nothing to test there.
+    skip "Active Job #{ActiveJob.version} has no enqueue_after_transaction_commit" unless
+      defined?(ActiveJob::EnqueueAfterTransactionCommit)
+
     ActiveJob::Base.logger = Logger.new(IO::NULL)
     stub_const("TxnBatchSpec", Module.new)
     stub_const("TxnBatchSpec::WorkerJob", worker_job)

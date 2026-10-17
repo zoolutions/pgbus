@@ -49,7 +49,9 @@ module Pgbus
     # transaction commits: a job with enqueue_after_transaction_commit keeps
     # the batch on its instance (b.add, batch.add and perform_later put it
     # there) and counts itself in at commit, before the batch starts. On a
-    # rollback no job is sent and the batch row is gone with the rest. A bare
+    # rollback no job is sent and, when pgbus shares the application's
+    # database, the batch row is gone with the rest (a separate pgbus
+    # database commits the row on its own connection). A bare
     # ActiveJob.perform_all_later in the block does not keep it: use b.add.
     #
     #   Pgbus::Batch.start(description: "Import") do |b|
