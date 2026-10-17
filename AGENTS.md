@@ -72,7 +72,7 @@ hook-rewritable shapes: no `for`/subshell wrappers, no `| head` on rtk-handled c
 | `/lfg` | Full autonomous workflow: branch → understand → explore → plan → TDD → verify → PR |
 | `/plan` | Fable-powered planning → GitHub issue or `docs/plans/` markdown (read-only; execute with `/lfg`) |
 | `/follow-through` | Epic or issues → merged, unattended: dependency waves, `/lfg` per issue in its own worktree, then `/finish-prs automerge`; parks what it cannot settle (`--dry-run` prints the waves) |
-| `/finish-prs` | Ordered PRs → merge-ready (merges main in, `/github-review-pr`); `automerge` squash-merges once CI is green, no thread is open and cubic APPROVED the head |
+| `/finish-prs` | Ordered PRs → merge-ready (merges main in, `/github-review-pr`); `automerge` squash-merges once the PR is mergeable, CI is green, no thread is open, cubic APPROVED the head and `fable-validator` passes |
 | `/github-review-pr` | Full PR pass: merge conflicts → CI failures → review comments |
 | `/github-review-failures` | Fix failing CI checks on a PR |
 | `/github-review-comments` | Process unresolved PR review comments (cubic's included) |
