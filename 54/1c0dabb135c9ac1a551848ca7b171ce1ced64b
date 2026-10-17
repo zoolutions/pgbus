@@ -1,0 +1,32 @@
+lib/pgbus/integrations/appsignal/event_span.rb
+  s_d101c94f64af21::t_0e9a74d30edbce 16-17
+CHANGELOG.md
+  s_d101c94f64af21::t_0169622072908c 16
+lib/pgbus/integrations/appsignal/job_span.rb
+  s_d101c94f64af21::t_ec3c83d626ee6f 16-17
+lib/pgbus/integrations/appsignal/span_subscriber.rb
+  s_d101c94f64af21::t_0a6415ba5f2429 71-72,74-77
+  s_d101c94f64af21::t_d467b55cc8df42 87-88,92
+  s_d101c94f64af21::t_c55fda7125292b 57,61-64
+  s_d101c94f64af21::t_66271da4463c0a 42-43,46
+  s_d101c94f64af21::t_a3a98f24cc8e5d 28-33,35
+spec/pgbus/integrations/appsignal/subscriber_spec.rb
+  s_d101c94f64af21::t_2d4604a55590a0 118-125
+  s_d101c94f64af21::t_e29ba576393939 198-206
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "541c0dabb135c9ac1a551848ca7b171ce1ced64b",
+  "prompts": {},
+  "sessions": {
+    "s_d101c94f64af21": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ce136a73-ff2f-4961-a39f-3f0fd9bc3705",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
