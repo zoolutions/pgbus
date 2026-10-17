@@ -22,6 +22,8 @@ RSpec.describe "Workflow insights", type: :system do
 
   def runs_path(**query) = "/pgbus/workflows?#{query.to_query}"
 
+  def ended_path(status, workflow_class) = runs_path(ended_from: since, ended_to: until_now, status: status, workflow_class: workflow_class)
+
   def class_row(name) = find("tr[data-workflow-class='#{name}']")
 
   def step_card(name) = find("[data-testid=workflow-pipeline] > li[data-step='#{name}']")
@@ -35,8 +37,8 @@ RSpec.describe "Workflow insights", type: :system do
       within(class_row("OrderWorkflow")) do
         expect(page).to have_link("11", href: runs_path(workflow_class: "OrderWorkflow"))
         expect(page).to have_link("1", href: runs_path(status: "paused", workflow_class: "OrderWorkflow"), match: :first)
-        expect(page).to have_link("412", href: runs_path(ended_from: since, ended_to: until_now, status: "finished", workflow_class: "OrderWorkflow"))
-        expect(page).to have_link("9", href: runs_path(ended_from: since, ended_to: until_now, status: "cancelled", workflow_class: "OrderWorkflow"))
+        expect(page).to have_link("412", href: ended_path("finished", "OrderWorkflow"))
+        expect(page).to have_link("9", href: ended_path("cancelled", "OrderWorkflow"))
         expect(page).to have_link("1", href: "/pgbus/workflows/attention?workflow_class=OrderWorkflow")
         expect(page).to have_text("48.2s")
         expect(page).to have_text("5m 12s")
@@ -120,8 +122,9 @@ RSpec.describe "Workflow insights", type: :system do
       visit "/pgbus/workflows/definitions/OrderWorkflow"
 
       within("[data-testid=workflow-insights-summary]") do
-        expect(page).to have_link("432", href: runs_path(created_from: since, created_to: until_now, status: "all", workflow_class: "OrderWorkflow"))
-        expect(page).to have_link("412", href: runs_path(ended_from: since, ended_to: until_now, status: "finished", workflow_class: "OrderWorkflow"))
+        expect(page).to have_link("432", href: runs_path(created_from: since, created_to: until_now, status: "all",
+                                                         workflow_class: "OrderWorkflow"))
+        expect(page).to have_link("412", href: ended_path("finished", "OrderWorkflow"))
         expect(page).to have_text("48.2s")
       end
     end
