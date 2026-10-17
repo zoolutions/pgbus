@@ -1,0 +1,21 @@
+lib/pgbus/web/workflow_window.rb
+  s_e3a487096d49a3::t_49a9f964373d42 18-19
+app/helpers/pgbus/workflow_insights_helper.rb
+  s_e3a487096d49a3::t_edf7f0df169ea1 12-13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "9d155b4b94b876a752793241de6208c4c0d09c59",
+  "prompts": {},
+  "sessions": {
+    "s_e3a487096d49a3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "faf1faea-af65-4cb2-b526-81aed7772ead",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
