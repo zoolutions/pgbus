@@ -1,0 +1,41 @@
+lib/pgbus/web/workflow_action_plan.rb
+  s_e3a487096d49a3::t_65ac73641d6b00 1-59
+lib/pgbus/web/workflow_payload.rb
+  s_e3a487096d49a3::t_1314160d7f52e5 1-35
+spec/pgbus/web/workflow_timeline_spec.rb
+  s_e3a487096d49a3::t_9348e965432950 1-76,78-118
+spec/pgbus/configuration_spec.rb
+  s_e3a487096d49a3::t_1b05648774c3be 1680-1695
+spec/pgbus/web/workflow_payload_spec.rb
+  s_e3a487096d49a3::t_e1964ca29b75f7 1-44
+lib/pgbus/web/data_source/workflow_list.rb
+  s_e3a487096d49a3::t_0a06b1e527868d 1-20,23-26,28-33,35-69,71-79,81-165,167-168,170-173,175-223
+spec/pgbus/web/workflows_data_source_spec.rb
+  s_e3a487096d49a3::t_a684dafa2e1d7e 1-121
+spec/pgbus/web/workflow_action_plan_spec.rb
+  s_e3a487096d49a3::t_8ebe029b1da867 1-18,20-37,39-64
+spec/integration/workflow/attention_spec.rb
+  s_e3a487096d49a3::t_b407b388a68c8c 1-90
+spec/integration/workflow/dashboard_data_source_spec.rb
+  s_e3a487096d49a3::t_ea2b4b4206b880 1-273
+lib/pgbus/web/workflow_timeline.rb
+  s_e3a487096d49a3::t_a116186a57c304 1-112
+lib/pgbus/web/data_source/workflow_actions.rb
+  s_e3a487096d49a3::t_bef9597dfe67cb 1-91,93,95-104
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "35b5511c6736248342d2ec62d36e6c4658fdf834",
+  "prompts": {},
+  "sessions": {
+    "s_e3a487096d49a3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "faf1faea-af65-4cb2-b526-81aed7772ead",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
