@@ -1,0 +1,29 @@
+lib/pgbus/configuration/snapshot.rb
+  s_0329b66527bb87::t_a3f2cf6ea069db 1-22
+lib/pgbus.rb
+  s_0329b66527bb87::t_ac3ee06b8d064d 389-390
+  s_0329b66527bb87::t_715da378820ebc 225-228
+spec/pgbus/ractor_canary_spec.rb
+  s_0329b66527bb87::t_e624fb0472ebad 105-111,113-127,136,139-152
+  s_0329b66527bb87::t_1f07aaf587c335 24
+  s_0329b66527bb87::t_899b5a403012a8 14-17
+lib/pgbus/shareable.rb
+  s_0329b66527bb87::t_627a4745c4872b 5-6
+  s_0329b66527bb87::t_f9c93b5f5caf5e 43-51
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "1c4118738826f4cb81f8db3a2cbce17951f118f2",
+  "prompts": {},
+  "sessions": {
+    "s_0329b66527bb87": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b11c3325-8240-4394-a4e9-87d468e62ed6",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
