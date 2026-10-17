@@ -190,7 +190,10 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
         repaired by the batch sweep, whose finish fires the same callback; a
         callback that is lost (dead-lettered, or never sent) is made up by the
         workflow sweep once its batch has been finished for
-        `config.workflow_stall_threshold`.
+        `config.workflow_stall_threshold`. If the batch row itself is gone
+        (batch retention ran before a long-delayed callback), its outcome is
+        unknown: the step fails with `FanOutFailed` and the run **pauses**,
+        whatever `on_batch_failure` says, for a person to resume or skip.
 
         - The workflow owns the batch's callbacks: `b.on_complete`,
           `b.on_success` and `b.on_failure` raise `ArgumentError` in the body.
@@ -442,7 +445,8 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
           Signals). A waiting step is never treated as stalled.
         - **A lost fan-out callback** — a `fan_out` step still waiting on a
           batch that finished more than the threshold ago — is resolved as
-          its `BatchFinishedJob` would have.
+          its `BatchFinishedJob` would have. One whose batch row is gone
+          pauses with `FanOutFailed` (the outcome is unknown).
         - **Retention**: finished and cancelled runs older than
           `config.workflow_retention` (30 days) are deleted hourly, with their
           steps and events.
