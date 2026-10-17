@@ -43,6 +43,68 @@ RSpec.describe Pgbus::ActiveJob::BatchId do
     end
   end
 
+  # Issue #553: the batch a job was added to rides on the instance, so it
+  # survives an enqueue Active Job defers to after commit.
+  describe "#enqueue_batch_id" do
+    let(:captured) { [] }
+    let(:adapter) do
+      seen = captured
+      stub_const("BatchIdSpec::CapturingAdapter", Class.new do
+        define_method(:enqueue) { |job| seen << job.enqueue_batch_id }
+        def enqueue_at(*) = nil
+        def enqueue_after_transaction_commit? = false
+      end).new
+    end
+
+    before { job_class.queue_adapter = adapter }
+    after { Thread.current[:pgbus_batch_id] = nil }
+
+    it "is never serialized: the executor's copy of a member must not look like a first attempt" do
+      job = job_class.new
+      job.enqueue_batch_id = "b-1"
+
+      expect(job.serialize.values).not_to include("b-1")
+      expect(ActiveJob::Base.deserialize(job.serialize).enqueue_batch_id).to be_nil
+    end
+
+    it "captures the block's batch tag when the job is enqueued" do
+      Thread.current[:pgbus_batch_id] = "b-1"
+
+      job_class.perform_later
+
+      expect(captured).to eq(["b-1"])
+    end
+
+    # An id left on the instance by an add whose enqueue never ran (the
+    # transaction rolled back, or a before_enqueue aborted) must not follow
+    # the job into a later enqueue.
+    it "replaces a stale id with the tag of the block it is enqueued in, or none" do
+      job = job_class.new
+      job.enqueue_batch_id = "rolled-back"
+      job.enqueue
+
+      job.enqueue_batch_id = "rolled-back"
+      Thread.current[:pgbus_batch_id] = "b-2"
+      job.enqueue
+
+      expect(captured).to eq([nil, "b-2"])
+    end
+
+    it "tags each instance with the batch it is added to" do
+      jobs = [job_class.new, job_class.new]
+
+      described_class.capture(jobs, "b-1")
+
+      expect(jobs.map(&:enqueue_batch_id)).to eq(%w[b-1 b-1])
+    end
+
+    it "skips instances without the mixin" do
+      plain = Class.new(ActiveJob::Base) { def perform; end }.new
+
+      expect { described_class.capture([plain], "b-1") }.not_to raise_error
+    end
+  end
+
   describe "#batch" do
     it "is nil when the job belongs to no batch" do
       expect(job_class.new.batch).to be_nil

@@ -143,6 +143,55 @@ RSpec.describe Pgbus::Batch do
       expect(captured_batch_id).to eq(batch.batch_id)
       expect(Thread.current[:pgbus_batch_id]).to be_nil
     end
+
+    # Issue #553: inside a transaction, jobs that enqueue after commit count
+    # themselves in from after_commit callbacks registered during the block,
+    # so the start has to queue up behind them.
+    describe "inside an open transaction" do
+      let(:relation) { double("relation", update_all: 1) }
+      let(:deferred) { [] }
+
+      before do
+        allow(Pgbus::BatchEntry).to receive(:where).with(batch_id: anything, status: "pending").and_return(relation)
+        allow(ActiveRecord).to receive(:after_all_transactions_commit) { |&block| deferred << block }
+      end
+
+      it "starts processing only once the transactions commit" do
+        batch = described_class.new
+
+        batch.enqueue {} # rubocop:disable Lint/EmptyBlock
+
+        expect(relation).not_to have_received(:update_all)
+        expect(Pgbus::BatchEntry).not_to have_received(:check_finished!)
+
+        deferred.each(&:call)
+
+        expect(relation).to have_received(:update_all).with(status: "processing")
+        expect(Pgbus::BatchEntry).to have_received(:check_finished!).with(batch.batch_id)
+      end
+
+      it "holds the trailing finish check of a re-opened block until the commit" do
+        batch = described_class.new
+        batch.enqueue {} # rubocop:disable Lint/EmptyBlock
+        deferred.shift.call
+
+        batch.enqueue {} # rubocop:disable Lint/EmptyBlock
+
+        expect(Pgbus::BatchEntry).to have_received(:check_finished!).once
+        deferred.each(&:call)
+        expect(Pgbus::BatchEntry).to have_received(:check_finished!).twice
+      end
+    end
+
+    it "starts at once on Active Record 7.1, which has no after_all_transactions_commit" do
+      allow(ActiveRecord).to receive(:respond_to?).and_call_original
+      allow(ActiveRecord).to receive(:respond_to?).with(:after_all_transactions_commit).and_return(false)
+      batch = described_class.new
+
+      batch.enqueue {} # rubocop:disable Lint/EmptyBlock
+
+      expect(Pgbus::BatchEntry).to have_received(:check_finished!).with(batch.batch_id)
+    end
   end
 
   describe "#enqueue on an already-started batch (reopen)" do
@@ -193,6 +242,16 @@ RSpec.describe Pgbus::Batch do
       expect(batch.add(*jobs)).to eq(jobs)
       expect(ActiveJob).to have_received(:perform_all_later).with(jobs).once
       expect(tag).to eq(batch.batch_id)
+    end
+
+    it "tags each instance with the batch, so an enqueue deferred past the block still joins it" do
+      tagged_job = Class.new(work_job) { include Pgbus::ActiveJob::BatchId }
+      jobs = [tagged_job.new(1), tagged_job.new(2)]
+      batch = described_class.new
+
+      batch.add(*jobs)
+
+      expect(jobs.map(&:enqueue_batch_id)).to eq([batch.batch_id, batch.batch_id])
     end
 
     it "adds to an already-started batch through the reopen path" do
