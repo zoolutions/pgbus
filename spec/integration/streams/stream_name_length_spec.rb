@@ -42,7 +42,7 @@ RSpec.describe "Streams: name length safety net (integration)", :integration do
   # Snapshots the set of PGMQ queue names via Pgbus::Client (the library
   # boundary) rather than reaching into pgmq.meta directly. This keeps
   # the spec aligned with the project rule that all PGMQ interactions
-  # go through Client — see .claude/rules/coding-style.md.
+  # go through Client — see AGENTS.md (Never Do 1).
   def queue_names_snapshot
     Pgbus.client.list_queues.map { |q| q.respond_to?(:queue_name) ? q.queue_name : q.to_s }.sort
   end
