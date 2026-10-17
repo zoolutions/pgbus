@@ -15,12 +15,8 @@ module Pgbus
       class Invalid < StandardError; end
 
       # name => [seconds, bucket seconds]
-      CHOICES = {
-        "1h" => [3_600, 300],
-        "24h" => [86_400, 3_600],
-        "7d" => [604_800, 21_600],
-        "30d" => [2_592_000, 86_400]
-      }.freeze
+      CHOICES = Ractor.make_shareable({ "1h" => [3_600, 300], "24h" => [86_400, 3_600], "7d" => [604_800, 21_600],
+                                        "30d" => [2_592_000, 86_400] })
       DEFAULT = "24h"
 
       attr_reader :name, :seconds, :bucket_seconds

@@ -9,8 +9,8 @@ module Pgbus
   # pgbus_ms_duration under a minute and pgbus_duration past it, so a two-day
   # run reads "2d 0h", not "2880.0m".
   module WorkflowInsightsHelper
-    LIVE_STATUSES = Web::WorkflowInsightsReport::LIVE.map(&:to_s).freeze
-    STOPPED_STATUSES = Web::WorkflowInsightsReport::STOPPED.map(&:to_s).freeze
+    LIVE_STATUSES = Workflow::States::ONGOING
+    STOPPED_STATUSES = Workflow::States::WORKFLOW
 
     KIND_TONES = { "fan_out" => :blue, "signal" => :yellow, "removed" => :gray, "undeclared" => :red }.freeze
 
