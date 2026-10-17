@@ -12,7 +12,12 @@ if ractor
   RactorRailsShim.install
 end
 
-require_relative "environment"
+require_relative "application"
+# As in production: an app that reloads code builds Action View's view
+# reloader, which a production app never has. Eager loading stays off: with it
+# on, making the app shareable freezes STDOUT and kino cannot boot.
+Rails.application.config.enable_reloading = false
+Rails.application.initialize!
 
 Pgbus.configure do |c|
   c.database_url = ENV.fetch("PGBUS_DATABASE_URL")

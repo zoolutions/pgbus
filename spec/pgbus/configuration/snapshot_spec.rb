@@ -66,6 +66,7 @@ RSpec.describe Pgbus::Configuration::Snapshot do
       Pgbus.reset!
 
       expect(Pgbus.configuration_snapshot.queue_prefix).to eq(Pgbus::Configuration.new.queue_prefix)
+      expect(Ractor.shareable?(Pgbus.configuration_snapshot)).to be(true)
     end
   end
 end

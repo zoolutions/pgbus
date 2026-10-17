@@ -54,9 +54,10 @@ smoke() {
   connected=no
   grep -q '^event: pgbus:connected' "$out/sse-$mode.body" 2> /dev/null && connected=yes
   blocker=$(grep -m1 -E "$errors" "$log" | cut -c1-400 || true)
-  # A server that never answered: the error it died with, if any.
+  # A server that never answered: the error it died with, if any (a Ruby
+  # error line ends in its class; the shim's notices do not).
   if [ -z "$blocker" ] && [ "$up" != 200 ]; then
-    blocker=$(grep -m1 -E '(Error|Exception)\b' "$log" | cut -c1-400 || true)
+    blocker=$(grep -m1 -E '\(([A-Z][A-Za-z0-9_]*::)*[A-Z][A-Za-z0-9_]*(Error|Exception)\)$' "$log" | cut -c1-400 || true)
   fi
   echo "== kino -m $mode"
   echo "GET /up: HTTP $up"

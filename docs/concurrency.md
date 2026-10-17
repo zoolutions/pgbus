@@ -122,9 +122,14 @@ place:
   sends `GET /up` and opens one SSE subscription, in streaming-body mode since
   kino has no `rack.hijack`. A threaded run is the control; the Ractor run,
   through `ractor-rails-shim`, records the first blocker in the job summary.
-  Today that blocker is in Rails, before pgbus runs: making the app shareable
-  freezes Action View's view reloader, and every request answers 500 with a
-  `FrozenError` from it.
+  Today that blocker is in Rails, before pgbus handles the request: making the
+  app shareable freezes Rails' routes reloader, which loads the routes lazily
+  on the first request, so every request answers 500 with a `FrozenError`
+  from it. kino names the first frame inside the project as the error's site,
+  which is pgbus's `Streams::WatermarkCacheMiddleware#call` handing the
+  request on, not where the error is raised. The smoke runs with reloading off,
+  as in production, but with eager loading off too: with eager loading on,
+  making the app shareable freezes STDOUT and kino cannot boot.
 - **The audit**: `bundle exec conformance-audit --strict` reports every constant
   and class/module instance variable under `Pgbus` that is not shareable. What
   is main-only by design is listed in `.conformance.yml` with its reason.
