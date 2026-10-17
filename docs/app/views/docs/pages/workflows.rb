@@ -577,7 +577,7 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
         tables already have: on about 1 M step rows over 20 classes a class's
         page reads in about 25 ms and the list in about 100 ms over 24 hours
         (the budgets `rake bench:workflow_insights` checks: 250 and 500 ms);
-        over 30 days both took under 300 ms, which the bench reports without
+        over 30 days both take about 300 ms, which the bench reports without
         a budget. The read-only MCP server has the same:
         `pgbus_workflow_definitions(window:)` and
         `pgbus_workflow_stats(workflow_class:, window:)`, and
