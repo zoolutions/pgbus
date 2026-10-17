@@ -106,10 +106,15 @@ module Pgbus
                                                           revision: older[:revision])
     end
 
-    # What charts.js renderWorkflowInsights draws.
+    # What charts.js renderWorkflowInsights draws. Its time axis prints UTC,
+    # so each bucket goes as the dashboard zone's wall clock written as UTC:
+    # the axis then reads like the data table, across a DST change too.
     def pgbus_insight_chart_payload(definition)
+      zone = Time.zone || ActiveSupport::TimeZone["UTC"]
       { throughput: definition[:throughput].map do |bucket|
-        { time: bucket[:from].utc.iso8601, started: bucket[:started], finished: bucket[:finished], cancelled: bucket[:cancelled] }
+        wall = Web::WorkflowInsightsReport.wall_epoch(bucket[:from], zone)
+        { time: Time.at(wall).utc.iso8601, started: bucket[:started], finished: bucket[:finished],
+          cancelled: bucket[:cancelled] }
       end,
         durations: definition[:duration_histogram].map { |bin| { label: pgbus_insight_bin_label(bin), count: bin[:count] } } }
     end

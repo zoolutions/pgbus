@@ -237,7 +237,10 @@ export async function renderTimeline(data, i18n) {
 }
 
 // The workflow insights (issue #549): runs started, finished and cancelled
-// per bucket, and the end-to-end duration histogram of the finished runs.
+// per bucket (cancelled in the neutral grey the dashboard uses for it, not
+// the failure red), and the end-to-end duration histogram of the finished
+// runs. The bucket times arrive as the dashboard zone's wall clock written
+// as UTC, which the UTC time axis prints as is.
 export async function renderWorkflowInsights(data, i18n) {
   const ApexCharts = await loadApexCharts();
   const colors = palette(document.documentElement.classList.contains("dark"));
@@ -251,7 +254,7 @@ export async function renderWorkflowInsights(data, i18n) {
       { name: i18n.cancelled, data: points(throughput, "cancelled") },
     ],
     stroke: { curve: "smooth", width: [2, 2, 2], dashArray: [0, 0, 5] },
-    colors: [colors.throughput, colors.status.success, colors.status.failed],
+    colors: [colors.throughput, colors.status.success, colors.other],
     xaxis: timeAxis(colors),
     yaxis: valueAxis(colors, (v) => Math.round(v)),
     legend: { position: "top", labels: { colors: colors.text } },

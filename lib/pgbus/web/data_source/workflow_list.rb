@@ -125,11 +125,15 @@ module Pgbus
         end
 
         # When a finished or cancelled run ended (issue #549): what the
-        # insights' "finished / cancelled in the window" counts link to.
+        # insights' "finished / cancelled in the window" counts link to. A run
+        # ends in the UPDATE that sets its updated_at, so the updated_at bound
+        # keeps every match and lets idx_pgbus_workflows_status serve it.
         def ended_scope(scope, filters)
           table = WorkflowEntry.arel_table
           ended_at = Arel::Nodes::NamedFunction.new("COALESCE", [table[:finished_at], table[:cancelled_at]])
-          scope = scope.where(ended_at.gteq(filters[:ended_from])) if filters[:ended_from]
+          if filters[:ended_from]
+            scope = scope.where(table[:updated_at].gteq(filters[:ended_from])).where(ended_at.gteq(filters[:ended_from]))
+          end
           scope = scope.where(ended_at.lteq(filters[:ended_to])) if filters[:ended_to]
           scope
         end

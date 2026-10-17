@@ -32,7 +32,7 @@ module Pgbus
           detail = data_source_from(server_context).workflow_definition(name, window: Web::WorkflowWindow.parse(window))
           return error_response("No workflow class or run named #{name}") unless detail
 
-          json_response(Serialization.serialize(workflow: detail))
+          json_response(Serialization.serialize(workflow: WorkflowInsightsPayload.row(detail)))
         rescue Web::WorkflowWindow::Invalid => e
           error_response(e.message)
         end

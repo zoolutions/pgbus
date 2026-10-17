@@ -1,7 +1,7 @@
 <%# The throughput chart's data table (issue #549): one row per bucket, each
-    count linked to those runs. Locals: definition. %>
+    count linked to those runs (from the bucket's first moment to just before
+    the next one's, so a 23- or 25-hour DST day links exactly). Locals: definition. %>
 <% name = definition[:workflow_class] %>
-<% step = definition[:bucket_seconds] %>
 <table class="pgbus-table min-w-full divide-y divide-gray-200 dark:divide-gray-700">
   <thead class="bg-gray-50 dark:bg-gray-900">
     <tr>
@@ -14,7 +14,7 @@
   <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
     <% definition[:throughput].each do |bucket| %>
       <% from = bucket[:from] %>
-      <% to = from + step - Rational(1, 1_000_000) %>
+      <% to = bucket[:to] - Rational(1, 1_000_000) %>
       <tr>
         <td data-label="<%= t("pgbus.workflow_insights.show.charts.throughput.headers.from") %>" class="px-4 py-2 text-sm text-gray-700 dark:text-gray-300"><%= pgbus_absolute_time(from) %></td>
         <td data-label="<%= t("pgbus.workflow_insights.show.charts.throughput.headers.started") %>" class="px-4 py-2 text-sm text-right font-mono text-gray-700 dark:text-gray-300">

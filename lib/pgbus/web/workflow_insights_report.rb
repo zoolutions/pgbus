@@ -102,12 +102,15 @@ module Pgbus
       end
 
       # Every bucket of the window, oldest first, empty ones as zeros. +from+
-      # is the real time its wall-clock start falls on in +zone+.
+      # and +to+ are the real times its wall-clock start and the next
+      # bucket's fall on in +zone+ (a day bucket across a DST change is 23 or
+      # 25 hours long; a fall-back hour spans two real hours).
       def throughput_buckets(counts, since:, now:, bucket:, zone: nil)
         zone ||= utc_zone
         bucket_starts(since: since, now: now, bucket: bucket, zone: zone).map do |start|
           started, finished, cancelled = counts.fetch(start, [0, 0, 0])
-          { from: from_wall(start, zone), started: started, finished: finished, cancelled: cancelled }
+          { from: from_wall(start, zone), to: from_wall(start + bucket, zone), started: started, finished: finished,
+            cancelled: cancelled }
         end
       end
 

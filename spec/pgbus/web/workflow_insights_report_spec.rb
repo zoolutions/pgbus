@@ -67,6 +67,8 @@ RSpec.describe Pgbus::Web::WorkflowInsightsReport do
 
     expect(buckets.map { |b| b[:from].in_time_zone(zone).strftime("%H:%M") }.uniq).to eq(["00:00"])
     expect(buckets.map { |b| b[:from] }).to include(Time.utc(2026, 10, 20, 22), Time.utc(2026, 10, 26, 23))
+    long_day = buckets.find { |b| b[:from] == Time.utc(2026, 10, 24, 22) } # 25 October, 25 hours long
+    expect(long_day[:to] - long_day[:from]).to eq(25 * 3600)
   end
 
   it "skips the wall-clock buckets a spring-forward night does not have" do
@@ -93,7 +95,7 @@ RSpec.describe Pgbus::Web::WorkflowInsightsReport do
 
   it "starts a day bucket whose midnight a DST change skips at the first hour that day has" do
     zone = ActiveSupport::TimeZone["America/Santiago"] # 2026-09-06 00:00 jumps to 01:00
-    month = Pgbus::Web::WorkflowWindow.parse("7d", retention: nil)
+    month = Pgbus::Web::WorkflowWindow.parse("30d", retention: nil)
     froms = described_class.detail("ReportSpecWorkflow", klass, window: month, since: Time.utc(2026, 9, 4), now: Time.utc(2026, 9, 9),
                                                                 zone: zone, **inputs)[:throughput].map { |b| b[:from] }
 

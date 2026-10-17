@@ -11,7 +11,8 @@
   <%= render "pgbus/workflows/definitions/window", path: ->(name) { pgbus.workflow_definitions_path(window: name) } %>
 </div>
 
-<% since = @window.since(Time.current) %>
+<%# The window's own lower bound: the one the counts were read with. %>
+<% since = @window.since %>
 <div class="rounded-lg bg-white dark:bg-gray-800 shadow ring-1 ring-gray-200 dark:ring-gray-700">
   <table class="pgbus-table min-w-full divide-y divide-gray-200 dark:divide-gray-700">
     <thead class="bg-gray-50 dark:bg-gray-900">

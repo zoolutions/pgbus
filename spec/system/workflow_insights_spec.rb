@@ -63,10 +63,10 @@ RSpec.describe "Workflow insights", type: :system do
     end
 
     it "says when the window is capped at workflow_retention" do
-      Pgbus.configuration.workflow_retention = 2 * 86_400
+      Pgbus.configuration.workflow_retention = (2 * 86_400) + 5_400
       visit "/pgbus/workflows/definitions?window=30d"
 
-      expect(page).to have_text("Capped at workflow_retention (2d)")
+      expect(page).to have_text("Capped at workflow_retention (2d 1h)")
     ensure
       Pgbus.configuration.workflow_retention = 30 * 86_400
     end

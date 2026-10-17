@@ -22,9 +22,8 @@ module Pgbus
         def workflow_definitions(window:)
           return [] unless Workflow::Sweep.tables_ready?
 
-          since = window.since(Time.current)
           ongoing = WorkflowInsightsQueries.ongoing.group_by { |row| row[:workflow_class] }
-          ended = WorkflowInsightsQueries.ended(since: since).index_by { |row| row[:workflow_class] }
+          ended = WorkflowInsightsQueries.ended(since: window.since, until_time: window.now).index_by { |row| row[:workflow_class] }
           stuck = attention_by_class
           names = (registered_workflows.keys + WorkflowInsightsQueries.class_names + ongoing.keys + ended.keys + stuck.keys)
           names.uniq.sort.map do |name|
@@ -55,17 +54,19 @@ module Pgbus
         private
 
         def read_definition(name, klass, window)
-          now = Time.current
+          now = window.now
           zone = Time.zone || ActiveSupport::TimeZone["UTC"]
-          since = window.since(now)
+          since = window.since
           queries = WorkflowInsightsQueries
           WorkflowInsightsReport.detail(
             name, klass,
             window: window, since: since, now: now, ongoing: queries.ongoing(workflow_class: name),
-            ended: queries.ended(since: since, workflow_class: name).first,
+            ended: queries.ended(since: since, until_time: now, workflow_class: name).first,
             attention: attention_by_class(workflow_class: name).fetch(name, 0),
-            stats: queries.step_stats(name, since: since), histogram: queries.duration_histogram(name, since: since),
-            throughput: queries.throughput(name, since: since, bucket: window.bucket_seconds, zone: zone.tzinfo.identifier),
+            stats: queries.step_stats(name, since: since),
+            histogram: queries.duration_histogram(name, since: since, until_time: now),
+            throughput: queries.throughput(name, since: since, until_time: now, bucket: window.bucket_seconds,
+                                                 zone: zone.tzinfo.identifier),
             zone: zone,
             reached: queries.funnel_reached(name, since: since), stopped: queries.funnel_stopped(name, since: since),
             revisions: queries.by_revision(name, since: since)

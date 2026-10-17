@@ -81,6 +81,8 @@ def clean!
 end
 
 # Each run reaches step s1..s4 by its status: finished runs completed all
+# (the status mix is drawn from g / CLASSES, independent of the class g % CLASSES,
+# so every class gets every status);
 # four, a cancelled run stopped at s2, a ready run waits on s1, a performing
 # one runs s2, a waiting one waits on s3, a paused one failed s2.
 def seed!
@@ -91,7 +93,8 @@ def seed!
     SELECT 'bench-' || g, 'BenchWorkflow' || (g % #{CLASSES}), r.status, r.step, 'bench', r.created_at,
            COALESCE(r.finished_at, r.cancelled_at, r.paused_at, r.created_at), r.finished_at, r.cancelled_at, r.paused_at
     FROM generate_series(1, #{RUNS}) g
-    CROSS JOIN LATERAL (SELECT now()::timestamp - (random() * interval '30 days') AS created_at, g % 100 AS bucket) t
+    CROSS JOIN LATERAL (SELECT now()::timestamp - (random() * interval '30 days') AS created_at,
+                               (g / #{CLASSES}) % 100 AS bucket) t
     CROSS JOIN LATERAL (
       SELECT CASE WHEN t.bucket < 90 THEN 'finished' WHEN t.bucket < 93 THEN 'cancelled' WHEN t.bucket < 95 THEN 'ready'
                   WHEN t.bucket < 96 THEN 'performing' WHEN t.bucket < 98 THEN 'waiting' ELSE 'paused' END AS status,
@@ -144,24 +147,24 @@ end
 
 create_tables!
 clean!
-seed_started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-seed!
-seed_seconds = Process.clock_gettime(Process::CLOCK_MONOTONIC) - seed_started
-counts = CONN.select_rows(<<~SQL).first.map(&:to_i)
-  SELECT (SELECT COUNT(*) FROM pgbus_workflows WHERE workflow_id LIKE 'bench-%'),
-         (SELECT COUNT(*) FROM pgbus_workflow_steps WHERE workflow_id LIKE 'bench-%')
-SQL
-
-puts "=" * 70
-puts "Pgbus workflow insights query budget (issue #549)"
-puts "  DB: #{DATABASE_URL.sub(%r{//[^@]*@}, "//***@")}  PostgreSQL #{CONN.select_value("SHOW server_version")}"
-puts "  #{counts[0]} runs, #{counts[1]} step rows over #{CLASSES} classes, 30 days (seeded in #{seed_seconds.round(1)}s)"
-puts "=" * 70
-
-data_source = Pgbus::Web::DataSource.new(client: nil)
-window = Pgbus::Web::WorkflowWindow.parse("24h", retention: nil)
 results = {}
 begin
+  seed_started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+  seed!
+  seed_seconds = Process.clock_gettime(Process::CLOCK_MONOTONIC) - seed_started
+  counts = CONN.select_rows(<<~SQL).first.map(&:to_i)
+    SELECT (SELECT COUNT(*) FROM pgbus_workflows WHERE workflow_id LIKE 'bench-%'),
+           (SELECT COUNT(*) FROM pgbus_workflow_steps WHERE workflow_id LIKE 'bench-%')
+  SQL
+
+  puts "=" * 70
+  puts "Pgbus workflow insights query budget (issue #549)"
+  puts "  DB: #{DATABASE_URL.sub(%r{//[^@]*@}, "//***@")}  PostgreSQL #{CONN.select_value("SHOW server_version")}"
+  puts "  #{counts[0]} runs, #{counts[1]} step rows over #{CLASSES} classes, 30 days (seeded in #{seed_seconds.round(1)}s)"
+  puts "=" * 70
+
+  data_source = Pgbus::Web::DataSource.new(client: nil)
+  window = Pgbus::Web::WorkflowWindow.parse("24h", retention: nil)
   data_source.workflow_definition("BenchWorkflow7", window: window) # warm the plan cache
   results[:definition] = median_and_max_ms { data_source.workflow_definition("BenchWorkflow7", window: window) }
   data_source.workflow_definitions(window: window)
@@ -169,6 +172,7 @@ begin
 
   detail = data_source.workflow_definition("BenchWorkflow7", window: window)
   puts "  sanity: BenchWorkflow7 started #{detail[:started]}, finished #{detail[:finished]}, " \
+       "cancelled #{detail[:cancelled]}, ongoing #{detail[:ongoing]} (#{detail[:paused]} paused), " \
        "#{detail[:steps].sum { |s| s[:sample_size] }} attempts in the window"
   results.each do |name, (median, max)|
     verdict = median <= BUDGETS_MS.fetch(name) ? "within" : "OVER"

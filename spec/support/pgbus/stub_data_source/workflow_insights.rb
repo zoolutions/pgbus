@@ -22,8 +22,8 @@ module Pgbus
           sample = @workflow_insights_samples[workflow_class]
           return nil unless sample
 
-          now = Time.current
-          since = window.since(now)
+          now = window.now
+          since = window.since
           Pgbus::Web::WorkflowInsightsReport.detail(
             workflow_class, sample[:klass],
             window: window, since: since, now: now, zone: Time.zone,

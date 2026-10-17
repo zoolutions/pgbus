@@ -36,6 +36,12 @@ RSpec.describe Pgbus::MCP::Tools::WorkflowDefinitionsTool do
                                                "e2e_ms" => { "p50" => 48_200.0, "p95" => 312_000.0, "samples" => 412 })
   end
 
+  it "sends the removed steps as rows, so a step named like a payload key keeps its count" do
+    rows.first[:removed_in_flight] = { "payload" => 2 }
+
+    expect(result["definitions"].sole["removed_in_flight"]).to eq([{ "step" => "payload", "runs" => 2 }])
+  end
+
   it "says when the window is capped at workflow_retention" do
     allow(Pgbus.configuration).to receive(:workflow_retention).and_return(86_400)
 

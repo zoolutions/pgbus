@@ -41,6 +41,12 @@ RSpec.describe Pgbus::MCP::Tools::WorkflowStatsTool do
     expect(stats["by_revision"].sole["last_seen_at"]).to eq("2026-10-17T12:00:00Z")
   end
 
+  it "sends the removed steps as rows, so a step named like a payload key keeps its count" do
+    detail[:removed_in_flight] = { "message" => 3 }
+
+    expect(result(workflow_class: "OrderWorkflow")["workflow"]["removed_in_flight"]).to eq([{ "step" => "message", "runs" => 3 }])
+  end
+
   it "answers a class nothing knows with an error" do
     allow(data_source).to receive(:workflow_definition).and_return(nil)
 

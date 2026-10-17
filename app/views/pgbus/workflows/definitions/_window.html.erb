@@ -12,6 +12,6 @@
     <% end %>
   </nav>
   <% if @window.capped? %>
-    <p class="mt-2 text-xs text-gray-600 dark:text-gray-300"><%= t("pgbus.workflow_insights.capped", retention: pgbus_insight_span(@window.seconds)) %></p>
+    <p class="mt-2 text-xs text-gray-600 dark:text-gray-300"><%= t("pgbus.workflow_insights.capped", retention: pgbus_duration(@window.seconds)) %></p>
   <% end %>
 </div>

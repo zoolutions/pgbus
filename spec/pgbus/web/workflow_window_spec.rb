@@ -41,6 +41,13 @@ RSpec.describe Pgbus::Web::WorkflowWindow do
     expect(described_class.parse("1h", retention: nil).since(now)).to eq(Time.utc(2026, 10, 17, 11))
   end
 
+  it "fixes its end when parsed, so every read and link of one page share one bound" do
+    now = Time.utc(2026, 10, 17, 12)
+    window = described_class.parse("1h", retention: nil, now: now)
+
+    expect([window.now, window.since]).to eq([now, Time.utc(2026, 10, 17, 11)])
+  end
+
   it "says what it is, for an MCP answer" do
     expect(described_class.parse("30d", retention: 7 * day).to_h)
       .to eq(name: "30d", seconds: 7 * day, bucket_seconds: 21_600, capped: true)

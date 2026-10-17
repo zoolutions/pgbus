@@ -19,6 +19,7 @@ RSpec.describe "Pgbus::Web::DataSource workflow insights", :integration do
   let(:window) { Pgbus::Web::WorkflowWindow.parse("24h", retention: nil) }
 
   before do
+    travel_to(Time.utc(2026, 10, 10, 12, 30, 0))
     Pgbus::Workflow::Registry.reset!
     stub_const("CheckoutWorkflow", Class.new(Pgbus::Workflow) do
       step(:reserve) { nil }
@@ -28,7 +29,10 @@ RSpec.describe "Pgbus::Web::DataSource workflow insights", :integration do
     end)
   end
 
-  after { Pgbus::Workflow::Registry.reset! }
+  after do
+    travel_back
+    Pgbus::Workflow::Registry.reset!
+  end
 
   def run!(klass = "CheckoutWorkflow", status: "finished", created_at: now - 3600, current_step: "receipt", **attrs)
     ended = attrs[:finished_at] || attrs[:cancelled_at]
@@ -130,7 +134,7 @@ RSpec.describe "Pgbus::Web::DataSource workflow insights", :integration do
 
       buckets = definition[:throughput]
 
-      expect(buckets.size).to be_between(24, 25)
+      expect(buckets.size).to eq(25)
       expect(buckets.map { |b| b[:from] }).to eq(buckets.map { |b| b[:from] }.sort)
       expect(buckets.sum { |b| b[:started] }).to eq(3)
       expect(buckets.sum { |b| b[:finished] }).to eq(2)
@@ -155,18 +159,28 @@ RSpec.describe "Pgbus::Web::DataSource workflow insights", :integration do
 
     it "starts each day bucket at the zone's midnight on both sides of a DST change" do
       travel_to(Time.utc(2026, 11, 5, 12)) do
-        # 00:30 on 21 October in Stockholm, summer time (UTC+2)
+        # 00:30 local on 21 October, summer time (UTC+2), and on 28 October, winter time (UTC+1)
         run!(created_at: Time.utc(2026, 10, 20, 22, 30), finished_at: Time.utc(2026, 10, 20, 22, 31))
+        run!(created_at: Time.utc(2026, 10, 27, 23, 30), finished_at: Time.utc(2026, 10, 27, 23, 31))
         day = Pgbus::Web::WorkflowWindow.parse("30d", retention: nil)
 
         Time.use_zone("Europe/Stockholm") do
           buckets = data_source.workflow_definition("CheckoutWorkflow", window: day)[:throughput]
-          busy = buckets.find { |b| b[:started].positive? }
+          busy = buckets.select { |b| b[:started].positive? }
 
-          expect(busy[:from]).to eq(Time.utc(2026, 10, 20, 22))
-          expect(busy[:finished]).to eq(1)
+          expect(busy.map { |b| b[:from] }).to eq([Time.utc(2026, 10, 20, 22), Time.utc(2026, 10, 27, 23)])
+          expect(busy.map { |b| b[:finished] }).to eq([1, 1])
         end
       end
+    end
+
+    it "does not count runs dated after now (a skewed clock)" do
+      run!(created_at: now - 600, finished_at: now + 3600)
+      run!(created_at: now - 600, finished_at: now - 60)
+
+      expect(definition).to include(finished: 1)
+      expect(data_source.workflow_definitions(window: window).find { |r| r[:workflow_class] == "CheckoutWorkflow" })
+        .to include(finished: 1)
     end
 
     it "builds the funnel of the runs started in the window: how many reached each step and where the rest are" do

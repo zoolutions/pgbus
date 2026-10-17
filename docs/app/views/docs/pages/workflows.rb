@@ -564,16 +564,21 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
         attempt, newest first, so a regression after a deploy shows as a row
         (a failure rate more than five points above the revision before is
         marked). The window is 1 h, 24 h (default), 7 d or 30 d, capped at
-        `workflow_retention`. Every count of runs links to the Workflows
-        list filtered to those runs; that list gained `ended_from`/`ended_to`
+        `workflow_retention`. Every count of runs a list filter can express
+        (runs at a step now, by status, started or ended in the window, where
+        the funnel's runs are now) links to the Workflows list filtered to
+        exactly those runs; attempt-level numbers (percentiles, rates, the
+        funnel's "reached", the per-revision rows) are text. The list gained `ended_from`/`ended_to`
         (when a run finished or was cancelled) for it, and the need-attention
         counts open Needs attention narrowed to the class
         (`/pgbus/workflows/attention?workflow_class=OrderWorkflow`).
 
         The numbers come from the step and run rows, on the indexes the
         tables already have: on about 1 M step rows over 20 classes a class's
-        page reads in about 25 ms and the list in about 100 ms over 24 hours,
-        both under 300 ms over 30 days (`rake bench:workflow_insights`). The read-only MCP server has the same:
+        page reads in about 25 ms and the list in about 100 ms over 24 hours
+        (the budgets `rake bench:workflow_insights` checks: 250 and 500 ms);
+        over 30 days both took under 300 ms, which the bench reports without
+        a budget. The read-only MCP server has the same:
         `pgbus_workflow_definitions(window:)` and
         `pgbus_workflow_stats(workflow_class:, window:)`, and
         `pgbus_workflows_attention` takes `workflow_class:`.

@@ -83,13 +83,14 @@ module Pgbus
             revisions: sample_order_revisions(now) }
         end
 
-        # capture fails on 18 % of the newest revision's attempts, 1 % before.
+        # capture fails on 18 % of the newest revision's attempts, 1 % before;
+        # each total is the sum of its steps, as the by_revision query gives.
         def sample_order_revisions(now)
           stat = lambda { |attempts, failed, p95|
             insight_stat(attempts, run: [820.0, p95, p95 * 2], pickup: [60.0, 900.0], first_seen_at: now, failed: failed,
                                    reattempted: failed)
           }
-          insight_revision(SampleDeployTasks::NEW_REVISION, now - 14_400, now - 60, stat.call(560, 41, 6_200.0),
+          insight_revision(SampleDeployTasks::NEW_REVISION, now - 14_400, now - 60, stat.call(560, 27, 6_200.0),
                            "reserve" => stat.call(140, 0, 180.0), "capture" => stat.call(150, 27, 9_100.0),
                            "notify_vendors" => stat.call(136, 0, 240_000.0), "confirm" => stat.call(134, 0, 400.0)) +
             insight_revision(SampleDeployTasks::OLD_REVISION, now - 86_000, now - 14_500, stat.call(1_180, 4, 2_900.0),
@@ -113,9 +114,12 @@ module Pgbus
             reached: insight_reached("welcome" => 15, "reminder" => 14),
             stopped: { %w[welcome ready] => 1, %w[reminder ready] => 14 },
             revisions: insight_revision(SampleDeployTasks::NEW_REVISION, now - 86_000, now - 300,
-                                        insight_stat(91, run: [140.0, 420.0, 900.0], pickup: [55.0, 900.0], first_seen_at: now),
+                                        insight_stat(91, run: [140.0, 420.0, 900.0], pickup: [55.0, 900.0], first_seen_at: now,
+                                                         skipped: 3),
                                         "welcome" => insight_stat(81, run: [120.0, 380.0, 900.0], pickup: [50.0, 400.0],
                                                                       first_seen_at: now),
+                                        "nudge" => insight_stat(3, run: [nil, nil, nil], pickup: [20.0, 40.0], first_seen_at: now,
+                                                                   skipped: 3),
                                         "reminder" => insight_stat(7, run: [210.0, 640.0, 700.0], pickup: [1_200.0, 4_800.0],
                                                                       first_seen_at: now)) }
         end
@@ -126,7 +130,7 @@ module Pgbus
           stat = ->(attempts, run) { insight_stat(attempts, run: run, pickup: [70.0, 650.0], first_seen_at: now - 80_000) }
           { klass: klass, hourly: 6, attention: 0,
             ongoing: insight_ongoing("ShippingWorkflow", [["waiting", "ship", 23], ["ready", "notify", 1]]),
-            ended: insight_ended("ShippingWorkflow", 133, 0, 30_600_000.0, 71_000_000.0, 84_000_000.0),
+            ended: insight_ended("ShippingWorkflow", 133, 0, 30_600_000.0, 71_000_000.0, 90_000_000.0),
             stats: { "label" => stat.call(160, [600.0, 1_500.0, 2_200.0]),
                      "ship" => stat.call(137, [28_800_000.0, 70_000_000.0, 83_000_000.0]),
                      "notify" => stat.call(133, [180.0, 520.0, 800.0]) },
@@ -135,9 +139,11 @@ module Pgbus
             stopped: { %w[ship waiting] => 23, %w[notify ready] => 1, %w[notify finished] => 26 },
             revisions: insight_revision(SampleDeployTasks::NEW_REVISION, now - 14_400, now - 120, stat.call(180, [700.0, 2_000.0, 3_000.0]),
                                         "label" => stat.call(64, [600.0, 1_500.0, 2_200.0]),
+                                        "ship" => stat.call(58, [28_800_000.0, 70_000_000.0, 83_000_000.0]),
                                         "notify" => stat.call(58, [180.0, 520.0, 800.0])) +
               insight_revision(OLDEST_REVISION, now - 86_000, now - 14_500, stat.call(240, [690.0, 1_900.0, 2_900.0]),
                                "label" => stat.call(96, [610.0, 1_480.0, 2_100.0]),
+                               "ship" => stat.call(69, [28_500_000.0, 69_000_000.0, 82_000_000.0]),
                                "notify" => stat.call(75, [175.0, 515.0, 790.0])) }
         end
 
