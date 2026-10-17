@@ -1,0 +1,15 @@
+docs/Gemfile.lock
+  ai_agent 4,513
+Gemfile.lock
+  ai_agent 4,537
+lib/pgbus/version.rb
+  ai_agent 4
+gemfiles/rails_7_1.gemfile.lock
+  ai_agent 4,557
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "3819d45e30f7fe92bac9345b351b9b3ac84cef58",
+  "prompts": {}
+}
