@@ -1,0 +1,39 @@
+spec/integration/streams/stream_name_length_spec.rb
+  s_707f05896d2adc::t_8729cd3e84038c 45
+AGENTS.md
+  s_707f05896d2adc::t_0b5a586566e866 37
+  s_707f05896d2adc::t_8b7d5001c0e908 77
+  s_707f05896d2adc::t_648a919224d118 38
+  s_707f05896d2adc::t_0c4e9fb5562d2a 209
+  s_707f05896d2adc::t_888db23da5ee59 224
+  s_707f05896d2adc::t_97b43ab1a97d2c 261-262
+  s_707f05896d2adc::t_b2b45602ae2e81 197-198
+  s_707f05896d2adc::t_214092997c5508 6-7
+  s_707f05896d2adc::t_dd1d69cc06de75 69-70,74-76,78-94
+  s_707f05896d2adc::t_3ff6cfa78ae4d1 71-73
+  s_707f05896d2adc::t_68afbd6aee811f 28
+.claude/commands/architect.md
+  s_707f05896d2adc::t_cbc74fd539b38c 92
+.claude/settings.json
+  s_707f05896d2adc::t_c6d58493dcea64 4-11
+spec/system/events_spec.rb
+  s_707f05896d2adc::t_8aa70924621e9b 12
+spec/spec_helper.rb
+  s_707f05896d2adc::t_9493f0de7c54d7 27
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "370ec2ca2fbf5f9601b6cabbcfb5164027717ef0",
+  "prompts": {},
+  "sessions": {
+    "s_707f05896d2adc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "882973f7-72ec-475c-b8ff-7f7f6099c58c",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
