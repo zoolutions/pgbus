@@ -1,0 +1,27 @@
+README.md
+  s_e96e270ce76923::t_36e181ecdbaccb 2222
+CHANGELOG.md
+  s_e96e270ce76923::t_36e181ecdbaccb 5
+spec/pgbus/deploy/runner_spec.rb
+  s_e96e270ce76923::t_36e181ecdbaccb 133-147
+lib/pgbus/deploy/runner.rb
+  s_e96e270ce76923::t_36e181ecdbaccb 66-72
+lib/pgbus/recurring/scheduler.rb
+  s_e96e270ce76923::t_36e181ecdbaccb 126
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "841df5dded6beb14bf39dc44948c05da4ec3add8",
+  "prompts": {},
+  "sessions": {
+    "s_e96e270ce76923": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5914cabb-29d8-407e-aea9-b5a4a5f09dbf",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
