@@ -73,7 +73,8 @@ module Pgbus
             subscribe("pgbus.recurring.enqueue") { |event| on_recurring_enqueue(event) },
             subscribe("pgbus.worker.recycle") { |event| on_worker_recycle(event) },
             subscribe("pgbus.consumer.recycle") { |event| on_consumer_recycle(event) },
-            subscribe("pgbus.client.pool") { |event| on_client_pool(event) }
+            subscribe("pgbus.client.pool") { |event| on_client_pool(event) },
+            *WorkflowMetrics::EVENTS.map { |name| subscribe(name) { |event| on_workflow(event) } }
           ].freeze
         end
 
@@ -249,6 +250,18 @@ module Pgbus
           tags = { hostname: hostname }
           backend.gauge("#{METRIC_PREFIX}pool_size", payload[:size], tags)
           backend.gauge("#{METRIC_PREFIX}pool_available", payload[:available], tags)
+        end
+
+        # ── Workflows (issue #540) ────────────────────────────────────────
+
+        def on_workflow(event)
+          WorkflowMetrics.samples(event.name, event.payload).each do |kind, name, value, tags|
+            case kind
+            when :histogram then backend.histogram(name, value, tags)
+            when :counter then backend.increment(name, value, tags)
+            when :gauge then backend.gauge(name, value, tags)
+            end
+          end
         end
 
         def hostname

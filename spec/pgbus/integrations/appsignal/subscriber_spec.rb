@@ -337,4 +337,44 @@ RSpec.describe "Pgbus::Integrations::Appsignal::Subscriber" do
       expect(Pgbus.logger).to have_received(:warn)
     end
   end
+
+  describe "workflow events (issue #540)" do
+    let(:base) { { workflow_class: "SignupWorkflow", workflow_id: "wf-1" } }
+
+    it "mirrors the Prometheus step histogram and counter" do
+      ActiveSupport::Notifications.instrument("pgbus.workflow.step", **base, step_name: "welcome", attempt: 1,
+                                                                             outcome: "completed", duration: 0.25)
+
+      tags = { workflow_class: "SignupWorkflow", step: "welcome", outcome: "completed" }
+      expect(appsignal_class.distributions).to include(["pgbus_workflow_step_duration_seconds", 0.25, tags])
+      expect(appsignal_class.counters).to include(["pgbus_workflow_steps_total", 1, tags])
+    end
+
+    it "counts finished, paused, cancelled and stalled runs" do
+      ActiveSupport::Notifications.instrument("pgbus.workflow_finished", **base)
+      ActiveSupport::Notifications.instrument("pgbus.workflow_paused", **base, error_class: "Timeout::Error")
+      ActiveSupport::Notifications.instrument("pgbus.workflow_cancelled", **base)
+      ActiveSupport::Notifications.instrument("pgbus.workflow.stall_detected", **base, step_name: "charge", detection: "sweep")
+
+      expect(appsignal_class.counters).to include(
+        ["pgbus_workflows_finished_total", 1, { workflow_class: "SignupWorkflow" }],
+        ["pgbus_workflows_paused_total", 1, { workflow_class: "SignupWorkflow", error_class: "Timeout::Error" }],
+        ["pgbus_workflows_cancelled_total", 1, { workflow_class: "SignupWorkflow" }],
+        ["pgbus_workflow_stalls_total", 1, { workflow_class: "SignupWorkflow", step: "charge", detection: "sweep" }]
+      )
+    end
+
+    it "sets the status and stuck-reason gauges" do
+      ActiveSupport::Notifications.instrument(
+        "pgbus.workflow.gauge",
+        statuses: [{ workflow_class: "SignupWorkflow", status: "ready", count: 4 }],
+        stuck: [{ workflow_class: "SignupWorkflow", reason: "overdue", count: 1 }]
+      )
+
+      expect(appsignal_class.gauges).to include(
+        ["pgbus_workflows", 4, { workflow_class: "SignupWorkflow", status: "ready" }],
+        ["pgbus_workflows_stuck", 1, { workflow_class: "SignupWorkflow", reason: "overdue" }]
+      )
+    end
+  end
 end
