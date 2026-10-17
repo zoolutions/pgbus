@@ -44,8 +44,12 @@ module Pgbus
       # its stall_at (detection: "sweep"): config.workflow_stall_action
       # applies, with Pgbus::Workflow::StepStalled recorded on the row.
       def stall!(record, step, detection:, notes:, config: Pgbus.configuration)
-        error = StepStalled.new("#{step.step_name} attempt #{step.attempt} stalled (#{detection}): " \
-                                "#{step.worker || "its worker"} stopped without finishing it")
+        why = if detection == "redelivery"
+                "its message came back while it was in_progress: the worker #{step.worker} died"
+              else
+                "it was still in_progress at its stall_at #{step.stall_at&.utc&.iso8601} (worker #{step.worker})"
+              end
+        error = StepStalled.new("#{step.step_name} attempt #{step.attempt} stalled: #{why}")
         Runner.event!(record, "stall_detected", actor: Runner::SYSTEM_ACTOR, step: step,
                                                 details: { detection: detection, worker: step.worker,
                                                            stall_at: step.stall_at&.utc&.iso8601(3) }.compact)

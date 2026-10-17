@@ -78,10 +78,7 @@ module Pgbus
       # transaction usable). The first StepJob goes out when it commits.
       def insert_run(klass, attrs, actor:, reason: nil)
         record, duplicate = WorkflowEntry.transaction(requires_new: true) do
-          unless WorkflowEntry.insert_run!(attrs)
-            next [WorkflowEntry.find_by!(workflow_class: klass.name, idempotency_key: attrs[:idempotency_key]),
-                  true]
-          end
+          next [existing_run(klass, attrs), true] unless WorkflowEntry.insert_run!(attrs)
 
           record = WorkflowEntry.find_by!(workflow_id: attrs[:workflow_id])
           event!(record, "started", actor: actor, reason: reason, details: { rerun_of: attrs[:rerun_of_workflow_id] }.compact)
@@ -91,10 +88,22 @@ module Pgbus
         end
         klass.new(record, duplicate_start: duplicate)
       rescue ActiveRecord::RecordNotUnique
+        # ON CONFLICT only absorbs the idempotency index. Two concurrent
+        # starts with the same key and subject can instead trip the
+        # one-ongoing index first; by then the winner has committed, so its
+        # key is visible: that is still a duplicate start, not a second run.
+        existing = attrs[:idempotency_key] && existing_run(klass, attrs, required: false)
+        return klass.new(existing, duplicate_start: true) if existing
+
         holder = WorkflowEntry.ongoing.find_by(workflow_class: klass.name, subject_type: attrs[:subject_type],
                                                subject_id: attrs[:subject_id])
         raise AlreadyRunning.new("#{klass.name} already has an ongoing run for #{attrs[:subject_type]} " \
                                  "#{attrs[:subject_id]} (#{holder&.workflow_id})", workflow: holder && klass.new(holder))
+      end
+
+      def existing_run(klass, attrs, required: true)
+        scope = WorkflowEntry.where(workflow_class: klass.name, idempotency_key: attrs[:idempotency_key])
+        required ? scope.take! : scope.take
       end
 
       # --- outside verbs ------------------------------------------------

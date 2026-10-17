@@ -67,6 +67,10 @@ RSpec.describe Pgbus::Process::Dispatcher do
       expect(described_class::BATCH_CLEANUP_INTERVAL).to eq(3600)
     end
 
+    it "has a workflow cleanup interval of 1 hour" do
+      expect(described_class::WORKFLOW_CLEANUP_INTERVAL).to eq(3600)
+    end
+
     it "has a recurring cleanup interval of 1 hour" do
       expect(described_class::RECURRING_CLEANUP_INTERVAL).to eq(3600)
     end
@@ -185,6 +189,28 @@ RSpec.describe Pgbus::Process::Dispatcher do
       expect(dispatcher).to have_received(:cleanup_batches)
     end
 
+    it "runs the workflow sweep on workflow_sweep_interval" do
+      allow(dispatcher).to receive(:sweep_workflows)
+      allow(dispatcher.config).to receive(:workflow_sweep_interval).and_return(300)
+
+      dispatcher.set_maintenance_timestamp(:@last_workflow_sweep_at, past_monotonic(299))
+      dispatcher.send(:run_maintenance)
+      expect(dispatcher).not_to have_received(:sweep_workflows)
+
+      dispatcher.set_maintenance_timestamp(:@last_workflow_sweep_at, past_monotonic(301))
+      dispatcher.send(:run_maintenance)
+      expect(dispatcher).to have_received(:sweep_workflows).once
+    end
+
+    it "runs the workflow cleanup hourly" do
+      allow(dispatcher).to receive(:cleanup_workflows)
+
+      dispatcher.set_maintenance_timestamp(:@last_workflow_cleanup_at, past_monotonic(described_class::WORKFLOW_CLEANUP_INTERVAL + 1))
+      dispatcher.send(:run_maintenance)
+
+      expect(dispatcher).to have_received(:cleanup_workflows)
+    end
+
     it "rescues errors from maintenance methods" do
       dispatcher.set_maintenance_timestamp(:@last_cleanup_at, past_monotonic(described_class::CLEANUP_INTERVAL + 1))
       allow(dispatcher).to receive(:cleanup_processed_events).and_raise(StandardError, "boom")
@@ -301,6 +327,39 @@ RSpec.describe Pgbus::Process::Dispatcher do
     it "rescues errors gracefully" do
       allow(Pgbus::Batch).to receive(:cleanup).and_raise(StandardError, "db error")
       expect { dispatcher.send(:cleanup_batches) }.not_to raise_error
+    end
+  end
+
+  describe "#sweep_workflows (private)" do
+    it "repairs stuck steps through Workflow::Sweep" do
+      allow(Pgbus::Workflow::Sweep).to receive(:repair).and_return(stalled: 1, resent: 0)
+
+      dispatcher.send(:sweep_workflows)
+
+      expect(Pgbus::Workflow::Sweep).to have_received(:repair).with(config: dispatcher.config)
+    end
+
+    it "returns the error so the cycle sees the failure" do
+      allow(Pgbus::Workflow::Sweep).to receive(:repair).and_raise(StandardError, "db error")
+
+      expect(dispatcher.send(:sweep_workflows)).to be_a(StandardError)
+    end
+  end
+
+  describe "#cleanup_workflows (private)" do
+    it "deletes terminal workflows past workflow_retention" do
+      allow(dispatcher.config).to receive(:workflow_retention).and_return(86_400)
+      allow(Pgbus::Workflow::Sweep).to receive(:cleanup).and_return(4)
+
+      dispatcher.send(:cleanup_workflows)
+
+      expect(Pgbus::Workflow::Sweep).to have_received(:cleanup).with(retention: 86_400)
+    end
+
+    it "returns the error so the cycle sees the failure" do
+      allow(Pgbus::Workflow::Sweep).to receive(:cleanup).and_raise(StandardError, "db error")
+
+      expect(dispatcher.send(:cleanup_workflows)).to be_a(StandardError)
     end
   end
 
@@ -749,7 +808,9 @@ RSpec.describe Pgbus::Process::Dispatcher do
         "@last_job_lock_cleanup_at": :cleanup_job_locks,
         "@last_stats_cleanup_at": :cleanup_stats,
         "@last_orphan_stream_sweep_at": :sweep_orphan_streams,
-        "@last_table_maintenance_at": :run_table_maintenance
+        "@last_table_maintenance_at": :run_table_maintenance,
+        "@last_workflow_sweep_at": :sweep_workflows,
+        "@last_workflow_cleanup_at": :cleanup_workflows
       }
     end
 
