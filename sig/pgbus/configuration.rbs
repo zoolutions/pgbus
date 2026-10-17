@@ -320,6 +320,20 @@ module Pgbus
     def worker_notify_wakeup?: () -> bool
     def workers: () -> Array[untyped]
     def workers=: (untyped value) -> untyped
+    def workflow_error_backtrace_lines: () -> Integer
+    def workflow_error_backtrace_lines=: (untyped) -> untyped
+    def workflow_max_payload_size: () -> Integer
+    def workflow_max_payload_size=: (untyped) -> untyped
+    def workflow_queue: () -> String
+    def workflow_queue=: (untyped value) -> untyped
+    def workflow_retention: () -> Numeric?
+    def workflow_retention=: (untyped value) -> untyped
+    def workflow_stall_action: () -> Symbol
+    def workflow_stall_action=: (untyped value) -> untyped
+    def workflow_stall_threshold: () -> Numeric?
+    def workflow_stall_threshold=: (untyped value) -> untyped
+    def workflow_sweep_interval: () -> Numeric?
+    def workflow_sweep_interval=: (untyped value) -> untyped
     def zombie_detection: () -> bool
     def zombie_detection=: (untyped) -> untyped
   end
