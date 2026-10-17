@@ -1,5 +1,9 @@
 # frozen_string_literal: true
 
+require "date"
+require "time"
+require "active_support/core_ext/time"
+
 module Pgbus
   module MCP
     # How MCP tools write a data-source row as JSON: times as ISO 8601 UTC,
