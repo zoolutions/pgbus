@@ -54,7 +54,10 @@ RSpec.describe "AppSignal transactions around a pgbus execution" do # rubocop:di
       expect(results).to eq(%i[failed failed])
       expect(transactions.size).to eq(2)
       expect(transactions).to all(have_attributes(namespace: "background_job", action: "NoSuchJob#perform", completed?: true))
-      expect(transactions.map { |t| t.errors.map(&:class) }).to all(eq([ActiveJob::UnknownJobClassError]))
+      # Rails 7.2+ raises ActiveJob::UnknownJobClassError; 7.1 the bare NameError from constantize.
+      unknown_job_error = defined?(ActiveJob::UnknownJobClassError) ? ActiveJob::UnknownJobClassError : NameError
+      expect(transactions.map { |t| t.errors.map(&:class) }).to all(eq([unknown_job_error]))
+      expect(transactions.map { |t| t.errors.sole.message }).to all(include("NoSuchJob"))
       expect(transactions.map { |t| t.tags.slice("queue", "job_class", "attempts") }).to eq(
         [{ "queue" => "default", "job_class" => "NoSuchJob", "attempts" => 1 },
          { "queue" => "default", "job_class" => "NoSuchJob", "attempts" => 2 }]
