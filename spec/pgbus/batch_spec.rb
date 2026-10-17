@@ -32,13 +32,52 @@ RSpec.describe Pgbus::Batch do
     it "stores callback classes and properties" do
       callback_class = Class.new
       batch = described_class.new(
-        on_finish: callback_class,
+        on_complete: callback_class,
         description: "test batch",
         properties: { user_id: 1 }
       )
+      expect(batch.on_complete).to eq(callback_class)
       expect(batch.on_finish).to eq(callback_class)
       expect(batch.description).to eq("test batch")
       expect(batch.properties[:user_id]).to eq(1)
+    end
+
+    describe "the deprecated on_finish:" do
+      let(:logger) { instance_double(Logger, warn: nil, error: nil, info: nil, debug: nil) }
+
+      before do
+        allow(Pgbus).to receive(:logger).and_return(logger)
+        described_class.reset_executions_migrated_cache!
+      end
+
+      after { described_class.reset_executions_migrated_cache! }
+
+      it "maps onto on_complete and warns once per process" do
+        callback_class = Class.new
+
+        batch = described_class.new(on_finish: callback_class)
+        described_class.new(on_finish: callback_class)
+
+        expect(batch.on_complete).to eq(callback_class)
+        expect(logger).to have_received(:warn).with(no_args).once
+      end
+
+      it "cannot be combined with on_complete:" do
+        expect { described_class.new(on_complete: Class.new, on_finish: Class.new) }
+          .to raise_error(ArgumentError, /on_complete/)
+      end
+    end
+
+    it "stores on_complete in the on_finish columns" do
+      callback_job = Class.new(ActiveJob::Base) do
+        def self.name = "BatchSpec::CompleteJob"
+        def perform(*); end
+      end
+      stub_const("BatchSpec::CompleteJob", callback_job)
+
+      described_class.new(on_complete: callback_job).enqueue {} # rubocop:disable Lint/EmptyBlock
+
+      expect(Pgbus::BatchEntry).to have_received(:create!).with(hash_including(on_finish_class: "BatchSpec::CompleteJob"))
     end
 
     it "accepts on_failure: as the canonical failure callback" do
@@ -129,6 +168,60 @@ RSpec.describe Pgbus::Batch do
 
       expect(Pgbus::BatchEntry).not_to have_received(:increment_total_jobs!)
       expect(Pgbus::BatchEntry).to have_received(:check_finished!).with(batch.batch_id).twice
+    end
+  end
+
+  describe "#add" do
+    let(:work_job) do
+      Class.new(ActiveJob::Base) do
+        def self.name = "BatchSpec::WorkJob"
+        def perform(*); end
+      end
+    end
+
+    before do
+      stub_const("BatchSpec::WorkJob", work_job)
+      allow(ActiveJob).to receive(:perform_all_later)
+    end
+
+    it "enqueues job instances in one bulk call inside the batch tag" do
+      jobs = [work_job.new(1), work_job.new(2)]
+      tag = nil
+      allow(ActiveJob).to receive(:perform_all_later) { tag = Thread.current[:pgbus_batch_id] }
+      batch = described_class.new
+
+      expect(batch.add(*jobs)).to eq(jobs)
+      expect(ActiveJob).to have_received(:perform_all_later).with(jobs).once
+      expect(tag).to eq(batch.batch_id)
+    end
+
+    it "adds to an already-started batch through the reopen path" do
+      batch = described_class.new
+      batch.enqueue {} # rubocop:disable Lint/EmptyBlock
+
+      batch.add(work_job.new)
+
+      expect(Pgbus::BatchEntry).to have_received(:create!).once
+      expect(Pgbus::BatchEntry).to have_received(:check_finished!).with(batch.batch_id).twice
+    end
+
+    it "yields a block inside the batch tag" do
+      tag = nil
+      batch = described_class.new
+
+      batch.add { tag = Thread.current[:pgbus_batch_id] }
+
+      expect(tag).to eq(batch.batch_id)
+    end
+
+    it "rejects anything that is not a job instance" do
+      expect { described_class.new.add(work_job) }.to raise_error(ArgumentError, /job instance/)
+    end
+
+    it "is a no-op without jobs or a block" do
+      described_class.new.add
+
+      expect(Pgbus::BatchEntry).not_to have_received(:create!)
     end
   end
 
@@ -474,7 +567,7 @@ RSpec.describe Pgbus::Batch do
 
     it "serializes a configured instance at batch-creation time" do
       callback = callback_job_class.new.set(queue: :critical)
-      batch = described_class.new(on_finish: callback)
+      batch = described_class.new(on_complete: callback)
 
       batch.enqueue {} # rubocop:disable Lint/EmptyBlock
 
@@ -490,7 +583,7 @@ RSpec.describe Pgbus::Batch do
       allow(described_class).to receive(:callback_jobs_migrated?).and_return(false)
       logger = instance_double(Logger, warn: nil, error: nil, info: nil, debug: nil)
       allow(Pgbus).to receive(:logger).and_return(logger)
-      batch = described_class.new(on_finish: callback_job_class.new.set(queue: :critical))
+      batch = described_class.new(on_complete: callback_job_class.new.set(queue: :critical))
 
       batch.enqueue {} # rubocop:disable Lint/EmptyBlock
 

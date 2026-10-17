@@ -298,6 +298,17 @@ module Pgbus
       Streams::Key.queue_name_budget
     end
 
+    # Open a batch, yield a Pgbus::Batch::Builder, and start the batch when
+    # the block returns — the top-level shortcut for Pgbus::Batch.start.
+    #
+    #   Pgbus.batch(description: "Import") do |b|
+    #     b.on_complete ImportDoneJob
+    #     b.add(*rows.map { |row| ImportRowJob.new(row.id) })
+    #   end
+    def batch(**, &)
+      Batch.start(**, &)
+    end
+
     # Publish an event to the bus — the top-level shortcut for
     # `Pgbus::EventBus::Publisher.publish`, symmetric with `Pgbus.stream`.
     #

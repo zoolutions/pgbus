@@ -263,7 +263,7 @@ module Pgbus
         [:add_batch_executions]
       end
 
-      # Configured callback instances (on_finish: MyJob.new.set(...)) need
+      # Configured callback instances (on_complete: MyJob.new.set(...)) need
       # somewhere to store the serialized job — issue #415.
       def batch_callback_jobs_migrations
         return [] unless table_exists?("pgbus_batches")
