@@ -118,9 +118,9 @@ Before moving to Phase B, one of these must be true:
 
 - All CI checks are green on the latest pushed commit. OR
 - All CI checks are pending (running) on the latest pushed commit, AND no checks failed in the most recent completed run on this commit. OR
-- A persistent CI failure exists that is **not caused by changes on this branch** (e.g., a flaky test on `main`, a secret-scanning job that fails for environmental reasons). Report this explicitly and proceed to Phase B with the caveat noted.
+- A CI failure persists whose cause is **outside the repository** (a runner or registry outage, a missing secret). Report the blocker and proceed to Phase B.
 
-If failures persist on this branch's changes, **do NOT proceed to Phase B**. Report what's still failing, what's been tried, and ask the user how to proceed.
+A failure that comes from code is fixed here, including a flaky test or one already failing on `main`: the PR does not merge red. If a fix did not take (same check, same error), the diagnosis was wrong. Re-read the log, re-diagnose (consult the advisor), push a different fix, and stay in Phase A.
 
 ---
 

@@ -181,8 +181,11 @@ the main working directory, main, or another issue's worktree.
    comment (gh pr comment <PR> --body-file <file>): nobody reads this session before the merge.
 3. Run /finish-prs <PR> automerge with the Skill tool. You have no ScheduleWakeup: wait for CI and
    cubic with gh pr checks <PR> --watch --fail-fast, as its Phase 3 says.
-4. Never ask a question. Wherever a command says to ask the user, park: comment on the PR (on issue
-   #<N> if no PR exists yet) with what is stuck and what the user must decide, then stop. If the
+4. Never ask a question, and never offer the user a choice. A finding, a failing check or a
+   validator note is work: fix it now, in this PR, whatever its severity. Never defer it to a
+   follow-up. Park only for a blocker outside the repository (an outage, missing credentials, a
+   GitHub permission), or where a command says to stop and ask: comment on the PR (on issue #<N>
+   if no PR exists yet) with the blocker and what removes it, then stop. If the
    Agent tool is unavailable, park with reason "validator-unavailable": never skip fable-validator.
    If the Skill tool cannot find a command, read .claude/commands/<name>.md and follow it.
 5. Your final message is exactly one JSON object and nothing else:

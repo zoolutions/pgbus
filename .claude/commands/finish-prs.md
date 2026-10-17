@@ -112,9 +112,12 @@ Invoke `/github-review-pr <PR>` (via the Skill tool). It runs **conflicts, then 
 - Fix any red CI checks (lint, specs, build) and push.
 - Address every unresolved review thread (cubic or human): implement valid fixes, push back with reasoning on wrong ones, record the outcome in cubic, resolve threads.
 
-Wait for it to finish. If it reports a persistent failure it could not fix (or a review thread it could not resolve without a decision): default mode → surface it to the user and mark the PR `needs-user`; `automerge` mode → park (2g). Do not block the whole queue on one stuck PR; continue to the next PR, then return.
+Wait for it to finish. A review thread never needs a decision: `/github-review-comments` fixes it or answers it. A failure is work too. The only things surfaced to the user (default mode, `needs-user`) or parked (`automerge`, 2g) are **blockers outside the repository**: a runner or registry outage, a missing secret or credential, a GitHub permission. Do not block the whole queue on one blocked PR; continue to the next PR, then return.
 
-**Rounds (`automerge`).** A round is one `/github-review-pr` pass, the CI run its push causes, and cubic's re-review of the new head. The first 2d is round 1; each later return to 2d is the next round. **At most 3 rounds per PR**: when 2e would send a PR to a fourth, park it (2g) with what is still open. A CI failure that repeats after a fix attempt — the same failing check with the same error — parks it at once: do not push the same fix again.
+**Rounds.** A round is one `/github-review-pr` pass, the CI run its push causes, and cubic's re-review of the new head. **There is no round limit.** Every round fixes everything open, whatever its severity (P1 to P3, docs, spec-precision nits): nothing is deferred to a follow-up, and nothing is offered to the user as a choice. Two rules keep the rounds converging:
+
+- A finding re-raised after it was fixed or answered gets one reply pointing at that commit or answer, and is resolved. It is not re-litigated.
+- A CI failure that repeats after a fix (same check, same error) means the diagnosis was wrong. Never push the same fix again: re-read the log, re-diagnose (consult the advisor), and push a different fix. Park only when the cause is outside the repository.
 
 ### 2e. Verify merge-ready
 
@@ -150,7 +153,7 @@ gh pr checks <PR> --json name,state,bucket
    When the cubic MCP is loaded (`ToolSearch` with `select:mcp__cubic__get_pr_issues,mcp__cubic__update_pr_issue_status,mcp__cubic__trigger_pr_review`), cross-check with `get_pr_issues`: `review.status == "completed"`, `review.hasNewCommitsSinceReview == false`, `openIssueCount == 0`. A disagreement between the two is a failed gate. A `COMMENTED` review — even "0 issues found" — is **not** approval. Gates 1–3 hold and only this one fails → 2e′.
 
    Example (PR #537): the latest cubic review is `APPROVED` on `841df5d`, which is the head → approved. Had the head been `64c00ba`, the latest cubic review would have been `COMMENTED` on it → not approved → 2e′.
-5. **`fable-validator` PASS or PASS WITH NOTES** on the final diff (2f).
+5. **`fable-validator` PASS** on the final diff, or **PASS WITH NOTES** with every note fixed (2f).
 
 ### 2e′. Cubic quiet (`automerge`)
 
@@ -163,7 +166,7 @@ Never merge on a `COMMENTED` review. One trigger per head SHA: a new push (a new
 
 ### 2f. Hand off for merge
 
-Run the `fable-validator` agent on the combined diff first (`git diff origin/main...HEAD` in the worktree; give it the PR's linked issue and the acceptance criteria from the PR body). On BLOCK do not merge: default mode → mark it `needs-user` and report the blockers; `automerge` mode → park (2g) with the blockers.
+Run the `fable-validator` agent on the combined diff first (`git diff origin/main...HEAD` in the worktree; give it the PR's linked issue and the acceptance criteria from the PR body). On BLOCK, or on PASS WITH NOTES, fix every blocker and every note (a failing test first for code) and go back to 2d for a new round. A note that is factually wrong gets a one-line rebuttal in the PR body instead. Merge only on PASS, or on PASS WITH NOTES whose notes are all fixed or rebutted.
 
 - **`automerge` mode:** `gh pr merge <PR> --squash --delete-branch`, only once gates 1–5 hold. Do not arm `--auto`: GitHub would merge as soon as the *required* checks pass, while a check that is not required (Security, Gitar) may still be pending or about to fail. `--delete-branch` is redundant where the repo deletes merged branches, but keeps the command correct where it does not. Inside a worktree gh may fail to delete or switch the **local** branch after merging; that is cleanup, not a failed merge. Judge the merge by `gh pr view <PR> --json state,mergeCommit --jq '{state, sha: .mergeCommit.oid}'` (`MERGED` + a SHA), never by gh's exit code. Then go to Phase 3.
 - **Default (pause) mode:** report this PR as ✅ merge-ready with its URL and a one-line "what's in it," and tell the user it's ready to merge. Then **wait** (Phase 3).
@@ -172,9 +175,9 @@ Mark the PR's task `completed` (merge-ready or merged) — or `needs-user` with 
 
 ### 2g. Park a PR
 
-Parking leaves the PR for the user without blocking the queue:
+Parking is for a blocker outside the repository (2d), or for cubic withholding approval with nothing left open (2e′). It leaves the PR for the user without blocking the queue:
 
-1. `gh pr comment <PR> --body '…'` naming what is stuck — the failing check and its error line, the open threads (links), cubic's latest review state and SHA, the validator's blockers — and what the user must decide. Say which round it stopped in.
+1. `gh pr comment <PR> --body '…'` naming the blocker (the failing check and its error line, or cubic's latest review state and SHA) and what removes it. A park comment never lists findings to fix later and never offers options ("another round or merge as is", "take these as a follow-up"). A finding is fixed in the round it appears, never parked.
 2. Mark its task `needs-user` with a one-line reason.
 3. Leave the PR open and its worktree as it is. Continue with the next PR.
 
@@ -214,9 +217,9 @@ When the queue is drained (all merged, or all merge-ready-and-handed-off, or par
 
 | PR | Result | Note |
 |----|--------|------|
-| #a | ✅ merged / ✅ merge-ready / ⏳ awaiting-merge / ⚠️ needs-user | one line (rounds used, the park reason) |
+| #a | ✅ merged / ✅ merge-ready / ⏳ awaiting-merge / ⚠️ needs-user | one line (rounds used, the blocker) |
 
-Then: what the user must do next (merge the ready ones, decide on any `needs-user` items), and whether any recurring drift (CHANGELOG, docs lockfile) is worth fixing at the source per Phase 4.
+Then: what the user must do next (merge the ready ones, remove the blocker of any `needs-user` items), and whether any recurring drift (CHANGELOG, docs lockfile) is worth fixing at the source per Phase 4.
 
 ---
 

@@ -173,9 +173,9 @@ If you can identify that certain failures will persist (e.g., a test that requir
 
 - **Read before fixing** -- always read the actual failing code before attempting a fix
 - **Fix the root cause** -- don't add `# rubocop:disable` to bypass lint; fix the actual issue
-- **Don't fix unrelated failures** -- if a spec was already failing on main, note it but don't fix it in this PR
+- **Fix every failure the PR's CI shows** -- one already failing on main included: the PR does not merge red, and main gets the fix with it
 - **CI environment differences** -- CI may not have PostgreSQL with PGMQ extension. Tests that require PGMQ will be pending (gated by PGBUS_DATABASE_URL).
-- **Flaky tests** -- if a test passes locally but fails in CI, note it as potentially flaky rather than adding workarounds
+- **Flaky tests** -- a test that passes locally but fails in CI has a cause (timing, ordering, shared state, an environment difference): find it and fix it. No retries, sleeps or skips as workarounds
 - **Don't retry CI blindly** -- diagnose first, fix, then push. Each push triggers a full CI run.
 
 Now begin by determining the PR number and fetching the failing checks.
