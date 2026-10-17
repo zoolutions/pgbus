@@ -58,6 +58,14 @@ RSpec.describe Pgbus::Generators::AddWorkflowsGenerator do
       end
     end
 
+    it "drops the three tables on rollback, children first" do
+      generate_migration(described_class, basename: basename) do |_path, content|
+        down = content[/def down.*?\n  end/m]
+        expect(down).to include("drop_table :pgbus_workflow_events, if_exists: true")
+        expect(down.index("pgbus_workflow_events")).to be < down.index("drop_table :pgbus_workflows,")
+      end
+    end
+
     it "creates the append-only pgbus_workflow_events table" do
       generate_migration(described_class, basename: basename) do |_path, content|
         expect(content).to include("create_table :pgbus_workflow_events, if_not_exists: true")
