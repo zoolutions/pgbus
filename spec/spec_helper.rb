@@ -24,7 +24,7 @@ unless ENV["PGBUS_COVERAGE"] == "off"
     # Baseline measured from `bundle exec rspec spec/pgbus/ spec/generators/`:
     # line 89.75% (7920/8825), branch 75.41% (2183/2895). Floors set below the
     # measured values so CI is green day one; ratchet toward the 80%/100% targets
-    # in .claude/rules/testing.md in follow-ups.
+    # in AGENTS.md (Always Do: Coverage) in follow-ups.
     minimum_coverage line: 89, branch: 75
   end
 end

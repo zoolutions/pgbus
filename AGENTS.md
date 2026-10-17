@@ -3,8 +3,8 @@
 PostgreSQL-native job processing and event bus for Rails, built on PGMQ.
 
 Project instructions for every agent: Claude Code (`CLAUDE.md` imports this file); Grok, Cursor,
-Copilot and Codex read this file directly. Claude-only material (slash commands, rules) lives
-under `.claude/`.
+Copilot and Codex read this file directly. Claude's workflow comes from the `flow` and `ruby-gem`
+plugins (`.claude/settings.json`), which act on the facts in `## Workflow` below.
 
 ## Tech Stack
 
@@ -25,7 +25,7 @@ under `.claude/`.
 5. **NO unsynchronized shared state** — use Mutex or Concurrent primitives, built at load (never an unguarded `@x ||=` on module state); a `ThreadSafety/*` disable only with the reason it is safe next to it. See `docs/concurrency.md`
 6. **NO swallowing errors** — log via `Pgbus.logger`, track in `pgbus_failed_events`
 7. **NO `Record` suffix on model classes** — see Model Naming below
-8. **NO hand-formatted time in the dashboard** — no raw `*_at`/`vt`/`*_age_sec` output, no `strftime`/`time_ago_in_words`: use `pgbus_time` / `pgbus_timestamp` / `pgbus_absolute_time` for moments, `pgbus_duration` for seconds and `pgbus_ms_duration` for milliseconds (`Pgbus::Web::TimeFormat`; full mapping in `.claude/rules/dashboard.md`). Enforced by `Pgbus/DashboardTimeFormatting` (Ruby) and `spec/pgbus/web/time_conventions_spec.rb` (ERB)
+8. **NO hand-formatted time in the dashboard** — no raw `*_at`/`vt`/`*_age_sec` output, no `strftime`/`time_ago_in_words`: use `pgbus_time` / `pgbus_timestamp` / `pgbus_absolute_time` for moments, `pgbus_duration` for seconds and `pgbus_ms_duration` for milliseconds (`Pgbus::Web::TimeFormat`; full mapping in `docs/dashboard.md`). Enforced by `Pgbus/DashboardTimeFormatting` (Ruby) and `spec/pgbus/web/time_conventions_spec.rb` (ERB)
 
 ### Always Do
 1. **TDD**: Write tests BEFORE implementation
@@ -34,7 +34,8 @@ under `.claude/`.
 4. **LISTEN/NOTIFY**: Use `enable_notify_insert` for instant wake-up
 5. **Queue prefix**: All queues through `config.queue_name()`
 6. **Visibility timeout**: Always pass `vt:` parameter on reads
-7. **Performance**: Measure before/after for hot-path changes (`/perf`); see `docs/performance.md`
+7. **Performance**: Measure before/after for hot-path changes (`/ruby-gem:perf`); no speed claim without a same-machine baseline; see `docs/performance.md`
+8. **Coverage**: target 80% overall, 100% for the ActiveJob adapter, event bus, process model, `Client`, `Configuration`, `Web::DataSource` and `Web::Authentication` (enforced SimpleCov floors today: 89% line, 75% branch, `spec/spec_helper.rb`). Unit specs mock `Pgbus::Client`; a real PGMQ only in `spec/integration/`
 
 ## Commands
 
@@ -65,24 +66,32 @@ scripts (`rake build`); every edit to it needs `rtk trust --yes` + `rtk verify`.
 hook-rewritable shapes: no `for`/subshell wrappers, no `| head` on rtk-handled commands,
 `bundle exec rubocop` not `bin/rubocop`.
 
-## Slash Commands
+## Workflow
 
-| Command | Purpose |
-|---------|---------|
-| `/lfg` | Full autonomous workflow: branch → understand → explore → plan → TDD → verify → PR |
-| `/plan` | Fable-powered planning → GitHub issue or `docs/plans/` markdown (read-only; execute with `/lfg`) |
-| `/follow-through` | Epic or issues → merged, unattended: dependency waves, `/lfg` per issue in its own worktree, then `/finish-prs automerge`; parks what it cannot settle (`--dry-run` prints the waves) |
-| `/finish-prs` | Ordered PRs → merge-ready (merges main in, `/github-review-pr`); `automerge` squash-merges once the PR is mergeable, CI is green, no thread is open, cubic APPROVED the head and `fable-validator` passes |
-| `/github-review-pr` | Full PR pass: merge conflicts → CI failures → review comments |
-| `/github-review-failures` | Fix failing CI checks on a PR |
-| `/github-review-comments` | Process unresolved PR review comments (cubic's included) |
-| `/review-pr` | Review a PR for pattern compliance |
-| `/tdd` | Enforce RED → GREEN → REFACTOR cycle |
-| `/security` | Security audit (PGMQ ops, connections, auth, deserialization) |
-| `/architect` | Coordinate multi-layer development |
-| `/perf` | Benchmark current branch against main (before/after with worktree) |
+- **Verify:** `bundle exec rubocop app benchmarks config gemfiles lib spec Gemfile Rakefile pgbus.gemspec` · `bundle exec rbs -I sig validate` · `bun run lint:herb` · after JS / a new Tailwind class: `bundle exec rake frontend:js` / `frontend:css` · `docs/**`: `cd docs && bin/rails g rails_icons:sync --library=lucide --force --quiet && bun install && bun run build:css && bundle exec rake lint && bundle exec rspec`
+- **Specs:** fast loop `bundle exec rspec <file>`; full suite `bundle exec rspec spec/pgbus/ spec/generators/ spec/requests/ spec/rubocop/ spec/benchmarks/ spec/i18n_spec.rb spec/pgbus_spec.rb`, `spec/integration/` (`PGBUS_DATABASE_URL`), `spec/system/` (Playwright); two worktrees at once: yes, integration with a database each
+- **CI:** required `Lint`, `Lint (Ruby 3.3 floor)`, the five `Ruby … (Rails …)` legs, `Integration (PG 17|18)`, `System Tests`, both `conformance / …`, `cubic · AI code reviewer`; `Security` (`bundle-audit`) fails the job but is not in the ruleset, so keep it green; `Benchmarks`, `kino smoke` report only; `Build & test` on `docs/**` only; full suite on the PR; failure report none
+- **Review bot:** cubic
+- **Merge:** squash — `gh pr merge <PR> --squash --delete-branch`
+- **PR contract:** `## Summary` (`Closes #N`), `## Test plan`; labels per `## Labels`; dashboard change: before/after screenshots, light + dark; hot-path change: the before/after bench
+- **Conflicts:** `CHANGELOG.md` — both sides' bullets under `[Unreleased]`, by category, no duplicate subheads; `lib/pgbus/version.rb` — main's (only `bin/release` bumps it); `Gemfile.lock` `gemfiles/rails_7_1.gemfile.lock` `docs/Gemfile.lock` — main's, `pgbus (X.Y.Z)` pin set to `version.rb` by hand, dependency changes via `bundle install`, never `bundle lock`; `bun.lock` `docs/bun.lock` — main's + `bun install`; `style.css` `*.min.js` — rebuild with `rake frontend:css` / `frontend:js`; `vendor/turbo.js` `vendor/apexcharts.js` — one side whole; routes files, `docs/app/models/doc.rb` — both, main's first
+- **Worktree setup:** `bun install --frozen-lockfile`; undo none
+- **Release:** `bin/release <v>`; changelog `CHANGELOG.md`, heading `## [X.Y.Z] - YYYY-MM-DD` under `## [Unreleased]`; prep none; lockfiles `Gemfile.lock` `gemfiles/rails_7_1.gemfile.lock` `docs/Gemfile.lock`; docs `deploy-docs.yml` on release; human none
+- **Main health:** `gh run list --workflow main.yml --branch main --event push --limit 1 --json conclusion,headSha`
+- **Upstream:** libraries we own `zoolutions/*` except pgmq-ruby, a fork whose upstream (`mensfeld/pgmq-ruby`) is a third party: draft only, the operator files it; scrub none
+- **Bench:** `bundle exec rake bench`, one `bundle exec rake bench:one[<name>]`; hot paths `docs/performance.md`; CI holds none
 
-**Models.** Sessions run on `opus` (Opus 5.5) with `fable` (Fable 5.1) as the advisor (`.claude/settings.json`). Fable is spent where judgment matters most: `/plan` runs on Fable, the advisor is consulted at decision points (before choosing an approach, a schema or public API, a migration, a dependency, anything irreversible, and when a failure repeats), and the `fable-validator` agent checks every finished implementation before its pull request opens (`/lfg`, Phase 6.5). Commands pin their tier by alias, never by full model ID: `opus` for orchestration, security, full PR review, payments and production debugging; `sonnet` for the implementation specialists and TDD; `haiku` for mechanical scans. Every spawned agent names its `model:`; one that does not runs on `sonnet` (`CLAUDE_CODE_SUBAGENT_MODEL`), never on the session's model. `/follow-through` spawns one `opus` agent per issue. Plan mode cannot take a model of its own: it runs on Opus and asks the advisor.
+## Agent commands
+
+Plugins (`.claude/settings.json`): `/flow:lfg`, `/flow:plan`, `/flow:follow-through`, `/flow:finish-prs`,
+`/flow:github-review-pr` (`-failures`, `-comments`), `/flow:review-pr`, `/flow:tdd`, `/flow:debug-flaky`,
+the `flow:fable-validator` agent; `/ruby-gem:release`, `/ruby-gem:perf`. Local (`.claude/commands/`):
+`/architect` (layer order), `/security` (PGMQ ops, connections, auth, deserialization).
+
+**Models.** Sessions run on `opus` with `fable` as the advisor (`.claude/settings.json`); consult it
+before choosing an approach, a schema or public API, a migration, a dependency, anything
+irreversible, and when a failure repeats. Every spawned agent names its `model:`; one that does not
+runs on `sonnet` (`CLAUDE_CODE_SUBAGENT_MODEL`), never on the session's model.
 
 ## Architecture
 
@@ -186,8 +195,8 @@ DLQ queues append `_dlq` suffix.
 ## Labels
 
 Every pull request carries exactly one `type` label and at least one `area`
-label from `.github/labels.yml` — never a `status` label. `/plan` labels the
-issue, `/lfg` copies the issue's `type` and `area` labels onto the PR (never
+label from `.github/labels.yml` — never a `status` label. `/flow:plan` labels the
+issue (`plan` + type + areas), `/flow:lfg` copies the issue's `type` and `area` labels onto the PR (never
 `plan` or another status label). Without an issue, the type comes from the
 change's conventional-commit prefix and the areas from
 `bin/labels infer $(git diff --name-only origin/main...HEAD)`. Labels change in
@@ -198,7 +207,7 @@ labels kit (canonical copy in docs-kit): never edit them in place.
 ## Dashboard changes (quality gates)
 
 Every change to a dashboard view, its CSS, its JS or the badge helpers is tested in this order.
-The long form, with the token rules and how to read a violation, is `.claude/rules/dashboard.md`.
+The long form, with the token rules and how to read a violation, is `docs/dashboard.md`.
 
 1. **System spec first.** Assert in words: state words, reasons, what-happens-next text, the empty
    state, the pager, bulk actions. Anything visual is checked in both themes (`visit_dark(path)`).
@@ -213,7 +222,7 @@ The long form, with the token rules and how to read a violation, is `.claude/rul
    is served as vendored, `vendor/apexcharts.js`), `bun run lint:herb`.
    Every timestamp, age and duration goes through the `TimeFormat` helpers (`pgbus_time`,
    `pgbus_timestamp`, `pgbus_absolute_time`, `pgbus_duration` for seconds, `pgbus_ms_duration` for
-   milliseconds; table in `.claude/rules/dashboard.md`); the time cop and
+   milliseconds; table in `docs/dashboard.md`); the time cop and
    `time_conventions_spec.rb` fail on anything else.
 5. **New page?** Add its URL to `lighthouserc.dashboard.json` — the route-coverage example fails
    otherwise, and that file is the page list for both gates.
@@ -248,9 +257,7 @@ gh issue comment <n> --attach ./repro.mp4                       # video renders 
 
 ## More Documentation
 
-See `.claude/` directory:
-- `commands/` — Slash command definitions (including `/perf` for benchmarking)
-- `rules/` — Coding style, git workflow, testing, agents, performance, security
-
 See `docs/` directory:
 - `docs/performance.md` — Hot paths, measuring guide, allocation budgets, CI integration
+- `docs/dashboard.md` — Dashboard checks, button/table/pager conventions, time helpers, contrast tokens, axe and Lighthouse
+- `docs/concurrency.md` — Shared state, thread and Ractor safety
