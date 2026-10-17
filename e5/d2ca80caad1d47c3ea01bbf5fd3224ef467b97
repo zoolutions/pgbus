@@ -1,0 +1,19 @@
+spec/pgbus/shareable_spec.rb
+  s_f234afa89e512b::t_cdb421830193b5 61-63,65,67-75
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "e5d2ca80caad1d47c3ea01bbf5fd3224ef467b97",
+  "prompts": {},
+  "sessions": {
+    "s_f234afa89e512b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e05be020-94a5-4fe1-9fcb-7746985d0de2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
