@@ -1,0 +1,27 @@
+sig/pgbus/configuration.rbs
+  s_0abf69c445fa20::t_9ee0200874e566 296
+CHANGELOG.md
+  s_0abf69c445fa20::t_2d34a144314288 22
+lib/pgbus/configuration.rb
+  s_0abf69c445fa20::t_781d14a802cdc8 1024-1033,1035-1037,1039-1041
+  s_0abf69c445fa20::t_dc6228b7230554 1034,1038
+  s_0abf69c445fa20::t_82054c3e93ae2c 1115
+spec/pgbus/configuration_spec.rb
+  s_0abf69c445fa20::t_b49f7c8c788a6c 410-435
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "14127f8e7229985e6f38cf68769ae491c78e45e4",
+  "prompts": {},
+  "sessions": {
+    "s_0abf69c445fa20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "780215a4-ac92-4464-839c-86e03bcf05b0",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
