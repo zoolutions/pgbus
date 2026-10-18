@@ -75,6 +75,8 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
         end
 
         wf = SignupWorkflow.start!(user, plan: "pro")
+        # or, started by a person, with who and why on the audit trail (not in arguments):
+        #   wf = SignupWorkflow.start!(user, plan: "pro", actor: "alice", reason: "invited by support")
         wf.status        # => "ready"
         wf.workflow_id   # => "6f1c…"
       RUBY
@@ -110,6 +112,13 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
         has at most one ongoing run per workflow class: a second `start!`
         raises `Pgbus::Workflow::AlreadyRunning`, whose `#workflow` is the run
         holding the slot. Subject-less runs are never limited.
+
+        `idempotency_key:`, `actor:` and `reason:` are reserved keywords of
+        `start!`: they never reach `arguments`. `actor:` (default `"app"`) and
+        `reason:` go on the run's `started` event, and the actor on its first
+        `step_scheduled`, as on every outside verb, so the audit trail says who
+        started a run and why. A workflow that took an argument named `actor`
+        or `reason` renames it (`requested_by:`).
 
         `start!` writes the run and its first step row in one transaction; the
         StepJob is sent by the step row's after-commit callback, so calling
@@ -403,7 +412,8 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
           rare call that must differ per attempt.
         - **Idempotent start.** `start!(…, idempotency_key:)` returns the run
           that already has that key, in whatever status, with
-          `duplicate_start?` true and no new step. The key is a reserved
+          `duplicate_start?` true, no new step and no new event: the first
+          caller's `actor:` stays on the trail. The key is a reserved
           keyword. A different key for a subject with an ongoing run still
           raises `AlreadyRunning`.
         - **Completed steps stay completed.** `resume!` and the policies never
@@ -697,8 +707,8 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
         (`name`, `idempotency_key`, `duplicate`), `signal_claimed`,
         `wait_timed_out` (`wait_for`, `action`, the missed `timeout_at`),
         `fan_out_opened` (`batch_id`, `size`) and
-        `fan_out_finished` (`failed_jobs`, `total_jobs`). `signal!` takes
-        `actor:` too.
+        `fan_out_finished` (`failed_jobs`, `total_jobs`). `start!` and
+        `signal!` take `actor:` too.
 
         **Metrics** reach Prometheus, StatsD and AppSignal with the same names
         (one exception for StatsD, below the table):
