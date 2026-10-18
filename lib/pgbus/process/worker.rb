@@ -407,12 +407,21 @@ module Pgbus
       # so we also pass `limit: qty` to cap the total across all queues —
       # otherwise we get `queue_count * qty` messages and overflow the
       # execution pool, crashing the worker fork (issue #123).
+      #
+      # The logical name is the configured one the table was made from, not
+      # the table name with its prefix cut: a name normalized for its table
+      # ("orders-handler" → "orders_handler") would otherwise reach the
+      # executor spelled unlike the name its jobs' uniqueness locks are bound
+      # under, and unlike every other fetch path (issue #564).
       def fetch_multi(active_queues, qty)
         messages = Pgbus.client.read_multi(active_queues, qty: qty, limit: qty) || []
+        return messages if messages.empty?
+
         prefix = "#{config.queue_prefix}_"
+        configured = active_queues.to_h { |q| [config.queue_name(q), q] }
 
         messages.map do |m|
-          logical = m.queue_name&.delete_prefix(prefix) || active_queues.first
+          logical = configured[m.queue_name] || m.queue_name&.delete_prefix(prefix) || active_queues.first
           [logical, m]
         end
       end

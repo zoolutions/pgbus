@@ -534,6 +534,21 @@ RSpec.describe Pgbus::Process::Worker do
         results = worker.send(:fetch_messages, 4)
         expect(results).to eq([["default", msg1], ["priority", msg2]])
       end
+
+      # The table name is the normalized one; the executor must see the name
+      # the queue is configured (and its jobs' uniqueness locks bound) under,
+      # as on every other fetch path (issue #564).
+      context "when a queue name is normalized for its table" do
+        let(:worker) { described_class.new(queues: %w[orders-handler priority], threads: 4) }
+
+        it "tags the message with the configured name, not the table's" do
+          msg = build_message_double(msg_id: 1, message: '{"a":1}')
+          allow(msg).to receive(:queue_name).and_return(worker.config.queue_name("orders-handler"))
+          allow(mock_client).to receive(:read_multi).and_return([msg])
+
+          expect(worker.send(:fetch_messages, 4)).to eq([["orders-handler", msg]])
+        end
+      end
     end
 
     context "with three or more queues under backpressure (regression: issue #123)" do

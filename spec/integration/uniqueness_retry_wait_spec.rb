@@ -222,6 +222,33 @@ RSpec.describe "Uniqueness across a delayed retry (integration)", :integration d
     end
   end
 
+  # The lock is bound under the job's queue_name; a multi-queue worker reads
+  # through read_multi, whose rows name the normalized table. The executor has
+  # to see the configured spelling or the release misses the bound lock.
+  context "when a multi-queue worker reads a queue whose name is normalized for its table" do
+    let(:hyphenated) { "orders-handler" }
+
+    before do
+      client.ensure_queue(hyphenated)
+      client.purge_queue(hyphenated)
+      queue_name = hyphenated
+      define_job { |_attempt| nil }
+      PollItemJob.queue_as queue_name
+    end
+
+    it "releases the job's key when it succeeds" do
+      PollItemJob.perform_later(1)
+      expect(lock_row.queue_name).to eq(hyphenated)
+
+      worker = Pgbus::Process::Worker.new(queues: [hyphenated, "default"], threads: 1)
+      (logical, message), = worker.send(:fetch_messages, 2)
+
+      expect(logical).to eq(hyphenated)
+      expect(executor.execute(message, logical)).to eq(:success)
+      expect(Pgbus::UniquenessKey.locked?(key)).to be(false)
+    end
+  end
+
   describe "a successor that took the key while an older message ran" do
     let(:successor_msg_id) { 9_999_999 }
 

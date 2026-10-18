@@ -14,13 +14,15 @@ RSpec.describe "Failed-job discard under priority routing (integration)", :integ
   let(:msg_id) { 9_000_001 }
   let(:key) { "prio-failed-1" }
 
+  # drop_queue takes one physical name: under priority routing every _pN
+  # sub-queue is dropped on its own, or the tables outlive the spec.
   around do |example|
     original = Pgbus.configuration.priority_levels
     Pgbus.configuration.priority_levels = 3
     Pgbus.reset_client!
     example.run
   ensure
-    Pgbus.client.drop_queue(queue)
+    Pgbus.client.physical_queue_names(queue).each { |name| Pgbus.client.drop_queue(name, prefixed: false) }
     Pgbus.configuration.priority_levels = original
     Pgbus.reset_client!
   end
@@ -84,16 +86,20 @@ RSpec.describe "Failed-job discard under priority routing (integration)", :integ
   end
 
   # A sub-queue the strategy names but that does not exist must not abort an
-  # enclosing transaction, or the discard's own DELETE fails after it.
+  # enclosing transaction, or the discard's own DELETE fails after it. The
+  # table is moved aside, not dropped, and put back, so pgmq.meta and the
+  # tables still agree for every spec that runs after this one.
   it "skips a missing sub-queue table without aborting an enclosing transaction" do
     Pgbus::UniquenessKey.acquire!(key, queue_name: queue, msg_id: 0)
     plant(1, key, lock_created_at + 1)
     event = record_failure
-    conn.execute("DROP TABLE pgmq.q_#{physical(0)}")
+    conn.execute("ALTER TABLE pgmq.q_#{physical(0)} RENAME TO q_#{physical(0)}_aside")
 
     ActiveRecord::Base.transaction { data_source.discard_failed_event(event["id"]) }
 
     expect(Pgbus::UniquenessKey.locked?(key)).to be(false)
     expect(data_source.failed_events.map { |e| e["id"] }).not_to include(event["id"])
+  ensure
+    conn.execute("ALTER TABLE IF EXISTS pgmq.q_#{physical(0)}_aside RENAME TO q_#{physical(0)}")
   end
 end
