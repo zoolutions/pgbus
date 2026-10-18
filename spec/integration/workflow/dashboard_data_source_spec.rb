@@ -144,6 +144,20 @@ RSpec.describe "Pgbus::Web::DataSource workflows", :integration do
 
       expect(data_source.workflows(status: "waiting").sole).to include(on_timeout: nil, late_since: nil)
     end
+
+    it "still says since when a :notify wait is late once its per-run deadline was reported and cleared (issue #574)" do
+      expires_at = 2.hours.from_now.change(usec: 0)
+      stub_const("OfferWorkflow", Class.new(Pgbus::Workflow) do
+        step(:await_reply, wait_for: :replied, wait_timeout: -> { expires_at }, on_timeout: :notify) { nil }
+      end)
+      wf = run_until(OfferWorkflow.start!, statuses: %w[waiting])
+      Pgbus::Workflow::Sweep.repair(now: expires_at + 60)
+
+      row = data_source.workflows(status: "waiting").sole
+      expect(row).to include(timeout_at: nil, on_timeout: nil)
+      expect(row[:late_since]).to be_within(0.001).of(expires_at)
+      expect(data_source.workflow_detail(wf.workflow_id)[:late_since]).to be_within(0.001).of(expires_at)
+    end
   end
 
   describe "#workflow_detail" do

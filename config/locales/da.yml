@@ -1167,6 +1167,8 @@ da:
           skipped: Sprunget over
           step_link: Igangværende kørsler ved %{step}
           title: Pipeline
+          wait_timeout: Ventetidsgrænse
+          wait_timeout_dynamic: dynamisk (pr. kørsel)
           window_label: Forsøg der sluttede i vinduet
         summary:
           attention: Kræver handling
@@ -1350,6 +1352,7 @@ da:
         waiting_batch_html: Venter på batch %{batch} (%{done} af %{total} jobs færdige).
         waiting_signal_html: Venter på signalet %{signal} siden %{ago}.
         waiting_signal_late_html: Venter på signalet %{signal} siden %{ago} (forsinket siden %{late}). Næste forsinkelsesbesked sendes %{time}.
+        waiting_signal_late_no_deadline_html: Venter på signalet %{signal} siden %{ago} (forsinket siden %{late}). Der sendes ikke flere forsinkelsesbeskeder.
         waiting_signal_notify_html: Venter på signalet %{signal} siden %{ago}. En forsinkelsesbesked sendes %{time}, og ventetiden fortsætter.
         waiting_signal_timeout_html: Venter på signalet %{signal} siden %{ago}. Ventetiden udløber %{time}.
         waiting_step_html: Venter på %{step}.

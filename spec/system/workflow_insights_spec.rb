@@ -118,6 +118,23 @@ RSpec.describe "Workflow insights", type: :system do
       end
     end
 
+    it "says how long each signal step waits: its wait_timeout:, or dynamic for a per-run one (issue #574)" do
+      visit "/pgbus/workflows/definitions/ShippingWorkflow"
+
+      expect(all("[data-testid=workflow-pipeline] > li").map { |li| li["data-step"] })
+        .to eq(%w[label ship confirm_delivery notify])
+      within(step_card("ship")) do
+        expect(page).to have_text("Waits for a signal")
+        expect(page).to have_text("Wait timeout dynamic (per run)")
+      end
+      within(step_card("confirm_delivery")) { expect(page).to have_text("Wait timeout 2d 0h") }
+      within(step_card("label")) { expect(page).to have_no_text("Wait timeout") }
+
+      visit_dark "/pgbus/workflows/definitions/ShippingWorkflow"
+      expect(page).to have_css("html.dark")
+      within(step_card("ship")) { expect(page).to have_text("Wait timeout dynamic (per run)") }
+    end
+
     it "sums the window up, each count linking to its runs" do
       visit "/pgbus/workflows/definitions/OrderWorkflow"
 

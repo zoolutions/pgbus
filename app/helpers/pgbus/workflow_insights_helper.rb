@@ -72,6 +72,14 @@ module Pgbus
 
     def pgbus_insight_definition_path(name, window) = pgbus.workflow_definition_path(name, window: window.name)
 
+    # A signal step's wait timeout: its length, or "dynamic (per run)" for a
+    # wait_timeout: lambda or method name (issue #574).
+    def pgbus_insight_wait_timeout(seconds)
+      return t("pgbus.workflow_insights.show.pipeline.wait_timeout_dynamic") if seconds == "dynamic"
+
+      pgbus_duration(seconds)
+    end
+
     def pgbus_insight_kind(step)
       key = step[:declared] ? step[:kind] : "undeclared"
       return unless KIND_TONES.key?(key)

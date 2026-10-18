@@ -100,8 +100,8 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
           `wait`/`wait_until` only ever move a step later: they are folded
           into its `scheduled_at` when it is scheduled. Anything else raises.
         - `on_exception:` — a step-level exception policy (below).
-        - `wait_for:`, `wait_timeout:`, `on_timeout:` — wait for a signal
-          (below).
+        - `wait_for:`, `wait_timeout:`, `on_timeout:` — wait for a signal,
+          with a fixed deadline or one per run (below).
         - `before_step:` / `after_step:` — insert the step before or after
           another (useful in a subclass).
 
@@ -357,6 +357,45 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
         that arrives after the timeout fired stays pending, except under
         `:notify`.
 
+        **A deadline per run.** `wait_timeout:` also takes a method name or a
+        lambda, evaluated on the workflow instance (`subject`, `arguments`)
+        when the step parks, returning a duration or a `Time`, or `nil`:
+      MD
+      DocsUI::Code(<<~'RUBY')
+        class OfferWorkflow < Pgbus::Workflow
+          # The offer row carries expires_at, set when it was created.
+          step :await_reply, wait_for: :replied, wait_timeout: -> { subject.expires_at }, on_timeout: :run do
+            timed_out? ? subject.expire! : subject.accept!(received_signal.payload)
+          end
+
+          step :await_payment, wait_for: :paid, wait_timeout: :payment_deadline, on_timeout: :pause! do
+            subject.record_payment!(received_signal.payload)
+          end
+
+          # start!(offer, ttl: 3600): an hour from park; without ttl, no timeout.
+          def payment_deadline = arguments[:ttl]&.seconds
+        end
+      RUBY
+      md <<~'MD'
+        - **A `Time`** (or anything with `#to_time` that is not a String) is the
+          deadline itself, however long the run took to reach the wait: the
+          steps before it, queue latency, a reattempt. A deadline already past
+          is `timeout_at = now`, so the next sweep applies `on_timeout`.
+        - **A Duration or a number of seconds** is counted from park, as a
+          static `wait_timeout:` is, and must be positive.
+        - **`nil`** parks with no deadline for this attempt.
+        - **Anything else** raises `ArgumentError` at the gate, which, like an
+          error the callable raises, goes to the step's exception policies
+          (the default pauses the run): the step never parks silently.
+
+        It is evaluated once per attempt, when the step parks, under the run's
+        row lock, so it must be fast and free of side effects, as a matcher
+        is. Under `on_timeout: :run`, a step that reattempts parks again and
+        evaluates it again: a callable that keeps returning the same past
+        deadline times out each attempt at once. A paused run's deadline moves
+        by the length of the pause, a `Time` one too. A static
+        `wait_timeout:` is unchanged, and checked when the class loads.
+
         **A soft deadline.** `on_timeout: :notify` reports a late signal and
         keeps waiting for it: a late notice writes a `wait_timed_out` event
         (`action: "notify"`), sends `pgbus.workflow.wait_timed_out` and counts
@@ -366,7 +405,16 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
         below are untouched, and a signal that arrives later wakes that
         attempt as usual (`timed_out?` is never true under `:notify`). A sweep
         that missed several deadlines (the dispatcher was down) reports them
-        once and moves to the next one ahead.
+        once and moves to the next one ahead. A per-run `wait_timeout:` is
+        evaluated again at each notice: a `Time` after now is the next
+        deadline, a duration moves the deadline one period on as a static
+        one does, and `nil` or a `Time` not after now (the same `expires_at`)
+        leaves the wait without a deadline: it was reported once and keeps
+        waiting for its signal (the Workflows list says since when it is
+        late, and that no further late notice is due). One that raises
+        there, or returns anything else, pauses the run with that error: the
+        sweep holds the run's row lock, under which no `on_exception` block
+        may run.
 
         **A wait without a timeout** has three escape hatches: `skip!` (the
         run moves on), `cancel!`, or `pause!` then `resume_at!`. One waiting
@@ -673,7 +721,9 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
         waiting, paused), the p50/p95/p99 run time and the pickup latency
         (scheduled → started) of its attempts that finished in the window,
         and their failure (an error was recorded), reattempt and skip rates.
-        Percentiles over fewer than 20 attempts carry their sample size and a
+        A step that waits for a signal also shows its wait timeout: its
+        `wait_timeout:`, or "dynamic (per run)" for a method name or a
+        lambda. Percentiles over fewer than 20 attempts carry their sample size and a
         "few samples" note. Below: runs started, finished and cancelled per
         bucket (5 min for 1 h, 1 h for 24 h, 6 h for 7 d, 1 d for 30 d), the
         end-to-end duration distribution, a **funnel** (of the runs started

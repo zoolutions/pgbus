@@ -52,7 +52,7 @@ module Pgbus
         end
 
         signal = peek.ready
-        return park(record, step, definition, now) unless signal
+        return park(record, step, definition, workflow, now) unless signal
 
         woken = !peek.held.nil?
         claim!(record, step, signal, actor: Runner::SYSTEM_ACTOR) if signal.status == "pending"
@@ -133,8 +133,12 @@ module Pgbus
         nil
       end
 
-      def park(record, step, definition, now) # rubocop:disable Naming/PredicateMethod -- the gate's false: the body does not run
-        timeout_at = definition.wait_timeout && (now + definition.wait_timeout)
+      # A per-run wait_timeout: is evaluated here, as the step parks and
+      # before anything is written: one that raises (or returns what is no
+      # deadline) leaves the attempt in_progress for the step's exception
+      # policies.
+      def park(record, step, definition, workflow, now) # rubocop:disable Naming/PredicateMethod -- the gate's false: the body does not run
+        timeout_at = definition.timeout_at_for(workflow, now)
         Waiting.park!(record, step, now: now, wait_for: definition.wait_for_name, timeout_at: timeout_at)
         false
       end

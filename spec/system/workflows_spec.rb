@@ -47,6 +47,18 @@ RSpec.describe "Workflows", type: :system do
       expect(page).to have_no_css("tr[data-workflow-id='#{samples::FINISHED_ID}']")
     end
 
+    it "says a wait past its per-run deadline was reported once and waits on with none (issue #574)" do
+      visit "/pgbus/workflows"
+
+      within(row_for(samples::OFFER_ID)) do
+        expect(page).to have_text("Waiting for signal replied since 2h ago (late since 30m ago). No further late notice is due.")
+      end
+
+      visit_dark "/pgbus/workflows/#{samples::OFFER_ID}"
+      expect(page).to have_css("html.dark")
+      expect(page).to have_text("Waiting for signal replied since 2h ago (late since 30m ago). No further late notice is due.")
+    end
+
     it "says why a run is paused, when a scheduled one runs and that an overdue one is sent again" do
       visit "/pgbus/workflows"
 
@@ -412,7 +424,7 @@ RSpec.describe "Workflows", type: :system do
       card = find("[data-testid=workflows-card]")
       within(card) do
         expect(page).to have_text("Workflows")
-        expect(page).to have_text("12")
+        expect(page).to have_text("13")
         expect(page).to have_text("5 paused")
         expect(page).to have_link("7 need attention", href: "/pgbus/workflows/attention")
       end

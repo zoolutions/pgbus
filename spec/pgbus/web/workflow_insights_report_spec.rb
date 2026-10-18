@@ -39,6 +39,22 @@ RSpec.describe Pgbus::Web::WorkflowInsightsReport do
               ["receipt", "step", false, true], ["legacy", nil, false, false]])
   end
 
+  it "gives each step its wait_timeout: seconds, \"dynamic\" for a per-run one, nil without one (issue #574)" do
+    timed = Class.new(Pgbus::Workflow) do
+      def self.name = "ReportSpecTimedWorkflow"
+      step(:prepare) { nil }
+      step(:approve, wait_for: :approved, wait_timeout: 172_800) { nil }
+      step(:reply, wait_for: :replied, wait_timeout: -> { arguments[:reply_by] }) { nil }
+      step(:ship, wait_for: :shipped) { nil }
+      removed_step :nudge
+    end
+
+    steps = detail(klass: timed, stats: { "legacy" => stats["reserve"] })[:steps]
+
+    expect(steps.map { |s| s.values_at(:name, :wait_timeout) })
+      .to eq([["prepare", nil], ["approve", 172_800], %w[reply dynamic], ["ship", nil], ["nudge", nil], ["legacy", nil]])
+  end
+
   it "gives a step's outcomes, rates and percentiles, and zeros for a step without attempts" do
     steps = detail(stats: stats)[:steps]
 

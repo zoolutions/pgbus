@@ -51,9 +51,12 @@ module Pgbus
         return ["waiting", "waiting_step", { step: step }] unless row[:waiting_for]
 
         args = { signal: row[:waiting_for], ago: row[:waiting_since] }
-        return ["waiting", "waiting_signal", args] unless row[:timeout_at]
+        return signal_deadline(row, args.merge(time: row[:timeout_at])) if row[:timeout_at]
+        # A per-run wait_timeout: reported once under on_timeout: :notify,
+        # then left without a deadline (issue #574).
+        return ["waiting", "waiting_signal_late_no_deadline", args.merge(late: row[:late_since])] if row[:late_since]
 
-        signal_deadline(row, args.merge(time: row[:timeout_at]))
+        ["waiting", "waiting_signal", args]
       end
 
       # An on_timeout: :notify deadline sends a late notice and the wait goes

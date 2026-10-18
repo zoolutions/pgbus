@@ -1167,6 +1167,8 @@ it:
           skipped: Saltati
           step_link: Esecuzioni in corso a %{step}
           title: Pipeline
+          wait_timeout: Timeout di attesa
+          wait_timeout_dynamic: dinamico (per esecuzione)
           window_label: Tentativi terminati nella finestra
         summary:
           attention: Richiedono attenzione
@@ -1350,6 +1352,7 @@ it:
         waiting_batch_html: In attesa del lotto %{batch} (%{done} lavori su %{total} completati).
         waiting_signal_html: In attesa del segnale %{signal} da %{ago}.
         waiting_signal_late_html: In attesa del segnale %{signal} da %{ago} (in ritardo da %{late}). Il prossimo avviso di ritardo parte %{time}.
+        waiting_signal_late_no_deadline_html: In attesa del segnale %{signal} da %{ago} (in ritardo da %{late}). Non parte nessun altro avviso di ritardo.
         waiting_signal_notify_html: In attesa del segnale %{signal} da %{ago}. Un avviso di ritardo parte %{time} e l'attesa continua.
         waiting_signal_timeout_html: In attesa del segnale %{signal} da %{ago}. L'attesa scade %{time}.
         waiting_step_html: In attesa di %{step}.

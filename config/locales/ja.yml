@@ -1167,6 +1167,8 @@ ja:
           skipped: スキップ
           step_link: "%{step} の進行中の実行"
           title: パイプライン
+          wait_timeout: 待機タイムアウト
+          wait_timeout_dynamic: 動的（実行ごと）
           window_label: 期間内に終了した試行
         summary:
           attention: 要対応
@@ -1350,6 +1352,7 @@ ja:
         waiting_batch_html: バッチ %{batch} を待機中です（%{total} 件中 %{done} 件のジョブが完了）。
         waiting_signal_html: シグナル %{signal} を %{ago} から待機中です。
         waiting_signal_late_html: シグナル %{signal} を %{ago} から待機中です（%{late} から遅延）。次の遅延通知は %{time} に送られます。
+        waiting_signal_late_no_deadline_html: シグナル %{signal} を %{ago} から待機中です（%{late} から遅延）。これ以上の遅延通知は送られません。
         waiting_signal_notify_html: シグナル %{signal} を %{ago} から待機中です。遅延通知は %{time} に送られ、待機は続きます。
         waiting_signal_timeout_html: シグナル %{signal} を %{ago} から待機中です。待機は %{time} にタイムアウトします。
         waiting_step_html: "%{step} を待機中です。"

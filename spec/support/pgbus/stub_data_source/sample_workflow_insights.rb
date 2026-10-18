@@ -8,9 +8,10 @@ module Pgbus
       # capture failing far more on the newest revision than on the one
       # before), SignupWorkflow (a removed step two old runs still sit on,
       # and a step with too few samples for its percentiles), ShippingWorkflow
-      # (a step waiting on a signal) and Billing::InvoiceWorkflow, whose class
-      # no longer loads. Each funnel adds up: the runs stopped at each step
-      # sum to the runs started. Part of fill_sample_data!.
+      # (steps waiting on a signal, one until a per-run deadline) and
+      # Billing::InvoiceWorkflow, whose class no longer loads. Each funnel
+      # adds up: the runs stopped at each step sum to the runs started. Part
+      # of fill_sample_data!.
       module SampleWorkflowInsights
         # Stands in for a loaded Pgbus::Workflow subclass: the report reads
         # only its name and its step list.
@@ -125,7 +126,11 @@ module Pgbus
         end
 
         def sample_shipping_insights(now)
-          klass = insight_class("ShippingWorkflow", insight_step(:label), insight_step(:ship, wait_for: :shipped),
+          # ship waits until the order's own delivery deadline (a per-run
+          # wait_timeout:, issue #574); confirm_delivery for at most 2 days.
+          klass = insight_class("ShippingWorkflow", insight_step(:label),
+                                insight_step(:ship, wait_for: :shipped, wait_timeout: -> { subject.ship_by }),
+                                insight_step(:confirm_delivery, wait_for: :delivered, wait_timeout: 2 * 86_400),
                                 insight_step(:notify))
           stat = ->(attempts, run) { insight_stat(attempts, run: run, pickup: [70.0, 650.0], first_seen_at: now - 80_000) }
           { klass: klass, hourly: 6, attention: 0,
@@ -133,17 +138,20 @@ module Pgbus
             ended: insight_ended("ShippingWorkflow", 133, 0, 30_600_000.0, 71_000_000.0, 90_000_000.0),
             stats: { "label" => stat.call(160, [600.0, 1_500.0, 2_200.0]),
                      "ship" => stat.call(137, [28_800_000.0, 70_000_000.0, 83_000_000.0]),
+                     "confirm_delivery" => stat.call(134, [3_600_000.0, 9_000_000.0, 12_600_000.0]),
                      "notify" => stat.call(133, [180.0, 520.0, 800.0]) },
             histogram: { 5 => 41, 6 => 88, 7 => 4 },
-            reached: insight_reached("label" => 50, "ship" => 50, "notify" => 27),
+            reached: insight_reached("label" => 50, "ship" => 50, "confirm_delivery" => 27, "notify" => 27),
             stopped: { %w[ship waiting] => 23, %w[notify ready] => 1, %w[notify finished] => 26 },
-            revisions: insight_revision(SampleDeployTasks::NEW_REVISION, now - 14_400, now - 120, stat.call(180, [700.0, 2_000.0, 3_000.0]),
+            revisions: insight_revision(SampleDeployTasks::NEW_REVISION, now - 14_400, now - 120, stat.call(238, [700.0, 2_000.0, 3_000.0]),
                                         "label" => stat.call(64, [600.0, 1_500.0, 2_200.0]),
                                         "ship" => stat.call(58, [28_800_000.0, 70_000_000.0, 83_000_000.0]),
+                                        "confirm_delivery" => stat.call(58, [3_600_000.0, 9_000_000.0, 12_600_000.0]),
                                         "notify" => stat.call(58, [180.0, 520.0, 800.0])) +
-              insight_revision(OLDEST_REVISION, now - 86_000, now - 14_500, stat.call(240, [690.0, 1_900.0, 2_900.0]),
+              insight_revision(OLDEST_REVISION, now - 86_000, now - 14_500, stat.call(316, [690.0, 1_900.0, 2_900.0]),
                                "label" => stat.call(96, [610.0, 1_480.0, 2_100.0]),
                                "ship" => stat.call(69, [28_500_000.0, 69_000_000.0, 82_000_000.0]),
+                               "confirm_delivery" => stat.call(76, [3_500_000.0, 8_800_000.0, 12_400_000.0]),
                                "notify" => stat.call(75, [175.0, 515.0, 790.0])) }
         end
 

@@ -1167,6 +1167,8 @@ sv:
           skipped: Överhoppade
           step_link: Pågående körningar vid %{step}
           title: Pipeline
+          wait_timeout: Väntetidsgräns
+          wait_timeout_dynamic: dynamisk (per körning)
           window_label: Försök som avslutades i fönstret
         summary:
           attention: Behöver åtgärd
@@ -1350,6 +1352,7 @@ sv:
         waiting_batch_html: Väntar på gruppen %{batch} (%{done} av %{total} jobb klara).
         waiting_signal_html: Väntar på signalen %{signal} sedan %{ago}.
         waiting_signal_late_html: Väntar på signalen %{signal} sedan %{ago} (sen sedan %{late}). Nästa förseningsavisering går ut %{time}.
+        waiting_signal_late_no_deadline_html: Väntar på signalen %{signal} sedan %{ago} (sen sedan %{late}). Ingen fler förseningsavisering går ut.
         waiting_signal_notify_html: Väntar på signalen %{signal} sedan %{ago}. En förseningsavisering går ut %{time}, och väntan fortsätter.
         waiting_signal_timeout_html: Väntar på signalen %{signal} sedan %{ago}. Väntan tar slut %{time}.
         waiting_step_html: Väntar på %{step}.
