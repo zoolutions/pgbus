@@ -62,5 +62,13 @@ module Pgbus
         .limit(limit)
         .pluck(:concurrency_key)
     end
+
+    # The uniqueness keys, out of +lock_keys+, that a parked job carries. Its
+    # :until_executed row stays unbound until it runs and it sits in no queue,
+    # so the uniqueness reaper asks here before calling the row an orphan.
+    def self.parked_uniqueness_keys(lock_keys)
+      key_path = "payload ->> '#{Uniqueness::METADATA_KEY}'"
+      where("#{key_path} IN (?)", lock_keys).distinct.pluck(Arel.sql(key_path)).to_set
+    end
   end
 end

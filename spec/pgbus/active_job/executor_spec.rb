@@ -568,12 +568,14 @@ RSpec.describe Pgbus::ActiveJob::Executor do
       it "leaves an :until_executed lock alone when the message was archived elsewhere" do
         allow(Pgbus::Uniqueness).to receive_messages(extract_key: "TestJob:u", extract_strategy: :until_executed)
         allow(Pgbus::UniquenessKey).to receive(:release_if_bound!)
+        allow(Pgbus::UniquenessKey).to receive(:release_held_by!)
         allow(Pgbus::Uniqueness).to receive(:release_lock)
         allow(mock_client).to receive(:archive_message).and_return(false)
 
         expect(executor.execute(message, queue_name)).to eq(:duplicate)
 
         expect(Pgbus::UniquenessKey).not_to have_received(:release_if_bound!)
+        expect(Pgbus::UniquenessKey).not_to have_received(:release_held_by!)
         expect(Pgbus::Uniqueness).not_to have_received(:release_lock)
       end
 
@@ -752,13 +754,24 @@ RSpec.describe Pgbus::ActiveJob::Executor do
         allow(ActiveJob::Base).to receive(:deserialize).with(uniqueness_payload).and_return(job_double)
         allow(Pgbus::Uniqueness).to receive_messages(extract_key: "TestJob:user-42", extract_strategy: :until_executed)
         allow(Pgbus::Uniqueness).to receive(:release_lock)
+        allow(Pgbus::UniquenessKey).to receive(:release_held_by!).and_return(1)
+      end
+
+      # The lock this message holds, never the key as such (issue #564): a
+      # row moved onto the job's retry, or a successor's, is left alone.
+      def expect_released_once(released_message)
+        expect(Pgbus::UniquenessKey).to have_received(:release_held_by!).with(
+          "TestJob:user-42",
+          queue_name: queue_name, msg_id: released_message.msg_id, enqueued_at: released_message.enqueued_at
+        ).once
+        expect(Pgbus::Uniqueness).not_to have_received(:release_lock)
       end
 
       context "with the until_executed strategy" do
-        it "releases the lock after a successful run" do
+        it "releases the lock this message holds after a successful run" do
           executor.execute(message, queue_name)
 
-          expect(Pgbus::Uniqueness).to have_received(:release_lock).with("TestJob:user-42").once
+          expect_released_once(message)
         end
 
         it "does not release the lock if archive_from fails (retry path)" do
@@ -769,7 +782,7 @@ RSpec.describe Pgbus::ActiveJob::Executor do
 
           executor.execute(message, queue_name)
 
-          expect(Pgbus::Uniqueness).not_to have_received(:release_lock)
+          expect(Pgbus::UniquenessKey).not_to have_received(:release_held_by!)
         end
 
         it "does not release the lock when perform_now raises (retry path)" do
@@ -777,15 +790,34 @@ RSpec.describe Pgbus::ActiveJob::Executor do
 
           executor.execute(message, queue_name)
 
-          expect(Pgbus::Uniqueness).not_to have_received(:release_lock)
+          expect(Pgbus::UniquenessKey).not_to have_received(:release_held_by!)
         end
 
-        it "releases the lock on dead-lettering (terminal state)" do
+        it "releases the lock this message holds on dead-lettering (terminal state)" do
           dlq_message = build_message_double(msg_id: 71, message: message_json, read_ct: config.max_retries + 1)
 
-          executor.execute(dlq_message, queue_name)
+          expect(executor.execute(dlq_message, queue_name)).to eq(:dead_lettered)
 
-          expect(Pgbus::Uniqueness).to have_received(:release_lock).with("TestJob:user-42")
+          expect_released_once(dlq_message)
+        end
+
+        it "still dead-letters when the release raises: the message has moved" do
+          dlq_message = build_message_double(msg_id: 71, message: message_json, read_ct: config.max_retries + 1)
+          allow(Pgbus::UniquenessKey).to receive(:release_held_by!).and_raise(StandardError, "pooler timeout")
+          warnings = []
+          allow(Pgbus.logger).to receive(:warn) { |&block| warnings << block.call }
+
+          expect(executor.execute(dlq_message, queue_name)).to eq(:dead_lettered)
+          expect(warnings).to include(a_string_including("Uniqueness release failed: pooler timeout"))
+        end
+
+        it "hands the running job's delivery, enqueued_at included, to a retry it enqueues" do
+          seen = nil
+          allow(job_double).to receive(:perform_now) { seen = Pgbus::ActiveJob::Delivery.current }
+
+          executor.execute(message, queue_name)
+
+          expect(seen).to eq(msg_id: 70, read_ct: 1, queue_name: queue_name, enqueued_at: message.enqueued_at)
         end
 
         it "releases the lock after archive and before job_completed (issue #418)" do
@@ -794,7 +826,7 @@ RSpec.describe Pgbus::ActiveJob::Executor do
             order << :archive
             true
           end
-          allow(Pgbus::Uniqueness).to receive(:release_lock) { order << :release }
+          allow(Pgbus::UniquenessKey).to receive(:release_held_by!) { order << :release }
           allow(ActiveSupport::Notifications).to receive(:instrument).and_wrap_original do |method, *args, &block|
             order << :completed if args.first == "pgbus.job_completed"
             method.call(*args, &block)
@@ -806,15 +838,15 @@ RSpec.describe Pgbus::ActiveJob::Executor do
           expect(order.index(:release)).to be < order.index(:completed)
         end
 
-        it "returns :success when release_lock raises after archive" do
-          allow(Pgbus::Uniqueness).to receive(:release_lock).and_raise(StandardError, "pooler timeout")
+        it "returns :success when the release raises after archive" do
+          allow(Pgbus::UniquenessKey).to receive(:release_held_by!).and_raise(StandardError, "pooler timeout")
           allow(Pgbus.logger).to receive(:warn)
 
           result = executor.execute(message, queue_name)
 
           expect(result).to eq(:success)
           expect(mock_client).to have_received(:archive_message)
-          expect(Pgbus::Uniqueness).to have_received(:release_lock).with("TestJob:user-42").once
+          expect_released_once(message)
         end
       end
 
@@ -830,7 +862,7 @@ RSpec.describe Pgbus::ActiveJob::Executor do
             "TestJob:user-42", uniqueness_payload, msg_id: message.msg_id.to_i, queue_name: queue_name
           )
           expect(job_double).to have_received(:perform_now)
-          expect(Pgbus::Uniqueness).to have_received(:release_lock).with("TestJob:user-42").once
+          expect_released_once(message)
         end
 
         # Issue #423 (F5): a failed attempt is no longer executing. Holding the
@@ -842,7 +874,7 @@ RSpec.describe Pgbus::ActiveJob::Executor do
           result = executor.execute(message, queue_name)
 
           expect(result).to eq(:failed)
-          expect(Pgbus::Uniqueness).to have_received(:release_lock).with("TestJob:user-42").once
+          expect_released_once(message)
         end
 
         it "returns :skipped without performing if another worker already holds the lock" do
@@ -863,7 +895,7 @@ RSpec.describe Pgbus::ActiveJob::Executor do
           executor.execute(message, queue_name)
         end.not_to raise_error
         # ensure block guards with `if uniqueness_key` — no release call
-        expect(Pgbus::Uniqueness).not_to have_received(:release_lock)
+        expect(Pgbus::UniquenessKey).not_to have_received(:release_held_by!)
       end
     end
 

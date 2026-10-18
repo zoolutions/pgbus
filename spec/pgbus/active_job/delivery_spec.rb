@@ -8,9 +8,11 @@ require "async"
 RSpec.describe Pgbus::ActiveJob::Delivery do
   describe ".with" do
     it "exposes the delivery inside the block and restores what was there after, also on a raise" do
-      seen = described_class.with(msg_id: 7, read_ct: 2, queue_name: "default") { described_class.current }
+      seen = described_class.with(msg_id: 7, read_ct: 2, queue_name: "default", enqueued_at: "2026-10-18 10:30:00+00") do
+        described_class.current
+      end
 
-      expect(seen).to eq(msg_id: 7, read_ct: 2, queue_name: "default")
+      expect(seen).to eq(msg_id: 7, read_ct: 2, queue_name: "default", enqueued_at: "2026-10-18 10:30:00+00")
       expect(described_class.current).to be_nil
 
       expect { described_class.with(msg_id: 1, read_ct: 1, queue_name: "q") { raise ArgumentError } }.to raise_error(ArgumentError)
@@ -21,7 +23,7 @@ RSpec.describe Pgbus::ActiveJob::Delivery do
       described_class.with(msg_id: 1, read_ct: 1, queue_name: "outer") do
         expect { described_class.with(msg_id: 2, read_ct: 3, queue_name: "inner") { raise ArgumentError } }.to raise_error(ArgumentError)
 
-        expect(described_class.current).to eq(msg_id: 1, read_ct: 1, queue_name: "outer")
+        expect(described_class.current).to eq(msg_id: 1, read_ct: 1, queue_name: "outer", enqueued_at: nil)
       end
     end
 
@@ -65,7 +67,7 @@ RSpec.describe Pgbus::ActiveJob::Delivery do
 
       executor.execute(message, "default")
 
-      expect(seen).to eq(msg_id: 42, read_ct: 3, queue_name: "default")
+      expect(seen).to eq(msg_id: 42, read_ct: 3, queue_name: "default", enqueued_at: message.enqueued_at)
       expect(described_class.current).to be_nil
     end
 
