@@ -390,6 +390,30 @@ RSpec.describe Pgbus::Configuration do
     end
   end
 
+  # Issue #564: code that strips the prefix off a table name to get the queue
+  # back (the dashboard, the worker, the uniqueness lock queue) needs the
+  # prefix spelled the way the tables are.
+  describe "#queue_prefix=" do
+    it "keeps a prefix its tables spell the same" do
+      config.queue_prefix = "my_app2"
+      expect(config.queue_prefix).to eq("my_app2")
+    end
+
+    it "spells the prefix the way its tables do, leaving every table name as it was" do
+      config.queue_prefix = "my-app"
+
+      expect(config.queue_prefix).to eq("my_app")
+      expect(config.queue_name("orders-handler")).to eq("my_app_orders_handler")
+      expect(config.queue_name("orders-handler").delete_prefix("#{config.queue_prefix}_")).to eq("orders_handler")
+    end
+
+    it "leaves a value it cannot spell as a table name for validate! to reject" do
+      config.queue_prefix = "!!!"
+      expect(config.queue_prefix).to eq("!!!")
+      expect { config.queue_name("x") }.not_to raise_error
+    end
+  end
+
   describe "#dead_letter_queue_name" do
     it "appends dlq suffix to prefixed name" do
       expect(config.dead_letter_queue_name("critical")).to eq("pgbus_critical_dlq")

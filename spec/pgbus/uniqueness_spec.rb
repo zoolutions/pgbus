@@ -358,6 +358,14 @@ RSpec.describe Pgbus::Uniqueness do
       config = Pgbus::Configuration.new.tap { |c| c.queue_prefix = "other" }
       expect(described_class.lock_queue_name("orders-handler", config: config)).to eq("orders_handler")
     end
+
+    # A prefix spelled unlike its tables ("my-app" → my_app_* tables) must
+    # still come off whole, or the lock would record the table name itself.
+    it "strips a prefix its tables spell differently" do
+      config = Pgbus::Configuration.new.tap { |c| c.queue_prefix = "my-app" }
+      expect(described_class.lock_queue_name("x", config: config)).to eq("x")
+      expect(described_class.lock_queue_name("orders-handler", config: config)).to eq("orders_handler")
+    end
   end
 
   describe "lock queue names at the boundary" do

@@ -13,7 +13,8 @@ module Pgbus
     attr_accessor :database_url, :connection_params, :pool_size, :pool_timeout
 
     # Queue settings
-    attr_accessor :default_queue, :queue_prefix
+    attr_accessor :default_queue
+    attr_reader :queue_prefix # rubocop:disable Style/AccessorGrouping -- the writer normalizes (see queue_prefix=)
 
     # Worker settings
     attr_accessor :polling_interval, :prefetch_limit, :execution_mode
@@ -595,6 +596,24 @@ module Pgbus
 
       @eager_validation = true
       @finalized = false
+    end
+
+    # Stored the way the queue tables spell it ("my-app" → "my_app"). Table
+    # names are unchanged (queue_name normalizes the joined name the same
+    # way), but code that strips the prefix off a table name to get its queue
+    # back (the dashboard, the worker, a job's uniqueness lock queue) then
+    # finds it. A value no table name could start with is kept as given for
+    # validate! to report.
+    def queue_prefix=(value)
+      @queue_prefix = if value.is_a?(String) && !value.empty?
+                        begin
+                          QueueNameValidator.normalize(value)
+                        rescue ArgumentError
+                          value
+                        end
+                      else
+                        value
+                      end
     end
 
     def queue_name(name)

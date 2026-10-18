@@ -390,6 +390,13 @@ RSpec.describe Pgbus::Web::DataSource do
       expect(data_source.send(:lock_queue_for_table, "pgbus_orders_p1")).to eq("orders_p1")
     end
 
+    it "strips a prefix its tables spell differently whole" do
+      config = Pgbus::Configuration.new.tap { |c| c.queue_prefix = "my-app" }
+      allow(Pgbus).to receive(:configuration).and_return(config)
+
+      expect(data_source.send(:lock_queue_for_table, config.queue_name("orders-handler"))).to eq("orders_handler")
+    end
+
     it "keeps a dead-letter queue's suffix, so a DLQ copy never matches a live message's lock" do
       allow(Pgbus.configuration).to receive(:priority_levels).and_return(3)
 
