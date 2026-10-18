@@ -25,10 +25,10 @@ module Pgbus
     def in_recovery?: () -> bool
     def list_notify_insert_throttles: () -> untyped
     def list_queues: () -> untyped
-    def message_archived?: (untyped queue_name, msg_id: untyped, ?prefixed: untyped) -> bool
-    def message_exists?: (untyped queue_name, ?msg_id: untyped, ?uniqueness_key: untyped, ?prefixed: untyped) -> bool
-    def message_in_queue?: (untyped queue_name, msg_id: untyped, ?prefixed: untyped) -> bool
-    def message_with_job_id?: (untyped queue_name, job_id: untyped, ?prefixed: untyped) -> bool
+    def message_archived?: (untyped queue_name, msg_id: untyped, ?prefixed: untyped) -> bool?
+    def message_exists?: (untyped queue_name, ?msg_id: untyped, ?uniqueness_key: untyped, ?prefixed: untyped) -> bool?
+    def message_in_queue?: (untyped queue_name, msg_id: untyped, ?prefixed: untyped) -> bool?
+    def message_with_job_id?: (untyped queue_name, job_id: untyped, ?prefixed: untyped) -> bool?
     def metrics: (?untyped queue_name) -> untyped
     def move_to_dead_letter: (untyped queue_name, untyped message, ?headers: untyped) -> untyped
     def notify_enabled?: (untyped queue_name) -> bool

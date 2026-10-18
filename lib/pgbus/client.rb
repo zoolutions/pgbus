@@ -731,6 +731,11 @@ module Pgbus
     #   false — the message definitely does not exist
     #   nil   — could not determine (e.g. queue table missing or unknown error).
     #           Callers MUST treat nil as "exists" for safety.
+    #
+    # Under priority routing a logical name probes every `_pN` table, and each
+    # table has its own msg_id sequence: a bare +msg_id+ may match a different
+    # message in a sibling sub-queue. A caller that knows the sub-queue passes
+    # its physical name with +prefixed: false+.
     def message_in_queue?(queue_name, msg_id:, prefixed: true)
       message_exists?(queue_name, msg_id: msg_id, prefixed: prefixed)
     end
@@ -778,6 +783,7 @@ module Pgbus
     # Same tri-state as message_exists?: true / false / nil (unknown).
     # A logical name probes the archive of every physical table the strategy
     # owns, like message_exists?; a physical name (prefixed: false) its own.
+    # A bare msg_id is unique per table only (see message_in_queue?).
     def message_archived?(queue_name, msg_id:, prefixed: true)
       tables = lookup_physical_queue_names(queue_name, prefixed: prefixed).map { |name| QueueNameValidator.sanitize!(name) }
       determined = false
