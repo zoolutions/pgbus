@@ -602,8 +602,9 @@ module Pgbus
     # names are unchanged (queue_name normalizes the joined name the same
     # way), but code that strips the prefix off a table name to get its queue
     # back (the dashboard, the worker, a job's uniqueness lock queue) then
-    # finds it. A value no table name could start with is kept as given for
-    # validate! to report.
+    # finds it. A value normalize cannot spell (nothing table-safe left, or
+    # too long) is kept as given, as before: validate! rejects one that is
+    # too long, and queue_name drops one with nothing table-safe in it.
     def queue_prefix=(value)
       @queue_prefix = if value.is_a?(String) && !value.empty?
                         begin
@@ -1032,10 +1033,11 @@ module Pgbus
       return unless queue_prefix.match?(/\A_|_\z|__/)
 
       suggested = queue_prefix.squeeze("_").delete_prefix("_").delete_suffix("_")
+      suggestion = suggested.empty? ? "" : "; prefer #{suggested.inspect} for new deployments"
       Pgbus.logger.warn do
         "[Pgbus] queue_prefix #{queue_prefix.inspect} has a leading, trailing or doubled underscore — a queue " \
           "whose name needs normalizing (\"orders-handler\") gets a table spelled unlike its queue, and its " \
-          "uniqueness locks can only be released by key; prefer #{suggested.inspect} for new deployments"
+          "uniqueness locks can only be released by key#{suggestion}"
       end
     end
 

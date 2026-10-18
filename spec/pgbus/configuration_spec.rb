@@ -424,6 +424,17 @@ RSpec.describe Pgbus::Configuration do
       end
     end
 
+    it "suggests no spelling for an all-underscore prefix" do
+      config.queue_prefix = "__"
+      warnings = []
+      allow(Pgbus.logger).to receive(:warn) { |&block| warnings << block.call }
+
+      config.validate!
+
+      expect(warnings.sole).to include("queue_prefix \"__\"")
+      expect(warnings.sole).not_to include("prefer")
+    end
+
     it "does not warn about a prefix without edge or doubled underscores" do
       config.queue_prefix = "my-app"
       allow(Pgbus.logger).to receive(:warn)
@@ -433,7 +444,9 @@ RSpec.describe Pgbus::Configuration do
       expect(Pgbus.logger).not_to have_received(:warn)
     end
 
-    it "leaves a value it cannot spell as a table name for validate! to reject" do
+    # As on main: nothing table-safe is left, so the value is kept and
+    # queue_name drops it.
+    it "keeps a value it cannot spell as a table name as given" do
       config.queue_prefix = "!!!"
       expect(config.queue_prefix).to eq("!!!")
       expect { config.queue_name("x") }.not_to raise_error
