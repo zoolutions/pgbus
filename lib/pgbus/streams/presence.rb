@@ -159,7 +159,7 @@ module Pgbus
         # tests) every thread shares the one adapter, and its lock is all
         # that keeps a second thread's statement off the libpq connection
         # while this one is in flight. Unpinned, the lock is a NullLock. The
-        # lock is a Monitor, so a thread already holding it (a request
+        # lock is reentrant, so a thread already holding it (a request
         # inside a transaction) re-enters it.
         def exec_params(sql, binds)
           adapter = self.adapter

@@ -130,6 +130,7 @@ RSpec.describe Pgbus::Streams::Presence do
     def wait_until_blocked(thread)
       deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 2
       Thread.pass until thread.status != "run" || Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
+      raise "thread never blocked within 2s: status=#{thread.status.inspect}" if thread.status == "run"
     end
 
     it "does not start a sweep's statement while another thread holds the adapter's lock" do

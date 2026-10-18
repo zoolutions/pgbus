@@ -86,6 +86,7 @@ RSpec.describe "Streams: presence statements hold the adapter lock", :integratio
   def wait_until_blocked(thread)
     deadline = monotonic_now + 5
     Thread.pass until thread.status != "run" || monotonic_now > deadline
+    raise "thread never blocked within 5s: status=#{thread.status.inspect}" if thread.status == "run"
   end
 
   it "gives every thread the same PG::Connection (the shape this guards)" do
