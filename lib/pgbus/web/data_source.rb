@@ -1639,13 +1639,25 @@ module Pgbus
           [key, row["queue_name"], row["msg_id"].to_i] if key && row["msg_id"]
         end
         holders = holders.group_by { |_key, queue, _msg_id| queue }.flat_map do |queue, entries|
-          sent = queued_send_times(queue, entries)
-          lock_queue = Uniqueness.lock_queue_name(queue)
-          entries.map { |key, _queue, msg_id| [key, lock_queue, msg_id, sent[[msg_id, key]]] }
+          failed_queue_lock_holders(queue, entries)
         end
         UniquenessKey.release_all_held_by!(holders) if holders.any?
       rescue StandardError => e
         Pgbus.logger.debug { "[Pgbus::Web] Error releasing locks for failed events: #{e.message}" }
+      end
+
+      # The release tuples for one queue's failed jobs. A queue that cannot
+      # be resolved (a stored name no longer valid as a table name) is skipped
+      # with a warning, so it does not stop the other queues' release.
+      def failed_queue_lock_holders(queue, entries)
+        sent = queued_send_times(queue, entries)
+        lock_queue = Uniqueness.lock_queue_name(queue)
+        entries.map { |key, _queue, msg_id| [key, lock_queue, msg_id, sent[[msg_id, key]]] }
+      rescue ActiveRecord::StatementInvalid
+        raise
+      rescue StandardError => e
+        Pgbus.logger.warn { "[Pgbus::Web] Skipped releasing locks for failed jobs on #{queue.inspect}: #{e.message}" }
+        []
       end
 
       # { [msg_id, uniqueness key] => enqueued_at } for the messages of

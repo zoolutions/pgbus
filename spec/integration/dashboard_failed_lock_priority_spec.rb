@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require_relative "../integration_helper"
+require "active_job"
+require "active_job/queue_adapters/pgbus_adapter"
 
 # Issue #564: discarding a failed job releases only the uniqueness lock its
 # message holds, bounded by when that message was sent. A failed event
@@ -83,6 +85,40 @@ RSpec.describe "Failed-job discard under priority routing (integration)", :integ
     data_source.discard_failed_event(record_failure["id"])
 
     expect(Pgbus::UniquenessKey.locked?(key)).to be(true)
+  end
+
+  # The adapter binds the lock for the job's queue_as; the dashboard knows only
+  # the _pN table it shows. Both have to land on the same spelling.
+  context "with a queue whose name its table spells differently" do
+    let(:hyphenated) { "prio-orders" }
+
+    before do
+      Pgbus.client.ensure_queue(hyphenated)
+      stub_const("PrioOrderJob", Class.new(ActiveJob::Base) do
+        include Pgbus::Uniqueness
+
+        self.queue_adapter = :pgbus
+        queue_as "prio-orders"
+        ensures_uniqueness strategy: :until_executed, on_conflict: :discard, key: ->(id) { "prio-order-#{id}" }
+
+        def perform(*); end
+      end)
+    end
+
+    after do
+      Pgbus.client.physical_queue_names(hyphenated).each { |name| Pgbus.client.drop_queue(name, prefixed: false) }
+    end
+
+    it "frees the job's lock when its message is discarded from its priority sub-queue" do
+      PrioOrderJob.set(priority: 1).perform_later(7)
+      table = physical(1).sub(queue, "prio_orders")
+      msg_id = conn.select_value("SELECT msg_id FROM pgmq.q_#{table} ORDER BY msg_id DESC LIMIT 1")
+      expect(Pgbus::UniquenessKey.find_by(lock_key: "prio-order-7")&.queue_name).to eq("prio_orders")
+
+      data_source.discard_job(table, msg_id)
+
+      expect(Pgbus::UniquenessKey.locked?("prio-order-7")).to be(false)
+    end
   end
 
   # A sub-queue the strategy names but that does not exist must not abort an

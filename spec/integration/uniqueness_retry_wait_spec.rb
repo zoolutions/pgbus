@@ -222,9 +222,10 @@ RSpec.describe "Uniqueness across a delayed retry (integration)", :integration d
     end
   end
 
-  # The lock is bound under the job's queue_name; a multi-queue worker reads
-  # through read_multi, whose rows name the normalized table. The executor has
-  # to see the configured spelling or the release misses the bound lock.
+  # The lock records the queue the way its table spells it (orders_handler),
+  # so every reader finds it: a multi-queue worker (read_multi rows name the
+  # table), a worker configured with either spelling, and the dashboard,
+  # which knows only the table.
   context "when a multi-queue worker reads a queue whose name is normalized for its table" do
     let(:hyphenated) { "orders-handler" }
 

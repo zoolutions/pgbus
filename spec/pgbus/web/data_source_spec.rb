@@ -648,6 +648,28 @@ RSpec.describe Pgbus::Web::DataSource do
       )
     end
 
+    # One stored queue name that no longer makes a valid table name must not
+    # stop the other queues' locks from being released.
+    it "skips, and logs, a queue whose locks cannot be resolved, and releases the rest" do
+      allow(mock_connection).to receive(:select_all)
+        .with("#{failed_lock_holders_sql} #{not_handler}", "Pgbus Collect Failed Keys", handler_names)
+        .and_return([
+                      { "queue_name" => "default", "msg_id" => 10, "payload" => '{"pgbus_uniqueness_key":"k1"}' },
+                      { "queue_name" => "!!!", "msg_id" => 12, "payload" => '{"pgbus_uniqueness_key":"k3"}' }
+                    ])
+      allow(mock_client).to receive(:physical_queue_names).with("!!!").and_raise(ArgumentError, "invalid queue name")
+      allow(mock_connection).to receive(:select_all)
+        .with(format(queued_send_times_sql, table: "pgbus_test_default"), "Pgbus Failed Message Sent At", ["{10}"])
+        .and_return([{ "msg_id" => 10, "enqueued_at" => sent_at, "lock_key" => "k1" }])
+      warnings = []
+      allow(Pgbus.logger).to receive(:warn) { |&block| warnings << block.call }
+
+      data_source.discard_all_failed
+
+      expect(Pgbus::UniquenessKey).to have_received(:release_all_held_by!).with([["k1", "default", 10, sent_at]])
+      expect(warnings).to include(a_string_including("!!!").and(including("invalid queue name")))
+    end
+
     it "batches archives by queue to avoid per-row PGMQ roundtrips" do
       data_source.discard_all_failed
       expect(mock_client).to have_received(:archive_batch).with("default", [10, 11])
