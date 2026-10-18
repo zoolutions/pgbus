@@ -66,7 +66,8 @@ module Pgbus
 
       def log_start(allow_payloads)
         mode = allow_payloads ? "payloads ALLOWED" : "payloads redacted"
-        Pgbus.logger.info { "[Pgbus::MCP] starting read-only diagnostic server over stdio (#{mode})" }
+        kind = Server.write_tools? ? "diagnostic server with the workflow write tools ON (mcp_write_tools)" : "read-only diagnostic server"
+        Pgbus.logger.info { "[Pgbus::MCP] starting #{kind} over stdio (#{mode})" }
       end
     end
   end

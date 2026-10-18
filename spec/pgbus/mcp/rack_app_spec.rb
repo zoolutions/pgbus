@@ -159,6 +159,28 @@ RSpec.describe Pgbus::MCP::RackApp do
 
       expect(Pgbus.logger).not_to have_received(:warn)
     end
+
+    context "with the workflow write tools on" do
+      before { Pgbus.configuration.mcp_write_tools = true }
+      after { Pgbus.configuration.mcp_write_tools = false }
+
+      it "says the unauthenticated endpoint can change workflow runs" do
+        warnings = []
+        allow(Pgbus.logger).to receive(:warn) { |&block| warnings << block.call }
+
+        described_class.new(data_source: data_source)
+
+        expect(warnings.join).to include("mcp_write_tools", "change workflow runs")
+      end
+
+      it "does not warn when a token is configured" do
+        allow(Pgbus.logger).to receive(:warn)
+
+        described_class.new(data_source: data_source, token: "s3cret")
+
+        expect(Pgbus.logger).not_to have_received(:warn)
+      end
+    end
   end
 
   describe "payload redaction over HTTP" do

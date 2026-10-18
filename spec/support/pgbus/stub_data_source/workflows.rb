@@ -62,9 +62,9 @@ module Pgbus
           @workflow_action_result
         end
 
-        def signal_workflow(workflow_id, name:, payload:, idempotency_key:, actor:)
+        def signal_workflow(workflow_id, name:, payload:, idempotency_key:, actor:, reason: nil)
           record(:signal_workflow, workflow_id, { name: name, payload: payload, idempotency_key: idempotency_key,
-                                                  actor: actor })
+                                                  actor: actor, reason: reason })
           @workflow_action_result[:ok] ? @workflow_action_result.merge(duplicate: false) : @workflow_action_result
         end
 

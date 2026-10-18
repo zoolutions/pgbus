@@ -5,7 +5,8 @@ module Pgbus
     # Assembles the read-only pgbus diagnostic MCP server: registers every
     # diagnostic tool and wires a DataSource (plus the payload gate) into the
     # server context so tools never touch the database directly or leak
-    # payloads by default.
+    # payloads by default. The workflow write tools (WRITE_TOOLS, issue #550)
+    # join only when config.mcp_write_tools is true when the server is built.
     #
     # This class only builds the +MCP::Server+ instance — transport is the
     # caller's concern (Runner drives stdio). Keeping them separate means the
@@ -35,38 +36,72 @@ module Pgbus
         Tools::WorkflowStatsTool
       ].freeze
 
-      INSTRUCTIONS = <<~TEXT
-        Read-only diagnostic tools for a pgbus (PostgreSQL/PGMQ) deployment.
+      # The opt-in write surface (issue #180's rule: separate, explicitly
+      # opt-in, off by default). Never merged into TOOLS: with
+      # config.mcp_write_tools false these are not constructed at all.
+      WRITE_TOOLS = [
+        Tools::WorkflowResumeTool,
+        Tools::WorkflowCancelTool,
+        Tools::WorkflowSkipStepTool,
+        Tools::WorkflowResumeAtTool,
+        Tools::WorkflowRunNowTool,
+        Tools::WorkflowSignalTool
+      ].freeze
+
+      DIAGNOSTICS = <<~TEXT
+        Diagnostic tools for a pgbus (PostgreSQL/PGMQ) deployment.
         Start with pgbus_health for a one-call OK/DEGRADED/STALLED verdict,
         then drill in with pgbus_queues, pgbus_processes, pgbus_jobs,
         pgbus_dlq, pgbus_locks, and pgbus_concurrency; workflow runs with
         pgbus_workflows_attention, pgbus_workflows and pgbus_workflow, and how
         each workflow class performs with pgbus_workflow_definitions and
-        pgbus_workflow_stats. No tool mutates state. Message payloads
-        are redacted unless the server was started with payloads explicitly
-        allowed.
+        pgbus_workflow_stats. Message payloads are redacted unless the server
+        was started with payloads explicitly allowed.
+      TEXT
+
+      INSTRUCTIONS = "#{DIAGNOSTICS}No tool mutates state.\n".freeze
+
+      WRITE_INSTRUCTIONS = <<~TEXT
+        The tools above do not mutate state. This server was also built with
+        config.mcp_write_tools, so pgbus_workflow_resume, pgbus_workflow_cancel,
+        pgbus_workflow_skip_step, pgbus_workflow_resume_at,
+        pgbus_workflow_run_now and pgbus_workflow_signal change one workflow
+        run each. Read the run with pgbus_workflow first, then pass a reason
+        (recorded on the run's audit trail) and expected_status (the status
+        you read): a run that has moved on by the time the call starts
+        answers ok: false and nothing is done (the check runs just before the
+        action, whose transition is guarded again under the run's row lock).
+        There are no bulk write tools: pgbus_workflows_attention groups the
+        stuck runs; list a group's runs with pgbus_workflows (status,
+        workflow_class, step, error_class) and call once per run.
       TEXT
 
       module_function
 
-      # Build an MCP::Server with all diagnostic tools registered.
+      # Build an MCP::Server with all diagnostic tools registered, plus the
+      # write tools when config.mcp_write_tools is true (read here, once).
       #
       # @param data_source [Pgbus::Web::DataSource] read layer the tools query.
       # @param allow_payloads [Boolean] when true, tools honor a per-call
       #   include_payloads flag; otherwise payloads are always redacted.
       def build(data_source: Pgbus::Web::DataSource.new, allow_payloads: false)
+        write = write_tools?
         ::MCP::Server.new(
           name: "pgbus",
           title: "Pgbus Diagnostics",
           version: Pgbus::VERSION,
-          instructions: INSTRUCTIONS,
-          tools: TOOLS.dup,
+          instructions: write ? DIAGNOSTICS + WRITE_INSTRUCTIONS : INSTRUCTIONS,
+          tools: write ? TOOLS + WRITE_TOOLS : TOOLS.dup,
           server_context: {
             data_source: data_source,
             allow_payloads: allow_payloads
           }
         )
       end
+
+      # Only a literal true turns the write tools on (validate! rejects
+      # anything else, but an app may skip validation).
+      def write_tools? = Pgbus.configuration.mcp_write_tools == true
     end
   end
 end

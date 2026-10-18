@@ -92,6 +92,14 @@ RSpec.describe "Workflow signals (integration)", :integration do
       expect(signal.reload.status).to eq("consumed")
     end
 
+    it "records the caller's reason on the signal_received event" do
+      wf = ShipmentWorkflow.start!
+      wf.signal!(:shipped, actor: "mcp", reason: "carrier webhook lost")
+
+      received = wf.events.find { |event| event.event == "signal_received" }
+      expect([received.actor, received.reason]).to eq(["mcp", "carrier webhook lost"])
+    end
+
     it "sends nothing until the application transaction around signal! commits" do
       wf = run_until_waiting(ShipmentWorkflow.start!)
 
@@ -112,6 +120,15 @@ RSpec.describe "Workflow signals (integration)", :integration do
       expect(queue_depth).to eq(1)
       duplicate = wf.events.reverse.find { |event| event.event == "signal_received" }
       expect(duplicate.details).to include("duplicate" => true, "idempotency_key" => "evt-1")
+    end
+
+    it "treats a blank idempotency key as none: every such signal is stored" do
+      wf = ShipmentWorkflow.start!
+      first = wf.signal!(:shipped, idempotency_key: "")
+      second = wf.signal!(:refunded, idempotency_key: "  ")
+
+      expect([first.duplicate_delivery?, second.duplicate_delivery?]).to eq([false, false])
+      expect(signals_of(wf).map { |signal| [signal.name, signal.idempotency_key] }).to eq([["shipped", nil], ["refunded", nil]])
     end
 
     it "raises NotOngoing on a finished or cancelled run" do
@@ -260,11 +277,13 @@ RSpec.describe "Workflow signals (integration)", :integration do
       user = create_user
       wf = run_until_waiting(OrderShipmentWorkflow.start!(user))
 
-      signal = OrderShipmentWorkflow.signal!(user, :shipped, payload: { at: "now" }, idempotency_key: "evt-9", actor: "webhook")
+      signal = OrderShipmentWorkflow.signal!(user, :shipped, payload: { at: "now" }, idempotency_key: "evt-9", actor: "webhook",
+                                                             reason: "carrier callback")
 
       expect(signal).to have_attributes(workflow_id: wf.workflow_id, status: "claimed")
       expect(wf.reload.status).to eq("ready")
-      expect(wf.events.find { |event| event.event == "signal_received" }.actor).to eq("webhook")
+      received = wf.events.find { |event| event.event == "signal_received" }
+      expect([received.actor, received.reason]).to eq(["webhook", "carrier callback"])
     end
 
     it "raises NotOngoing with missing: :raise and returns nil with missing: :ignore when no run is ongoing" do

@@ -79,6 +79,22 @@ RSpec.describe Pgbus::MCP::Runner do
       expect(transport).to have_received(:open)
     end
 
+    it "says in its start line whether the workflow write tools are on" do
+      transport = instance_double(MCP::Server::Transports::StdioTransport, open: nil)
+      allow(MCP::Server::Transports::StdioTransport).to receive(:new).and_return(transport)
+      lines = []
+      allow(Pgbus.logger).to receive(:info) { |&block| lines << block.call }
+
+      described_class.run(env: {})
+      Pgbus.configuration.mcp_write_tools = true
+      described_class.run(env: {})
+
+      expect(lines.first).to include("read-only")
+      expect(lines.last).to include("workflow write tools ON")
+    ensure
+      Pgbus.configuration.mcp_write_tools = false
+    end
+
     it "passes allow_payloads through when the env flag is truthy" do
       transport = instance_double(MCP::Server::Transports::StdioTransport, open: nil)
       allow(Pgbus::MCP::Server).to receive(:build).and_call_original

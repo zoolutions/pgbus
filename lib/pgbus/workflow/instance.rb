@@ -99,12 +99,12 @@ module Pgbus
       # pending, for the step that claims it. With an idempotency_key a
       # redelivery stores nothing and returns the first signal
       # (duplicate_delivery? true). Raises NotOngoing on a finished or
-      # cancelled run.
+      # cancelled run. +reason+ goes on the signal_received event.
       #
       #   wf.signal!(:payment_confirmed, payload: { amount: 42 }, idempotency_key: event.id)
-      def signal!(name, payload: {}, idempotency_key: nil, actor: nil)
+      def signal!(name, payload: {}, idempotency_key: nil, actor: nil, reason: nil)
         @record, signal = Signals.deliver(workflow_id, name, payload: payload, idempotency_key: idempotency_key,
-                                                             actor: actor || Runner::DEFAULT_ACTOR)
+                                                             actor: actor || Runner::DEFAULT_ACTOR, reason: reason)
         signal
       end
 

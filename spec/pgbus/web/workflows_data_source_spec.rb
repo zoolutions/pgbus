@@ -135,6 +135,16 @@ RSpec.describe Pgbus::Web::DataSource::WorkflowList do
                                                                          reason: "workflow wf-1 is gone")
     end
 
+    it "passes a signal's reason through to signal!" do
+      allow(workflow).to receive(:signal!).and_return(double("signal", duplicate_delivery?: false))
+
+      expect(data_source.signal_workflow("wf-1", name: "shipped", payload: { "a" => 1 }, idempotency_key: "k",
+                                                 actor: actor, reason: "carrier webhook lost"))
+        .to eq(ok: true, duplicate: false)
+      expect(workflow).to have_received(:signal!).with("shipped", payload: { "a" => 1 }, idempotency_key: "k", actor: actor,
+                                                                  reason: "carrier webhook lost")
+    end
+
     it "reports a payload over the cap as invalid" do
       allow(workflow).to receive(:signal!).and_raise(Pgbus::Workflow::PayloadTooLarge, "payload of signal x is too big")
 

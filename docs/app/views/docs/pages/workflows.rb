@@ -258,7 +258,10 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
           and is taken when the step reaches its gate.
         - **Idempotency.** With an `idempotency_key`, a redelivery stores
           nothing, wakes nothing and returns the stored signal, whose
-          `duplicate_delivery?` is true.
+          `duplicate_delivery?` is true. A blank key (`""`) is no key.
+        - **Audit.** `actor:` and `reason:` (both optional, on the handle and
+          by subject) go on the run's `signal_received` event:
+          `wf.signal!(:shipped, actor: "webhook", reason: "carrier callback")`.
         - **Matchers.** `wait_for:` takes a signal name, a
           `Pgbus::Workflow::SignalMatcher.new(:shipped) { |payload| payload[:region] == "eu" }`,
           or any object answering `matches?(signal)`. A matcher runs under the
@@ -527,11 +530,55 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
         end
       RUBY
       md <<~'MD'
-        The read-only MCP server has the same views: `pgbus_workflows` (the
+        The MCP server's read tools have the same views: `pgbus_workflows` (the
         list, with the page's filters), `pgbus_workflow` (one run, with
         `available_actions`) and `pgbus_workflows_attention`. Arguments, step
         outputs, signal payloads and error text are redacted unless the server
         allows payloads and the call sets `include_payloads`.
+
+        **Acting over MCP** is a separate opt-in. With the write tools on, an
+        agent that found the paused runs can resume them after the fix:
+      MD
+      DocsUI::Code(<<~'RUBY', filename: "config/initializers/pgbus.rb")
+        Pgbus.configure do |config|
+          # Default false: the write tools do not exist at all. Read when the
+          # MCP server is built (pgbus mcp, Pgbus::MCP.rack_app).
+          config.mcp_write_tools = true
+        end
+      RUBY
+      md <<~'MD'
+        That adds `pgbus_workflow_resume`, `pgbus_workflow_cancel`,
+        `pgbus_workflow_skip_step`, `pgbus_workflow_resume_at` (with `step`),
+        `pgbus_workflow_run_now` and `pgbus_workflow_signal` (with `name`, a
+        JSON object `payload` of at most `workflow_max_payload_size` and an
+        optional `idempotency_key`, which a retried call should pass; a blank
+        one is no key). Each
+        takes `workflow_id`, a required `reason` (1–500 characters after
+        trimming whitespace) and an
+        optional `expected_status`, the status the agent read: a run that has
+        moved on by the time the call starts answers `ok: false` and nothing
+        is done (the check runs just before the action, whose transition is
+        guarded again under the run's row lock). A verb the run's `available_actions` does not
+        allow answers `ok: false` with the allowed list. Otherwise the call
+        goes through the same action as the dashboard's button and lands on
+        the audit trail with actor `mcp` (`mcp:<client name>` when the
+        transport knows the client) and the reason it was given; a refused
+        call changes nothing and records nothing. Every call answers
+        `{ ok:, reason:, workflow: }` with the run as it is after the call
+        (payloads always redacted; a transition refused under the row lock
+        adds `code` and the `status` the run is in now; an unexpected failure
+        answers a fixed reason, the error is in the pgbus log). They are
+        marked `destructiveHint: true` (`idempotentHint: true` on cancel
+        only), and there are no bulk tools: `pgbus_workflows_attention`
+        groups the stuck runs, `pgbus_workflows` lists a group's runs
+        (`status`, `workflow_class`, `step`, `error_class`), and each run gets
+        one audited call.
+
+        Enable them only on an authenticated endpoint: `Pgbus::MCP.rack_app`
+        with `token:` or `auth:`, or mounted inside your app's authenticated
+        routes, never public. An unauthenticated `rack_app` with the write
+        tools on logs a warning saying anyone who reaches it can change
+        workflow runs.
       MD
     end
   end
@@ -578,7 +625,7 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
         page reads in about 25 ms and the list in about 100 ms over 24 hours
         (the budgets `rake bench:workflow_insights` checks: 250 and 500 ms);
         over 30 days both take about 300 ms, which the bench reports without
-        a budget. The read-only MCP server has the same:
+        a budget. The MCP server's read tools have the same:
         `pgbus_workflow_definitions(window:)` and
         `pgbus_workflow_stats(workflow_class:, window:)`, and
         `pgbus_workflows_attention` takes `workflow_class:`.

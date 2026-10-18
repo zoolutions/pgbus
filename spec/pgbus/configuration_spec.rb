@@ -1572,6 +1572,21 @@ RSpec.describe Pgbus::Configuration do
       expect { config.validate! }.not_to raise_error
     end
 
+    it "leaves the MCP write tools off by default" do
+      expect(config.mcp_write_tools).to be(false)
+    end
+
+    it "accepts a boolean mcp_write_tools" do
+      config.mcp_write_tools = true
+      expect { config.validate! }.not_to raise_error
+      expect(config.finalize!.mcp_write_tools).to be(true)
+    end
+
+    it "rejects a non-boolean mcp_write_tools" do
+      config.mcp_write_tools = "yes"
+      expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /mcp_write_tools must be true or false/)
+    end
+
     # Pre-1.0 surface-freeze: close the validation gaps on core job-path keys so
     # a malformed value fails loud at boot instead of deep in a worker thread,
     # per-enqueue, or by silently corrupting queue names (issue #335).

@@ -20,18 +20,19 @@ module Pgbus
 
       # Returns [record, signal]. A redelivery with a stored idempotency key
       # returns the stored signal (duplicate_delivery? true) and does nothing
-      # else.
-      def deliver(workflow_id, name, payload:, idempotency_key:, actor:)
+      # else. A blank key is no key: "" would otherwise dedup every signal
+      # sent with it against the first.
+      def deliver(workflow_id, name, payload:, idempotency_key:, actor:, reason: nil)
         name = signal_name!(name)
         serialized = Payload.dump(payload || {}, what: "payload of signal #{name}")
-        key = idempotency_key&.to_s
+        key = idempotency_key.to_s.presence
         Runner.locked(workflow_id) do |record, notes|
           raise ActiveRecord::RecordNotFound, "workflow #{workflow_id} is gone" unless record
 
           States.check!(:signal, record.status)
           signal = WorkflowSignal.insert_signal!(workflow_id: workflow_id, name: name, payload: serialized, idempotency_key: key)
           signal ||= duplicate(record, key)
-          received!(record, signal, actor: actor, notes: notes)
+          received!(record, signal, actor: actor, reason: reason, notes: notes)
           [record, signal]
         end
       end
@@ -76,9 +77,9 @@ module Pgbus
         end
       end
 
-      def received!(record, signal, actor:, notes:)
+      def received!(record, signal, actor:, notes:, reason: nil)
         duplicate = signal.duplicate_delivery?
-        Runner.event!(record, "signal_received", actor: actor,
+        Runner.event!(record, "signal_received", actor: actor, reason: reason,
                                                  details: { name: signal.name, idempotency_key: signal.idempotency_key,
                                                             signal_id: signal.id, duplicate: duplicate }.compact)
         woke = !duplicate && wake_waiting(record, signal, actor: actor)

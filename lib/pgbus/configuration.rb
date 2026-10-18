@@ -220,6 +220,12 @@ module Pgbus
                   :metrics_enabled,
                   :web_filter_parameters, :web_filter_sensitive
 
+    # The MCP server's workflow write tools (issue #550): pgbus_workflow_resume,
+    # _cancel, _skip_step, _resume_at, _run_now and _signal. Off by default, and
+    # then they are never built, so tools/list cannot show them. Read once, when
+    # Pgbus::MCP::Server.build runs (pgbus mcp, Pgbus::MCP.rack_app).
+    attr_accessor :mcp_write_tools
+
     # HTTP health endpoints (liveness/readiness for orchestrators like
     # Kubernetes). `health_port` nil (default) leaves the standalone server in
     # the supervisor disabled — mount Pgbus::Web::HealthApp in the host Rails
@@ -381,6 +387,8 @@ module Pgbus
       @connects_to = nil
       @require_primary = false
       @connection_guc_mode = :options
+
+      @mcp_write_tools = false
 
       @web_auth = nil
       # ->(request) { String or nil }: who an operator action on the dashboard
@@ -947,6 +955,7 @@ module Pgbus
       end
 
       raise Pgbus::ConfigurationError, "require_primary must be true or false" unless [true, false].include?(require_primary)
+      raise Pgbus::ConfigurationError, "mcp_write_tools must be true or false" unless [true, false].include?(mcp_write_tools)
 
       validate_job_path_gaps!
       validate_streams!

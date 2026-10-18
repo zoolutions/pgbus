@@ -43,6 +43,77 @@ RSpec.describe Pgbus::MCP::Server do
     end
   end
 
+  describe "the workflow write tools (issue #550)" do
+    let(:write_names) do
+      %w[pgbus_workflow_resume pgbus_workflow_cancel pgbus_workflow_skip_step pgbus_workflow_resume_at
+         pgbus_workflow_run_now pgbus_workflow_signal]
+    end
+
+    def listed(server)
+      response = JSON.parse(server.handle_json(JSON.generate(jsonrpc: "2.0", id: 1, method: "tools/list", params: {})))
+      response.dig("result", "tools").to_h { |tool| [tool["name"], tool] }
+    end
+
+    after { Pgbus.configuration.mcp_write_tools = false }
+
+    it "lists none of them while mcp_write_tools is off (the default)" do
+      tools = listed(described_class.build(data_source: data_source))
+
+      expect(tools.keys).to match_array(described_class::TOOLS.map(&:tool_name))
+      expect(tools.keys & write_names).to be_empty
+      expect(described_class.build(data_source: data_source).instructions).not_to include("pgbus_workflow_resume")
+    end
+
+    it "lists all six, destructive and not read-only, when mcp_write_tools is on" do
+      Pgbus.configuration.mcp_write_tools = true
+      tools = listed(described_class.build(data_source: data_source))
+
+      expect(described_class::WRITE_TOOLS.map(&:tool_name)).to match_array(write_names)
+      expect(tools.keys).to match_array(described_class::TOOLS.map(&:tool_name) + write_names)
+      write_names.each do |name|
+        expect(tools[name]["annotations"]).to include("readOnlyHint" => false, "destructiveHint" => true),
+                                              "#{name} is not marked as a write"
+      end
+      # Only a cancelled run stays cancelled: a retried skip or resume at can
+      # act again once the run has parked or paused again.
+      expect(write_names.to_h { |name| [name, tools[name]["annotations"]["idempotentHint"]] })
+        .to eq(write_names.to_h { |name| [name, name == "pgbus_workflow_cancel"] })
+    end
+
+    it "leaves every read tool unchanged when mcp_write_tools is on" do
+      off = listed(described_class.build(data_source: data_source))
+      Pgbus.configuration.mcp_write_tools = true
+      on = listed(described_class.build(data_source: data_source))
+
+      expect(on.slice(*off.keys)).to eq(off)
+    end
+
+    it "says in its instructions which tools write, and no longer that no tool does" do
+      Pgbus.configuration.mcp_write_tools = true
+      instructions = described_class.build(data_source: data_source).instructions
+
+      expect(instructions).to include("pgbus_workflow_resume", "reason", "expected_status", "pgbus_workflows")
+      expect(instructions).not_to include("No tool mutates state")
+    end
+
+    it "says no tool mutates state while the write tools are off" do
+      expect(described_class.build(data_source: data_source).instructions).to include("No tool mutates state")
+    end
+
+    it "reads the flag when the server is built, not per call" do
+      server = described_class.build(data_source: data_source)
+      Pgbus.configuration.mcp_write_tools = true
+
+      expect(listed(server).keys & write_names).to be_empty
+    end
+
+    it "never builds a write tool on the read-only base class" do
+      expect(described_class::WRITE_TOOLS).to all(be < Pgbus::MCP::WriteTool)
+      expect(described_class::WRITE_TOOLS.none? { |tool| tool <= Pgbus::MCP::BaseTool }).to be(true)
+      expect(described_class::TOOLS.none? { |tool| tool <= Pgbus::MCP::WriteTool }).to be(true)
+    end
+  end
+
   describe "tool listing over the protocol" do
     subject(:server) { described_class.build(data_source: data_source) }
 

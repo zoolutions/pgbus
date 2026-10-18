@@ -890,7 +890,7 @@ wf.events.map(&:event)                              # ["started", "step_schedule
 - **Signals**: `step :capture, wait_for: :payment_confirmed do … received_signal.payload["amount"] … end` parks until `wf.signal!(:payment_confirmed, payload: {…}, idempotency_key: event.id)`, or by subject, `OrderWorkflow.signal!(order, :payment_confirmed, …, missing: :ignore)`. Early signals are buffered, a redelivery with the same key is a no-op (`duplicate_delivery?`), and matchers (`Pgbus::Workflow::SignalMatcher.new(:shipped) { |payload| … }`) narrow what a step takes. `wait_timeout: 2.days, on_timeout: :pause!` (or `:cancel!`, `:skip!`, `:run`) puts a deadline on the wait, fired by the dispatcher's sweep.
 - **Housekeeping**: a worker that dies mid-step is noticed when its message comes back (the visibility heartbeat keeps a live one invisible); a hung step stalls after its `timeout:` or `workflow_stall_threshold`; the dispatcher re-sends lost steps and deletes finished runs after `workflow_retention` (30 days).
 - **Metrics** for Prometheus/StatsD and AppSignal: per-step duration histograms and counters, and gauges of runs by status and by stuck reason.
-- **Dashboard**: `/pgbus/workflows` lists runs with what each one does next, filters by state, class, step, error, subject, id and creation date, and shows a run's timeline, attempts, signals and audit trail with its actions (Resume, Resume at, Run now, Skip step, Send signal, Rerun, Cancel); `/pgbus/workflows/attention` groups the stuck runs for bulk Resume/Cancel. `config.web_actor = ->(request) { … }` names the operator on the audit trail and `config.workflow_subject_url = ->(type, id) { … }` links the subject. The MCP server reads the same through `pgbus_workflows`, `pgbus_workflow` and `pgbus_workflows_attention`.
+- **Dashboard**: `/pgbus/workflows` lists runs with what each one does next, filters by state, class, step, error, subject, id and creation date, and shows a run's timeline, attempts, signals and audit trail with its actions (Resume, Resume at, Run now, Skip step, Send signal, Rerun, Cancel); `/pgbus/workflows/attention` groups the stuck runs for bulk Resume/Cancel. `config.web_actor = ->(request) { … }` names the operator on the audit trail and `config.workflow_subject_url = ->(type, id) { … }` links the subject. The MCP server reads the same through `pgbus_workflows`, `pgbus_workflow` and `pgbus_workflows_attention`, and with `config.mcp_write_tools = true` acts on one run per call through `pgbus_workflow_resume`, `_cancel`, `_skip_step`, `_resume_at`, `_run_now` and `_signal` ([write tools](#write-tools-opt-in)).
 - **Insights by class**: `/pgbus/workflows/definitions` has one row per workflow class (ongoing, paused, needing attention, finished and cancelled in the window, p50/p95 end-to-end duration); `/pgbus/workflows/definitions/OrderWorkflow` shows its steps as a pipeline with the runs sitting at each one now, run-time and pickup percentiles and failure/reattempt/skip rates, runs per bucket, the duration distribution, a funnel of the runs started in the window and the same numbers per app revision, over 1 h, 24 h, 7 d or 30 d. MCP: `pgbus_workflow_definitions` and `pgbus_workflow_stats`.
 - **Testing**: `include Pgbus::Workflow::TestHelpers`, then `perform_next_step(wf)`, `run_step_inline(wf, :reminder)` or `speedrun_workflow(wf)` (which raises `Pgbus::Workflow::StepWaiting` at a waiting step), and `deliver_signal(wf, :shipped)`, `complete_fan_out(wf)` or `expire_wait(wf)` to move a waiting run on.
 
@@ -1190,9 +1190,9 @@ When `config.metrics_enabled = true` (default), the dashboard exposes Prometheus
 | `pgbus_worker_pool_busy` | Currently busy worker threads |
 | `pgbus_worker_pool_utilization` | Busy / capacity ratio |
 
-### MCP diagnostic server (read-only)
+### MCP diagnostic server (read-only by default)
 
-Pgbus ships an optional, **read-only** [MCP](https://modelcontextprotocol.io) server so an AI agent (or any MCP client) can diagnose pgbus directly — "are queues backed up?", "is `read_ct` advancing?", "are workers heart-beating but not claiming?" — instead of hand-writing `pgmq` / `pg_stat_activity` SQL against production. It is a thin adapter over the same read layer the dashboard uses, so it adds no new database access path.
+Pgbus ships an optional, **read-only** [MCP](https://modelcontextprotocol.io) server so an AI agent (or any MCP client) can diagnose pgbus directly — "are queues backed up?", "is `read_ct` advancing?", "are workers heart-beating but not claiming?" — instead of hand-writing `pgmq` / `pg_stat_activity` SQL against production. It is a thin adapter over the same read layer the dashboard uses, so it adds no new database access path. Acting on workflow runs is a separate opt-in: [write tools](#write-tools-opt-in), off by default.
 
 Add the optional `mcp` gem to your `Gemfile` first (`gem "mcp"`, 0.23 or newer — 1.x is fully supported); both entry points below tell you if it's missing.
 
@@ -1255,7 +1255,7 @@ run Pgbus::MCP.rack_app(token: ENV["PGBUS_MCP_TOKEN"])
 
 #### Tools
 
-All tools are read-only — no tool mutates state, and there is no raw-SQL passthrough.
+All tools below are read-only — none mutates state, and there is no raw-SQL passthrough. The workflow write tools are a separate opt-in ([next section](#write-tools-opt-in)).
 
 | Tool | Purpose |
 |------|---------|
@@ -1273,11 +1273,40 @@ All tools are read-only — no tool mutates state, and there is no raw-SQL passt
 | `pgbus_workflow_definitions` / `pgbus_workflow_stats` | One row per workflow class over a `window` (1h, 24h, 7d, 30d), and one class's pipeline (runs at each step now, run-time and pickup percentiles, failure/reattempt/skip rates), throughput, durations, funnel and per-revision numbers. |
 | `pgbus_recurring` | Recurring task schedule + last/next run times. All tasks unless `page` / `per_page` is given (then `total` is capped at 10,000); returns `total`, `has_more`. |
 
+#### Write tools (opt-in)
+
+An agent that found 30 paused runs with `pgbus_workflows_attention` (and listed them with `pgbus_workflows`) can resume them after the fix without opening the dashboard — once you turn the write tools on:
+
+```ruby
+Pgbus.configure { |c| c.mcp_write_tools = true } # default false: the tools do not exist at all
+```
+
+The flag is read when the server is built (`pgbus mcp`, `Pgbus::MCP.rack_app`). Off, the six tools are never constructed, so `tools/list` cannot show them; on, they join the read tools, which stay exactly as they are.
+
+| Tool | What it does |
+|------|--------------|
+| `pgbus_workflow_resume` | Resume a paused run (a failed step runs again; a completed one is followed by the next). |
+| `pgbus_workflow_cancel` | Cancel an ongoing run. |
+| `pgbus_workflow_skip_step` | Skip the step a waiting run waits on. |
+| `pgbus_workflow_resume_at` | Resume a paused run at a named `step`. |
+| `pgbus_workflow_run_now` | Send a ready run's scheduled step now instead of after its wait. |
+| `pgbus_workflow_signal` | Deliver signal `name` with a JSON object `payload` (at most `workflow_max_payload_size`) and an optional `idempotency_key` — pass one when the call may be retried (a blank key is no key). A retry dedups only while the run is ongoing: once it finished or was cancelled, it answers `ok: false`. Name and key are at most 255 characters. |
+
+- Each takes `workflow_id`, a required `reason` (1–500 characters after trimming whitespace) and an optional `expected_status`, the status the agent read: a run that has moved on by the time the call starts answers `ok: false` and nothing is done, so an agent acting on a stale read is not surprised. The check runs just before the action; the transition itself is guarded again under the run's row lock.
+- Arguments the input schema rejects (no `reason`, one over 500 characters, an unknown `expected_status`, a `payload` that is not an object) come back as a tool error before the tool runs; nothing is done either way.
+- The verb is checked against the run's `available_actions` (not allowed: `ok: false` with the allowed list), then goes through the same `Web::DataSource` action as the dashboard's button, so the transition table and the run's row lock decide.
+- An action the call performs lands on the run's audit trail with actor `mcp` (`mcp:<client name>` when the transport knows the client) and the reason it was given. A refused call changes nothing and records nothing.
+- The answer is `{ ok:, reason:, workflow: }`: `workflow` is the `pgbus_workflow` detail as the run is after the call, with arguments, outputs, signal payloads and error text always redacted. A disallowed verb adds `available_actions`; a transition refused by `Web::DataSource` under the row lock adds `code` and, when the run is still there, the `status` it is in now. An unexpected failure answers a fixed reason (the error is in the pgbus log), never the exception's text.
+- The tools carry `readOnlyHint: false, destructiveHint: true`, and `idempotentHint: true` on cancel only: a cancelled run stays cancelled, while a retried skip or resume at can act again once the run has parked or paused again.
+- No bulk tools: `pgbus_workflows_attention` groups the stuck runs; list a group's runs with `pgbus_workflows` (`status`, `workflow_class`, `step`, `error_class`) and make one audited call per run.
+
+Enable them only on an authenticated endpoint: `rack_app` with `token:` or `auth:`, or mounted inside your app's own authenticated routes — never public. An unauthenticated `rack_app` with write tools on logs a warning that anyone who reaches it can change workflow runs.
+
 #### Security
 
 The server is built to be safe against a production datastore:
 
-- **Read-only by default.** No tool mutates state and no arbitrary-query tool exists.
+- **Read-only by default.** No tool mutates state unless `config.mcp_write_tools` is on, and then only the six workflow write tools do, one run per call, each with a reason on the run's audit trail. No arbitrary-query tool exists.
 - **Payloads redacted.** Message bodies, headers, and job arguments are replaced with `[redacted]` unless payloads are explicitly allowed **and** `include_payloads: true` is passed on the call. Both gates must be open. Allow payloads with `PGBUS_MCP_ALLOW_PAYLOADS=1` (stdio) or `Pgbus::MCP.rack_app(allow_payloads: true)` (HTTP).
 - **Bounded queries.** Every list tool paginates with a row cap (`pgbus_jobs` / `pgbus_dlq` / `pgbus_locks` / `pgbus_concurrency` cap at 100 rows/page; time windows cap at 1440 minutes). The exceptions are `pgbus_deploy_tasks` and `pgbus_recurring` called without `page`/`per_page`, which return every task as they always have, and `pgbus_workflow_definitions`, which returns one row per workflow class.
 - **Reuses your DB credentials.** No new privileged path — it reads through the app's existing connection config.
@@ -2524,6 +2553,7 @@ Curated headline options for the README. The full operator reference (with types
 | `error_reporters` | `[]` | Array of callables invoked on caught exceptions. Each receives `(exception, context_hash)`. |
 | `log_format` | `:text` | Log formatter (`:text` or `:json`). Sets `logger.formatter` automatically. |
 | `metrics_enabled` | `true` | Enable Prometheus-compatible metrics on the dashboard |
+| `mcp_write_tools` | `false` | Build the MCP server's workflow write tools (resume, cancel, skip step, resume at, run now, signal). Enable only on an authenticated endpoint. See [Write tools](#write-tools-opt-in). |
 | `metrics_backend` | `nil` | Generic metrics adapter: `nil` (off), `:prometheus`, `:statsd`, or a `Pgbus::Metrics::Backend` instance |
 | `statsd_host` | `"127.0.0.1"` | StatsD UDP host (used when `metrics_backend = :statsd`) |
 | `statsd_port` | `8125` | StatsD UDP port (used when `metrics_backend = :statsd`) |
