@@ -171,6 +171,27 @@ RSpec.describe "Dashboard failed event handlers (integration)", :integration do
       expect(Pgbus::UniquenessKey.locked?(lock_key)).to be(true)
     end
 
+    # Issue #569: the probe took "pgbus_int_mailers" for a table name, found
+    # nothing and re-enqueued a copy next to the original.
+    context "when the logical queue name starts with the prefix" do
+      let(:queue_name) { "pgbus_int_mailers" }
+
+      it "resets the existing message instead of enqueueing a duplicate" do
+        msg_id = setup_failed_message
+        client.read_message(queue_name, vt: 600)
+
+        event = data_source.failed_events.first
+        data_source.retry_failed_event(event["id"])
+
+        count = ActiveRecord::Base.connection.select_value("SELECT COUNT(*) FROM pgmq.q_#{full_queue}", "test")
+        expect(count.to_i).to eq(1)
+        vt_after = ActiveRecord::Base.connection.select_value(
+          "SELECT vt FROM pgmq.q_#{full_queue} WHERE msg_id = $1", "test", [msg_id]
+        )
+        expect(Time.parse(vt_after.to_s)).to be <= Time.current + 1
+      end
+    end
+
     it "falls back to send_message when the original is gone (e.g. moved to DLQ)" do
       msg_id = setup_failed_message
       client.archive_message(queue_name, msg_id)

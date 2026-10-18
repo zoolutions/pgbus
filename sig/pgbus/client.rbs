@@ -13,7 +13,7 @@ module Pgbus
     def convert_archive_partitioned: (untyped queue_name, ?partition_interval: untyped, ?retention_interval: untyped, ?leading_partition: untyped) -> untyped
     def create_fifo_index: (untyped queue_name) -> untyped
     def create_fifo_indexes_all: () -> untyped
-    def dead_letter_physical_name: (untyped queue_name) -> untyped
+    def dead_letter_physical_name: (untyped queue_name, ?prefixed: untyped) -> untyped
     def delete_batch: (untyped queue_name, untyped msg_ids, ?prefixed: untyped) -> untyped
     def delete_message: (untyped queue_name, untyped msg_id, ?prefixed: untyped) -> untyped
     def drop_queue: (untyped queue_name, ?prefixed: untyped) -> untyped
@@ -25,10 +25,10 @@ module Pgbus
     def in_recovery?: () -> bool
     def list_notify_insert_throttles: () -> untyped
     def list_queues: () -> untyped
-    def message_archived?: (untyped queue_name, msg_id: untyped) -> bool
-    def message_exists?: (untyped queue_name, ?msg_id: untyped, ?uniqueness_key: untyped) -> bool
-    def message_in_queue?: (untyped queue_name, msg_id: untyped) -> bool
-    def message_with_job_id?: (untyped queue_name, job_id: untyped) -> bool
+    def message_archived?: (untyped queue_name, msg_id: untyped, ?prefixed: untyped) -> bool
+    def message_exists?: (untyped queue_name, ?msg_id: untyped, ?uniqueness_key: untyped, ?prefixed: untyped) -> bool
+    def message_in_queue?: (untyped queue_name, msg_id: untyped, ?prefixed: untyped) -> bool
+    def message_with_job_id?: (untyped queue_name, job_id: untyped, ?prefixed: untyped) -> bool
     def metrics: (?untyped queue_name) -> untyped
     def move_to_dead_letter: (untyped queue_name, untyped message, ?headers: untyped) -> untyped
     def notify_enabled?: (untyped queue_name) -> bool

@@ -194,6 +194,30 @@ RSpec.describe "Dispatcher uniqueness key reaper (integration)", :integration do
       end
     end
 
+    # Issue #569: a logical queue whose own name starts with the prefix
+    # ("pgbus_int_mailers") lives in pgmq.q_pgbus_int_pgbus_int_mailers. The
+    # lock records the logical name; the probe must expand it, not take it for
+    # a table name and answer "unknown" forever.
+    context "when the logical queue name starts with the prefix" do
+      let(:queue_name) { "pgbus_int_mailers" }
+
+      it "reaps a bound lock once its message is gone" do
+        msg_id = Pgbus.client.send_message(
+          queue_name, { "job_class" => "MailJob", Pgbus::Uniqueness::METADATA_KEY => "MailJob:1" }
+        )
+        Pgbus::UniquenessKey.acquire!("MailJob:1", queue_name: queue_name, msg_id: msg_id)
+        Pgbus::UniquenessKey.where(lock_key: "MailJob:1").update_all(created_at: 10.minutes.ago)
+
+        expect(dispatcher.send(:reap_orphaned_uniqueness_keys)).to eq(0)
+        expect(Pgbus.client.message_exists?(queue_name, msg_id: msg_id)).to be(true)
+
+        Pgbus.client.delete_message(queue_name, msg_id)
+
+        expect(dispatcher.send(:reap_orphaned_uniqueness_keys)).to eq(1)
+        expect(Pgbus::UniquenessKey.exists?(lock_key: "MailJob:1")).to be(false)
+      end
+    end
+
     context "when locks are recent" do
       it "does not reap locks newer than the threshold even if the message is gone" do
         Pgbus::UniquenessKey.acquire!("Recent:lock", queue_name: queue_name, msg_id: 999_999_998)

@@ -720,16 +720,19 @@ module Pgbus
     # reaper to determine if a uniqueness lock with msg_id=0 (placeholder)
     # still has a corresponding queue message.
     #
-    # +queue_name+ may be either a logical name (e.g. "default") or an already
-    # prefixed physical name (e.g. "pgbus_default"). The client normalizes both.
+    # +queue_name+ is a logical name (e.g. "default"), expanded through the
+    # queue strategy, unless the caller passes +prefixed: false+ for a physical
+    # table name (e.g. "pgbus_default_p1"), used as is. The name's spelling
+    # decides nothing: a logical "pgbus_mailers" lives in pgbus_pgbus_mailers
+    # (issue #569).
     #
     # Returns:
     #   true  — the message definitely exists in the queue
     #   false — the message definitely does not exist
     #   nil   — could not determine (e.g. queue table missing or unknown error).
     #           Callers MUST treat nil as "exists" for safety.
-    def message_in_queue?(queue_name, msg_id:)
-      message_exists?(queue_name, msg_id: msg_id)
+    def message_in_queue?(queue_name, msg_id:, prefixed: true)
+      message_exists?(queue_name, msg_id: msg_id, prefixed: prefixed)
     end
 
     # Look up a queue row by ActiveJob job_id in the JSON payload. Used by the
@@ -738,10 +741,10 @@ module Pgbus
     #
     # Same tri-state as message_exists?: true / false / nil (unknown). A
     # logical name expands to every physical table the strategy owns (the
-    # `_pN` sub-queues under priority routing); an already-prefixed physical
-    # name probes itself only.
-    def message_with_job_id?(queue_name, job_id:)
-      tables = lookup_physical_queue_names(queue_name).map { |name| QueueNameValidator.sanitize!(name) }
+    # `_pN` sub-queues under priority routing); a physical name passed with
+    # +prefixed: false+ probes itself only.
+    def message_with_job_id?(queue_name, job_id:, prefixed: true)
+      tables = lookup_physical_queue_names(queue_name, prefixed: prefixed).map { |name| QueueNameValidator.sanitize!(name) }
       determined = false
 
       synchronized do
@@ -758,20 +761,23 @@ module Pgbus
       determined ? false : nil # rubocop:disable Style/ReturnNilInPredicateMethodDefinition -- tri-state: nil means unknown
     end
 
-    # DLQ companion of a logical or already-physical queue name. Does not
-    # re-prefix a name that resolve_full_queue_name already expanded.
-    def dead_letter_physical_name(queue_name)
-      full = resolve_full_queue_name(queue_name)
+    # DLQ companion of a logical queue name, or of a physical table name passed
+    # with +prefixed: false+.
+    def dead_letter_physical_name(queue_name, prefixed: true)
+      return config.dead_letter_queue_name(queue_name) if prefixed
+
       # Priority sub-queues share the logical queue's DLQ (`pgbus_default_dlq`),
-      # not a per-priority `…_pN_dlq`. Only strip when the strategy actually
-      # creates `_pN` tables — a logical queue named `orders_p0` must keep it.
-      base = @queue_strategy.priority? ? full.sub(/_p\d+\z/, "") : full
+      # not a per-priority `…_pN_dlq`. Only a physical name can be a sub-queue,
+      # and only when the strategy actually creates `_pN` tables: a logical
+      # queue named `orders_p0` keeps its suffix.
+      name = queue_name.to_s
+      base = @queue_strategy.priority? ? name.sub(/_p\d+\z/, "") : name
       "#{base}#{Pgbus::DEAD_LETTER_SUFFIX}"
     end
 
     # Same tri-state as message_exists?: true / false / nil (unknown).
-    def message_archived?(queue_name, msg_id:)
-      full_name = resolve_full_queue_name(queue_name)
+    def message_archived?(queue_name, msg_id:, prefixed: true)
+      full_name = resolve_full_queue_name(queue_name, prefixed: prefixed)
       sanitized = QueueNameValidator.sanitize!(full_name)
 
       synchronized do
@@ -789,12 +795,12 @@ module Pgbus
       nil
     end
 
-    def message_exists?(queue_name, msg_id: nil, uniqueness_key: nil)
+    def message_exists?(queue_name, msg_id: nil, uniqueness_key: nil, prefixed: true)
       has_msg_id = !msg_id.nil?
       has_uniqueness_key = !uniqueness_key.nil?
       raise ArgumentError, "pass msg_id, uniqueness_key, or both" unless has_msg_id || has_uniqueness_key
 
-      tables = lookup_physical_queue_names(queue_name).map { |name| QueueNameValidator.sanitize!(name) }
+      tables = lookup_physical_queue_names(queue_name, prefixed: prefixed).map { |name| QueueNameValidator.sanitize!(name) }
       determined = false
 
       synchronized do
@@ -1092,21 +1098,16 @@ module Pgbus
       end
     end
 
-    # Accept either a logical name ("default") or an already-prefixed
-    # physical name ("pgbus_default") and return the physical name.
-    # Coerces symbols to strings so callers can pass either form.
-    def resolve_full_queue_name(queue_name)
-      name = queue_name.to_s
-      prefix = "#{config.queue_prefix}_"
-      name.start_with?(prefix) ? name : config.queue_name(name)
+    # The physical name of a logical name, or a physical name (prefixed: false)
+    # as given. Coerces symbols to strings so callers can pass either form.
+    def resolve_full_queue_name(queue_name, prefixed:)
+      prefixed ? config.queue_name(queue_name) : queue_name.to_s
     end
 
     # Logical names expand through QueueFactory so a priority queue's _pN
-    # tables are included; already-prefixed physical names stay as-is.
-    def lookup_physical_queue_names(queue_name)
-      name = queue_name.to_s
-      prefix = "#{config.queue_prefix}_"
-      name.start_with?(prefix) ? [name] : @queue_strategy.physical_queue_names(name)
+    # tables are included; a physical name (prefixed: false) stays as is.
+    def lookup_physical_queue_names(queue_name, prefixed:)
+      prefixed ? @queue_strategy.physical_queue_names(queue_name.to_s) : [queue_name.to_s]
     end
 
     def probe_queue_presence(conn, sanitized, msg_id:, uniqueness_key:)
