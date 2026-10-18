@@ -87,7 +87,10 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
         - `wait:` — seconds or a Duration after the previous step (for the
           first step, after `start!`). Underneath it is a PGMQ delay: the
           StepJob is sent with `wait_until:`.
-        - `skip_if:` — a lambda or method name; truthy skips the step.
+        - `skip_if:` — a lambda or method name; truthy skips the step. On a
+          `wait_for:` step it runs on every claim, the one after `signal!`
+          woke the step included: see "Skip a wait the record already
+          passed" under Signals.
         - `timeout:` — how long the step may stay in progress before the sweep
           treats it as stalled (default `config.workflow_stall_threshold`).
         - `job_options:` — `queue`, `priority`, `wait`, `wait_until` for this
@@ -260,7 +263,8 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
       )
       md <<~'MD'
         - **Buffering.** A signal sent before its step waits stays pending
-          and is taken when the step reaches its gate.
+          and is taken when the step reaches its gate (unless a guard skips
+          the step first; see below).
         - **Idempotency.** With an `idempotency_key`, a redelivery stores
           nothing, wakes nothing and returns the stored signal, whose
           `duplicate_delivery?` is true. A blank key (`""`) is no key.
@@ -288,6 +292,46 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
         - **A paused run** still takes a signal for its waiting step, but stays
           paused; `resume!` runs the step. `resume!` of a run paused while it
           waited puts it back to waiting.
+
+        **Skip a wait the record already passed.** A run that starts late, or
+        a later signal that overtakes an earlier wait, finds the record past
+        the state the step waits for. The guard for that reads
+        `signal_ready?`:
+      MD
+      DocsUI::Code(<<~'RUBY')
+        class OrderWorkflow < Pgbus::Workflow
+          step :await_shipped, wait_for: :shipped,
+                               skip_if: -> { subject.shipped? && !signal_ready? } do
+            output(shipped_at: subject.shipped_at)
+          end
+        end
+      RUBY
+      md <<~'MD'
+        Guards run before the gate, on every claim of the step. Without the
+        reader, `skip_if: -> { subject.shipped? }` would also skip the step
+        `signal!` woke once the order shipped (its body would never run), and
+        a signal sent before the step's first claim would stay pending for
+        good. Two step readers, usable in `skip_if:`, `cancel_if` and the
+        body, tell the cases apart:
+
+        - `signal_ready?` — the gate runs this attempt with a signal: one the
+          step holds, or a pending one its `wait_for:` matcher takes. The
+          guard above skips only when no signal is held or pending for the
+          step; a woken step and one whose signal came first both complete,
+          and the gate consumes the signal.
+        - `woken?` — narrower: this attempt holds a signal before its gate
+          (`signal!` woke it, or an earlier attempt took one and reattempted
+          or failed into a pause). False on a first claim, even when a
+          buffered signal waits for the gate, so `!woken?` in that guard
+          skips the step and leaves that signal pending.
+        - Both only read (the gate claims, after the guards), keep one answer
+          for the whole attempt, are false after an `on_timeout: :run` wake
+          (the gate takes no signal then) and in a step without `wait_for:`,
+          and raise `Pgbus::Workflow::NotInStep` outside a step.
+        - **A guard that skips** (or a `cancel_if` that cancels) takes no
+          signal: a pending one stays pending for a later `wait_for:` step
+          that matches it, as with an outside `skip!`. A signal the step
+          already holds is consumed, as when the body calls `skip!`.
 
         **Timeouts.** A signal that never comes is the usual way a workflow
         gets stuck, so a waiting step can carry a deadline:

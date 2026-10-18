@@ -160,9 +160,22 @@ RSpec.describe Pgbus::Workflow::StepJob do
     it "skips a step a removed_step gravestone covers" do
       klass.removed_step :old
       allow(step).to receive(:step_name).and_return("old")
+      allow(Pgbus::WorkflowSignal).to receive(:held_by_step).with("wf-1", "old").and_return(nil)
 
       perform
 
+      expect(outcomes).to eq([:skip])
+    end
+
+    it "records the signal a removed step still holds on the attempt's row before skipping it" do
+      klass.removed_step :old
+      allow(step).to receive_messages(step_name: "old", signal_id: nil)
+      allow(step).to receive(:update_columns)
+      allow(Pgbus::WorkflowSignal).to receive(:held_by_step).with("wf-1", "old").and_return(double("WorkflowSignal", id: 7))
+
+      perform
+
+      expect(step).to have_received(:update_columns).with(signal_id: 7)
       expect(outcomes).to eq([:skip])
     end
 

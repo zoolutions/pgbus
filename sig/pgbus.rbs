@@ -56,6 +56,33 @@ module Pgbus
     end
   end
 
+  # Partial: only the readers a workflow step's guards and body use to see
+  # its signal (issue #572). The rest of Workflow is not covered by
+  # spec/pgbus/rbs_spec.rb yet.
+  class Workflow
+    include Instance
+
+    class Error < Pgbus::Error
+    end
+
+    # A step reader (woken?, signal_ready?, ...) called outside a step.
+    class NotInStep < Error
+    end
+
+    module Instance
+      # The Pgbus::WorkflowSignal a wait_for: step took, or nil when its wait timed out.
+      def received_signal: () -> untyped
+      # The body runs because the wait timed out (on_timeout: :run).
+      def timed_out?: () -> bool
+      # This attempt holds a signal before its gate: signal! woke it, or an
+      # earlier attempt took one and reattempted or paused.
+      def woken?: () -> bool
+      # The gate runs this attempt with a signal: the held one, or a pending
+      # one its wait_for: matcher takes.
+      def signal_ready?: () -> bool
+    end
+  end
+
   def self.configuration: () -> Configuration
   def self.configuration_snapshot: () -> Configuration::Snapshot
   def self.configure: () { (Configuration) -> void } -> Configuration

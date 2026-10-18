@@ -12,6 +12,8 @@ module Pgbus
     # lock: a signal this step already holds (woken by signal!, or claimed by
     # an earlier attempt that reattempted or paused on a failure), else the
     # oldest pending one its matcher takes, else the step parks as waiting.
+    # The guards run first; woken? and signal_ready? (issue #572) show them
+    # what the gate holds and would take, through SignalPeek, claiming nothing.
     #
     # A claimed signal is consumed when its step ends, except when that
     # attempt reattempts or fails into a pause: the next attempt runs with it.
@@ -38,21 +40,36 @@ module Pgbus
       end
 
       # The gate of a wait_for: step. True when the body runs (with a signal,
-      # or timed out), false when the step parked. Sets received_signal and
-      # timed_out? on +workflow+.
-      def gate(record, step, definition, workflow, now: Time.current)
-        if timed_out?(step, now)
+      # or timed out), false when the step parked. Sets received_signal,
+      # timed_out?, woken? and signal_ready? on +workflow+. Which signal it
+      # takes is SignalPeek#ready: given the attempt's +peek+ (the StepJob
+      # passes the one its guards read), the very answer signal_ready? gave.
+      def gate(record, step, definition, workflow, now: Time.current, peek: nil)
+        peek ||= SignalPeek.new(record, step, definition, now: now)
+        if peek.timed_out?
           workflow.send(:enter_wait, signal: nil, timed_out: true)
           return true
         end
 
-        signal = WorkflowSignal.held_by_step(record.workflow_id, step.step_name) || match(record, definition.wait_for)
+        signal = peek.ready
         return park(record, step, definition, now) unless signal
 
+        woken = !peek.held.nil?
         claim!(record, step, signal, actor: Runner::SYSTEM_ACTOR) if signal.status == "pending"
         step.update_columns(signal_id: signal.id) unless step.signal_id == signal.id
-        workflow.send(:enter_wait, signal: signal, timed_out: false)
+        workflow.send(:enter_wait, signal: signal, timed_out: false, woken: woken)
         true
+      end
+
+      # An attempt that ended before its gate (cancel_if, skip_if, a guard
+      # that raised, a removed_step) records +held+, the signal the step
+      # holds, on its row, so settle treats it as for any attempt: consumed
+      # when the step ends, kept when it reattempts or fails into a pause. A
+      # post-reattempt row carries no signal_id until its gate runs. A
+      # pending signal stays pending: no step took it, and a later wait_for:
+      # step may.
+      def adopt_held(step, held)
+        step.update_columns(signal_id: held.id) if held && step.signal_id != held.id
       end
 
       # The step's attempt ended (StepOutcome.apply): consume the signal it
@@ -123,7 +140,7 @@ module Pgbus
       end
 
       # This attempt waited, holds no signal, and its wait_timeout passed: the
-      # sweep woke it with on_timeout: :run.
+      # sweep woke it with on_timeout: :run (SignalPeek#timed_out?).
       def timed_out?(step, now)
         !step.waiting_since.nil? && step.signal_id.nil? && !step.timeout_at.nil? && step.timeout_at <= now + 1
       end
