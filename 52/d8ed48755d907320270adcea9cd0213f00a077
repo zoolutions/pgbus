@@ -1,0 +1,37 @@
+spec/integration/workflow/signal_guards_spec.rb
+  s_4b791bd43897d0::t_d58b0f6793faed 1-219
+lib/pgbus/workflow/signals.rb
+  s_4b791bd43897d0::t_8c41317d6f53f0 15-16
+  s_4b791bd43897d0::t_4dd091e1510d39 43-49,54,57,60,64-71
+lib/pgbus/workflow/step_execution.rb
+  s_4b791bd43897d0::t_364960dabc0ebe 16-17
+spec/pgbus/workflow_spec.rb
+  s_4b791bd43897d0::t_6ae02d5c95a7d5 273-274
+  s_4b791bd43897d0::t_3fb56ba8e67eea 250-272,275-279
+spec/pgbus/workflow/signal_peek_spec.rb
+  s_4b791bd43897d0::t_8080f7bd29f423 1-58
+lib/pgbus/workflow/signal_peek.rb
+  s_4b791bd43897d0::t_534cef8aeabd41 1-4,11,13-15,17-24,26-27,36-38,40-43,45-47
+  s_4b791bd43897d0::t_fa3a4efc7a7d14 5,12,16,25,31-35,39,44
+  s_4b791bd43897d0::t_05716f1453dbea 28-30
+  s_4b791bd43897d0::t_09dd6cd76e3c23 6-10
+lib/pgbus/workflow/instance.rb
+  s_4b791bd43897d0::t_6da4cca8f147c0 194-196,198,203-204,208,211-212
+  s_4b791bd43897d0::t_2300e585f451fd 97-123
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "52d8ed48755d907320270adcea9cd0213f00a077",
+  "prompts": {},
+  "sessions": {
+    "s_4b791bd43897d0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a70340de-f4bd-46ab-aad8-f878f6fc3714",
+        "model": "unknown"
+      },
+      "human_author": null
+    }
+  }
+}
