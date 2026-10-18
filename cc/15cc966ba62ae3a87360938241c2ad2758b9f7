@@ -1,0 +1,51 @@
+spec/pgbus/dead_letter_header_spec.rb
+  s_0abf69c445fa20::t_b3b6a1afe34164 52
+spec/integration/dashboard_discard_locks_spec.rb
+  s_0abf69c445fa20::t_d349e8b6f87025 297
+  s_0abf69c445fa20::t_bb8d680a0d4313 58-59,63
+  s_0abf69c445fa20::t_9eec57fcf1f50f 152-161
+spec/integration/dispatcher_reaper_spec.rb
+  s_0abf69c445fa20::t_ef3b36e3e22b3d 120-123
+spec/pgbus/rbs_spec.rb
+  s_0abf69c445fa20::t_2842f6ac6d75af 81-92
+docs/app/views/docs/pages/retries_dead_letters.rb
+  s_0abf69c445fa20::t_5667c8727b93b2 114
+spec/integration/event_bus_flow_spec.rb
+  s_0abf69c445fa20::t_de7c793c212cd9 129-130
+spec/integration/job_uniqueness_spec.rb
+  s_0abf69c445fa20::t_b61cd6cad35f52 306-317
+lib/pgbus/configuration.rb
+  s_0abf69c445fa20::t_bb1ca82aadf363 1040-1042
+  s_0abf69c445fa20::t_0db7424ca2f2bd 1029-1032
+lib/pgbus/process/dispatcher.rb
+  s_0abf69c445fa20::t_caffd569d5149f 510-514,518-520,522-523
+spec/pgbus/process/dispatcher_spec.rb
+  s_0abf69c445fa20::t_c6425e0c5e9708 1075-1079,1081-1090,1093-1095
+spec/pgbus/web/data_source_spec.rb
+  s_0abf69c445fa20::t_9bc85038991600 658-672
+CHANGELOG.md
+  s_0abf69c445fa20::t_5220a8be91ca22 22
+app/models/pgbus/uniqueness_key.rb
+  s_0abf69c445fa20::t_7bbfd1e14ad914 149-150
+  s_0abf69c445fa20::t_e71f7de5c10f56 130
+  s_0abf69c445fa20::t_4d9750be82d90e 156
+  s_0abf69c445fa20::t_04c5fc4c4be60a 97-99,101
+lib/pgbus/web/data_source.rb
+  s_0abf69c445fa20::t_8357c332af71ac 1637,1639
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "cc15cc966ba62ae3a87360938241c2ad2758b9f7",
+  "prompts": {},
+  "sessions": {
+    "s_0abf69c445fa20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "780215a4-ac92-4464-839c-86e03bcf05b0",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
