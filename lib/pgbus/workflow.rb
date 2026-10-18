@@ -111,12 +111,18 @@ module Pgbus
       #
       #   SignupWorkflow.start!(user, plan: "pro")    # arguments["plan"]
       #   CheckoutWorkflow.start!(order, idempotency_key: "checkout-#{order.id}")
+      #   ReportWorkflow.start!(actor: "alice", reason: "monthly close")
       #
-      # +idempotency_key+ is reserved: with one, a second start! with the same
-      # key returns the first run (any status) with duplicate_start? true.
-      # Raises AlreadyRunning when the subject already has an ongoing run.
-      def start!(subject = nil, idempotency_key: nil, **arguments)
-        Runner.start(self, subject: subject, arguments: arguments, idempotency_key: idempotency_key)
+      # +idempotency_key+, +actor+ and +reason+ are reserved and never reach
+      # the arguments. With an idempotency_key, a second start! with the same
+      # key returns the first run (any status) with duplicate_start? true and
+      # records nothing. +actor+ (default "app") and +reason+ go on the
+      # started event, and the actor on the first step_scheduled, as on every
+      # outside verb. Raises AlreadyRunning when the subject already has an
+      # ongoing run.
+      def start!(subject = nil, idempotency_key: nil, actor: nil, reason: nil, **arguments)
+        Runner.start(self, subject: subject, arguments: arguments, idempotency_key: idempotency_key,
+                           actor: actor || Runner::DEFAULT_ACTOR, reason: reason)
       end
 
       # The run with this workflow_id, as an instance of the class that
