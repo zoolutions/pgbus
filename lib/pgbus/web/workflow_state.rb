@@ -57,7 +57,7 @@ module Pgbus
       end
 
       # An on_timeout: :notify deadline sends a late notice and the wait goes
-      # on (issue #565); late_since is when the first one went out.
+      # on (issue #565); late_since is the first deadline the wait missed.
       def signal_deadline(row, args)
         # A deploy that changed on_timeout since the last notice: the next
         # deadline does something else (nil: the class is not loaded here).
