@@ -1,0 +1,21 @@
+spec/pgbus/streams/presence_adapter_lock_spec.rb
+  s_601896216f96ff::t_a5264f620afd68 1-80,83,85,88-89,105,109,112-117,126-129,177-183
+spec/integration/streams/presence_adapter_lock_spec.rb
+  s_601896216f96ff::t_03f7271866a8b4 1-50,55,59,61-86,88-157
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "880d8d6202d4e235c447d0bf2c2c29e50c87ec3a",
+  "prompts": {},
+  "sessions": {
+    "s_601896216f96ff": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ad8fa3ec-23b3-4a3a-b359-07bf91dc2fa4",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
