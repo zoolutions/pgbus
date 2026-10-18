@@ -1026,9 +1026,10 @@ module Pgbus
     # written (its tables already exist under it), but queue_name collapses
     # the separator after it only for a queue name that needs normalizing:
     # "myapp_" gives myapp__orders yet myapp_orders_handler for
-    # "orders-handler". Such a queue's table cannot be traced back to the
-    # queue, so its uniqueness locks are found only by key (Locks page, or the
-    # reaper never). Legal, but warned.
+    # "orders-handler". A job's own release and the dashboard derive the same
+    # lock queue for it and still match, but the reaper cannot resolve that
+    # name back to the table, so a lock orphaned there is never reclaimed and
+    # has to be released by key. Legal, but warned.
     def warn_queue_prefix_underscores
       return unless queue_prefix.match?(/\A_|_\z|__/)
 
@@ -1036,8 +1037,9 @@ module Pgbus
       suggestion = suggested.empty? ? "" : "; prefer #{suggested.inspect} for new deployments"
       Pgbus.logger.warn do
         "[Pgbus] queue_prefix #{queue_prefix.inspect} has a leading, trailing or doubled underscore — a queue " \
-          "whose name needs normalizing (\"orders-handler\") gets a table spelled unlike its queue, and its " \
-          "uniqueness locks can only be released by key#{suggestion}"
+          "whose name needs normalizing (\"orders-handler\") gets a table spelled unlike its queue, so the " \
+          "reaper cannot find that table: a uniqueness lock orphaned there (a worker crash before its release) " \
+          "is never reclaimed and has to be released by key#{suggestion}"
       end
     end
 

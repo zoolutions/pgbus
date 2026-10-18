@@ -117,6 +117,10 @@ RSpec.describe "Dispatcher uniqueness key reaper (integration)", :integration do
         stamp = Pgbus::UniquenessKey.unbind!("PollJob:1", from_queue_name: queue_name, from_msg_id: 1,
                                                           from_enqueued_at: Time.current, queue_name: queue_name)
         Pgbus::UniquenessKey.bind!("PollJob:1", queue_name: queue_name, msg_id: msg_id, acquired_at: stamp)
+        # Bound to the delayed retry, so the reaper takes the bound path, not
+        # the unbound scan that the same key in the payload would also satisfy.
+        row = Pgbus::UniquenessKey.find_by(lock_key: "PollJob:1")
+        expect([row.queue_name, row.msg_id]).to eq([queue_name, msg_id.to_i])
         Pgbus::UniquenessKey.where(lock_key: "PollJob:1").update_all(created_at: 10.minutes.ago)
 
         reaped = dispatcher.send(:reap_orphaned_uniqueness_keys)

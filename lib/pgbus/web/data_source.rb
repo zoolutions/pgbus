@@ -1634,8 +1634,9 @@ module Pgbus
 
         # queue_name is the logical name the executor saw: the message is looked
         # up under it, and the lock is released under its table spelling.
+        # A key proc may return a number; the queue lookup reads it as text.
         holders = rows.to_a.filter_map do |row|
-          key = extract_uniqueness_key_from_payload_str(row["payload"])
+          key = extract_uniqueness_key_from_payload_str(row["payload"])&.to_s
           [key, row["queue_name"], row["msg_id"].to_i] if key && row["msg_id"]
         end
         holders = holders.group_by { |_key, queue, _msg_id| queue }.flat_map do |queue, entries|

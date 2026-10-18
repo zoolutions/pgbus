@@ -655,6 +655,21 @@ RSpec.describe Pgbus::Web::DataSource do
       )
     end
 
+    # A key proc may return a number: the payload holds it as a JSON number,
+    # the queue lookup returns it as text.
+    it "matches a numeric uniqueness key to its queued message's send time" do
+      allow(mock_connection).to receive(:select_all)
+        .with("#{failed_lock_holders_sql} #{not_handler}", "Pgbus Collect Failed Keys", handler_names)
+        .and_return([{ "queue_name" => "default", "msg_id" => 10, "payload" => '{"pgbus_uniqueness_key":42}' }])
+      allow(mock_connection).to receive(:select_all)
+        .with(format(queued_send_times_sql, table: "pgbus_test_default"), "Pgbus Failed Message Sent At", ["{10}"])
+        .and_return([{ "msg_id" => 10, "enqueued_at" => sent_at, "lock_key" => "42" }])
+
+      data_source.discard_all_failed
+
+      expect(Pgbus::UniquenessKey).to have_received(:release_all_held_by!).with([["42", "default", 10, sent_at]])
+    end
+
     # One stored queue name that no longer makes a valid table name must not
     # stop the other queues' locks from being released.
     it "skips, and logs, a queue whose locks cannot be resolved, and releases the rest" do

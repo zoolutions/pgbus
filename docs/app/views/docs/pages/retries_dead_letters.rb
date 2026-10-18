@@ -111,7 +111,7 @@ class Views::Docs::Pages::RetriesDeadLetters < DocsUI::Page
       DocsUI::Table(
         [ "Key", "Value" ],
         [
-          [ [ :code, "version" ], "1 — bumped when the shape changes." ],
+          [ [ :code, "version" ], [ :md, "1 — bumped when a field changes meaning or goes away; an optional field added later (`source_msg_id`, `source_enqueued_at`) does not bump it." ] ],
           [ [ :code, "reason" ], [ :md, "`max_retries_exceeded`, the only reason today." ] ],
           [ [ :code, "source" ], [ :md, "`worker` (ActiveJob) or `consumer` (event bus)." ] ],
           [ [ :code, "source_queue" ], [ :md, "The physical queue it was deleted from, a priority sub-queue (`…_p2`) included." ] ],

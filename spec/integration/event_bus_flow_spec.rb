@@ -126,7 +126,8 @@ RSpec.describe "Event bus flow (integration)", :integration do
       copy = client.read_batch(dlq_queue, qty: 5).sole
       block = Pgbus::DeadLetterHeader.parse(copy.headers)
       expect(block).to include("source" => "consumer", "source_msg_id" => message.msg_id.to_i)
-      expect(Time.parse(block["source_enqueued_at"])).to be_within(0.001).of(Time.parse(message.enqueued_at.to_s))
+      # to_time takes PGMQ's String (with its offset) or a Time as it is.
+      expect(block["source_enqueued_at"].to_time).to be_within(0.001).of(message.enqueued_at.to_time)
     end
 
     it "still dead-letters and emits for a raw jsonb scalar written straight to the queue" do

@@ -303,6 +303,18 @@ RSpec.describe "Job uniqueness (integration)", :integration do
       expect(release(enqueued_at: 1.second.from_now)).to eq(1)
     end
 
+    # "pending" is also a name a real queue can have: a lock bound to one of
+    # its messages is bound, and another message's send time must not take it.
+    it "keeps a lock bound to a message on a real queue named pending" do
+      Pgbus::UniquenessKey.acquire!("unique-order-42", queue_name: "pending", msg_id: 9)
+
+      expect(release(queue_name: "default", msg_id: 7, enqueued_at: 1.second.from_now)).to eq(0)
+      expect(Pgbus::UniquenessKey.release_all_held_by!([["unique-order-42", "default", 7, 1.second.from_now]])).to eq(0)
+      expect(Pgbus::UniquenessKey.unbind!("unique-order-42", from_queue_name: "default", from_msg_id: 7,
+                                                             from_enqueued_at: 1.second.from_now,
+                                                             queue_name: "default")).to be_nil
+    end
+
     # Without a send time nothing says the unbound row is this message's (it
     # may be a parked retry's it handed over, or a successor's): only the row
     # bound to it goes, and the reaper takes an orphan.

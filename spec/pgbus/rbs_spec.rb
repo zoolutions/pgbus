@@ -78,6 +78,18 @@ RSpec.describe "the RBS signatures in sig/" do # rubocop:disable RSpec/DescribeC
     end
   end
 
+  # A spec helper may prepend a wrapper to a lib method (integration_helper
+  # wraps Pgbus.reset_client!): the method is still pgbus's.
+  it "counts a lib method behind a prepended wrapper as pgbus-defined" do
+    config = Pgbus::Configuration.new
+    config.singleton_class.prepend(Module.new { define_method(:queue_name) { |name| super(name) } })
+    wrapped = config.method(:queue_name)
+
+    expect(wrapped.source_location.first).to eq(__FILE__)
+    expect(self.class.pgbus_defined?(wrapped)).to be(true)
+    expect(self.class.pgbus_defined?(Object.new.method(:to_s))).to be(false)
+  end
+
   # The typed surface is for the apps that install the gem.
   it "ships with the gem" do
     root = File.expand_path("../..", __dir__)

@@ -94,8 +94,11 @@ module Pgbus
     # acquired after the send is a successor's. created_at is a timestamp
     # without time zone written in the session's zone, and the cast compares
     # it in that same zone; PGMQ's enqueued_at string carries its offset.
+    # Unbound means msg_id <= 0 only: "pending" (the placeholder queue) is a
+    # name a real queue can have too, and a lock bound to one of its messages
+    # is bound.
     HELD_BY_CONDITION = "lock_key = $1 AND ((queue_name = $2 AND msg_id = $3 AND msg_id > 0) OR " \
-                        "((msg_id <= 0 OR queue_name = $5) AND created_at <= $4::timestamptz))"
+                        "(msg_id <= 0 AND created_at <= $4::timestamptz))"
     private_constant :HELD_BY_CONDITION
 
     # Release the lock a finishing message holds (success or DLQ). Unlike the
@@ -124,7 +127,7 @@ module Pgbus
     def self.unbind!(lock_key, from_queue_name:, from_msg_id:, from_enqueued_at:, queue_name:)
       binds = held_by_binds(lock_key, from_queue_name, from_msg_id, sent_at_literal(from_enqueued_at))
       result = connection.exec_query(
-        "UPDATE #{table_name} SET queue_name = $6, msg_id = 0, created_at = CURRENT_TIMESTAMP " \
+        "UPDATE #{table_name} SET queue_name = $5, msg_id = 0, created_at = CURRENT_TIMESTAMP " \
         "WHERE #{HELD_BY_CONDITION} RETURNING created_at",
         "UniquenessKey Unbind", binds + [queue_name.to_s]
       )
@@ -143,14 +146,14 @@ module Pgbus
         connection.exec_delete(
           "DELETE FROM #{table_name} AS u USING (VALUES #{values.join(", ")}) AS m(lock_key, queue_name, msg_id, sent_at) " \
           "WHERE u.lock_key = m.lock_key AND ((u.queue_name = m.queue_name AND u.msg_id = m.msg_id AND u.msg_id > 0) OR " \
-          "((u.msg_id <= 0 OR u.queue_name = $1) AND u.created_at <= m.sent_at))",
-          "UniquenessKey Release All Held By", [Uniqueness::PLACEHOLDER_QUEUE]
+          "(u.msg_id <= 0 AND u.created_at <= m.sent_at))",
+          "UniquenessKey Release All Held By"
         )
       end
     end
 
     def self.held_by_binds(lock_key, queue_name, msg_id, sent_at)
-      [lock_key, queue_name.to_s, msg_id.to_i, sent_at, Uniqueness::PLACEHOLDER_QUEUE]
+      [lock_key, queue_name.to_s, msg_id.to_i, sent_at]
     end
     private_class_method :held_by_binds
 

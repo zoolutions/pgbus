@@ -55,14 +55,12 @@ RSpec.describe "Dashboard discard operations clear locks (integration)", :integr
     end
 
     it "keeps the lock its job handed to a retry that is still waiting" do
-      Pgbus::UniquenessKey.acquire!("import-7", queue_name: queue_name, msg_id: 0)
-      attempt_id = client.send_message(queue_name, unique_payload("import-7"))
-      retry_id = client.send_message(queue_name, unique_payload("import-7"), delay: 300)
-      Pgbus::UniquenessKey.where(lock_key: "import-7").update_all(msg_id: retry_id)
+      attempt_id = enqueue_unique("import-7")
+      retry_id = hand_to_waiting_retry("import-7", attempt_id)
 
       data_source.discard_job(full_queue, attempt_id)
 
-      expect(Pgbus::UniquenessKey.find_by(lock_key: "import-7")&.msg_id).to eq(retry_id.to_i)
+      expect(Pgbus::UniquenessKey.find_by(lock_key: "import-7")&.msg_id).to eq(retry_id)
     end
 
     it "keeps a successor's lock taken after the discarded message was sent" do
@@ -151,6 +149,16 @@ RSpec.describe "Dashboard discard operations clear locks (integration)", :integr
     stamp = Pgbus::UniquenessKey.unbind!(key, from_queue_name: queue_name, from_msg_id: attempt_id,
                                               from_enqueued_at: sent_at(attempt_id), queue_name: queue_name)
     expect(stamp).not_to be_nil
+    stamp
+  end
+
+  # The same handoff to a retry that was sent with a wait: unbound and
+  # re-stamped, then bound to the delayed retry with that stamp.
+  def hand_to_waiting_retry(key, attempt_id, job_class: "ImportJob")
+    stamp = hand_to_parked_retry(key, attempt_id)
+    retry_id = client.send_message(queue_name, unique_payload(key, job_class: job_class), delay: 300).to_i
+    expect(Pgbus::UniquenessKey.bind!(key, queue_name: queue_name, msg_id: retry_id, acquired_at: stamp)).to eq(1)
+    retry_id
   end
 
   # As the executor records it: under the logical queue, with the msg_id.
@@ -286,8 +294,7 @@ RSpec.describe "Dashboard discard operations clear locks (integration)", :integr
 
       it "keeps the lock a waiting retry holds once it was bound to the retry" do
         attempt = enqueue_unique("dlq-4", job_class: "DlqJob")
-        retry_id = client.send_message(queue_name, unique_payload("dlq-4", job_class: "DlqJob"), delay: 300).to_i
-        Pgbus::UniquenessKey.where(lock_key: "dlq-4").update_all(msg_id: retry_id)
+        retry_id = hand_to_waiting_retry("dlq-4", attempt, job_class: "DlqJob")
         copy = dead_letter(attempt)
 
         data_source.discard_dlq_message(full_dlq, copy)
