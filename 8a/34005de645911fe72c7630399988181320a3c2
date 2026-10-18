@@ -1,0 +1,19 @@
+spec/integration/workflow/one_ongoing_index_spec.rb
+  s_039165cf117b7c::t_f9851b54acb63c 14,16-22,25-26,29-32,34-35,37,39-41,43,48-50,52-58,60-61
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "8a34005de645911fe72c7630399988181320a3c2",
+  "prompts": {},
+  "sessions": {
+    "s_039165cf117b7c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c644b7ed-8e6b-44ea-aff6-e4b3d4cd1c83",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
