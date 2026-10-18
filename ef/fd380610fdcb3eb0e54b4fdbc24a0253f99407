@@ -1,0 +1,33 @@
+spec/pgbus/workflow_spec.rb
+  s_4b791bd43897d0::t_9177a80fca50e5 57-60
+  s_4b791bd43897d0::t_daa25e597aa61c 106,110
+  s_4b791bd43897d0::t_383e9535ee5e89 52-56,61-70
+lib/pgbus/workflow.rb
+  s_4b791bd43897d0::t_fde638ce574a92 114,116-125
+docs/app/views/docs/pages/workflows.rb
+  s_4b791bd43897d0::t_ee35872e38609b 80
+  s_4b791bd43897d0::t_68c1389f25bfa1 81-82
+  s_4b791bd43897d0::t_278e45ec29aeec 117-123
+  s_4b791bd43897d0::t_9f1d2a13a88db5 416-417
+  s_4b791bd43897d0::t_baf9cc3018b763 711-712
+spec/integration/workflow/verbs_spec.rb
+  s_4b791bd43897d0::t_7da05a1e69f776 37-69
+lib/pgbus/workflow/runner.rb
+  s_4b791bd43897d0::t_6427732bbcc4eb 71,75
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "effd380610fdcb3eb0e54b4fdbc24a0253f99407",
+  "prompts": {},
+  "sessions": {
+    "s_4b791bd43897d0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a70340de-f4bd-46ab-aad8-f878f6fc3714",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
