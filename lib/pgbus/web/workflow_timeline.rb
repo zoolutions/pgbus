@@ -11,13 +11,15 @@ module Pgbus
     #   waiting  waiting_since → …           parked on a signal or its fan-out batch
     #
     # and a paused run's pauses (paused → resumed, from the events) are their
-    # own segments, so a long gap explains itself. The show page's step table
-    # prints durations; the range-bar chart (charts.js renderTimeline) draws
-    # chart. Pure: rows in, hashes out.
+    # own segments, so a long gap explains itself; each wait_timed_out event
+    # is a marker. The show page's step table prints durations; the
+    # range-bar chart (charts.js renderTimeline) draws chart. Pure: rows in,
+    # hashes out.
     module WorkflowTimeline
       OPEN = %w[scheduled waiting in_progress].freeze
       PAUSE_ENDS = %w[resumed cancelled finished].freeze
       PAUSE_EVENTS = (%w[paused] + PAUSE_ENDS).freeze
+      WAIT_TIMED_OUT = "wait_timed_out"
       RAN_SERIES = { "completed" => "ran_ok", "skipped" => "ran_ok", "failed" => "ran_failed",
                      "in_progress" => "ran_open", "waiting" => "ran_open" }.freeze
 
@@ -82,7 +84,18 @@ module Pgbus
         paused = paused_periods(events, status: status, now: now).map do |period|
           chart_segment(period.merge(kind: :paused), "paused")
         end
-        { rows: rows, paused: paused }
+        { rows: rows, paused: paused, wait_timeouts: wait_timeouts(events) }
+      end
+
+      # [{ at:, step:, action: }] per wait_timed_out event, oldest first: the
+      # chart draws each as a line across the rows, the page lists them. An
+      # on_timeout: :notify wait has one per deadline it missed (issue #565).
+      def wait_timeouts(events)
+        timed_out = events.select { |event| event[:event] == WAIT_TIMED_OUT }.sort_by { |event| event[:created_at] }
+        timed_out.map do |event|
+          { at: millis(event[:created_at]), step: "#{event[:step_name]} ##{event[:attempt]}",
+            action: event[:details].to_h["action"] }
+        end
       end
 
       def series_for(kind, step)

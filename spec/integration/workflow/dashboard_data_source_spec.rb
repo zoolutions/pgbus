@@ -8,6 +8,7 @@ require_relative "support"
 # action's real outcome, including the lost race.
 RSpec.describe "Pgbus::Web::DataSource workflows", :integration do
   include WorkflowIntegration
+  include Pgbus::Workflow::TestHelpers
 
   subject(:data_source) { Pgbus::Web::DataSource.new }
 
@@ -118,6 +119,30 @@ RSpec.describe "Pgbus::Web::DataSource workflows", :integration do
       expect(row).to include(batch_id: batch_id, batch_progress: { done: 1, total: 2 })
       expect(queries.count { |sql| sql.include?("pgbus_batches") }).to eq(1)
     end
+
+    it "says since when an on_timeout: :notify wait is late, from one events query for the page (issue #565)" do
+      stub_const("ApprovalWorkflow", Class.new(Pgbus::Workflow) do
+        step(:await_approval, wait_for: :approved, wait_timeout: 3600, on_timeout: :notify) { nil }
+      end)
+      wf = run_until(ApprovalWorkflow.start!, statuses: %w[waiting])
+      expect(data_source.workflows(status: "waiting").sole).to include(on_timeout: "notify", late_since: nil)
+
+      2.times { expire_wait(wf) }
+      first = wf.events.find { |event| event.event == "wait_timed_out" }.created_at
+      queries = []
+      row = ActiveSupport::Notifications.subscribed(->(*, payload) { queries << payload[:sql] }, "sql.active_record") do
+        data_source.workflows(status: "waiting").sole
+      end
+
+      expect(row).to include(on_timeout: "notify", late_since: first, timeout_at: steps_of(wf).last.timeout_at)
+      expect(queries.count { |sql| sql.include?("pgbus_workflow_events") }).to eq(1)
+    end
+
+    it "leaves on_timeout and late_since nil for a wait without a wait_timeout:" do
+      run_until(ShippingWorkflow.start!, statuses: %w[waiting])
+
+      expect(data_source.workflows(status: "waiting").sole).to include(on_timeout: nil, late_since: nil)
+    end
   end
 
   describe "#workflow_detail" do
@@ -135,6 +160,20 @@ RSpec.describe "Pgbus::Web::DataSource workflows", :integration do
       expect(detail[:events].first[:event]).to eq("paused")
       expect(detail[:events].map { |e| e[:event] }).to include("started", "step_failed")
       expect(detail[:timeline][:rows].sole[:label]).to eq("capture #1")
+    end
+
+    it "marks each wait_timed_out event on the timeline and says since when the wait is late (issue #565)" do
+      stub_const("ApprovalWorkflow", Class.new(Pgbus::Workflow) do
+        step(:await_approval, wait_for: :approved, wait_timeout: 3600, on_timeout: :notify) { nil }
+      end)
+      wf = run_until(ApprovalWorkflow.start!, statuses: %w[waiting])
+      2.times { expire_wait(wf) }
+
+      detail = data_source.workflow_detail(wf.workflow_id)
+
+      expect(detail[:late_since]).to eq(wf.events.find { |event| event.event == "wait_timed_out" }.created_at)
+      expect(detail[:timeline][:wait_timeouts].map { |mark| mark.slice(:step, :action) })
+        .to eq([{ step: "await_approval #1", action: "notify" }] * 2)
     end
 
     it "says a run paused after a completed step continues with the next one" do

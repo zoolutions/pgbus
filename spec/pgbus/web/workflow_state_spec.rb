@@ -32,6 +32,16 @@ RSpec.describe Pgbus::Web::WorkflowState do
     expect(said(status: "waiting")).to eq(["waiting", "waiting_step", { step: "capture" }])
   end
 
+  it "calls an on_timeout: :notify deadline a late notice, and says since when a wait it fired on is late (issue #565)" do
+    waiting = { status: "waiting", waiting_for: "approved", on_timeout: "notify" }
+    expect(said(**waiting, waiting_since: now - 60, timeout_at: now + 60))
+      .to eq(["waiting", "waiting_signal_notify", { signal: "approved", ago: now - 60, time: now + 60 }])
+    expect(said(**waiting, waiting_since: now - 10_800, timeout_at: now + 3600, late_since: now - 7200))
+      .to eq(["waiting", "waiting_signal_late", { signal: "approved", ago: now - 10_800, late: now - 7200, time: now + 3600 }])
+    expect(said(**waiting, on_timeout: "pause!", waiting_since: now - 60, timeout_at: now + 60).second)
+      .to eq("waiting_signal_timeout")
+  end
+
   it "says why a run is paused" do
     expect(said(status: "paused", error_class: "Timeout::Error"))
       .to eq(["paused", "paused_error", { step: "capture", error: "Timeout::Error" }])

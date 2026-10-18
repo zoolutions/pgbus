@@ -17,6 +17,7 @@ module Pgbus
         # The pause events the timeline pairs, read on their own so a long
         # audit trail never drops a run's earliest pauses from the chart.
         PAUSE_HISTORY = 1_000
+        WAIT_TIMEOUT_HISTORY = 200
         SIGNAL_HISTORY = 100
         RERUN_LINKS = 10
         ATTENTION_GROUPS = 200
@@ -46,7 +47,8 @@ module Pgbus
 
           steps = WorkflowStep.where(workflow_id: workflow_id).order(id: :desc).limit(STEP_HISTORY).to_a
           progress = batch_progress([step_attribute(steps.first, :batch_id)].compact)
-          workflow_row(record, steps.first, progress).merge(workflow_extras(record, steps))
+          late = late_since(steps.first&.status == "waiting" ? [steps.first] : [])
+          workflow_row(record, steps.first, progress, late).merge(workflow_extras(record, steps))
         rescue StandardError => e
           Pgbus.logger.error { "[Pgbus::Web] Error fetching workflow #{workflow_id}: #{e.class}: #{e.message}" }
           nil
@@ -96,7 +98,8 @@ module Pgbus
           latest = latest_steps(records.map(&:workflow_id))
           waiting = latest.values.select { |step| step.status == "waiting" }
           progress = batch_progress(waiting.filter_map { |step| step_attribute(step, :batch_id) })
-          records.map { |record| workflow_row(record, latest[record.workflow_id], progress) }
+          late = late_since(waiting)
+          records.map { |record| workflow_row(record, latest[record.workflow_id], progress, late) }
         rescue StandardError => e
           Pgbus.logger.error { "[Pgbus::Web] Error fetching workflows: #{e.class}: #{e.message}" }
           []
@@ -155,7 +158,29 @@ module Pgbus
           end
         end
 
-        def workflow_row(record, step, progress)
+        # { step_id => when its wait was first reported late } for waiting
+        # steps with a deadline, one query. Only on_timeout: :notify leaves a
+        # step waiting after a wait_timed_out event (issue #565): every other
+        # on_timeout ends the attempt.
+        def late_since(waiting)
+          steps = waiting.select { |step| step_attribute(step, :timeout_at) }
+          return {} if steps.empty?
+
+          WorkflowEvent.where(workflow_id: steps.map(&:workflow_id), step_id: steps.map(&:id),
+                              event: WorkflowTimeline::WAIT_TIMED_OUT)
+                       .group(:step_id).minimum(:created_at)
+        end
+
+        # The waiting step's on_timeout as its class declares it: nil without
+        # a wait_timeout:, or when the class is not loaded in this process.
+        def wait_on_timeout(record, step)
+          return nil unless step_attribute(step, :timeout_at)
+
+          definition = record.workflow_klass&.workflow_steps&.fetch(step.step_name)
+          definition.on_timeout.to_s if definition.is_a?(Workflow::StepDefinition)
+        end
+
+        def workflow_row(record, step, progress, late = {})
           waiting = step&.status == "waiting"
           { workflow_id: record.workflow_id, workflow_class: record.workflow_class, subject_type: record.subject_type,
             subject_id: record.subject_id, status: record.status, current_step: record.current_step,
@@ -163,6 +188,7 @@ module Pgbus
             waiting_for: (step_attribute(step, :wait_for) if waiting),
             waiting_since: (step_attribute(step, :waiting_since) if waiting),
             timeout_at: (step_attribute(step, :timeout_at) if waiting),
+            on_timeout: (wait_on_timeout(record, step) if waiting), late_since: (late[step.id] if waiting),
             batch_id: step_attribute(step, :batch_id),
             batch_progress: (progress[step_attribute(step, :batch_id)] if waiting),
             scheduled_at: (step.scheduled_at if step&.status == "scheduled"),
@@ -192,7 +218,7 @@ module Pgbus
             definition_outdated: record.definition_outdated?, class_loaded: !klass.nil?,
             step_names: klass ? klass.workflow_steps.names : [], resume_action: resume_action, resume_step: resume_step,
             signal_names: WorkflowActionPlan.signal_names(steps.first, klass), reruns: workflow_reruns(record.workflow_id),
-            timeline: WorkflowTimeline.chart(step_hashes, pause_events(record.workflow_id), status: record.status, now: now) }
+            timeline: WorkflowTimeline.chart(step_hashes, timeline_events(record.workflow_id), status: record.status, now: now) }
         end
 
         def workflow_step_hash(step)
@@ -207,9 +233,18 @@ module Pgbus
             signal_id: step_attribute(step, :signal_id) }
         end
 
-        def pause_events(workflow_id)
-          WorkflowEvent.where(workflow_id: workflow_id, event: WorkflowTimeline::PAUSE_EVENTS).order(:id).limit(PAUSE_HISTORY)
-                       .map { |event| { event: event.event, created_at: event.created_at } }
+        # The pauses (oldest first) and the newest wait_timed_out events the
+        # timeline marks, read apart so a wait late for weeks cannot crowd out
+        # the pauses.
+        def timeline_events(workflow_id)
+          pauses = WorkflowEvent.where(workflow_id: workflow_id, event: WorkflowTimeline::PAUSE_EVENTS).order(:id)
+                                .limit(PAUSE_HISTORY).map { |event| { event: event.event, created_at: event.created_at } }
+          timeouts = WorkflowEvent.where(workflow_id: workflow_id, event: WorkflowTimeline::WAIT_TIMED_OUT)
+                                  .order(id: :desc).limit(WAIT_TIMEOUT_HISTORY).map do |event|
+            { event: event.event, created_at: event.created_at, step_name: event.step_name, attempt: event.attempt,
+              details: event.details }
+          end
+          pauses + timeouts
         end
 
         def workflow_signals(workflow_id)

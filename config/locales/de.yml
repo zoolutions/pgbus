@@ -1349,6 +1349,8 @@ de:
         unknown_html: 'Status: %{status}.'
         waiting_batch_html: Wartet auf Stapel %{batch} (%{done} von %{total} Jobs erledigt).
         waiting_signal_html: Wartet auf Signal %{signal} seit %{ago}.
+        waiting_signal_late_html: Wartet auf Signal %{signal} seit %{ago} (verspätet seit %{late}). Die nächste Verspätungsmeldung folgt %{time}.
+        waiting_signal_notify_html: Wartet auf Signal %{signal} seit %{ago}. Eine Verspätungsmeldung folgt %{time}, und das Warten geht weiter.
         waiting_signal_timeout_html: Wartet auf Signal %{signal} seit %{ago}. Das Warten läuft ab %{time}.
         waiting_step_html: Wartet auf %{step}.
       not_found:
@@ -1451,7 +1453,7 @@ de:
         ready: Bereit
         waiting: Wartend
       timeline:
-        caption: 'Jeder Versuch, der älteste oben: gewartet (seine Wartezeit), eingereiht (fällig, noch nicht abgeholt), gelaufen (nach Ausgang eingefärbt) und wartend (auf ein Signal oder seinen Stapel), die Pausen in einer eigenen Zeile. Die Versuchstabelle darunter listet dieselben Dauern.'
+        caption: 'Jeder Versuch, der älteste oben: gewartet (seine Wartezeit), eingereiht (fällig, noch nicht abgeholt), gelaufen (nach Ausgang eingefärbt) und wartend (auf ein Signal oder seinen Stapel), die Pausen in einer eigenen Zeile. Die Versuchstabelle darunter listet dieselben Dauern. Eine gestrichelte Linie markiert jedes Mal, wenn ein Warten seine Frist überschritt.'
         empty: Noch keine Versuche.
         paused_period_html: Pausiert ab %{from} für %{duration}
         paused_row: Pausiert
@@ -1465,3 +1467,4 @@ de:
           waited: Gewartet
           waiting: Wartend
         title: Zeitachse
+        wait_timeout_html: 'Das Warten von %{step} überschritt um %{time} seine Frist (on_timeout: %{action}).'

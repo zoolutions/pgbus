@@ -1349,6 +1349,8 @@ nb:
         unknown_html: 'Status: %{status}.'
         waiting_batch_html: Venter på gruppen %{batch} (%{done} av %{total} jobber ferdige).
         waiting_signal_html: Venter på signalet %{signal} siden %{ago}.
+        waiting_signal_late_html: Venter på signalet %{signal} siden %{ago} (forsinket siden %{late}). Neste forsinkelsesvarsel sendes %{time}.
+        waiting_signal_notify_html: Venter på signalet %{signal} siden %{ago}. Et forsinkelsesvarsel sendes %{time}, og ventingen fortsetter.
         waiting_signal_timeout_html: Venter på signalet %{signal} siden %{ago}. Ventetiden utløper %{time}.
         waiting_step_html: Venter på %{step}.
       not_found:
@@ -1451,7 +1453,7 @@ nb:
         ready: Klare
         waiting: Venter
       timeline:
-        caption: 'Hvert forsøk, eldst øverst: ventet (ventetiden), i kø (forfalt, ikke hentet ennå), kjørte (farget etter utfall) og venter (på et signal eller sin gruppe), med pausene på en egen rad. Forsøkstabellen under viser de samme varighetene.'
+        caption: 'Hvert forsøk, eldst øverst: ventet (ventetiden), i kø (forfalt, ikke hentet ennå), kjørte (farget etter utfall) og venter (på et signal eller sin gruppe), med pausene på en egen rad. Forsøkstabellen under viser de samme varighetene. En stiplet linje markerer hver gang en ventetid passerte fristen.'
         empty: Ingen forsøk ennå.
         paused_period_html: Satt på pause %{from} i %{duration}
         paused_row: På pause
@@ -1465,3 +1467,4 @@ nb:
           waited: Ventet
           waiting: Venter
         title: Tidslinje
+        wait_timeout_html: 'Ventetiden for %{step} passerte fristen %{time} (on_timeout: %{action}).'

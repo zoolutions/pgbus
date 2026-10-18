@@ -34,7 +34,12 @@ RSpec.describe "Workflows", type: :system do
         expect(page).to have_text("Performing")
         expect(page).to have_text("Performing capture (attempt 2).")
       end
-      within(row_for(samples::SIGNAL_ID)) { expect(page).to have_text("Waiting for signal shipped since 3h ago.") }
+      within(row_for(samples::SIGNAL_ID)) do
+        expect(page).to have_text("Waiting for signal shipped since 3h ago. The wait times out in 2d")
+      end
+      within(row_for(samples::LATE_ID)) do
+        expect(page).to have_text("Waiting for signal approved since 3h ago (late since 2h ago). The next late notice goes out in 1h")
+      end
       within(row_for(samples::FAN_OUT_ID)) do
         expect(page).to have_text("Waiting for batch OrderWorkflow#notify_vendors (7 of 12 jobs done).")
         expect(page).to have_link("OrderWorkflow#notify_vendors", href: "/pgbus/batches/#{samples::BATCH_ID}")
@@ -159,6 +164,24 @@ RSpec.describe "Workflows", type: :system do
       expect(payload["paused"].size).to eq(2)
       expect(page).to have_css("#workflow-timeline-chart[role=img]")
       expect(page).to have_css("#workflow-timeline-chart .apexcharts-rangebar-area", wait: 10)
+    end
+
+    it "marks each missed wait deadline on the timeline and lists them as text, in both themes (issue #565)" do
+      visit "/pgbus/workflows/#{samples::LATE_ID}"
+
+      payload = JSON.parse(find("#pgbus-workflow-timeline-data", visible: :all).text(:all))
+      expect(payload["wait_timeouts"].map { |mark| mark.slice("step", "action") })
+        .to eq([{ "step" => "await_approval #1", "action" => "notify" }] * 2)
+      within("[data-testid=workflow-wait-timeouts]") do
+        expect(page).to have_css("li", count: 2)
+        expect(page).to have_text("await_approval #1's wait passed its deadline", count: 2)
+        expect(page).to have_text("on_timeout: notify", count: 2)
+      end
+      expect(page).to have_css("#workflow-timeline-chart .apexcharts-xaxis-annotations line", count: 2, wait: 10)
+
+      visit_dark "/pgbus/workflows/#{samples::LATE_ID}"
+      expect(page).to have_css("#workflow-timeline-chart .apexcharts-xaxis-annotations line", count: 2, wait: 10)
+      expect(page).to have_css("[data-testid=workflow-wait-timeouts] li", count: 2)
     end
 
     it "honours dark mode in the timeline" do
@@ -389,7 +412,7 @@ RSpec.describe "Workflows", type: :system do
       card = find("[data-testid=workflows-card]")
       within(card) do
         expect(page).to have_text("Workflows")
-        expect(page).to have_text("11")
+        expect(page).to have_text("12")
         expect(page).to have_text("5 paused")
         expect(page).to have_link("7 need attention", href: "/pgbus/workflows/attention")
       end
