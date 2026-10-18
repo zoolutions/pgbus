@@ -40,7 +40,8 @@ RSpec.describe Pgbus::Generators::AddWorkflowsGenerator do
         expect(content).to match(/\[:workflow_class, :subject_type, :subject_id\],\s+unique: true/)
         expect(content).to match(/\[:workflow_class, :idempotency_key\],\s+unique: true/)
         expect(content).to include('name: "idx_pgbus_workflows_one_ongoing"')
-        expect(content).to include(%(where: "status IN ('ready','performing','waiting','paused')"))
+        # status is a varchar: the ::text cast keeps the predicate stable through schema.rb (issue #573).
+        expect(content).to include(%(where: "status::text IN ('ready','performing','waiting','paused')"))
         expect(content).to include('name: "idx_pgbus_workflows_idempotency"')
         expect(content).to include('where: "idempotency_key IS NOT NULL"')
       end
