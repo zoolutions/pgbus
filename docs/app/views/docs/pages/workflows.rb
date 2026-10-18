@@ -553,20 +553,26 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
         JSON object `payload` of at most `workflow_max_payload_size` and an
         optional `idempotency_key`, which a retried call should pass; a blank
         one is no key). Each
-        takes `workflow_id`, a required `reason` (1–500 characters) and an
+        takes `workflow_id`, a required `reason` (1–500 characters after
+        trimming whitespace) and an
         optional `expected_status`, the status the agent read: a run that has
         moved on by the time the call starts answers `ok: false` and nothing
         is done (the check runs just before the action, whose transition is
         guarded again under the run's row lock). A verb the run's `available_actions` does not
         allow answers `ok: false` with the allowed list. Otherwise the call
-        goes through the same action as the dashboard's button, lands on the
-        audit trail with its reason as actor `mcp` (`mcp:<client name>` when
-        the transport knows the client), and answers
-        `{ ok:, reason:, workflow: }` with the run after the action (payloads
-        always redacted; a refused action adds `code` and the `status` the run
-        is in now). They are marked `destructiveHint: true`, and there are no
-        bulk tools: loop over `pgbus_workflows_attention`, one audited call
-        per run.
+        goes through the same action as the dashboard's button and lands on
+        the audit trail with actor `mcp` (`mcp:<client name>` when the
+        transport knows the client) and the reason it was given; a refused
+        call changes nothing and records nothing. Every call answers
+        `{ ok:, reason:, workflow: }` with the run as it is after the call
+        (payloads always redacted; a transition refused under the row lock
+        adds `code` and the `status` the run is in now; an unexpected failure
+        answers a fixed reason, the error is in the pgbus log). They are
+        marked `destructiveHint: true` (`idempotentHint: true` on cancel
+        only), and there are no bulk tools: `pgbus_workflows_attention`
+        groups the stuck runs, `pgbus_workflows` lists a group's runs
+        (`status`, `workflow_class`, `step`, `error_class`), and each run gets
+        one audited call.
 
         Enable them only on an authenticated endpoint: `Pgbus::MCP.rack_app`
         with `token:` or `auth:`, or mounted inside your app's authenticated

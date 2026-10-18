@@ -11,7 +11,6 @@ module Pgbus
         description verb_description(
           :resume_at, "Resume a paused Pgbus::Workflow run at the named step (pgbus_workflow lists its step_names)."
         )
-        idempotent!
         input_schema(
           **workflow_input_schema(
             properties: { step: { type: "string", minLength: 1, description: "The step to run next, e.g. capture." } },
@@ -21,10 +20,9 @@ module Pgbus
 
         def self.call(workflow_id:, reason:, step:, expected_status: nil, server_context: nil)
           step = step.to_s.strip
-          return answer(ok: false, reason: "step must name a step") if step.empty?
-
           perform(:resume_at, workflow_id: workflow_id, reason: reason, expected_status: expected_status,
-                              server_context: server_context) do |data_source, **who|
+                              server_context: server_context,
+                              invalid: step.empty? ? "step must name a step" : nil) do |data_source, **who|
             data_source.resume_workflow_at(workflow_id, step: step, **who)
           end
         end

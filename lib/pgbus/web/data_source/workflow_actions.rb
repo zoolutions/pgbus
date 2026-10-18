@@ -46,8 +46,8 @@ module Pgbus
         def signal_workflow(workflow_id, name:, payload:, idempotency_key:, actor:, reason: nil)
           duplicate = false
           result = workflow_action(workflow_id) do |wf|
-            duplicate = wf.signal!(name, payload: payload, idempotency_key: idempotency_key, actor: actor,
-                                         reason: reason).duplicate_delivery?
+            signal = wf.signal!(name, payload: payload, idempotency_key: idempotency_key, actor: actor, reason: reason)
+            duplicate = signal.duplicate_delivery?
           end
           result[:ok] ? result.merge(duplicate: duplicate) : result
         end

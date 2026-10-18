@@ -9,7 +9,6 @@ module Pgbus
         tool_name "pgbus_workflow_skip_step"
         title "Pgbus Workflow: Skip Step"
         description verb_description(:skip, "Skip the step a waiting Pgbus::Workflow run waits on (a signal or a fan-out batch).")
-        idempotent!
         input_schema(**workflow_input_schema)
 
         def self.call(workflow_id:, reason:, expected_status: nil, server_context: nil)

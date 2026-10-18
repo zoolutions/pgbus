@@ -48,29 +48,32 @@ module Pgbus
         Tools::WorkflowSignalTool
       ].freeze
 
-      INSTRUCTIONS = <<~TEXT
-        Read-only diagnostic tools for a pgbus (PostgreSQL/PGMQ) deployment.
+      DIAGNOSTICS = <<~TEXT
+        Diagnostic tools for a pgbus (PostgreSQL/PGMQ) deployment.
         Start with pgbus_health for a one-call OK/DEGRADED/STALLED verdict,
         then drill in with pgbus_queues, pgbus_processes, pgbus_jobs,
         pgbus_dlq, pgbus_locks, and pgbus_concurrency; workflow runs with
         pgbus_workflows_attention, pgbus_workflows and pgbus_workflow, and how
         each workflow class performs with pgbus_workflow_definitions and
-        pgbus_workflow_stats. No tool mutates state. Message payloads
-        are redacted unless the server was started with payloads explicitly
-        allowed.
+        pgbus_workflow_stats. Message payloads are redacted unless the server
+        was started with payloads explicitly allowed.
       TEXT
 
+      INSTRUCTIONS = "#{DIAGNOSTICS}No tool mutates state.\n".freeze
+
       WRITE_INSTRUCTIONS = <<~TEXT
-        The exception: this server was built with config.mcp_write_tools, so
-        pgbus_workflow_resume, pgbus_workflow_cancel, pgbus_workflow_skip_step,
-        pgbus_workflow_resume_at, pgbus_workflow_run_now and
-        pgbus_workflow_signal change one workflow run each. Read the run with
-        pgbus_workflow first, then pass a reason (recorded on the run's audit
-        trail) and expected_status (the status you read): a run that has
-        moved on by the time the call starts answers ok: false and nothing
-        is done (the check runs just before the action, whose transition is
-        guarded again under the run's row lock). There are no bulk write
-        tools: loop over pgbus_workflows_attention results, one call per run.
+        The tools above do not mutate state. This server was also built with
+        config.mcp_write_tools, so pgbus_workflow_resume, pgbus_workflow_cancel,
+        pgbus_workflow_skip_step, pgbus_workflow_resume_at,
+        pgbus_workflow_run_now and pgbus_workflow_signal change one workflow
+        run each. Read the run with pgbus_workflow first, then pass a reason
+        (recorded on the run's audit trail) and expected_status (the status
+        you read): a run that has moved on by the time the call starts
+        answers ok: false and nothing is done (the check runs just before the
+        action, whose transition is guarded again under the run's row lock).
+        There are no bulk write tools: pgbus_workflows_attention groups the
+        stuck runs; list a group's runs with pgbus_workflows (status,
+        workflow_class, step, error_class) and call once per run.
       TEXT
 
       module_function
@@ -87,7 +90,7 @@ module Pgbus
           name: "pgbus",
           title: "Pgbus Diagnostics",
           version: Pgbus::VERSION,
-          instructions: write ? INSTRUCTIONS + WRITE_INSTRUCTIONS : INSTRUCTIONS,
+          instructions: write ? DIAGNOSTICS + WRITE_INSTRUCTIONS : INSTRUCTIONS,
           tools: write ? TOOLS + WRITE_TOOLS : TOOLS.dup,
           server_context: {
             data_source: data_source,

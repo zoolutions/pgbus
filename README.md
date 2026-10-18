@@ -1275,7 +1275,7 @@ All tools below are read-only — none mutates state, and there is no raw-SQL pa
 
 #### Write tools (opt-in)
 
-An agent that found 30 paused runs with `pgbus_workflows_attention` can resume them after the fix without opening the dashboard — once you turn the write tools on:
+An agent that found 30 paused runs with `pgbus_workflows_attention` (and listed them with `pgbus_workflows`) can resume them after the fix without opening the dashboard — once you turn the write tools on:
 
 ```ruby
 Pgbus.configure { |c| c.mcp_write_tools = true } # default false: the tools do not exist at all
@@ -1290,15 +1290,15 @@ The flag is read when the server is built (`pgbus mcp`, `Pgbus::MCP.rack_app`). 
 | `pgbus_workflow_skip_step` | Skip the step a waiting run waits on. |
 | `pgbus_workflow_resume_at` | Resume a paused run at a named `step`. |
 | `pgbus_workflow_run_now` | Send a ready run's scheduled step now instead of after its wait. |
-| `pgbus_workflow_signal` | Deliver signal `name` with a JSON object `payload` (at most `workflow_max_payload_size`) and an optional `idempotency_key` — pass one when the call may be retried (a blank key is no key). Name and key are at most 255 characters. |
+| `pgbus_workflow_signal` | Deliver signal `name` with a JSON object `payload` (at most `workflow_max_payload_size`) and an optional `idempotency_key` — pass one when the call may be retried (a blank key is no key). A retry dedups only while the run is ongoing: once it finished or was cancelled, it answers `ok: false`. Name and key are at most 255 characters. |
 
-- Each takes `workflow_id`, a required `reason` (1–500 characters) and an optional `expected_status`, the status the agent read: a run that has moved on by the time the call starts answers `ok: false` and nothing is done, so an agent acting on a stale read is not surprised. The check runs just before the action; the transition itself is guarded again under the run's row lock.
+- Each takes `workflow_id`, a required `reason` (1–500 characters after trimming whitespace) and an optional `expected_status`, the status the agent read: a run that has moved on by the time the call starts answers `ok: false` and nothing is done, so an agent acting on a stale read is not surprised. The check runs just before the action; the transition itself is guarded again under the run's row lock.
 - Arguments the input schema rejects (no `reason`, one over 500 characters, an unknown `expected_status`, a `payload` that is not an object) come back as a tool error before the tool runs; nothing is done either way.
 - The verb is checked against the run's `available_actions` (not allowed: `ok: false` with the allowed list), then goes through the same `Web::DataSource` action as the dashboard's button, so the transition table and the run's row lock decide.
-- Every call lands on the run's audit trail with its reason and actor `mcp` (`mcp:<client name>` when the transport knows the client).
-- The answer is `{ ok:, reason:, workflow: }`: `workflow` is the `pgbus_workflow` detail after the action, with arguments, outputs, signal payloads and error text always redacted; a refused action adds `code` and the `status` the run is in now.
-- The tools carry `readOnlyHint: false, destructiveHint: true` (`idempotentHint: true` on cancel, skip and resume at).
-- No bulk tools: loop over `pgbus_workflows_attention` results, one audited call per run.
+- An action the call performs lands on the run's audit trail with actor `mcp` (`mcp:<client name>` when the transport knows the client) and the reason it was given. A refused call changes nothing and records nothing.
+- The answer is `{ ok:, reason:, workflow: }`: `workflow` is the `pgbus_workflow` detail as the run is after the call, with arguments, outputs, signal payloads and error text always redacted. A disallowed verb adds `available_actions`; a transition refused by `Web::DataSource` under the row lock adds `code` and, when the run is still there, the `status` it is in now. An unexpected failure answers a fixed reason (the error is in the pgbus log), never the exception's text.
+- The tools carry `readOnlyHint: false, destructiveHint: true`, and `idempotentHint: true` on cancel only: a cancelled run stays cancelled, while a retried skip or resume at can act again once the run has parked or paused again.
+- No bulk tools: `pgbus_workflows_attention` groups the stuck runs; list a group's runs with `pgbus_workflows` (`status`, `workflow_class`, `step`, `error_class`) and make one audited call per run.
 
 Enable them only on an authenticated endpoint: `rack_app` with `token:` or `auth:`, or mounted inside your app's own authenticated routes — never public. An unauthenticated `rack_app` with write tools on logs a warning that anyone who reaches it can change workflow runs.
 

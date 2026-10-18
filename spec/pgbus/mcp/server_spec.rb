@@ -74,10 +74,10 @@ RSpec.describe Pgbus::MCP::Server do
         expect(tools[name]["annotations"]).to include("readOnlyHint" => false, "destructiveHint" => true),
                                               "#{name} is not marked as a write"
       end
-      expect(tools.values_at("pgbus_workflow_cancel", "pgbus_workflow_skip_step", "pgbus_workflow_resume_at")
-                  .map { |tool| tool["annotations"]["idempotentHint"] }).to all(be(true))
-      expect(tools.values_at("pgbus_workflow_resume", "pgbus_workflow_run_now", "pgbus_workflow_signal")
-                  .map { |tool| tool["annotations"]["idempotentHint"] }).to all(be(false))
+      # Only a cancelled run stays cancelled: a retried skip or resume at can
+      # act again once the run has parked or paused again.
+      expect(write_names.to_h { |name| [name, tools[name]["annotations"]["idempotentHint"]] })
+        .to eq(write_names.to_h { |name| [name, name == "pgbus_workflow_cancel"] })
     end
 
     it "leaves every read tool unchanged when mcp_write_tools is on" do
@@ -88,11 +88,16 @@ RSpec.describe Pgbus::MCP::Server do
       expect(on.slice(*off.keys)).to eq(off)
     end
 
-    it "says in its instructions which tools write" do
+    it "says in its instructions which tools write, and no longer that no tool does" do
       Pgbus.configuration.mcp_write_tools = true
+      instructions = described_class.build(data_source: data_source).instructions
 
-      expect(described_class.build(data_source: data_source).instructions)
-        .to include("pgbus_workflow_resume", "reason", "expected_status")
+      expect(instructions).to include("pgbus_workflow_resume", "reason", "expected_status", "pgbus_workflows")
+      expect(instructions).not_to include("No tool mutates state")
+    end
+
+    it "says no tool mutates state while the write tools are off" do
+      expect(described_class.build(data_source: data_source).instructions).to include("No tool mutates state")
     end
 
     it "reads the flag when the server is built, not per call" do

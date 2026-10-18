@@ -21,13 +21,17 @@ RSpec.describe "the workflow write tools" do # rubocop:disable RSpec/DescribeCla
     JSON.parse(response.content.first[:text])
   end
 
+  # tool => [name, DataSource action, status before, status after]
   {
-    Pgbus::MCP::Tools::WorkflowResumeTool => ["pgbus_workflow_resume", :resume_workflow],
-    Pgbus::MCP::Tools::WorkflowCancelTool => ["pgbus_workflow_cancel", :cancel_workflow],
-    Pgbus::MCP::Tools::WorkflowSkipStepTool => ["pgbus_workflow_skip_step", :skip_workflow_step],
-    Pgbus::MCP::Tools::WorkflowRunNowTool => ["pgbus_workflow_run_now", :run_workflow_step_now]
-  }.each do |tool, (name, action)|
+    Pgbus::MCP::Tools::WorkflowResumeTool => ["pgbus_workflow_resume", :resume_workflow, "paused", "ready"],
+    Pgbus::MCP::Tools::WorkflowCancelTool => ["pgbus_workflow_cancel", :cancel_workflow, "paused", "cancelled"],
+    Pgbus::MCP::Tools::WorkflowSkipStepTool => ["pgbus_workflow_skip_step", :skip_workflow_step, "waiting", "ready"],
+    Pgbus::MCP::Tools::WorkflowRunNowTool => ["pgbus_workflow_run_now", :run_workflow_step_now, "ready", "ready"]
+  }.each do |tool, (name, action, from, to)|
     describe name do
+      let(:status) { from }
+      let(:after_detail) { before_detail.merge(status: to) }
+
       it "calls DataSource##{action} with actor mcp and the reason, and answers with the run after it" do
         allow(data_source).to receive(action).and_return(ok: true)
 
@@ -36,7 +40,7 @@ RSpec.describe "the workflow write tools" do # rubocop:disable RSpec/DescribeCla
         expect(tool.tool_name).to eq(name)
         expect(data_source).to have_received(action).with("wf-1", **who)
         expect(out).to include("ok" => true, "reason" => nil)
-        expect(out["workflow"]).to include("status" => "ready")
+        expect(out["workflow"]).to include("status" => to)
       end
     end
   end
@@ -65,7 +69,10 @@ RSpec.describe "the workflow write tools" do # rubocop:disable RSpec/DescribeCla
     it "needs a step" do
       allow(data_source).to receive(:resume_workflow_at)
 
-      expect(call(tool, step: "  ")).to include("ok" => false, "reason" => "step must name a step")
+      out = call(tool, step: "  ")
+
+      expect(out).to include("ok" => false, "reason" => "step must name a step")
+      expect(out["workflow"]).to include("status" => "paused")
       expect(data_source).not_to have_received(:resume_workflow_at)
     end
   end
@@ -121,9 +128,18 @@ RSpec.describe "the workflow write tools" do # rubocop:disable RSpec/DescribeCla
       expect(data_source).not_to have_received(:signal_workflow)
     end
 
-    it "needs a signal name" do
-      expect(call(tool, name: " ")).to include("ok" => false, "reason" => "name must name a signal")
+    it "needs a signal name, and answers the refusal with the run as it is" do
+      out = call(tool, name: " ")
+
+      expect(out).to include("ok" => false, "reason" => "name must name a signal")
+      expect(out["workflow"]).to include("workflow_id" => "wf-1", "status" => "waiting")
       expect(data_source).not_to have_received(:signal_workflow)
+    end
+
+    it "answers an input refusal on an unknown run as not found" do
+      allow(data_source).to receive(:workflow_detail).with("wf-1").and_return(nil)
+
+      expect(call(tool, name: " ")).to eq("ok" => false, "reason" => "workflow wf-1 not found", "workflow" => nil)
     end
 
     it "caps the name and the idempotency key at 255 characters (both are indexed)" do
@@ -141,6 +157,10 @@ RSpec.describe "the workflow write tools" do # rubocop:disable RSpec/DescribeCla
       allow(data_source).to receive(:workflow_detail).with("wf-1").and_return(before_detail.merge(available_actions: []))
       expect(call(tool, name: "shipped")).to include("ok" => false, "reason" => "cannot signal a waiting workflow")
       expect(data_source).not_to have_received(:signal_workflow)
+    end
+
+    it "says a retry dedups only while the run is ongoing" do
+      expect(tool.description).to include("only while the run is ongoing")
     end
 
     it "takes name, payload and idempotency_key in its schema" do
@@ -161,6 +181,7 @@ RSpec.describe "the workflow write tools" do # rubocop:disable RSpec/DescribeCla
       transition = Pgbus::Workflow::States.fetch(verb)
       expect(tool.description).to include(transition.effect, transition.from.join(", "), "mcp_write_tools")
       expect(tool.description).to be_frozen # class state the conformance audit requires to be shareable
+      expect(tool.description).to include('actor "mcp" (or "mcp:<client name>"')
     end
   end
 end

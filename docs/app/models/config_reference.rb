@@ -121,7 +121,7 @@ module ConfigReference
       { name: "metrics_enabled", type: "Boolean", default: "true", desc: "Expose Prometheus gauges on the dashboard." }
     ],
     "MCP server" => [
-      { name: "mcp_write_tools", type: "Boolean", default: "false", desc: "Build the MCP server's workflow write tools (pgbus_workflow_resume, _cancel, _skip_step, _resume_at, _run_now, _signal); off, they do not exist. Each call needs a reason and lands on the run's audit trail as actor \"mcp\". Enable only on an authenticated endpoint." }
+      { name: "mcp_write_tools", type: "Boolean", default: "false", desc: "Build the MCP server's workflow write tools (pgbus_workflow_resume, _cancel, _skip_step, _resume_at, _run_now, _signal); off, they do not exist. Each call needs a reason and lands on the run's audit trail as actor \"mcp\" (\"mcp:<client name>\" when the transport knows the client). Enable only on an authenticated endpoint." }
     ],
     "Metrics & logging" => [
       { name: "metrics_backend", type: "Symbol, Object, nil", default: "nil", desc: "Metrics adapter: nil, :prometheus, :statsd, or a Backend." },

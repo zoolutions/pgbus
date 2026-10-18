@@ -16,7 +16,8 @@ module Pgbus
         description verb_description(
           :signal, "Send a named signal, with an optional JSON object payload, to an ongoing Pgbus::Workflow run. " \
                    "Pass an idempotency_key when the call may be retried: a redelivery with the same key stores " \
-                   "nothing and answers duplicate: true."
+                   "nothing and answers duplicate: true, but only while the run is ongoing (once it finished or " \
+                   "was cancelled, a retry answers ok: false: signal is not allowed)."
         )
         input_schema(
           **workflow_input_schema(
@@ -39,11 +40,9 @@ module Pgbus
           name = name.to_s.strip
           idempotency_key = idempotency_key.to_s.presence # blank is no key, as in Signals.deliver
           payload = payload_object(payload)
-          refusal = signal_refusal(name, idempotency_key, payload)
-          return answer(ok: false, reason: refusal) if refusal
-
           perform(:signal, workflow_id: workflow_id, reason: reason, expected_status: expected_status,
-                           server_context: server_context) do |data_source, **who|
+                           server_context: server_context,
+                           invalid: signal_refusal(name, idempotency_key, payload)) do |data_source, **who|
             data_source.signal_workflow(workflow_id, name: name, payload: payload, idempotency_key: idempotency_key, **who)
           end
         end

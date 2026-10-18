@@ -89,7 +89,8 @@ RSpec.describe "MCP workflow write tools (integration)", :integration do
     expect(call_tool("pgbus_workflow_signal", **args)).to include("ok" => true, "duplicate" => true)
 
     received = wf.events.select { |event| event.event == "signal_received" }
-    expect(received.map { |event| [event.actor, event.reason] }).to all(eq(["mcp", "carrier webhook lost"]))
+    expect(received.map { |event| [event.actor, event.reason] })
+      .to eq([["mcp", "carrier webhook lost"], ["mcp", "carrier webhook lost"]])
     expect(Pgbus::WorkflowSignal.where(workflow_id: wf.workflow_id).count).to eq(1)
     run_until(wf, statuses: %w[finished])
     expect(wf.output_of(:ship)).to include("carrier" => "DHL")

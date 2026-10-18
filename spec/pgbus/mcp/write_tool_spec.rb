@@ -76,10 +76,11 @@ RSpec.describe Pgbus::MCP::WriteTool do
   end
 
   describe "the reason" do
-    it "is required to say something" do
+    it "is required to say something, and the refusal carries the run as it is" do
       out = answer(reason: "   ")
 
       expect(out).to include("ok" => false, "reason" => "reason must be 1-500 characters after trimming whitespace")
+      expect(out["workflow"]).to include("workflow_id" => "wf-1", "status" => "paused")
       expect(data_source).not_to have_received(:resume_workflow)
     end
 
@@ -145,6 +146,17 @@ RSpec.describe Pgbus::MCP::WriteTool do
 
       expect(answer).to include("ok" => false, "code" => "not_allowed", "reason" => "cannot resume a ready workflow",
                                 "status" => "ready")
+    end
+
+    it "does not pass an unexpected error's text on: the DataSource logged it" do
+      allow(data_source).to receive(:resume_workflow)
+        .and_return(ok: false, code: :failed, reason: "PG::ConnectionBad: connection to server at 10.0.0.7 failed")
+
+      out = answer
+
+      expect(out).to include("ok" => false, "code" => "failed",
+                             "reason" => "the action failed unexpectedly; the error is in the pgbus log")
+      expect(out.to_json).not_to include("10.0.0.7")
     end
 
     it "redacts arguments, outputs, signal payloads and error text even when the server allows payloads" do
