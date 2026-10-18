@@ -2,6 +2,7 @@
 
 require "spec_helper"
 require "pg"
+require "monitor"
 require "pgbus/streams/presence"
 
 RSpec.describe Pgbus::Streams::Presence do
@@ -10,7 +11,9 @@ RSpec.describe Pgbus::Streams::Presence do
   let(:stream) { double("Pgbus::Streams::Stream", name: "room:42") }
   let(:raw_connection) { double("PG::Connection") }
 
-  let(:ar_connection) { double("ActiveRecord::ConnectionAdapters::Connection", raw_connection: raw_connection) }
+  let(:ar_connection) do
+    double("ActiveRecord::ConnectionAdapters::Connection", raw_connection: raw_connection, lock: Monitor.new)
+  end
 
   before do
     # Force the single-database path (Pgbus.configuration.connects_to == nil)

@@ -167,6 +167,7 @@ ThreadSafety/NewThread:
     - spec/integration/streams_pool_publisher_autoscale_spec.rb
     - spec/integration/streams_pool_swap_spec.rb
     - spec/integration/streams/harness_smoke_spec.rb
+    - spec/integration/streams/presence_adapter_lock_spec.rb
     - spec/integration/thread_safety_spec.rb
     - spec/integration/workflow/support.rb
     - spec/pgbus/batch/builder_spec.rb
@@ -190,6 +191,7 @@ ThreadSafety/NewThread:
     - spec/pgbus/stream_queue_spec.rb
     - spec/pgbus/streams/filters_spec.rb
     - spec/pgbus/streams/pool_trigger_spec.rb
+    - spec/pgbus/streams/presence_adapter_lock_spec.rb
     - spec/pgbus/streams/transaction_probe_spec.rb
     - spec/pgbus/testing_mode_spec.rb
     - spec/pgbus/visibility_heartbeat_mutex_spec.rb
