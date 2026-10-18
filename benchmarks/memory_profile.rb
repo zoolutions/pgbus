@@ -25,8 +25,8 @@ job = ProfileJob.new("hello", 42, { nested: true })
 job_payload = job.serialize
 message_json = JSON.generate(job_payload)
 
-mock_message = Struct.new(:msg_id, :message, :read_ct, :headers)
-msg = mock_message.new(1, message_json, 1, nil)
+msg = BenchStubs.build_message(msg_id: 1, message: message_json)
+BenchStubs.expect_success!(executor, msg)
 
 # --- Profile individual operations ---
 
