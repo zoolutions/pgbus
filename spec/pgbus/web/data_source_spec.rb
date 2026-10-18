@@ -494,6 +494,8 @@ RSpec.describe Pgbus::Web::DataSource do
 
     before do
       allow(Pgbus.configuration).to receive(:queue_prefix).and_return("pgbus")
+      # Each sub-queue read runs in its own savepoint.
+      allow(mock_connection).to receive(:transaction).with(requires_new: true).and_yield
       allow(mock_connection).to receive(:select_one).with(anything, "Pgbus Failed Event", [1]).and_return(event)
       allow(mock_connection).to receive(:select_all)
         .with("#{failed_lock_holders_sql} id = $1", "Pgbus Collect Failed Keys", [1])
@@ -566,6 +568,24 @@ RSpec.describe Pgbus::Web::DataSource do
       end
     end
 
+    # The executor records the logical queue; one named like the prefix
+    # ("pgbus_mailers" under prefix "pgbus") must not lose its first part.
+    it "keeps a logical queue name that starts with the prefix as it is" do
+      event["queue_name"] = "pgbus_mailers"
+      allow(mock_connection).to receive(:select_all)
+        .with("#{failed_lock_holders_sql} id = $1", "Pgbus Collect Failed Keys", [1])
+        .and_return([event.except("id")])
+      allow(mock_client).to receive(:physical_queue_names).with("pgbus_mailers").and_return(%w[pgbus_pgbus_mailers])
+      allow(mock_connection).to receive(:select_all)
+        .with(format(queued_send_times_sql, table: "pgbus_pgbus_mailers"), "Pgbus Failed Message Sent At", ["{42}"])
+        .and_return(queued)
+
+      data_source.discard_failed_event(1)
+
+      expect(Pgbus::UniquenessKey).to have_received(:release_all_held_by!)
+        .with([["failed-1", "pgbus_mailers", 42, sent_at]])
+    end
+
     it "releases nothing for a failed row without a msg_id: no message to hold it" do
       allow(mock_connection).to receive(:select_all)
         .with("#{failed_lock_holders_sql} id = $1", "Pgbus Collect Failed Keys", [1])
@@ -596,6 +616,7 @@ RSpec.describe Pgbus::Web::DataSource do
                     ])
       # One lookup per queue for every keyed row; k2's message is gone.
       allow(mock_client).to receive(:physical_queue_names).with("default").and_return(%w[pgbus_test_default])
+      allow(mock_connection).to receive(:transaction).with(requires_new: true).and_yield
       allow(mock_connection).to receive(:select_all)
         .with(format(queued_send_times_sql, table: "pgbus_test_default"), "Pgbus Failed Message Sent At", ["{10,11}"])
         .and_return([{ "msg_id" => 10, "enqueued_at" => sent_at, "lock_key" => "k1" }])

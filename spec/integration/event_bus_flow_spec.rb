@@ -116,6 +116,19 @@ RSpec.describe "Event bus flow (integration)", :integration do
       expect(client.read_batch(dlq_queue, qty: 5).size).to eq(1)
     end
 
+    # Issue #564: the copy gets a new msg_id and enqueued_at in the DLQ; its
+    # header keeps the original's, which a dashboard discard bounds by.
+    it "writes the original's msg_id and send time into the DLQ copy's header" do
+      message = publish_and_read
+
+      handle_capturing(message)
+
+      copy = client.read_batch(dlq_queue, qty: 5).sole
+      block = Pgbus::DeadLetterHeader.parse(copy.headers)
+      expect(block).to include("source" => "consumer", "source_msg_id" => message.msg_id.to_i)
+      expect(Time.parse(block["source_enqueued_at"])).to be_within(0.001).of(Time.parse(message.enqueued_at.to_s))
+    end
+
     it "still dead-letters and emits for a raw jsonb scalar written straight to the queue" do
       client.send_message(queue_name, 42)
       message = client.read_message(queue_name)

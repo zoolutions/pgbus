@@ -1632,9 +1632,11 @@ module Pgbus
           "Pgbus Collect Failed Keys", binds
         )
 
+        # queue_name is the logical name the executor saw, as the lock was
+        # bound under: no prefix to strip.
         holders = rows.to_a.filter_map do |row|
           key = extract_uniqueness_key_from_payload_str(row["payload"])
-          [key, lock_queue_name(row["queue_name"]), row["msg_id"].to_i] if key && row["msg_id"]
+          [key, row["queue_name"], row["msg_id"].to_i] if key && row["msg_id"]
         end
         holders = holders.group_by { |_key, queue, _msg_id| queue }.flat_map do |queue, entries|
           sent = queued_send_times(queue, entries)
@@ -1653,18 +1655,28 @@ module Pgbus
       def queued_send_times(queue, entries)
         msg_ids = "{#{entries.map { |_key, _queue, msg_id| msg_id }.uniq.join(",")}}"
         @client.physical_queue_names(queue).each_with_object({}) do |physical, found|
+          queued_rows(physical, msg_ids).each do |row|
+            pair = [row["msg_id"].to_i, row["lock_key"]]
+            found[pair] = [found[pair], row["enqueued_at"]].compact.min
+          end
+        end
+      end
+
+      # Each read runs in its own savepoint: a sub-queue the strategy names
+      # but that does not exist raises, and inside a caller's transaction
+      # that would abort the discard's own statements after it.
+      def queued_rows(physical, msg_ids)
+        connection.transaction(requires_new: true) do
           connection.select_all(
             "SELECT msg_id, enqueued_at, message->>'#{Uniqueness::METADATA_KEY}' AS lock_key " \
             "FROM pgmq.q_#{sanitize_name(physical)} WHERE msg_id = ANY($1::bigint[])",
             "Pgbus Failed Message Sent At", [msg_ids]
-          ).each do |row|
-            pair = [row["msg_id"].to_i, row["lock_key"]]
-            found[pair] = [found[pair], row["enqueued_at"]].compact.min
-          end
-        rescue ActiveRecord::StatementInvalid => e
-          # A sub-queue the strategy names but that was never created.
-          raise unless defined?(PG::UndefinedTable) && e.cause.is_a?(PG::UndefinedTable)
+          ).to_a
         end
+      rescue ActiveRecord::StatementInvalid => e
+        raise unless defined?(PG::UndefinedTable) && e.cause.is_a?(PG::UndefinedTable)
+
+        []
       end
 
       # The queue a uniqueness lock records for a message in this physical
