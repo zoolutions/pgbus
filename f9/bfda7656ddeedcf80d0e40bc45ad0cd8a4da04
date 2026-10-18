@@ -1,0 +1,28 @@
+benchmarks/bench_helper.rb
+  s_0abf69c445fa20::t_b4baa1cca3eceb 44-49,52-61
+  s_0abf69c445fa20::t_8b326cd0248eca 8-10
+  s_0abf69c445fa20::t_00e89e70a26eee 50-51
+benchmarks/memory_profile.rb
+  s_0abf69c445fa20::t_af0ba96b53df3b 28-29
+docs/performance.md
+  s_0abf69c445fa20::t_dbccf3deae661c 315-336
+benchmarks/executor_bench.rb
+  s_0abf69c445fa20::t_810c0e50517756 41
+  s_0abf69c445fa20::t_0d0daf1299a613 42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "f9bfda7656ddeedcf80d0e40bc45ad0cd8a4da04",
+  "prompts": {},
+  "sessions": {
+    "s_0abf69c445fa20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "780215a4-ac92-4464-839c-86e03bcf05b0",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
