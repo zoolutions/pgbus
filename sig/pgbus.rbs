@@ -91,7 +91,9 @@ module Pgbus
       # wait_timeout: is a method name or a lambda, evaluated per run.
       def dynamic_wait_timeout?: () -> bool
       # The timeout_at of the step parking at +now+ on +workflow+; nil for no timeout.
-      def timeout_at_for: (Workflow workflow, Time now) -> Time?
+      # +now+ and the result are a Time or an ActiveSupport::TimeWithZone (Time.current
+      # in an app with a time zone), which sig/ does not declare: untyped.
+      def timeout_at_for: (Workflow workflow, untyped now) -> untyped
       # What a per-run wait_timeout: returns on +workflow+: a deadline, seconds from now, or nil.
       def resolve_wait_timeout: (Workflow workflow) -> (Time | Numeric)?
     end

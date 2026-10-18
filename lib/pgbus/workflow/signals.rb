@@ -133,10 +133,10 @@ module Pgbus
         nil
       end
 
-      # A per-run wait_timeout: is evaluated here, as the step parks and
-      # before anything is written: one that raises (or returns what is no
-      # deadline) leaves the attempt in_progress for the step's exception
-      # policies.
+      # A per-run wait_timeout: is evaluated here, before Waiting.park! writes
+      # the waiting state: one that raises (an invalid return raises
+      # ArgumentError) leaves the attempt in_progress for the step's exception
+      # policies; nil parks it without a deadline.
       def park(record, step, definition, workflow, now) # rubocop:disable Naming/PredicateMethod -- the gate's false: the body does not run
         timeout_at = definition.timeout_at_for(workflow, now)
         Waiting.park!(record, step, now: now, wait_for: definition.wait_for_name, timeout_at: timeout_at)

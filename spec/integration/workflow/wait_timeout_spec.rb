@@ -395,9 +395,10 @@ RSpec.describe "Workflow wait timeouts (integration)", :integration do
     end
 
     it "takes a Date as its midnight, as any #to_time does" do
-      wf = start_offer(define_offer("DatedOffer", wait_timeout: -> { Date.tomorrow }))
+      day = Date.tomorrow
+      wf = start_offer(define_offer("DatedOffer", wait_timeout: -> { day }))
 
-      expect(steps_of(wf).last.timeout_at).to eq(Date.tomorrow.to_time)
+      expect(steps_of(wf).last.timeout_at).to eq(day.to_time)
     end
 
     it "applies on_timeout through expire_wait before the deadline" do
