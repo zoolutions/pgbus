@@ -47,6 +47,7 @@ RSpec.describe Pgbus::Generators::InstallGenerator do
         expect(content).to include("drop_table :#{table}")
       end
       expect(content).to include('name: "idx_pgbus_workflows_one_ongoing"', 'name: "idx_pgbus_workflows_idempotency"')
+      expect(content).to include(%(where: "status::text IN ('ready','performing','waiting','paused')"))
       expect(content.index("drop_table :pgbus_workflow_events")).to be < content.index("drop_table :pgbus_workflows\n")
       expect(content.index("drop_table :pgbus_workflow_steps")).to be < content.index("drop_table :pgbus_workflows\n")
     end

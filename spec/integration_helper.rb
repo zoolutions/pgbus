@@ -253,12 +253,27 @@ def bootstrap_integration_tables(conn)
       CREATE UNIQUE INDEX idx_pgbus_workflows_workflow_id ON pgbus_workflows (workflow_id);
       CREATE UNIQUE INDEX idx_pgbus_workflows_one_ongoing
         ON pgbus_workflows (workflow_class, subject_type, subject_id)
-        WHERE status IN ('ready','performing','waiting','paused');
+        WHERE status::text IN ('ready','performing','waiting','paused');
       CREATE UNIQUE INDEX idx_pgbus_workflows_idempotency
         ON pgbus_workflows (workflow_class, idempotency_key) WHERE idempotency_key IS NOT NULL;
       CREATE INDEX idx_pgbus_workflows_status ON pgbus_workflows (status, updated_at);
       CREATE INDEX idx_pgbus_workflows_class_status ON pgbus_workflows (workflow_class, status, created_at);
       CREATE INDEX idx_pgbus_workflows_subject ON pgbus_workflows (subject_type, subject_id);
+    SQL
+  end
+
+  # Issue #573: the one-ongoing predicate casts status to text. Rebuilt apart
+  # from the CREATE so a database bootstrapped before the cast upgrades.
+  one_ongoing = conn.select_value(<<~SQL)
+    SELECT pg_get_expr(indpred, indrelid) FROM pg_index
+    WHERE indexrelid = to_regclass('idx_pgbus_workflows_one_ongoing')
+  SQL
+  if one_ongoing&.include?("character varying")
+    conn.execute(<<~SQL)
+      DROP INDEX idx_pgbus_workflows_one_ongoing;
+      CREATE UNIQUE INDEX idx_pgbus_workflows_one_ongoing
+        ON pgbus_workflows (workflow_class, subject_type, subject_id)
+        WHERE status::text IN ('ready','performing','waiting','paused');
     SQL
   end
 
