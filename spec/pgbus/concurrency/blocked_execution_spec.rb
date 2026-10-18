@@ -4,8 +4,8 @@ require "spec_helper"
 
 RSpec.describe Pgbus::Concurrency::BlockedExecution do
   describe ".insert" do
-    it "creates a blocked execution record" do
-      allow(Pgbus::BlockedExecution).to receive(:create!).and_return(double("record"))
+    it "inserts a blocked execution row, leaving created_at to the database's clock" do
+      allow(Pgbus::BlockedExecution).to receive(:insert!).and_return(double("result"))
 
       described_class.insert(
         concurrency_key: "TestJob-42",
@@ -15,10 +15,11 @@ RSpec.describe Pgbus::Concurrency::BlockedExecution do
         duration: 900
       )
 
-      expect(Pgbus::BlockedExecution).to have_received(:create!).with(
+      expect(Pgbus::BlockedExecution).to have_received(:insert!).with(
         hash_including(concurrency_key: "TestJob-42", queue_name: "default", priority: 0,
-                       payload: { "job_class" => "TestJob", "arguments" => [42] })
-      )
+                       payload: { "job_class" => "TestJob", "arguments" => [42] }),
+        record_timestamps: false
+      ) { |attributes, **| expect(attributes).not_to have_key(:created_at) }
     end
   end
 

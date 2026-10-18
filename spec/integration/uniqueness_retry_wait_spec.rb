@@ -197,6 +197,31 @@ RSpec.describe "Uniqueness across a delayed retry (integration)", :integration d
     end
   end
 
+  # The retry is sent before the row is bound to it; with no wait, another
+  # worker can run it to the end in between. Its release must still take the
+  # row, and the late bind must not bring it back.
+  context "when the retry finishes before the row is bound to it" do
+    before { define_job { |attempt| retry_job if attempt == 1 } }
+
+    it "releases the key and leaves nothing behind" do
+      raced = false
+      allow(Pgbus::UniquenessKey).to receive(:bind!).and_wrap_original do |original, lock_key, **kwargs|
+        if kwargs[:acquired_at] && !raced
+          raced = true
+          expect(executor.execute(read_one, "default")).to eq(:success)
+        end
+        original.call(lock_key, **kwargs)
+      end
+      PollItemJob.perform_later(1)
+
+      expect(executor.execute(read_one, "default")).to eq(:success)
+
+      expect(raced).to be(true)
+      expect(attempts).to eq([1, 1])
+      expect(Pgbus::UniquenessKey.locked?(key)).to be(false)
+    end
+  end
+
   describe "a successor that took the key while an older message ran" do
     let(:successor_msg_id) { 9_999_999 }
 

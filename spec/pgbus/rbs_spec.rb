@@ -28,8 +28,17 @@ RSpec.describe "the RBS signatures in sig/" do # rubocop:disable RSpec/DescribeC
 
   # Defined in pgbus's own lib/: not inherited from Object, and not added by
   # ActiveSupport or by Rails (isolate_namespace defines Pgbus.table_name_prefix).
+  # Walks past a wrapper prepended by a spec helper (integration_helper.rb's
+  # reset_client!) to the definition it wraps, so the result does not depend
+  # on which spec files share the process.
   def self.pgbus_defined?(method)
-    method.source_location&.first.to_s.start_with?(File.expand_path("../../lib", __dir__))
+    lib = File.expand_path("../../lib", __dir__)
+    while method
+      return true if method.source_location&.first.to_s.start_with?(lib)
+
+      method = method.super_method
+    end
+    false
   end
 
   # Public instance methods pgbus defines, wherever in the ancestry it does.

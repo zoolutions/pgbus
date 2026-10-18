@@ -16,13 +16,21 @@ module Pgbus
         # once. Handing it a pre-serialized String stored a JSON *string*
         # (double-encoded), which every document reader of the column —
         # `payload->>'job_id'`, the job-class lookup, `scheduled_at` — misread.
+        #
+        # created_at is left to the column's CURRENT_TIMESTAMP default: the
+        # job's uniqueness lock is stamped by the database too, and discarding
+        # a parked job releases only a lock acquired no later than the park
+        # (UniquenessKey.release_if_unbound!), so both sides need one clock.
         def insert(concurrency_key:, queue_name:, payload:, duration:, priority: 0)
-          Pgbus::BlockedExecution.create!(
-            concurrency_key: concurrency_key,
-            queue_name: queue_name,
-            payload: payload,
-            priority: priority,
-            expires_at: Time.current + duration
+          Pgbus::BlockedExecution.insert!(
+            {
+              concurrency_key: concurrency_key,
+              queue_name: queue_name,
+              payload: payload,
+              priority: priority,
+              expires_at: Time.current + duration
+            },
+            record_timestamps: false
           )
         end
 

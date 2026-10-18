@@ -100,7 +100,8 @@ module Pgbus
           assign_batch_id(job, payload)
           Pgbus.logger.debug { "[Pgbus::Executor] running #{log_tag(message, queue_name)} job_class=#{job_class}" }
           with_visibility_heartbeat(job, queue_name, msg_id, source_queue, payload) do
-            Delivery.with(msg_id: msg_id, read_ct: read_count, queue_name: queue_name, enqueued_at: message.enqueued_at) do
+            Delivery.with(msg_id: msg_id, read_ct: read_count, queue_name: queue_name,
+                          enqueued_at: message.enqueued_at, job_id: payload["job_id"]) do
               execute_job(job)
             end
           end

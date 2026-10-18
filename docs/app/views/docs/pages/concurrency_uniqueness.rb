@@ -59,7 +59,9 @@ class Views::Docs::Pages::ConcurrencyUniqueness < DocsUI::Page
 
         A finishing message releases only the lock it holds: a lock that moved
         onto the job's retry, or that another job took after an operator
-        released it, stays.
+        released it, stays. Discarding a job, a failed job or a dead-lettered
+        copy from the dashboard follows the same rule; the Locks page's own
+        Release still frees the key itself.
       MD
     end
   end

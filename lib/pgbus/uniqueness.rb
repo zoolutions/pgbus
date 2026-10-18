@@ -17,11 +17,12 @@ module Pgbus
   #   2. Execution: PGMQ's visibility timeout is the execution lock —
   #      no separate claim_for_execution step needed.
   #   3. Retry: a retry_job / retry_on re-enqueue passes through the key the
-  #      running attempt holds, and the row moves onto the retry (rebind!, or
-  #      unbind! when the retry is parked behind a concurrency slot).
+  #      running attempt holds, and the row is handed to the retry: unbound
+  #      and re-stamped before the retry is sent or parked (unbind!), bound
+  #      to it once sent (bind!).
   #   4. Completion/DLQ: the finishing message deletes the row only while it
-  #      holds it (release_held_by!), so a row that moved onto a retry, or a
-  #      successor's, stays.
+  #      holds it (release_held_by!), so a row handed to a retry, or a
+  #      successor's, stays. The dashboard's discards do the same.
   #   5. Crash recovery: if a worker dies, VT expires, the message becomes
   #      readable again. The uniqueness key row stays (correctly — the job
   #      hasn't finished). The next worker picks it up and executes.

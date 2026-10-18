@@ -811,13 +811,14 @@ RSpec.describe Pgbus::ActiveJob::Executor do
           expect(warnings).to include(a_string_including("Uniqueness release failed: pooler timeout"))
         end
 
-        it "hands the running job's delivery, enqueued_at included, to a retry it enqueues" do
+        it "hands the running job's delivery, enqueued_at and job_id included, to a retry it enqueues" do
           seen = nil
           allow(job_double).to receive(:perform_now) { seen = Pgbus::ActiveJob::Delivery.current }
 
           executor.execute(message, queue_name)
 
-          expect(seen).to eq(msg_id: 70, read_ct: 1, queue_name: queue_name, enqueued_at: message.enqueued_at)
+          expect(seen).to eq(msg_id: 70, read_ct: 1, queue_name: queue_name, enqueued_at: message.enqueued_at,
+                             job_id: uniqueness_payload["job_id"])
         end
 
         it "releases the lock after archive and before job_completed (issue #418)" do

@@ -321,7 +321,8 @@ module Pgbus
       def discard_failed_event(id)
         event = failed_event(id)
         if event
-          release_lock_for_payload(event["payload"])
+          release_lock_held_by(event["payload"], queue_name: event["queue_name"], msg_id: event["msg_id"],
+                                                 enqueued_at: nil)
           archive_failed_message(event)
         end
 
@@ -920,7 +921,8 @@ module Pgbus
         # memory — otherwise the message is archived but the lock row stays
         # behind, blocking later publishes with the same key. Mirrors
         # discard_event.
-        release_lock_for_payload(detail[:message])
+        release_lock_held_by(detail[:message], queue_name: lock_queue_name(queue_name), msg_id: detail[:msg_id],
+                                               enqueued_at: detail[:enqueued_at])
         @client.archive_message(queue_name, msg_id.to_i, prefixed: false)
         clear_event_failure(queue_name, msg_id)
         true
@@ -1554,6 +1556,13 @@ module Pgbus
       end
 
       # --- Lock cleanup helpers ---
+      #
+      # Discarding a message releases only the uniqueness lock that message
+      # holds (UniquenessKey.release_held_by!): its job may have handed the
+      # lock to a retry that is still waiting (issue #564), or a successor may
+      # have taken the key, and neither is the discarded message's to free.
+      # The Locks page's own deletes stay key-only: there the key is the
+      # operator's target.
 
       # Extract uniqueness key from a queue message and release its lock.
       def release_lock_for_message(queue_name, msg_id)
@@ -1564,37 +1573,59 @@ module Pgbus
         )
         return unless row
 
-        release_lock_for_payload(row["message"])
+        release_lock_held_by(row["message"], queue_name: lock_queue_name(queue_name), msg_id: row["msg_id"],
+                                             enqueued_at: row["enqueued_at"])
       rescue StandardError => e
         Pgbus.logger.debug { "[Pgbus::Web] Error releasing lock for message #{msg_id}: #{e.message}" }
       end
 
-      # Extract uniqueness key from a JSON payload string and release its lock.
-      def release_lock_for_payload(payload_str)
+      # Release the lock held by the message whose JSON payload this is.
+      def release_lock_held_by(payload_str, queue_name:, msg_id:, enqueued_at:)
         key = extract_uniqueness_key_from_payload_str(payload_str)
-        UniquenessKey.release!(key) if key
+        return unless key
+
+        UniquenessKey.release_held_by!(key, queue_name: queue_name, msg_id: msg_id.to_i, enqueued_at: enqueued_at)
       end
 
-      # Extract uniqueness keys from a collection of formatted messages and
-      # release all associated locks in a single query.
+      # Release the locks a collection of formatted messages hold, in a single
+      # query.
       def release_locks_for_messages(messages)
-        keys = messages.filter_map { |m| extract_uniqueness_key_from_payload_str(m[:message]) }
-        UniquenessKey.where(lock_key: keys).delete_all if keys.any?
+        holders = messages.filter_map do |m|
+          key = extract_uniqueness_key_from_payload_str(m[:message])
+          [key, lock_queue_name(m[:queue_name]), m[:msg_id].to_i, m[:enqueued_at]] if key
+        end
+        UniquenessKey.release_all_held_by!(holders) if holders.any?
       rescue StandardError => e
         Pgbus.logger.debug { "[Pgbus::Web] Error releasing locks for messages: #{e.message}" }
       end
 
-      # Collect uniqueness keys from all failed events and release their locks.
+      # Release the locks the failed jobs' messages hold. A failed event row
+      # has no enqueued_at, so an unbound lock for its key is released as
+      # before.
       def release_locks_for_failed_events
         rows = connection.select_all(
-          "SELECT payload FROM pgbus_failed_events WHERE #{NOT_HANDLER_QUEUE}", "Pgbus Collect Failed Keys",
-          [handler_queue_names_literal]
+          "SELECT queue_name, msg_id, payload FROM pgbus_failed_events WHERE #{NOT_HANDLER_QUEUE}",
+          "Pgbus Collect Failed Keys", [handler_queue_names_literal]
         )
 
-        keys = rows.to_a.filter_map { |row| extract_uniqueness_key_from_payload_str(row["payload"]) }
-        UniquenessKey.where(lock_key: keys).delete_all if keys.any?
+        holders = rows.to_a.filter_map do |row|
+          key = extract_uniqueness_key_from_payload_str(row["payload"])
+          [key, row["queue_name"], row["msg_id"].to_i, nil] if key
+        end
+        UniquenessKey.release_all_held_by!(holders) if holders.any?
       rescue StandardError => e
         Pgbus.logger.debug { "[Pgbus::Web] Error releasing locks for failed events: #{e.message}" }
+      end
+
+      # The queue a uniqueness lock records for a message in this physical
+      # queue: the logical name the adapter bound it under, without a priority
+      # sub-queue's _pN. A dead-letter queue keeps its suffix, so its copy's
+      # msg_id (another sequence) never matches a lock bound to a live message.
+      def lock_queue_name(physical_name)
+        name = physical_name.to_s.delete_prefix("#{Pgbus.configuration.queue_prefix}_")
+        return name if name.end_with?(Pgbus::DEAD_LETTER_SUFFIX) || Pgbus.configuration.priority_levels.to_i <= 1
+
+        name.sub(/_p\d+\z/, "")
       end
 
       # Single unwrap point for PGMQ message / failed_event payload strings.

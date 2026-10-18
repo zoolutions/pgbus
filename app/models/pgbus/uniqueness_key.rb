@@ -40,10 +40,11 @@ module Pgbus
     # Does not touch created_at — the reaper's age floor is from acquire time.
     # Restricted to this enqueue's unbound row (msg_id=0, matching created_at
     # when acquire! stamped one) so a completed job's bind cannot retarget a
-    # successor that re-acquired the key.
-    def self.bind!(lock_key, queue_name:, msg_id:)
+    # successor that re-acquired the key. A retry passes the stamp unbind!
+    # returned as +acquired_at+.
+    def self.bind!(lock_key, queue_name:, msg_id:, acquired_at: nil)
       stamps = Thread.current[:pgbus_uniqueness_created_at]
-      created_at = stamps&.delete(lock_key)
+      created_at = acquired_at || stamps&.delete(lock_key)
       sql = "UPDATE #{table_name} SET queue_name = $2, msg_id = $3 " \
             "WHERE lock_key = $1 AND msg_id = 0"
       binds = [lock_key, queue_name, msg_id]
@@ -98,8 +99,8 @@ module Pgbus
     private_constant :HELD_BY_CONDITION
 
     # Release the lock a finishing message holds (success or DLQ). Unlike the
-    # key-only release!, it leaves a row that has moved on: re-pointed at the
-    # message's retry (rebind!), or taken by a successor after this
+    # key-only release!, it leaves a row that has moved on: handed to the
+    # message's retry (unbind!), or taken by a successor after this
     # message's own row went. A message without an enqueued_at releases any
     # unbound row, as release! did.
     def self.release_held_by!(lock_key, queue_name:, msg_id:, enqueued_at:)
@@ -110,32 +111,42 @@ module Pgbus
       )
     end
 
-    # Move the lock from the running attempt to its retry, which was sent
-    # through the key the attempt still holds (issue #333) and so never
-    # acquired: the attempt's release then leaves the row alone, and the key
-    # stays held for the retry's whole wait. created_at stays (the reaper's
-    # age floor). Returns the number of rows moved: 0 when the attempt no
-    # longer holds the key. Without the attempt's enqueued_at only a row bound
-    # to it is moved.
-    def self.rebind!(lock_key, from_queue_name:, from_msg_id:, from_enqueued_at:, queue_name:, msg_id:)
-      binds = held_by_binds(lock_key, from_queue_name, from_msg_id, from_enqueued_at || "-infinity")
-      connection.exec_update(
-        "UPDATE #{table_name} SET queue_name = $6, msg_id = $7 WHERE #{HELD_BY_CONDITION}",
-        "UniquenessKey Rebind", binds + [queue_name.to_s, msg_id.to_i]
-      )
-    end
-
-    # The rebind! for a retry parked as a blocked execution: it has no msg_id
-    # until it is promoted, so the row is left unbound on the retry's queue
-    # and stamped now, after the attempt was sent, so the attempt's release
-    # no longer counts it as its own while the promoted retry's still does.
+    # Hand the running attempt's lock to its retry, which goes out through the
+    # key the attempt still holds (issue #333) and never acquires one. Called
+    # before the retry exists, as a first enqueue acquires before its send:
+    # the row is left unbound on the retry's queue and stamped now, after the
+    # attempt was sent, so the attempt's release no longer counts it as its
+    # own while the retry's (sent later) does, even if the retry finishes
+    # before bind! points the row at it. Returns the new stamp for that
+    # bind!, or nil when the attempt no longer holds the key. Without the
+    # attempt's enqueued_at only a row bound to it is taken.
     def self.unbind!(lock_key, from_queue_name:, from_msg_id:, from_enqueued_at:, queue_name:)
       binds = held_by_binds(lock_key, from_queue_name, from_msg_id, from_enqueued_at || "-infinity")
-      connection.exec_update(
+      result = connection.exec_query(
         "UPDATE #{table_name} SET queue_name = $6, msg_id = 0, created_at = CURRENT_TIMESTAMP " \
-        "WHERE #{HELD_BY_CONDITION}",
+        "WHERE #{HELD_BY_CONDITION} RETURNING created_at",
         "UniquenessKey Unbind", binds + [queue_name.to_s]
       )
+      result.rows.first&.first
+    end
+
+    # release_held_by! for many messages at once — the dashboard's bulk
+    # discards and queue purges — as [lock_key, queue_name, msg_id,
+    # enqueued_at] tuples, one statement per thousand.
+    def self.release_all_held_by!(holders)
+      holders.each_slice(1000).sum do |slice|
+        values = slice.map do |lock_key, queue_name, msg_id, enqueued_at|
+          sent_at = enqueued_at.is_a?(Numeric) ? Time.at(enqueued_at) : (enqueued_at || "infinity")
+          "(#{connection.quote(lock_key.to_s)}, #{connection.quote(queue_name.to_s)}, #{msg_id.to_i}, " \
+            "#{connection.quote(sent_at)}::timestamptz)"
+        end
+        connection.exec_delete(
+          "DELETE FROM #{table_name} AS u USING (VALUES #{values.join(", ")}) AS m(lock_key, queue_name, msg_id, sent_at) " \
+          "WHERE u.lock_key = m.lock_key AND ((u.queue_name = m.queue_name AND u.msg_id = m.msg_id) OR " \
+          "((u.msg_id <= 0 OR u.queue_name = $1) AND u.created_at <= m.sent_at))",
+          "UniquenessKey Release All Held By", [Uniqueness::PLACEHOLDER_QUEUE]
+        )
+      end
     end
 
     def self.held_by_binds(lock_key, queue_name, msg_id, enqueued_at)

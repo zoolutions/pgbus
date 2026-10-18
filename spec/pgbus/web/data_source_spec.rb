@@ -363,8 +363,36 @@ RSpec.describe Pgbus::Web::DataSource do
     end
   end
 
+  # The queue a uniqueness lock records for a message in a physical queue.
+  describe "#lock_queue_name" do
+    before { allow(Pgbus.configuration).to receive(:queue_prefix).and_return("pgbus") }
+
+    it "is the logical name" do
+      expect(data_source.send(:lock_queue_name, "pgbus_default")).to eq("default")
+    end
+
+    it "drops a priority sub-queue's suffix under priority routing" do
+      allow(Pgbus.configuration).to receive(:priority_levels).and_return(3)
+
+      expect(data_source.send(:lock_queue_name, "pgbus_default_p1")).to eq("default")
+    end
+
+    it "keeps a queue named like a sub-queue without priority routing" do
+      allow(Pgbus.configuration).to receive(:priority_levels).and_return(nil)
+
+      expect(data_source.send(:lock_queue_name, "pgbus_orders_p1")).to eq("orders_p1")
+    end
+
+    it "keeps a dead-letter queue's suffix, so a DLQ copy never matches a live message's lock" do
+      allow(Pgbus.configuration).to receive(:priority_levels).and_return(3)
+
+      expect(data_source.send(:lock_queue_name, "pgbus_default_dlq")).to eq("default_dlq")
+    end
+  end
+
   describe "#discard_job" do
     it "archives the message and releases the uniqueness lock" do
+      allow(Pgbus.configuration).to receive(:queue_prefix).and_return("pgbus")
       allow(mock_client).to receive(:archive_message)
 
       # Mock reading the message to extract uniqueness key
@@ -377,12 +405,16 @@ RSpec.describe Pgbus::Web::DataSource do
                       "headers" => nil, "last_read_at" => nil
                     })
 
-      allow(Pgbus::UniquenessKey).to receive(:release!).and_return(1)
+      allow(Pgbus::UniquenessKey).to receive(:release_held_by!).and_return(1)
 
       data_source.discard_job("pgbus_default", 42)
 
       expect(mock_client).to have_received(:archive_message).with("pgbus_default", 42, prefixed: false)
-      expect(Pgbus::UniquenessKey).to have_received(:release!).with("import-42")
+      # Only the lock this message holds (issue #564): a lock its job handed
+      # to a retry, or a successor's, stays.
+      expect(Pgbus::UniquenessKey).to have_received(:release_held_by!).with(
+        "import-42", queue_name: "default", msg_id: 42, enqueued_at: kind_of(String)
+      )
     end
 
     it "does not release lock when message has no uniqueness key" do
@@ -397,11 +429,11 @@ RSpec.describe Pgbus::Web::DataSource do
                       "headers" => nil, "last_read_at" => nil
                     })
 
-      allow(Pgbus::UniquenessKey).to receive(:release!).and_return(1)
+      allow(Pgbus::UniquenessKey).to receive(:release_held_by!).and_return(1)
 
       data_source.discard_job("pgbus_default", 42)
 
-      expect(Pgbus::UniquenessKey).not_to have_received(:release!)
+      expect(Pgbus::UniquenessKey).not_to have_received(:release_held_by!)
     end
   end
 
@@ -417,13 +449,15 @@ RSpec.describe Pgbus::Web::DataSource do
                     })
 
       allow(mock_connection).to receive(:exec_delete)
-      allow(Pgbus::UniquenessKey).to receive(:release!).and_return(1)
+      allow(Pgbus::UniquenessKey).to receive(:release_held_by!).and_return(1)
       allow(mock_client).to receive(:archive_message)
 
       data_source.discard_failed_event(1)
 
       expect(mock_connection).to have_received(:exec_delete)
-      expect(Pgbus::UniquenessKey).to have_received(:release!).with("failed-1")
+      expect(Pgbus::UniquenessKey).to have_received(:release_held_by!).with(
+        "failed-1", queue_name: "default", msg_id: 42, enqueued_at: nil
+      )
       expect(mock_client).to have_received(:archive_message).with("default", 42)
     end
   end
@@ -438,11 +472,12 @@ RSpec.describe Pgbus::Web::DataSource do
       allow(data_source).to receive(:registered_subscribers)
         .and_return([{ queue_name: "orders_handler", physical_queue_name: "pgbus_orders_handler" }])
       allow(mock_connection).to receive(:select_all)
-        .with("SELECT payload FROM pgbus_failed_events WHERE #{not_handler}", "Pgbus Collect Failed Keys", handler_names)
+        .with("SELECT queue_name, msg_id, payload FROM pgbus_failed_events WHERE #{not_handler}",
+              "Pgbus Collect Failed Keys", handler_names)
         .and_return([
-                      { "payload" => '{"pgbus_uniqueness_key":"k1"}' },
-                      { "payload" => '{"pgbus_uniqueness_key":"k2"}' },
-                      { "payload" => '{"job_class":"PlainJob"}' }
+                      { "queue_name" => "default", "msg_id" => 10, "payload" => '{"pgbus_uniqueness_key":"k1"}' },
+                      { "queue_name" => "default", "msg_id" => 11, "payload" => '{"pgbus_uniqueness_key":"k2"}' },
+                      { "queue_name" => "low", "msg_id" => 99, "payload" => '{"job_class":"PlainJob"}' }
                     ])
 
       allow(mock_connection).to receive(:select_all)
@@ -460,14 +495,16 @@ RSpec.describe Pgbus::Web::DataSource do
         .with("DELETE FROM pgbus_failed_events WHERE #{not_handler}", "Pgbus Discard All Failed", handler_names)
         .and_return(3)
 
-      allow(Pgbus::UniquenessKey).to receive(:where).and_return(double(delete_all: 2))
+      allow(Pgbus::UniquenessKey).to receive(:release_all_held_by!).and_return(2)
       allow(mock_client).to receive(:archive_batch)
       allow(mock_client).to receive(:archive_message)
     end
 
-    it "releases the uniqueness locks for every failed job" do
+    it "releases the uniqueness lock each failed job's message holds" do
       data_source.discard_all_failed
-      expect(Pgbus::UniquenessKey).to have_received(:where).with(lock_key: %w[k1 k2])
+      expect(Pgbus::UniquenessKey).to have_received(:release_all_held_by!).with(
+        [["k1", "default", 10, nil], ["k2", "default", 11, nil]]
+      )
     end
 
     it "batches archives by queue to avoid per-row PGMQ roundtrips" do
@@ -535,15 +572,19 @@ RSpec.describe Pgbus::Web::DataSource do
                     ])
 
       allow(mock_client).to receive(:archive_batch).and_return([1, 2])
-      allow(Pgbus::UniquenessKey).to receive(:where).and_return(double(delete_all: 1))
+      allow(Pgbus::UniquenessKey).to receive(:release_all_held_by!).and_return(1)
     end
 
-    it "archives all messages from non-DLQ job queues and releases locks" do
+    it "archives all messages from non-DLQ job queues and releases the locks they hold" do
+      allow(Pgbus.configuration).to receive(:queue_prefix).and_return("pgbus")
+
       count = data_source.discard_all_enqueued
 
       expect(count).to eq(2)
       expect(mock_client).to have_received(:archive_batch).with("pgbus_default", [1, 2], prefixed: false)
-      expect(Pgbus::UniquenessKey).to have_received(:where).with(lock_key: ["k1"])
+      expect(Pgbus::UniquenessKey).to have_received(:release_all_held_by!).with(
+        [["k1", "default", 1, kind_of(String)]]
+      )
     end
 
     it "leaves EventBus handler queues alone" do
@@ -1181,11 +1222,13 @@ RSpec.describe Pgbus::Web::DataSource do
                       "message" => '{"event_id":"evt-1","pgbus_uniqueness_key":"uk-42"}',
                       "headers" => nil, "last_read_at" => nil
                     })
-      allow(Pgbus::UniquenessKey).to receive(:release!).and_return(1)
+      allow(Pgbus::UniquenessKey).to receive(:release_held_by!).and_return(1)
 
       data_source.discard_event("task_completion_handler", 42)
 
-      expect(Pgbus::UniquenessKey).to have_received(:release!).with("uk-42")
+      expect(Pgbus::UniquenessKey).to have_received(:release_held_by!).with(
+        "uk-42", queue_name: "task_completion_handler", msg_id: 42, enqueued_at: kind_of(String)
+      )
     end
   end
 
@@ -1213,7 +1256,7 @@ RSpec.describe Pgbus::Web::DataSource do
         allow(mock_connection).to receive(:select_one)
           .with(anything, "Pgbus Job Detail", [42]).and_return(event_detail)
         allow(mock_client).to receive(:archive_message)
-        allow(Pgbus::UniquenessKey).to receive(:release!)
+        allow(Pgbus::UniquenessKey).to receive(:release_held_by!)
         allow(Pgbus::ProcessedEvent).to receive(:upsert)
       end
 
@@ -1231,7 +1274,7 @@ RSpec.describe Pgbus::Web::DataSource do
     it "performs insert -> release -> archive in strict order" do
       call_order = []
       allow(Pgbus::ProcessedEvent).to receive(:insert) { call_order << :insert }
-      allow(Pgbus::UniquenessKey).to receive(:release!) { call_order << :release }
+      allow(Pgbus::UniquenessKey).to receive(:release_held_by!) { call_order << :release }
       allow(mock_client).to receive(:archive_message) { call_order << :archive }
       allow(mock_connection).to receive(:select_one)
         .with(anything, "Pgbus Job Detail", [42]).and_return(event_detail)
@@ -1243,7 +1286,7 @@ RSpec.describe Pgbus::Web::DataSource do
 
     it "inserts the ProcessedEvent row for the event" do
       allow(Pgbus::ProcessedEvent).to receive(:insert)
-      allow(Pgbus::UniquenessKey).to receive(:release!)
+      allow(Pgbus::UniquenessKey).to receive(:release_held_by!)
       allow(mock_client).to receive(:archive_message)
       allow(mock_connection).to receive(:select_one)
         .with(anything, "Pgbus Job Detail", [42]).and_return(event_detail)
@@ -1276,11 +1319,13 @@ RSpec.describe Pgbus::Web::DataSource do
                       "message" => '{"event_id":"evt-1","pgbus_uniqueness_key":"uk-42"}',
                       "headers" => nil, "last_read_at" => nil
                     })
-      allow(Pgbus::UniquenessKey).to receive(:release!).and_return(1)
+      allow(Pgbus::UniquenessKey).to receive(:release_held_by!).and_return(1)
 
       data_source.mark_event_handled("task_completion_handler", 42, "TaskCompletionHandler")
 
-      expect(Pgbus::UniquenessKey).to have_received(:release!).with("uk-42")
+      expect(Pgbus::UniquenessKey).to have_received(:release_held_by!).with(
+        "uk-42", queue_name: "task_completion_handler", msg_id: 42, enqueued_at: kind_of(String)
+      )
     end
   end
 

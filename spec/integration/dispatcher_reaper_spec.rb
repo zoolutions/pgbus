@@ -105,17 +105,18 @@ RSpec.describe "Dispatcher uniqueness key reaper (integration)", :integration do
       end
     end
 
-    # Issue #564: a retry_job(wait:) retry's row is rebound to the delayed
+    # Issue #564: a retry_job(wait:) retry's row is bound to the delayed
     # retry message, and a retry parked behind its concurrency slot holds an
     # unbound row while it sits in pgbus_blocked_executions. Both are live.
     context "when the lock follows a retry that is waiting" do
-      it "does NOT reap a row rebound to a delayed retry message" do
+      it "does NOT reap a row handed to a delayed retry message" do
         msg_id = Pgbus.client.send_message(
           queue_name, { "job_class" => "PollJob", Pgbus::Uniqueness::METADATA_KEY => "PollJob:1" }, delay: 300
         )
         Pgbus::UniquenessKey.acquire!("PollJob:1", queue_name: queue_name, msg_id: 1)
-        Pgbus::UniquenessKey.rebind!("PollJob:1", from_queue_name: queue_name, from_msg_id: 1,
-                                                  from_enqueued_at: Time.current, queue_name: queue_name, msg_id: msg_id)
+        stamp = Pgbus::UniquenessKey.unbind!("PollJob:1", from_queue_name: queue_name, from_msg_id: 1,
+                                                          from_enqueued_at: Time.current, queue_name: queue_name)
+        Pgbus::UniquenessKey.bind!("PollJob:1", queue_name: queue_name, msg_id: msg_id, acquired_at: stamp)
         Pgbus::UniquenessKey.where(lock_key: "PollJob:1").update_all(created_at: 10.minutes.ago)
 
         reaped = dispatcher.send(:reap_orphaned_uniqueness_keys)
@@ -137,6 +138,27 @@ RSpec.describe "Dispatcher uniqueness key reaper (integration)", :integration do
 
         expect(reaped).to eq(0)
         expect(Pgbus::UniquenessKey.exists?(lock_key: "PollJob:2")).to be(true)
+      ensure
+        Pgbus::BlockedExecution.delete_all
+      end
+
+      # Rows parked before the double-encoding fix hold a jsonb string; the
+      # promote sweep repairs them, but the reaper can run first.
+      it "does NOT reap an unbound row whose job is parked in a double-encoded row" do
+        Pgbus::BlockedExecution.delete_all
+        document = JSON.generate("job_class" => "PollJob", Pgbus::Uniqueness::METADATA_KEY => "PollJob:3")
+        ActiveRecord::Base.connection.exec_insert(
+          "INSERT INTO pgbus_blocked_executions (concurrency_key, queue_name, payload, priority, expires_at) " \
+          "VALUES ('PollJob-slot', $1, to_jsonb($2::text), 0, NOW() + interval '15 minutes')",
+          "spec", [queue_name, document]
+        )
+        Pgbus::UniquenessKey.acquire!("PollJob:3", queue_name: queue_name, msg_id: 0)
+        Pgbus::UniquenessKey.where(lock_key: "PollJob:3").update_all(created_at: 10.minutes.ago)
+
+        reaped = dispatcher.send(:reap_orphaned_uniqueness_keys)
+
+        expect(reaped).to eq(0)
+        expect(Pgbus::UniquenessKey.exists?(lock_key: "PollJob:3")).to be(true)
       ensure
         Pgbus::BlockedExecution.delete_all
       end

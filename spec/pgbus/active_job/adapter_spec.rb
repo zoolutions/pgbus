@@ -419,77 +419,128 @@ RSpec.describe Pgbus::ActiveJob::Adapter do
 
     # Issue #564: the retry enqueues through the held key, so the row has to
     # follow it or the archiving attempt's release frees the key mid-wait.
+    # Like a first enqueue (acquire unbound, send, bind), the row is unbound
+    # and re-stamped for the retry before the send and bound after it, so a
+    # retry that finishes before the bind still releases it.
     context "when the retry is enqueued by the running attempt" do
       let(:attempt_sent_at) { "2026-10-18 10:30:00.123456+00" }
+      let(:stamp) { "2026-10-18 10:31:00.654321" }
+      let(:order) { [] }
 
       before do
         allow(job).to receive(:executions).and_return(1)
         allow(Pgbus::Uniqueness).to receive(:extract_strategy).and_return(:until_executed)
-        allow(Pgbus::UniquenessKey).to receive(:rebind!).and_return(1)
+        allow(Pgbus::UniquenessKey).to receive(:unbind!) do
+          order << :unbind
+          stamp
+        end
+        allow(Pgbus::UniquenessKey).to receive(:bind!) { |*, **kwargs| order << [:bind, kwargs[:msg_id]] }
+        allow(mock_client).to receive(:send_message) do
+          order << :send
+          42
+        end
       end
 
-      def enqueue_from_attempt(&)
-        Pgbus::ActiveJob::Delivery.with(msg_id: 7, read_ct: 1, queue_name: "default", enqueued_at: attempt_sent_at) do
+      def enqueue_from_attempt(job_id: self.job_id, &)
+        Pgbus::ActiveJob::Delivery.with(msg_id: 7, read_ct: 1, queue_name: "default", enqueued_at: attempt_sent_at,
+                                        job_id: job_id) do
           adapter.enqueue(job)
         end
       end
 
-      it "moves the attempt's row onto the retry once the retry is sent" do
+      it "unbinds the attempt's row for the retry before the send and binds it to the retry after" do
         enqueue_from_attempt
 
-        expect(Pgbus::UniquenessKey).to have_received(:rebind!).with(
+        expect(Pgbus::UniquenessKey).to have_received(:unbind!).with(
           "UniqJob-42", from_queue_name: "default", from_msg_id: 7, from_enqueued_at: attempt_sent_at,
-                        queue_name: "default", msg_id: 42
+                        queue_name: "default"
         )
+        expect(Pgbus::UniquenessKey).to have_received(:bind!).with(
+          "UniqJob-42", queue_name: "default", msg_id: 42, acquired_at: stamp
+        )
+        expect(order).to eq([:unbind, :send, [:bind, 42]])
       end
 
-      it "moves it for a scheduled retry (retry_job(wait:)) too" do
-        Pgbus::ActiveJob::Delivery.with(msg_id: 7, read_ct: 1, queue_name: "default", enqueued_at: attempt_sent_at) do
+      it "does the same for a scheduled retry (retry_job(wait:))" do
+        Pgbus::ActiveJob::Delivery.with(msg_id: 7, read_ct: 1, queue_name: "default", enqueued_at: attempt_sent_at,
+                                        job_id: job_id) do
           adapter.enqueue_at(job, Time.current.to_f + 30)
         end
 
         expect(mock_client).to have_received(:send_message).with("default", anything, delay: 30, priority: nil)
-        expect(Pgbus::UniquenessKey).to have_received(:rebind!).with(
-          "UniqJob-42", hash_including(from_msg_id: 7, msg_id: 42)
-        )
+        expect(order).to eq([:unbind, :send, [:bind, 42]])
       end
 
-      it "does not move a :while_executing key: it is taken at execution, not held across enqueue" do
+      it "leaves a :while_executing key alone: it is taken at execution, not held across enqueue" do
         allow(Pgbus::Uniqueness).to receive(:extract_strategy).and_return(:while_executing)
 
         enqueue_from_attempt
 
-        expect(Pgbus::UniquenessKey).not_to have_received(:rebind!)
+        expect(Pgbus::UniquenessKey).not_to have_received(:unbind!)
       end
 
-      it "does not move anything for a retry enqueued outside the executor" do
+      it "moves nothing for a retry enqueued outside the executor" do
         adapter.enqueue(job)
 
         expect(mock_client).to have_received(:send_message)
-        expect(Pgbus::UniquenessKey).not_to have_received(:rebind!)
+        expect(Pgbus::UniquenessKey).not_to have_received(:unbind!)
       end
 
-      it "does not move anything when the send fails" do
-        allow(mock_client).to receive(:send_message).and_raise(StandardError, "pg down")
+      # A job run inline (perform_now) inside an executing job sees that
+      # job's delivery: the row it holds is not this job's to move.
+      it "moves nothing when the running delivery is another job's" do
+        enqueue_from_attempt(job_id: "the-enclosing-job")
 
-        expect { enqueue_from_attempt }.to raise_error(StandardError, "pg down")
-        expect(Pgbus::UniquenessKey).not_to have_received(:rebind!)
+        expect(Pgbus::UniquenessKey).not_to have_received(:unbind!)
+      end
+
+      it "binds the row back to the attempt when the send fails before any message exists" do
+        allow(mock_client).to receive(:send_message).and_raise(StandardError, "invalid queue")
+
+        expect { enqueue_from_attempt }.to raise_error(StandardError, "invalid queue")
+        expect(Pgbus::UniquenessKey).to have_received(:bind!).with(
+          "UniqJob-42", queue_name: "default", msg_id: 7, acquired_at: stamp
+        )
         expect(Pgbus::Uniqueness).not_to have_received(:release_lock)
       end
 
-      it "warns when the attempt no longer holds the key" do
-        allow(Pgbus::UniquenessKey).to receive(:rebind!).and_return(0)
+      # The produce may have committed with only its reply lost: the retry may
+      # be live, and it releases the unbound row itself when it finishes.
+      it "leaves the row unbound when the send's outcome is unknown" do
+        stub_const("PGMQ::Errors::ConnectionError", Class.new(StandardError)) unless defined?(PGMQ::Errors::ConnectionError)
+        allow(mock_client).to receive(:send_message).and_raise(PGMQ::Errors::ConnectionError, "server closed")
+
+        expect { enqueue_from_attempt }.to raise_error(PGMQ::Errors::ConnectionError)
+        expect(Pgbus::UniquenessKey).not_to have_received(:bind!)
+        expect(Pgbus::Uniqueness).not_to have_received(:release_lock)
+      end
+
+      it "warns and sends without moving anything when the attempt no longer holds the key" do
+        allow(Pgbus::UniquenessKey).to receive(:unbind!).and_return(nil)
         allow(Pgbus.logger).to receive(:warn)
 
-        enqueue_from_attempt
+        expect(enqueue_from_attempt).to eq(job)
 
+        expect(mock_client).to have_received(:send_message)
+        expect(Pgbus::UniquenessKey).not_to have_received(:bind!)
         expect(Pgbus.logger).to have_received(:warn) do |&block|
           expect(block.call).to include("UniqJob-42").and include("no longer held")
         end
       end
 
-      it "still enqueues when the move raises: the retry is live" do
-        allow(Pgbus::UniquenessKey).to receive(:rebind!).and_raise(StandardError, "pooler timeout")
+      it "sends anyway when the unbind raises; the row stays with the attempt" do
+        allow(Pgbus::UniquenessKey).to receive(:unbind!).and_raise(StandardError, "pooler timeout")
+        allow(Pgbus.logger).to receive(:warn)
+
+        expect(enqueue_from_attempt).to eq(job)
+        expect(Pgbus::UniquenessKey).not_to have_received(:bind!)
+        expect(Pgbus.logger).to have_received(:warn)
+      end
+
+      # The retry is live; its own release takes the unbound row (stamped
+      # before it was sent) when it finishes.
+      it "still enqueues when the bind after the send raises" do
+        allow(Pgbus::UniquenessKey).to receive(:bind!).and_raise(StandardError, "pooler timeout")
         allow(Pgbus.logger).to receive(:warn)
 
         expect(enqueue_from_attempt).to eq(job)
@@ -498,14 +549,16 @@ RSpec.describe Pgbus::ActiveJob::Adapter do
       end
     end
 
-    it "does not move the row for a first attempt, which acquired its own" do
+    it "leaves the row alone for a first attempt, which acquired its own" do
       allow(job).to receive(:executions).and_return(0)
       allow(Pgbus::Uniqueness).to receive_messages(acquire_enqueue_lock: :acquired, extract_strategy: :until_executed)
-      allow(Pgbus::UniquenessKey).to receive(:rebind!)
+      allow(Pgbus::UniquenessKey).to receive(:unbind!)
 
-      Pgbus::ActiveJob::Delivery.with(msg_id: 7, read_ct: 1, queue_name: "default") { adapter.enqueue(job) }
+      Pgbus::ActiveJob::Delivery.with(msg_id: 7, read_ct: 1, queue_name: "default", job_id: job_id) do
+        adapter.enqueue(job)
+      end
 
-      expect(Pgbus::UniquenessKey).not_to have_received(:rebind!)
+      expect(Pgbus::UniquenessKey).not_to have_received(:unbind!)
     end
 
     it "acquires against the logical queue and binds msg_id after send (issue #418)" do
@@ -649,10 +702,12 @@ RSpec.describe Pgbus::ActiveJob::Adapter do
     end
 
     # Issue #564: the running attempt holds its own concurrency slot, so its
-    # retry parks; the row must stop counting as the attempt's, or the
-    # attempt's release frees the key while the retry waits.
-    context "when the running attempt's retry parks" do
+    # retry parks. The row is unbound and re-stamped for it before the
+    # parking transaction, so the attempt's release no longer counts it as
+    # its own while the promoted retry's still does.
+    context "when the running attempt's retry meets its concurrency limit" do
       let(:attempt_sent_at) { "2026-10-18 10:30:00.123456+00" }
+      let(:stamp) { "2026-10-18 10:31:00.654321" }
       let(:order) { [] }
 
       before do
@@ -661,12 +716,11 @@ RSpec.describe Pgbus::ActiveJob::Adapter do
         allow(job).to receive(:try).with(:priority).and_return(0)
         allow(Pgbus::Uniqueness).to receive(:extract_strategy).and_return(:until_executed)
         allow(Pgbus::Concurrency::BlockedExecution).to receive(:insert) { order << :park }
-        allow(Pgbus::UniquenessKey).to receive(:transaction).and_yield
         allow(Pgbus::UniquenessKey).to receive(:unbind!) do
           order << :unbind
-          1
+          stamp
         end
-        allow(Pgbus::UniquenessKey).to receive(:rebind!)
+        allow(Pgbus::UniquenessKey).to receive(:bind!)
         allow(Pgbus::Semaphore).to receive(:transaction) do |&block|
           order << :begin
           block.call
@@ -674,37 +728,49 @@ RSpec.describe Pgbus::ActiveJob::Adapter do
         end
       end
 
-      def park_from_attempt
-        Pgbus::ActiveJob::Delivery.with(msg_id: 7, read_ct: 1, queue_name: "default", enqueued_at: attempt_sent_at) do
+      def enqueue_from_attempt
+        Pgbus::ActiveJob::Delivery.with(msg_id: 7, read_ct: 1, queue_name: "default", enqueued_at: attempt_sent_at,
+                                        job_id: job_id) do
           adapter.enqueue(job)
         end
       end
 
-      it "unbinds the attempt's row onto the retry's queue inside the parking transaction" do
-        park_from_attempt
+      it "unbinds the attempt's row for the parked retry before parking it, and binds nothing" do
+        enqueue_from_attempt
 
         expect(Pgbus::UniquenessKey).to have_received(:unbind!).with(
           "UniqJob-42", from_queue_name: "default", from_msg_id: 7, from_enqueued_at: attempt_sent_at,
                         queue_name: "default"
         )
-        expect(order).to eq(%i[begin park unbind commit])
-        expect(Pgbus::UniquenessKey).not_to have_received(:rebind!)
+        expect(order).to eq(%i[unbind begin park commit])
+        expect(Pgbus::UniquenessKey).not_to have_received(:bind!)
         expect(mock_client).not_to have_received(:send_message)
       end
 
-      it "parks the retry anyway, with a warning, when the unbind fails" do
-        allow(Pgbus::UniquenessKey).to receive(:unbind!).and_raise(StandardError, "pooler timeout")
-        allow(Pgbus.logger).to receive(:warn)
+      it "binds the row back to the attempt when the retry is discarded by the limit" do
+        allow(job_class_double).to receive(:pgbus_concurrency).and_return(concurrency_config.merge(on_conflict: :discard))
 
-        expect(park_from_attempt).to eq(job)
-        expect(order).to eq(%i[begin park commit])
-        expect(Pgbus.logger).to have_received(:warn)
+        enqueue_from_attempt
+
+        expect(Pgbus::UniquenessKey).to have_received(:bind!).with(
+          "UniqJob-42", queue_name: "default", msg_id: 7, acquired_at: stamp
+        )
+        expect(Pgbus::Uniqueness).not_to have_received(:release_lock)
       end
 
-      it "leaves a first attempt's row alone: it is unbound already" do
+      it "binds the row back to the attempt when the limit raises" do
+        allow(job_class_double).to receive(:pgbus_concurrency).and_return(concurrency_config.merge(on_conflict: :raise))
+
+        expect { enqueue_from_attempt }.to raise_error(Pgbus::ConcurrencyLimitExceeded)
+        expect(Pgbus::UniquenessKey).to have_received(:bind!).with(
+          "UniqJob-42", queue_name: "default", msg_id: 7, acquired_at: stamp
+        )
+      end
+
+      it "leaves a first attempt's row alone: it acquired its own" do
         allow(job).to receive(:executions).and_return(0)
 
-        park_from_attempt
+        enqueue_from_attempt
 
         expect(Pgbus::UniquenessKey).not_to have_received(:unbind!)
       end
