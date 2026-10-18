@@ -332,6 +332,63 @@ RSpec.describe Pgbus::Uniqueness do
     end
   end
 
+  # Issue #564: a lock records the queue the way its table spells it, so a
+  # release that knows only the table (the dashboard) or a fetch path that
+  # spells the queue another way still finds the row.
+  describe ".lock_queue_name" do
+    it "keeps a name its table spells the same" do
+      expect(described_class.lock_queue_name("critical")).to eq("critical")
+    end
+
+    it "spells a name the way its table does" do
+      expect(described_class.lock_queue_name("orders-handler")).to eq("orders_handler")
+      expect(described_class.lock_queue_name("orders.v2")).to eq("orders_v2")
+    end
+
+    it "keeps a logical name that starts with the prefix" do
+      prefix = Pgbus.configuration.queue_prefix
+      expect(described_class.lock_queue_name("#{prefix}_mailers")).to eq("#{prefix}_mailers")
+    end
+
+    it "keeps the placeholder queue" do
+      expect(described_class.lock_queue_name(described_class::PLACEHOLDER_QUEUE)).to eq("pending")
+    end
+
+    it "uses the configuration it is given" do
+      config = Pgbus::Configuration.new.tap { |c| c.queue_prefix = "other" }
+      expect(described_class.lock_queue_name("orders-handler", config: config)).to eq("orders_handler")
+    end
+  end
+
+  describe "lock queue names at the boundary" do
+    it "acquires an enqueue lock under the table's spelling" do
+      stub_const("SpelledLockJob", Class.new(ActiveJob::Base) do
+        include Pgbus::Uniqueness
+
+        ensures_uniqueness strategy: :until_executed, key: ->(*) { "k" }
+      end)
+
+      described_class.acquire_enqueue_lock("test-key", SpelledLockJob.new, queue_name: "orders-handler")
+      expect(Pgbus::UniquenessKey).to have_received(:acquire!).with(
+        "test-key", queue_name: "orders_handler", msg_id: 0
+      )
+    end
+
+    it "binds under the table's spelling" do
+      described_class.bind_lock("test-key", queue_name: "orders-handler", msg_id: 42)
+      expect(Pgbus::UniquenessKey).to have_received(:bind!).with(
+        "test-key", queue_name: "orders_handler", msg_id: 42
+      )
+    end
+
+    it "acquires an execution lock under the table's spelling" do
+      payload = { "pgbus_uniqueness_strategy" => "while_executing" }
+      described_class.acquire_execution_lock("k", payload, msg_id: 42, queue_name: "orders-handler")
+      expect(Pgbus::UniquenessKey).to have_received(:acquire!)
+        .with("k", queue_name: "orders_handler", msg_id: 42, reacquire_same_message: true)
+    end
+  end
+
   describe ".placeholder?" do
     it "is true for the synthetic pending queue regardless of msg_id" do
       expect(described_class.placeholder?(queue_name: "pending", msg_id: 0)).to be(true)

@@ -371,29 +371,29 @@ RSpec.describe Pgbus::Web::DataSource do
   end
 
   # The queue a uniqueness lock records for a message in a physical queue.
-  describe "#lock_queue_name" do
+  describe "#lock_queue_for_table" do
     before { allow(Pgbus.configuration).to receive(:queue_prefix).and_return("pgbus") }
 
     it "is the logical name" do
-      expect(data_source.send(:lock_queue_name, "pgbus_default")).to eq("default")
+      expect(data_source.send(:lock_queue_for_table, "pgbus_default")).to eq("default")
     end
 
     it "drops a priority sub-queue's suffix under priority routing" do
       allow(Pgbus.configuration).to receive(:priority_levels).and_return(3)
 
-      expect(data_source.send(:lock_queue_name, "pgbus_default_p1")).to eq("default")
+      expect(data_source.send(:lock_queue_for_table, "pgbus_default_p1")).to eq("default")
     end
 
     it "keeps a queue named like a sub-queue without priority routing" do
       allow(Pgbus.configuration).to receive(:priority_levels).and_return(nil)
 
-      expect(data_source.send(:lock_queue_name, "pgbus_orders_p1")).to eq("orders_p1")
+      expect(data_source.send(:lock_queue_for_table, "pgbus_orders_p1")).to eq("orders_p1")
     end
 
     it "keeps a dead-letter queue's suffix, so a DLQ copy never matches a live message's lock" do
       allow(Pgbus.configuration).to receive(:priority_levels).and_return(3)
 
-      expect(data_source.send(:lock_queue_name, "pgbus_default_dlq")).to eq("default_dlq")
+      expect(data_source.send(:lock_queue_for_table, "pgbus_default_dlq")).to eq("default_dlq")
     end
   end
 

@@ -344,6 +344,16 @@ RSpec.describe Pgbus::Recurring::Schedule do
         )
       end
 
+      # Issue #564: the lock records the queue as its table spells it.
+      it "acquires and binds under the table's spelling of the task's queue" do
+        allow(schedule).to receive(:resolve_queue).with(task).and_return("night-shift")
+
+        schedule.enqueue_task(task, run_at: run_at)
+
+        expect(Pgbus::UniquenessKey).to have_received(:acquire!).with("CleanupJob", queue_name: "night_shift", msg_id: 0)
+        expect(Pgbus::UniquenessKey).to have_received(:bind!).with("CleanupJob", queue_name: "night_shift", msg_id: 77)
+      end
+
       it "does not bind when the uniqueness lock is already held" do
         allow(Pgbus::UniquenessKey).to receive(:acquire!).and_return(false)
 

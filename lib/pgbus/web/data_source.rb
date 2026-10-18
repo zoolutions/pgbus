@@ -920,7 +920,7 @@ module Pgbus
         # memory — otherwise the message is archived but the lock row stays
         # behind, blocking later publishes with the same key. Mirrors
         # discard_event.
-        release_lock_held_by(detail[:message], queue_name: lock_queue_name(queue_name), msg_id: detail[:msg_id],
+        release_lock_held_by(detail[:message], queue_name: lock_queue_for_table(queue_name), msg_id: detail[:msg_id],
                                                enqueued_at: detail[:enqueued_at])
         @client.archive_message(queue_name, msg_id.to_i, prefixed: false)
         clear_event_failure(queue_name, msg_id)
@@ -1587,14 +1587,14 @@ module Pgbus
       # lock then) has no send time to go by, so only a bound lock could
       # match, and none is bound to a DLQ copy.
       def lock_holder(queue_name, msg_id, headers, enqueued_at)
-        own = [lock_queue_name(queue_name), msg_id.to_i]
+        own = [lock_queue_for_table(queue_name), msg_id.to_i]
         return [*own, enqueued_at] unless queue_name.to_s.end_with?(Pgbus::DEAD_LETTER_SUFFIX)
 
         block = DeadLetterHeader.parse(headers)
         source_msg_id = block && Integer(block["source_msg_id"], exception: false)
         return [*own, nil] unless source_msg_id && block["source_queue"]
 
-        [lock_queue_name(block["source_queue"]), source_msg_id, block["source_enqueued_at"]]
+        [lock_queue_for_table(block["source_queue"]), source_msg_id, block["source_enqueued_at"]]
       end
 
       # Release the lock held by the message whose JSON payload this is.
@@ -1632,15 +1632,16 @@ module Pgbus
           "Pgbus Collect Failed Keys", binds
         )
 
-        # queue_name is the logical name the executor saw, as the lock was
-        # bound under: no prefix to strip.
+        # queue_name is the logical name the executor saw: the message is looked
+        # up under it, and the lock is released under its table spelling.
         holders = rows.to_a.filter_map do |row|
           key = extract_uniqueness_key_from_payload_str(row["payload"])
           [key, row["queue_name"], row["msg_id"].to_i] if key && row["msg_id"]
         end
         holders = holders.group_by { |_key, queue, _msg_id| queue }.flat_map do |queue, entries|
           sent = queued_send_times(queue, entries)
-          entries.map { |key, _queue, msg_id| [key, queue, msg_id, sent[[msg_id, key]]] }
+          lock_queue = Uniqueness.lock_queue_name(queue)
+          entries.map { |key, _queue, msg_id| [key, lock_queue, msg_id, sent[[msg_id, key]]] }
         end
         UniquenessKey.release_all_held_by!(holders) if holders.any?
       rescue StandardError => e
@@ -1680,10 +1681,11 @@ module Pgbus
       end
 
       # The queue a uniqueness lock records for a message in this physical
-      # queue: the logical name the adapter bound it under, without a priority
-      # sub-queue's _pN. A dead-letter queue keeps its suffix, so its copy's
+      # queue: the table name without its prefix and a priority sub-queue's
+      # _pN, which is how Uniqueness.lock_queue_name spells the queue the lock
+      # was bound for. A dead-letter queue keeps its suffix, so its copy's
       # msg_id (another sequence) never matches a lock bound to a live message.
-      def lock_queue_name(physical_name)
+      def lock_queue_for_table(physical_name)
         name = physical_name.to_s.delete_prefix("#{Pgbus.configuration.queue_prefix}_")
         return name if name.end_with?(Pgbus::DEAD_LETTER_SUFFIX) || Pgbus.configuration.priority_levels.to_i <= 1
 

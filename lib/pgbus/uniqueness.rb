@@ -185,12 +185,23 @@ module Pgbus
         return :no_lock unless config[:strategy] == :until_executed
 
         acquired = if msg_id && queue_name
-                     UniquenessKey.acquire!(key, queue_name: queue_name, msg_id: msg_id)
+                     UniquenessKey.acquire!(key, queue_name: lock_queue_name(queue_name), msg_id: msg_id)
                    else
                      # Pre-produce check: use advisory lock + ON CONFLICT
-                     UniquenessKey.acquire!(key, queue_name: queue_name || PLACEHOLDER_QUEUE, msg_id: msg_id || 0)
+                     UniquenessKey.acquire!(key, queue_name: lock_queue_name(queue_name || PLACEHOLDER_QUEUE),
+                                                 msg_id: msg_id || 0)
                    end
         acquired ? :acquired : :locked
+      end
+
+      # The queue a job's uniqueness lock records: the logical name as its
+      # table spells it ("orders-handler" → "orders_handler"), the inverse of
+      # stripping the prefix off the table name. Every writer and releaser of
+      # a job's lock goes through it, so a release that knows only the table
+      # (the dashboard) or a worker that spells the queue the table's way
+      # still finds the row it was bound under (issue #564).
+      def lock_queue_name(queue_name, config: Pgbus.configuration)
+        config.queue_name(queue_name).delete_prefix("#{config.queue_prefix}_")
       end
 
       # Acquire the uniqueness lock at execution time (:while_executing only).
@@ -205,7 +216,7 @@ module Pgbus
         return true unless strategy == :while_executing
 
         queue_name ||= payload["queue_name"] || "unknown"
-        UniquenessKey.acquire!(key, queue_name: queue_name, msg_id: msg_id.to_i,
+        UniquenessKey.acquire!(key, queue_name: lock_queue_name(queue_name), msg_id: msg_id.to_i,
                                     reacquire_same_message: msg_id.to_i.positive?)
       end
 
@@ -223,7 +234,7 @@ module Pgbus
         return unless key
         return unless msg_id.to_i.positive?
 
-        UniquenessKey.bind!(key, queue_name: queue_name, msg_id: msg_id)
+        UniquenessKey.bind!(key, queue_name: lock_queue_name(queue_name), msg_id: msg_id)
       end
 
       # True when the uniqueness row is not yet bound to a real PGMQ message.

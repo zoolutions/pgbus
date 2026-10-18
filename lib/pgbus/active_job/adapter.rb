@@ -316,8 +316,9 @@ module Pgbus
         key, delivery = retry_uniqueness_lock(active_job, payload_hash)
         return unless key
 
-        stamp = UniquenessKey.unbind!(key, from_queue_name: delivery[:queue_name], from_msg_id: delivery[:msg_id],
-                                           from_enqueued_at: delivery[:enqueued_at], queue_name: queue)
+        stamp = UniquenessKey.unbind!(key, from_queue_name: Uniqueness.lock_queue_name(delivery[:queue_name]),
+                                           from_msg_id: delivery[:msg_id], from_enqueued_at: delivery[:enqueued_at],
+                                           queue_name: Uniqueness.lock_queue_name(queue))
         return [key, delivery, stamp] if stamp
 
         warn_retry_lock_not_held(key)
@@ -334,7 +335,7 @@ module Pgbus
         return unless retry_lock
 
         key, _delivery, stamp = retry_lock
-        UniquenessKey.bind!(key, queue_name: queue, msg_id: msg_id, acquired_at: stamp)
+        UniquenessKey.bind!(key, queue_name: Uniqueness.lock_queue_name(queue), msg_id: msg_id, acquired_at: stamp)
       rescue StandardError => e
         Pgbus.logger.warn { "[Pgbus] Uniqueness bind to retry failed for #{key}: #{e.message}" }
       end
@@ -346,7 +347,8 @@ module Pgbus
         return unless retry_lock
 
         key, delivery, stamp = retry_lock
-        UniquenessKey.bind!(key, queue_name: delivery[:queue_name], msg_id: delivery[:msg_id], acquired_at: stamp)
+        UniquenessKey.bind!(key, queue_name: Uniqueness.lock_queue_name(delivery[:queue_name]),
+                                 msg_id: delivery[:msg_id], acquired_at: stamp)
       rescue StandardError => e
         Pgbus.logger.warn { "[Pgbus] Uniqueness return to the attempt failed for #{key}: #{e.message}" }
       end

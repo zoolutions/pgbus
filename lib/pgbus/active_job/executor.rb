@@ -197,13 +197,13 @@ module Pgbus
 
       # Releases only the row this message holds, never the key as such: a
       # row the job moved onto its retry (issue #564), or a successor's, stays.
-      # The queue is the logical one the row was bound under, as for
-      # release_duplicate_execution_lock.
+      # The queue is spelled as the row was bound (Uniqueness.lock_queue_name),
+      # as for release_duplicate_execution_lock.
       def release_uniqueness_lock(key, queue_name, message)
         return unless key
 
-        UniquenessKey.release_held_by!(key, queue_name: queue_name, msg_id: message.msg_id.to_i,
-                                            enqueued_at: message.enqueued_at)
+        UniquenessKey.release_held_by!(key, queue_name: Uniqueness.lock_queue_name(queue_name, config: config),
+                                            msg_id: message.msg_id.to_i, enqueued_at: message.enqueued_at)
       rescue StandardError => e
         Pgbus.logger.warn { "[Pgbus] Uniqueness release failed: #{e.message}" }
       end
@@ -433,7 +433,8 @@ module Pgbus
 
         # Same queue the execution lock was acquired under, so the match
         # cannot land on another queue's message of the same id.
-        UniquenessKey.release_if_bound!(uniqueness_key, queue_name: queue_name, msg_id: msg_id)
+        UniquenessKey.release_if_bound!(uniqueness_key, queue_name: Uniqueness.lock_queue_name(queue_name, config: config),
+                                                        msg_id: msg_id)
       rescue StandardError => e
         Pgbus.logger.warn { "[Pgbus] Duplicate-execution lock release failed: #{e.message}" }
       end

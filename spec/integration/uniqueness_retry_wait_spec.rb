@@ -236,9 +236,12 @@ RSpec.describe "Uniqueness across a delayed retry (integration)", :integration d
       PollItemJob.queue_as queue_name
     end
 
+    after { client.drop_queue(hyphenated) }
+
     it "releases the job's key when it succeeds" do
       PollItemJob.perform_later(1)
-      expect(lock_row.queue_name).to eq(hyphenated)
+      # Recorded the way the table spells it, which the dashboard can derive.
+      expect(lock_row.queue_name).to eq("orders_handler")
 
       worker = Pgbus::Process::Worker.new(queues: [hyphenated, "default"], threads: 1)
       (logical, message), = worker.send(:fetch_messages, 2)
@@ -246,6 +249,36 @@ RSpec.describe "Uniqueness across a delayed retry (integration)", :integration d
       expect(logical).to eq(hyphenated)
       expect(executor.execute(message, logical)).to eq(:success)
       expect(Pgbus::UniquenessKey.locked?(key)).to be(false)
+    end
+
+    it "releases the job's key when a worker configured with the table's spelling runs it" do
+      PollItemJob.perform_later(1)
+      message = client.read_batch("orders_handler", qty: 1, vt: 30).first
+
+      expect(executor.execute(message, "orders_handler")).to eq(:success)
+      expect(Pgbus::UniquenessKey.locked?(key)).to be(false)
+    end
+
+    # The dashboard knows only the table; it must find the lock the adapter
+    # bound for the job's queue_name.
+    it "releases the job's key when its message is discarded from the dashboard" do
+      PollItemJob.perform_later(1)
+      message = client.read_batch(hyphenated, qty: 1, vt: 30).first
+      data_source = Pgbus::Web::DataSource.new(client: client)
+
+      expect(data_source.discard_job(Pgbus.configuration.queue_name(hyphenated), message.msg_id)).to be_truthy
+      expect(Pgbus::UniquenessKey.locked?(key)).to be(false)
+    end
+
+    it "hands the key to a delayed retry and keeps it through the wait" do
+      define_job { |attempt| retry_job(wait: 30) if attempt == 1 }
+      PollItemJob.queue_as hyphenated
+      PollItemJob.perform_later(1)
+      message = client.read_batch(hyphenated, qty: 1, vt: 30).first
+
+      expect(executor.execute(message, hyphenated)).to eq(:success)
+      expect(lock_row&.msg_id).not_to eq(message.msg_id.to_i)
+      expect(Pgbus::UniquenessKey.locked?(key)).to be(true)
     end
   end
 
