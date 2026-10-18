@@ -1,0 +1,40 @@
+lib/pgbus/web/workflow_timeline.rb
+  s_6dc718aa5ed0fb::t_72617c246af8d9 90-93,97-99,116
+  s_6dc718aa5ed0fb::t_4c2ad492b79fd4 74-75
+README.md
+  s_6dc718aa5ed0fb::t_72617c246af8d9 1076,1106
+docs/app/views/docs/pages/workflows.rb
+  s_6dc718aa5ed0fb::t_72617c246af8d9 308-310,723-725
+lib/pgbus/metrics/workflow_metrics.rb
+  s_6dc718aa5ed0fb::t_72617c246af8d9 15
+lib/pgbus/web/workflow_state.rb
+  s_6dc718aa5ed0fb::t_72617c246af8d9 62-65
+spec/pgbus/web/workflow_state_spec.rb
+  s_6dc718aa5ed0fb::t_4c2ad492b79fd4 43-47
+spec/system/workflows_spec.rb
+  s_6dc718aa5ed0fb::t_72617c246af8d9 81
+lib/pgbus/instrumentation.rb
+  s_6dc718aa5ed0fb::t_72617c246af8d9 83
+spec/support/pgbus/stub_data_source/sample_workflows.rb
+  s_6dc718aa5ed0fb::t_72617c246af8d9 276
+spec/pgbus/web/workflow_timeline_spec.rb
+  s_6dc718aa5ed0fb::t_4c2ad492b79fd4 121-128
+CHANGELOG.md
+  s_6dc718aa5ed0fb::t_72617c246af8d9 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "94f8b91caa0f3a28bfd6d47bafbfbe60e50fdf10",
+  "prompts": {},
+  "sessions": {
+    "s_6dc718aa5ed0fb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1fb31b65-82d7-41b6-84c2-41c5d368ce3e",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}

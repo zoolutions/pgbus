@@ -1,0 +1,75 @@
+config/locales/nl.yml
+  s_6dc718aa5ed0fb::t_e31cb95e9c57c0 1352-1353,1456,1470
+lib/pgbus/web/workflow_state.rb
+  s_6dc718aa5ed0fb::t_05ce56f238cbfc 9-10,54-64
+config/locales/en.yml
+  s_6dc718aa5ed0fb::t_e31cb95e9c57c0 1352-1353,1456,1470
+config/locales/es.yml
+  s_6dc718aa5ed0fb::t_e31cb95e9c57c0 1352-1353,1456,1470
+config/locales/sv.yml
+  s_6dc718aa5ed0fb::t_e31cb95e9c57c0 1352-1353,1456,1470
+config/locales/pt.yml
+  s_6dc718aa5ed0fb::t_e31cb95e9c57c0 1352-1353,1456,1470
+spec/system/workflows_spec.rb
+  s_6dc718aa5ed0fb::t_f38c5c7bd17476 37-42,169-184
+  s_6dc718aa5ed0fb::t_7f8d8138dde25d 415
+spec/pgbus/web/workflow_state_spec.rb
+  s_6dc718aa5ed0fb::t_6dd5e373cb0a01 35-44
+spec/integration/workflow/dashboard_data_source_spec.rb
+  s_6dc718aa5ed0fb::t_6dd5e373cb0a01 11,123-145,165-176
+  s_6dc718aa5ed0fb::t_4f24b51ca06ff0 122
+lib/pgbus/web/workflow_timeline.rb
+  s_6dc718aa5ed0fb::t_8cd5c3c75b16cb 15-17
+  s_6dc718aa5ed0fb::t_05ce56f238cbfc 14,22,87-98
+config/locales/fi.yml
+  s_6dc718aa5ed0fb::t_e31cb95e9c57c0 1352-1353,1456,1470
+app/frontend/pgbus/modules/charts.min.js.map
+  ai_agent 1
+config/locales/de.yml
+  s_6dc718aa5ed0fb::t_e31cb95e9c57c0 1352-1353,1456,1470
+app/views/pgbus/workflows/_timeline.html.erb
+  s_6dc718aa5ed0fb::t_add10821e872c3 3-4,28-33
+config/locales/da.yml
+  s_6dc718aa5ed0fb::t_e31cb95e9c57c0 1352-1353,1456,1470
+config/locales/it.yml
+  s_6dc718aa5ed0fb::t_e31cb95e9c57c0 1352-1353,1456,1470
+app/frontend/pgbus/modules/charts.min.js
+  ai_agent 1
+app/frontend/pgbus/modules/charts.js
+  s_6dc718aa5ed0fb::t_add10821e872c3 236,240-254
+lib/pgbus/web/data_source/workflow_list.rb
+  s_6dc718aa5ed0fb::t_8cd5c3c75b16cb 20,50-51,101-102,161-183,191,221,236-247
+spec/pgbus/web/workflow_timeline_spec.rb
+  s_6dc718aa5ed0fb::t_05ce56f238cbfc 109-111
+  s_6dc718aa5ed0fb::t_6dd5e373cb0a01 108,112-120
+app/helpers/pgbus/workflows_helper.rb
+  s_6dc718aa5ed0fb::t_add10821e872c3 76,161
+spec/support/pgbus/stub_data_source/sample_workflows.rb
+  s_6dc718aa5ed0fb::t_8292f8929bf615 154,158-159
+  s_6dc718aa5ed0fb::t_2094c246f8752b 160-164
+  s_6dc718aa5ed0fb::t_f0582a134b0e14 9-10,28,41-42,52-53,127,143-153,155-157
+lighthouserc.dashboard.json
+  s_6dc718aa5ed0fb::t_413187102bd3d9 38
+config/locales/ja.yml
+  s_6dc718aa5ed0fb::t_e31cb95e9c57c0 1352-1353,1456,1470
+config/locales/nb.yml
+  s_6dc718aa5ed0fb::t_e31cb95e9c57c0 1352-1353,1456,1470
+config/locales/fr.yml
+  s_6dc718aa5ed0fb::t_e31cb95e9c57c0 1352-1353,1456,1470
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "8ec2456c330304a0be6c0d4faf16cb28ae5cb3a4",
+  "prompts": {},
+  "sessions": {
+    "s_6dc718aa5ed0fb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1fb31b65-82d7-41b6-84c2-41c5d368ce3e",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}

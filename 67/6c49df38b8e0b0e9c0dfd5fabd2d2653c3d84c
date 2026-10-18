@@ -1,0 +1,25 @@
+docs/app/views/docs/pages/workflows.rb
+  s_6dc718aa5ed0fb::t_56348a0190bd39 297-298
+  s_6dc718aa5ed0fb::t_bcb2b9fc2e54f3 299-305
+  s_6dc718aa5ed0fb::t_e538b463ce91ca 230-234,296,307-316,651,653-654,672-675,698-699,715,723-725,732-733,786-787
+CHANGELOG.md
+  s_6dc718aa5ed0fb::t_e538b463ce91ca 5
+README.md
+  s_6dc718aa5ed0fb::t_e538b463ce91ca 890,1076
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "676c49df38b8e0b0e9c0dfd5fabd2d2653c3d84c",
+  "prompts": {},
+  "sessions": {
+    "s_6dc718aa5ed0fb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1fb31b65-82d7-41b6-84c2-41c5d368ce3e",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}

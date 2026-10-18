@@ -1,0 +1,31 @@
+CHANGELOG.md
+  s_6dc718aa5ed0fb::t_bfc0f1aa0a8962 5
+spec/integration/workflow/wait_timeout_spec.rb
+  s_6dc718aa5ed0fb::t_36820a2ae0777a 176-189
+docs/app/views/docs/pages/workflows.rb
+  s_6dc718aa5ed0fb::t_bfc0f1aa0a8962 679-680
+README.md
+  s_6dc718aa5ed0fb::t_bfc0f1aa0a8962 890
+spec/integration/workflow/dashboard_data_source_spec.rb
+  s_6dc718aa5ed0fb::t_36820a2ae0777a 130,137-138,171,176
+lib/pgbus/web/data_source/workflow_list.rb
+  s_6dc718aa5ed0fb::t_3bff71799edee8 161-164,171-179
+lib/pgbus/integrations/appsignal/dashboard.json
+  s_6dc718aa5ed0fb::t_bfc0f1aa0a8962 7,523-546
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "368a1817c9cdbcde55981a4f9c59b493523efcf2",
+  "prompts": {},
+  "sessions": {
+    "s_6dc718aa5ed0fb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1fb31b65-82d7-41b6-84c2-41c5d368ce3e",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
