@@ -1,0 +1,28 @@
+spec/pgbus/web/data_source_spec.rb
+  s_0abf69c445fa20::t_725ada26aa8adb 497-498
+  s_0abf69c445fa20::t_7e619c56fb4aca 571-588
+  s_0abf69c445fa20::t_1d4bc26f5c4e9c 619
+lib/pgbus/web/data_source.rb
+  s_0abf69c445fa20::t_36003e6fcd15f5 1635-1636,1639
+  s_0abf69c445fa20::t_c33e0f22aa11ea 1658-1669,1674,1676-1679
+spec/integration/dashboard_failed_lock_priority_spec.rb
+  s_0abf69c445fa20::t_dd81a06a1587f1 1-99
+spec/integration/event_bus_flow_spec.rb
+  s_0abf69c445fa20::t_475cc2dd0486df 119-131
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "9440f6eca727c313fd567a68c61feaaf2c1a6dbf",
+  "prompts": {},
+  "sessions": {
+    "s_0abf69c445fa20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "780215a4-ac92-4464-839c-86e03bcf05b0",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
