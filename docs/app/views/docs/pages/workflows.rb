@@ -676,8 +676,8 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
       YAML
       md <<~'MD'
         On AppSignal, the bundled `main` dashboard (`pgbus dashboard main`) has
-        a workflows row: steps per outcome, step run time, workflows by status
-        and stuck workflows.
+        a workflows row: steps per outcome, step run time, workflows by
+        status, stuck workflows and late waits.
       MD
     end
   end

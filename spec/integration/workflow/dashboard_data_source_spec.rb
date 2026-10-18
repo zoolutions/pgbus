@@ -127,14 +127,15 @@ RSpec.describe "Pgbus::Web::DataSource workflows", :integration do
       wf = run_until(ApprovalWorkflow.start!, statuses: %w[waiting])
       expect(data_source.workflows(status: "waiting").sole).to include(on_timeout: "notify", late_since: nil)
 
+      deadline = steps_of(wf).last.timeout_at
       2.times { expire_wait(wf) }
-      first = wf.events.find { |event| event.event == "wait_timed_out" }.created_at
       queries = []
       row = ActiveSupport::Notifications.subscribed(->(*, payload) { queries << payload[:sql] }, "sql.active_record") do
         data_source.workflows(status: "waiting").sole
       end
 
-      expect(row).to include(on_timeout: "notify", late_since: first, timeout_at: steps_of(wf).last.timeout_at)
+      expect(row).to include(on_timeout: "notify", timeout_at: steps_of(wf).last.timeout_at)
+      expect(row[:late_since]).to be_within(0.001).of(deadline) # the first missed deadline, not when the sweep saw it
       expect(queries.count { |sql| sql.include?("pgbus_workflow_events") }).to eq(1)
     end
 
@@ -167,11 +168,12 @@ RSpec.describe "Pgbus::Web::DataSource workflows", :integration do
         step(:await_approval, wait_for: :approved, wait_timeout: 3600, on_timeout: :notify) { nil }
       end)
       wf = run_until(ApprovalWorkflow.start!, statuses: %w[waiting])
+      deadline = steps_of(wf).last.timeout_at
       2.times { expire_wait(wf) }
 
       detail = data_source.workflow_detail(wf.workflow_id)
 
-      expect(detail[:late_since]).to eq(wf.events.find { |event| event.event == "wait_timed_out" }.created_at)
+      expect(detail[:late_since]).to be_within(0.001).of(deadline)
       expect(detail[:timeline][:wait_timeouts].map { |mark| mark.slice(:step, :action) })
         .to eq([{ step: "await_approval #1", action: "notify" }] * 2)
     end

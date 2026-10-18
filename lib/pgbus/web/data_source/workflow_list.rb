@@ -158,17 +158,25 @@ module Pgbus
           end
         end
 
-        # { step_id => when its wait was first reported late } for waiting
-        # steps with a deadline, one query. Only on_timeout: :notify leaves a
-        # step waiting after a wait_timed_out event (issue #565): every other
-        # on_timeout ends the attempt.
+        # { step_id => the first deadline its wait missed } for waiting steps
+        # with a deadline, one query: the first wait_timed_out event of each.
+        # Only on_timeout: :notify leaves a step waiting after that event
+        # (issue #565): every other on_timeout ends the attempt.
         def late_since(waiting)
           steps = waiting.select { |step| step_attribute(step, :timeout_at) }
           return {} if steps.empty?
 
           WorkflowEvent.where(workflow_id: steps.map(&:workflow_id), step_id: steps.map(&:id),
                               event: WorkflowTimeline::WAIT_TIMED_OUT)
-                       .group(:step_id).minimum(:created_at)
+                       .select("DISTINCT ON (step_id) step_id, details, created_at").order(Arel.sql("step_id, id"))
+                       .to_h { |event| [event.step_id, missed_deadline(event)] }
+        end
+
+        # The deadline the event reports; when it went out, for an event
+        # written without one.
+        def missed_deadline(event)
+          deadline = event.details.to_h["timeout_at"]
+          deadline ? Time.iso8601(deadline) : event.created_at
         end
 
         # The waiting step's on_timeout as its class declares it: nil without

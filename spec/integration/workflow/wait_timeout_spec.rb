@@ -173,6 +173,20 @@ RSpec.describe "Workflow wait timeouts (integration)", :integration do
     end
   end
 
+  it "pauses with WaitTimedOut when the waiting step was removed from the class while it waited" do
+    wf = park(define("RemovedWhileWaiting", on_timeout: :notify))
+    stub_const("RemovedWhileWaiting", Class.new(Pgbus::Workflow) do
+      removed_step :await_payment
+      step(:after) { nil }
+    end)
+    expire!(wf)
+
+    expect(sweep).to include(timed_out: 1)
+    expect(wf.reload.status).to eq("paused")
+    expect(steps_of(wf).last).to have_attributes(status: "failed", outcome: "paused",
+                                                 error_class: "Pgbus::Workflow::WaitTimedOut")
+  end
+
   it "lets exactly one of a racing signal and timeout win" do
     wf = park(define("RacingTimeout", on_timeout: :run))
     expire!(wf)
