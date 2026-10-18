@@ -253,7 +253,7 @@ def bootstrap_integration_tables(conn)
       CREATE UNIQUE INDEX idx_pgbus_workflows_workflow_id ON pgbus_workflows (workflow_id);
       CREATE UNIQUE INDEX idx_pgbus_workflows_one_ongoing
         ON pgbus_workflows (workflow_class, subject_type, subject_id)
-        WHERE status IN ('ready','performing','waiting','paused');
+        WHERE status::text IN ('ready','performing','waiting','paused');
       CREATE UNIQUE INDEX idx_pgbus_workflows_idempotency
         ON pgbus_workflows (workflow_class, idempotency_key) WHERE idempotency_key IS NOT NULL;
       CREATE INDEX idx_pgbus_workflows_status ON pgbus_workflows (status, updated_at);
