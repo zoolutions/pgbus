@@ -303,8 +303,28 @@ RSpec.describe "Job uniqueness (integration)", :integration do
       expect(release(enqueued_at: 1.second.from_now)).to eq(1)
     end
 
-    it "releases an unbound row when the message carries no enqueued_at" do
+    # Without a send time nothing says the unbound row is this message's (it
+    # may be a parked retry's it handed over, or a successor's): only the row
+    # bound to it goes, and the reaper takes an orphan.
+    it "keeps an unbound row when the message's send time is unknown" do
       Pgbus::UniquenessKey.acquire!("unique-order-42", queue_name: "default", msg_id: 0)
+
+      expect(release(enqueued_at: nil)).to eq(0)
+      expect(Pgbus::UniquenessKey.release_all_held_by!([["unique-order-42", "default", 7, nil]])).to eq(0)
+    end
+
+    # msg_id 0 is no message: it must not match an unbound row as "bound".
+    it "matches nothing as bound for a holder without a msg_id" do
+      Pgbus::UniquenessKey.acquire!("unique-order-42", queue_name: "default", msg_id: 0)
+
+      expect(release(msg_id: 0, enqueued_at: nil)).to eq(0)
+      expect(Pgbus::UniquenessKey.release_all_held_by!([["unique-order-42", "default", 0, nil]])).to eq(0)
+      expect(Pgbus::UniquenessKey.unbind!("unique-order-42", from_queue_name: "default", from_msg_id: 0,
+                                                             from_enqueued_at: nil, queue_name: "default")).to be_nil
+    end
+
+    it "still releases the row bound to it when the send time is unknown" do
+      Pgbus::UniquenessKey.acquire!("unique-order-42", queue_name: "default", msg_id: 7)
 
       expect(release(enqueued_at: nil)).to eq(1)
     end
@@ -330,8 +350,8 @@ RSpec.describe "Job uniqueness (integration)", :integration do
         ]
       )
 
-      expect(released).to eq(3)
-      expect(Pgbus::UniquenessKey.pluck(:lock_key)).to contain_exactly("bound-elsewhere", "unbound-successor")
+      expect(released).to eq(2)
+      expect(Pgbus::UniquenessKey.pluck(:lock_key)).to contain_exactly("bound-elsewhere", "unbound-successor", "no-sent-at")
     end
 
     it "quotes the keys and queues it is given" do

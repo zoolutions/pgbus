@@ -60,7 +60,10 @@ class Views::Docs::Pages::ConcurrencyUniqueness < DocsUI::Page
         A finishing message releases only the lock it holds: a lock that moved
         onto the job's retry, or that another job took after an operator
         released it, stays. Discarding a job, a failed job or a dead-lettered
-        copy from the dashboard follows the same rule; the Locks page's own
+        copy from the dashboard follows the same rule, judged by when the
+        job's message was sent (a dead-lettered copy carries its original's
+        send time); when that is unknown, only a lock bound to the message is
+        freed and the dispatcher's reaper takes the rest. The Locks page's own
         Release still frees the key itself.
       MD
     end

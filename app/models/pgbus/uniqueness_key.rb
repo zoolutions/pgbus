@@ -94,20 +94,21 @@ module Pgbus
     # acquired after the send is a successor's. created_at is a timestamp
     # without time zone written in the session's zone, and the cast compares
     # it in that same zone; PGMQ's enqueued_at string carries its offset.
-    HELD_BY_CONDITION = "lock_key = $1 AND ((queue_name = $2 AND msg_id = $3) OR " \
+    HELD_BY_CONDITION = "lock_key = $1 AND ((queue_name = $2 AND msg_id = $3 AND msg_id > 0) OR " \
                         "((msg_id <= 0 OR queue_name = $5) AND created_at <= $4::timestamptz))"
     private_constant :HELD_BY_CONDITION
 
     # Release the lock a finishing message holds (success or DLQ). Unlike the
     # key-only release!, it leaves a row that has moved on: handed to the
     # message's retry (unbind!), or taken by a successor after this
-    # message's own row went. A message without an enqueued_at releases any
-    # unbound row, as release! did.
+    # message's own row went. +enqueued_at+ is when that message was sent;
+    # without it only the row bound to the message goes (an unbound row could
+    # be a retry's it handed over), and the reaper takes an orphan.
     def self.release_held_by!(lock_key, queue_name:, msg_id:, enqueued_at:)
       Thread.current[:pgbus_uniqueness_created_at]&.delete(lock_key)
       connection.exec_delete(
         "DELETE FROM #{table_name} WHERE #{HELD_BY_CONDITION}",
-        "UniquenessKey Release Held By", held_by_binds(lock_key, queue_name, msg_id, sent_at_literal(enqueued_at, "infinity"))
+        "UniquenessKey Release Held By", held_by_binds(lock_key, queue_name, msg_id, sent_at_literal(enqueued_at))
       )
     end
 
@@ -121,7 +122,7 @@ module Pgbus
     # bind!, or nil when the attempt no longer holds the key. Without the
     # attempt's enqueued_at only a row bound to it is taken.
     def self.unbind!(lock_key, from_queue_name:, from_msg_id:, from_enqueued_at:, queue_name:)
-      binds = held_by_binds(lock_key, from_queue_name, from_msg_id, sent_at_literal(from_enqueued_at, "-infinity"))
+      binds = held_by_binds(lock_key, from_queue_name, from_msg_id, sent_at_literal(from_enqueued_at))
       result = connection.exec_query(
         "UPDATE #{table_name} SET queue_name = $6, msg_id = 0, created_at = CURRENT_TIMESTAMP " \
         "WHERE #{HELD_BY_CONDITION} RETURNING created_at",
@@ -137,11 +138,11 @@ module Pgbus
       holders.each_slice(1000).sum do |slice|
         values = slice.map do |lock_key, queue_name, msg_id, enqueued_at|
           "(#{connection.quote(lock_key.to_s)}, #{connection.quote(queue_name.to_s)}, #{msg_id.to_i}, " \
-            "#{connection.quote(sent_at_literal(enqueued_at, "infinity"))}::timestamptz)"
+            "#{connection.quote(sent_at_literal(enqueued_at))}::timestamptz)"
         end
         connection.exec_delete(
           "DELETE FROM #{table_name} AS u USING (VALUES #{values.join(", ")}) AS m(lock_key, queue_name, msg_id, sent_at) " \
-          "WHERE u.lock_key = m.lock_key AND ((u.queue_name = m.queue_name AND u.msg_id = m.msg_id) OR " \
+          "WHERE u.lock_key = m.lock_key AND ((u.queue_name = m.queue_name AND u.msg_id = m.msg_id AND u.msg_id > 0) OR " \
           "((u.msg_id <= 0 OR u.queue_name = $1) AND u.created_at <= m.sent_at))",
           "UniquenessKey Release All Held By", [Uniqueness::PLACEHOLDER_QUEUE]
         )
@@ -157,10 +158,11 @@ module Pgbus
     # offset. PGMQ hands over a String that already does; a Time (the
     # dashboard reads it through ActiveRecord) or epoch seconds would
     # otherwise be bound as zone-less digits and read in the session's zone.
-    # +missing+ stands in for an unknown send time.
-    def self.sent_at_literal(enqueued_at, missing)
+    # An unknown send time is -infinity: no unbound row counts as the
+    # message's own.
+    def self.sent_at_literal(enqueued_at)
       sent_at = enqueued_at.is_a?(Numeric) ? Time.at(enqueued_at) : enqueued_at
-      return missing if sent_at.nil?
+      return "-infinity" if sent_at.nil?
 
       sent_at.respond_to?(:iso8601) ? sent_at.iso8601(6) : sent_at.to_s
     end

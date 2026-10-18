@@ -37,11 +37,14 @@ RSpec.describe "Dashboard failed event handlers (integration)", :integration do
     client.ensure_queue(queue_name)
   end
 
-  # Helper: enqueue a message, register a failed_event row pointing to it,
-  # and acquire the uniqueness lock — mimicking what happens after a job fails.
+  # Helper: acquire the uniqueness lock, enqueue the message and bind the lock
+  # to it (the adapter's order), then register a failed_event row pointing to
+  # it — mimicking what happens after a job fails. A lock acquired after the
+  # send would be a successor's, which a discard leaves alone (issue #564).
   def setup_failed_message
-    msg_id = client.send_message(queue_name, payload)
     Pgbus::UniquenessKey.acquire!(lock_key, queue_name: queue_name, msg_id: 0)
+    msg_id = client.send_message(queue_name, payload)
+    Pgbus::UniquenessKey.bind!(lock_key, queue_name: queue_name, msg_id: msg_id)
     Pgbus::FailedEventRecorder.record!(
       queue_name: queue_name,
       msg_id: msg_id,
@@ -106,8 +109,8 @@ RSpec.describe "Dashboard failed event handlers (integration)", :integration do
       msg_ids = 3.times.map do |i|
         key = "TestJob:#{i}"
         msg_payload = payload.merge(Pgbus::Uniqueness::METADATA_KEY => key, "arguments" => [i])
-        msg_id = client.send_message(queue_name, msg_payload)
         Pgbus::UniquenessKey.acquire!(key, queue_name: queue_name, msg_id: 0)
+        msg_id = client.send_message(queue_name, msg_payload)
         Pgbus::FailedEventRecorder.record!(
           queue_name: queue_name, msg_id: msg_id, payload: msg_payload, headers: nil,
           error: StandardError.new("boom #{i}"), retry_count: 0

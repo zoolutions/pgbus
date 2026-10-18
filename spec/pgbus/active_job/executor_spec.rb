@@ -174,6 +174,7 @@ RSpec.describe Pgbus::ActiveJob::Executor do
         expect(dead_letter_block).to include(
           "reason" => "max_retries_exceeded", "source" => "worker",
           "source_queue" => config.queue_name(queue_name), "source_msg_id" => 7,
+          "source_enqueued_at" => message.enqueued_at,
           "attempts" => config.max_retries + 1, "max_retries" => config.max_retries,
           "error_class" => "Stripe::CardError", "error_message" => "Your card was declined",
           "backtrace" => "app/jobs/pay.rb:12", "error_attempt" => config.max_retries

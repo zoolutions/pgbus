@@ -72,6 +72,7 @@ RSpec.describe "Dead-letter reason headers (integration)", :integration do
     expect(block).to include(
       "version" => 1, "reason" => "max_retries_exceeded", "source" => "worker",
       "source_queue" => config.queue_name(queue), "source_msg_id" => source.msg_id.to_i,
+      "source_enqueued_at" => source.enqueued_at,
       "attempts" => 3, "max_retries" => 2,
       "error_class" => "ArgumentError", "error_message" => "card declined", "error_attempt" => 2
     )
