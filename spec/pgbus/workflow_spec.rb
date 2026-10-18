@@ -273,6 +273,36 @@ RSpec.describe Pgbus::Workflow do
     end
   end
 
+  describe "the step signal readers" do
+    let(:workflow) { klass.new(record) }
+
+    it "raise NotInStep outside a step, naming the reader" do
+      expect { workflow.woken? }.to raise_error(described_class::NotInStep, /woken\? can only be called inside a step/)
+      expect { workflow.signal_ready? }.to raise_error(described_class::NotInStep, /signal_ready\? can only be called inside a step/)
+    end
+
+    it "answer false in a step entered without a signal peek" do
+      workflow.send(:enter_step, described_class::StepContext::Attempt.new(step_id: 1, step_name: "charge", attempt: 1))
+
+      expect([workflow.woken?, workflow.signal_ready?]).to eq([false, false])
+    end
+
+    it "keep what the gate answered, and start over on the next attempt" do
+      peek = instance_double(described_class::SignalPeek, held: nil, ready: nil)
+      workflow.send(:enter_step, described_class::StepContext::Attempt.new(step_id: 1, step_name: "charge", attempt: 1),
+                    signals: peek)
+      workflow.send(:enter_wait, signal: double("WorkflowSignal"), timed_out: false, woken: true)
+      expect([workflow.woken?, workflow.signal_ready?]).to eq([true, true])
+
+      workflow.send(:enter_step, described_class::StepContext::Attempt.new(step_id: 2, step_name: "charge", attempt: 2),
+                    signals: peek)
+      answers = Array.new(2) { [workflow.woken?, workflow.signal_ready?] }
+      expect(answers).to eq([[false, false], [false, false]])
+      expect(peek).to have_received(:held).once
+      expect(peek).to have_received(:ready).once
+    end
+  end
+
   describe "readers" do
     it "loads arguments with indifferent access and a nil subject for a subject-less run" do
       serialized = ActiveJob::Arguments.serialize([{ plan: "pro" }]).first

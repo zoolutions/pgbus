@@ -13,7 +13,8 @@ module Pgbus
     #    heartbeat is on: its worker died, and the stall action applies now.
     # 2. Guards, still under the lock: the class or the step no longer
     #    defined (pause with StepNotDefined, or skip a removed_step),
-    #    cancel_if, skip_if.
+    #    cancel_if, skip_if (which read woken? and signal_ready? through the
+    #    attempt's SignalPeek), then a wait_for: step's signal gate.
     # 3. The body, outside any transaction, inside `catch` for the
     #    flow-control verbs and `rescue StandardError` for the policies.
     # 4. The outcome, under the lock again (StepOutcome).
@@ -21,7 +22,9 @@ module Pgbus
     # Whatever the step's outcome, the job itself completes normally: the
     # step row and the pgbus.workflow.* events carry the truth.
     class StepExecution
-      Claim = Data.define(:record, :step, :klass, :definition, :workflow, :guard_error)
+      # +adopt_held+: a guard raised before the gate, so the signal the step
+      # holds is put on this attempt's row before its outcome (Signals.adopt_held).
+      Claim = Data.define(:record, :step, :klass, :definition, :workflow, :guard_error, :adopt_held)
 
       def initialize(step_id, delivery: Pgbus::ActiveJob::Delivery.current, config: Pgbus.configuration)
         @step_id = step_id
@@ -103,15 +106,23 @@ module Pgbus
         return undefined!(record, step, notes, "#{record.workflow_class} is not a Pgbus::Workflow class any more") unless klass
 
         unless definition
-          return skip!(record, step, notes, klass) if klass.workflow_steps.removed?(step.step_name)
+          if klass.workflow_steps.removed?(step.step_name)
+            # The definition is gone, so whether it waited is unknown: look for a
+            # held signal only where the signal schema exists.
+            Signals.adopt_held(step, WorkflowSignal.held_by_step(record.workflow_id, step.step_name)) if Sweep.waiting_ready?
+            return skip!(record, step, notes, klass)
+          end
 
           return undefined!(record, step, notes, "#{klass.name} has no step #{step.step_name} " \
                                                  "(declare `removed_step :#{step.step_name}` to skip it)")
         end
 
         workflow = klass.new(record)
-        workflow.send(:enter_step, StepContext::Attempt.new(step_id: step.id, step_name: step.step_name, attempt: step.attempt))
-        claim = Claim.new(record: record, step: step, klass: klass, definition: definition, workflow: workflow, guard_error: nil)
+        peek = SignalPeek.new(record, step, definition)
+        workflow.send(:enter_step, StepContext::Attempt.new(step_id: step.id, step_name: step.step_name, attempt: step.attempt),
+                      signals: peek)
+        claim = Claim.new(record: record, step: step, klass: klass, definition: definition, workflow: workflow, guard_error: nil,
+                          adopt_held: false)
         begin
           verdict = workflow.send(:guarding) do
             next FlowControl::Outcome.cancel if cancel?(klass, workflow)
@@ -119,20 +130,23 @@ module Pgbus
             FlowControl::Outcome.skip if definition.skip?(workflow)
           end
         rescue StandardError => e
-          return claim.with(guard_error: e)
+          return claim.with(guard_error: e, adopt_held: definition.waits_for_signal?)
         end
-        return outcome!(record, step, notes, klass, verdict) if verdict
+        if verdict
+          Signals.adopt_held(step, peek.held)
+          return outcome!(record, step, notes, klass, verdict)
+        end
 
-        gate(record, step, definition, workflow, claim)
+        gate(record, step, definition, workflow, claim, peek)
       end
 
       # A wait_for: step runs only with a signal (or once its wait timed
       # out); without one it parks and this delivery ends. A matcher that
       # raises is handed to the exception policies, like a guard.
-      def gate(record, step, definition, workflow, claim)
+      def gate(record, step, definition, workflow, claim, peek)
         return claim unless definition.waits_for_signal?
 
-        Signals.gate(record, step, definition, workflow) ? claim : nil
+        Signals.gate(record, step, definition, workflow, peek: peek) ? claim : nil
       rescue StandardError => e
         claim.with(guard_error: e)
       end
@@ -185,6 +199,9 @@ module Pgbus
           next park_fan_out(record, claim, outcome, notes) if outcome&.action == :fan_out
 
           notes.report(decision.handler_error, handler_context(claim)) if decision&.handler_error
+          # Here rather than in the claim's transaction, which the statement
+          # a guard failed on may have aborted.
+          Signals.adopt_held(claim.step, SignalPeek.new(record, claim.step, claim.definition).held) if claim.adopt_held
           StepOutcome.apply(record, claim.step, outcome, notes: notes, error: error, output: claim.workflow.pending_output,
                                                          report: decision ? decision.report : true, duration: duration,
                                                          klass: claim.klass)

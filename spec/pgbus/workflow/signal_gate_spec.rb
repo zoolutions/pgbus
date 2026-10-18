@@ -70,6 +70,23 @@ RSpec.describe "Pgbus::Workflow::StepExecution signal gate" do # rubocop:disable
     expect(options[:error]).to be_a(ArgumentError)
   end
 
+  it "records the signal the step holds on the attempt's row when a guard ends the attempt before the gate" do
+    calls = ran
+    klass.step(:held, skip_if: -> { true }, wait_for: :shipped) { calls << :held }
+    allow(step).to receive_messages(step_name: "held", signal_id: nil)
+    order = []
+    allow(step).to receive(:update_columns) { |attrs| order << attrs }
+    allow(Pgbus::Workflow::StepOutcome).to receive(:apply) { |*, **| order << :outcome }
+    allow(Pgbus::WorkflowSignal).to receive(:held_by_step).with("wf-1", "held").and_return(double("WorkflowSignal", id: 7))
+    allow(Pgbus::Workflow::Signals).to receive(:gate)
+
+    perform
+
+    expect(order).to eq([{ signal_id: 7 }, :outcome])
+    expect(ran).to be_empty
+    expect(Pgbus::Workflow::Signals).not_to have_received(:gate)
+  end
+
   it "skips the gate for a step that does not wait" do
     calls = ran
     klass.step(:plain) { calls << :plain }

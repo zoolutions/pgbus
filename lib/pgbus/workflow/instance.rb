@@ -94,6 +94,33 @@ module Pgbus
         @timed_out == true
       end
 
+      # Inside a step (its guards and its body): true when this attempt holds
+      # a signal before its gate runs: signal! woke the step, or an earlier
+      # attempt of it took one and reattempted or failed into a pause. False
+      # on an attempt that has not waited yet (even one whose gate then takes
+      # a buffered signal), after an on_timeout: :run wake, and in a step
+      # without wait_for:. The same answer for the whole attempt.
+      def woken?
+        step_context!(:woken?)
+        @woken = !@signal_peek&.held.nil? if @woken.nil?
+        @woken
+      end
+
+      # Inside a step (its guards and its body): true when the gate runs this
+      # attempt with a signal: the one it holds (woken?), or a pending one its
+      # wait_for: matcher takes. The guard for "skip a wait the record already
+      # passed", which neither skips a signalled step nor leaves its signal
+      # pending. False after an on_timeout: :run wake (the gate takes no
+      # signal then) and in a step without wait_for:. Reads only: the gate
+      # claims the signal after the guards.
+      #
+      #   step :await_shipped, skip_if: -> { subject.shipped? && !signal_ready? }, wait_for: :shipped do … end
+      def signal_ready?
+        step_context!(:signal_ready?)
+        @signal_ready = !@signal_peek&.ready.nil? if @signal_ready.nil?
+        @signal_ready
+      end
+
       # Deliver a signal to this run. Stored under the run's lock; a step
       # waiting for it (wait_for:) is woken at once, otherwise it waits,
       # pending, for the step that claims it. With an idempotency_key a
@@ -164,19 +191,25 @@ module Pgbus
         @guarding = false
       end
 
-      # Used by the StepJob only.
-      def enter_step(context)
+      # Used by the StepJob only. +signals+ is the attempt's SignalPeek, which
+      # woken? and signal_ready? read until the gate answers them.
+      def enter_step(context, signals: nil)
         @step_context = context
+        @signal_peek = signals
         @output_values = nil
         @pending_output = nil
         @received_signal = nil
         @timed_out = false
+        @woken = nil
+        @signal_ready = nil
       end
 
       # Used by the StepJob's signal gate only.
-      def enter_wait(signal:, timed_out:)
+      def enter_wait(signal:, timed_out:, woken: false)
         @received_signal = signal
         @timed_out = timed_out
+        @woken = woken
+        @signal_ready = !signal.nil?
       end
     end
   end
