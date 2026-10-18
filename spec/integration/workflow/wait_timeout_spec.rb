@@ -92,6 +92,87 @@ RSpec.describe "Workflow wait timeouts (integration)", :integration do
     expect(late.reload.status).to eq("pending")
   end
 
+  describe "on_timeout: :notify (issue #565)" do
+    # [[name, payload]] of the pgbus.workflow.step and wait_timed_out
+    # notifications sent while the block runs.
+    def notified(&)
+      seen = []
+      callback = ->(name, _start, _finish, _id, payload) { seen << [name, payload] }
+      ActiveSupport::Notifications.subscribed(callback, /\Apgbus\.workflow\.(step|wait_timed_out)\z/, &)
+      seen
+    end
+
+    it "reports the missed deadline, keeps the same attempt waiting and moves timeout_at one wait_timeout on" do
+      wf = park(define("NotifyOnTimeout", on_timeout: :notify))
+      expire!(wf)
+      deadline = steps_of(wf).last.timeout_at
+
+      seen = notified { expect(sweep).to include(timed_out: 1) }
+
+      expect(wf.reload.status).to eq("waiting")
+      expect(steps_of(wf).size).to eq(1)
+      expect(steps_of(wf).last).to have_attributes(status: "waiting", attempt: 1, outcome: nil, wait_for: "paid")
+      expect(steps_of(wf).last.timeout_at).to be_within(0.001).of(deadline + 3600)
+      timed_out = wf.events.select { |event| event.event == "wait_timed_out" }
+      expect(timed_out.map { |event| [event.actor, event.details["action"], event.attempt] }).to eq([["system", "notify", 1]])
+      expect(seen.map(&:first)).to eq(["pgbus.workflow.wait_timed_out"])
+      expect(seen.first.last).to include(workflow_class: "NotifyOnTimeout", step_name: "await_payment", attempt: 1, action: "notify")
+      expect(logged).to be_empty
+    end
+
+    it "lets a later signal wake that same attempt, whose body runs with the signal and not timed out" do
+      wf = park(define("NotifyThenSignal", on_timeout: :notify))
+      expire!(wf)
+      sweep
+
+      wf.signal!(:paid)
+      run_until(wf, statuses: %w[finished])
+
+      expect(logged).to eq([["paid", false], :after])
+      expect(steps_of(wf).map { |step| [step.step_name, step.attempt, step.status] })
+        .to eq([["await_payment", 1, "completed"], ["after", 1, "completed"]])
+    end
+
+    it "notifies once per sweep however many deadlines it missed, and moves to the next one ahead of now" do
+      wf = park(define("NotifyLate", on_timeout: :notify))
+      steps_of(wf).last.update_columns(timeout_at: 150.minutes.ago, waiting_since: 210.minutes.ago)
+      first = steps_of(wf).last.timeout_at
+
+      expect(Pgbus::Workflow::WaitTimeout.expire_due(limit: 1, max_batches: 5)).to eq(1)
+
+      # 150 minutes late on an hourly deadline: missed at -150, -90 and -30 minutes; next at +30.
+      expect(steps_of(wf).last.timeout_at).to be_within(0.001).of(first + (3 * 3600))
+      expect(events_of(wf).count("wait_timed_out")).to eq(1)
+      expect(sweep).to include(timed_out: 0)
+    end
+
+    it "does not fire while the run is paused, and fires again once it is resumed and late" do
+      wf = park(define("NotifyPaused", on_timeout: :notify))
+      wf.pause!
+      expire!(wf)
+      expect(sweep).to include(timed_out: 0)
+      expect(events_of(wf)).not_to include("wait_timed_out")
+
+      wf.resume!
+      expect(wf.status).to eq("waiting")
+      expire!(wf)
+      expect(sweep).to include(timed_out: 1)
+      expect(wf.reload.status).to eq("waiting")
+    end
+
+    it "applies through expire_wait before the deadline too: timeout_at moves one wait_timeout on" do
+      wf = park(define("NotifyInline", on_timeout: :notify))
+      deadline = steps_of(wf).last.timeout_at
+
+      expire_wait(wf)
+
+      expect(wf.status).to eq("waiting")
+      expect(steps_of(wf).last).to have_attributes(status: "waiting", attempt: 1)
+      expect(steps_of(wf).last.timeout_at).to be_within(0.001).of(deadline + 3600)
+      expect(events_of(wf).count("wait_timed_out")).to eq(1)
+    end
+  end
+
   it "lets exactly one of a racing signal and timeout win" do
     wf = park(define("RacingTimeout", on_timeout: :run))
     expire!(wf)

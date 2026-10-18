@@ -12,6 +12,7 @@ module Pgbus
     #   pgbus_workflows_paused_total{workflow_class, error_class}            counter (error_class absent for a manual pause)
     #   pgbus_workflows_cancelled_total{workflow_class}                      counter
     #   pgbus_workflow_stalls_total{workflow_class, step, detection}         counter (detection: redelivery | sweep)
+    #   pgbus_workflow_wait_overdue_total{workflow_class, step}              counter (a missed on_timeout: :notify deadline)
     #   pgbus_workflows{workflow_class, status}                              gauge, from each sweep
     #   pgbus_workflows_stuck{workflow_class, reason}                        gauge, from each sweep
     #
@@ -20,7 +21,7 @@ module Pgbus
     module WorkflowMetrics
       EVENTS = %w[
         pgbus.workflow.step pgbus.workflow_finished pgbus.workflow_paused pgbus.workflow_cancelled
-        pgbus.workflow.stall_detected pgbus.workflow.gauge
+        pgbus.workflow.stall_detected pgbus.workflow.wait_timed_out pgbus.workflow.gauge
       ].freeze
 
       module_function
@@ -37,6 +38,7 @@ module Pgbus
         when "pgbus.workflow_cancelled" then [counter("pgbus_workflows_cancelled_total", workflow_class: klass)]
         when "pgbus.workflow.stall_detected"
           [counter("pgbus_workflow_stalls_total", workflow_class: klass, step: payload[:step_name], detection: payload[:detection])]
+        when "pgbus.workflow.wait_timed_out" then wait_timed_out_samples(klass, payload)
         when "pgbus.workflow.gauge" then gauge_samples(payload)
         else []
         end
@@ -47,6 +49,14 @@ module Pgbus
         samples = [[:counter, "pgbus_workflow_steps_total", 1, tags]]
         samples.unshift([:histogram, "pgbus_workflow_step_duration_seconds", payload[:duration], tags]) if payload[:duration]
         samples
+      end
+
+      # Only :notify keeps waiting past the deadline; every other on_timeout
+      # ends the wait and is counted by the step or run it ends.
+      def wait_timed_out_samples(klass, payload)
+        return [] unless payload[:action] == "notify"
+
+        [counter("pgbus_workflow_wait_overdue_total", workflow_class: klass, step: payload[:step_name])]
       end
 
       def gauge_samples(payload)

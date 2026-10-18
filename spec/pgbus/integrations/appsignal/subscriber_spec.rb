@@ -495,6 +495,17 @@ RSpec.describe "Pgbus::Integrations::Appsignal::Subscriber" do
       )
     end
 
+    it "counts a missed on_timeout: :notify deadline as an overdue wait (issue #565)" do
+      ActiveSupport::Notifications.instrument("pgbus.workflow.wait_timed_out", **base, step_name: "await_approval",
+                                                                                       attempt: 1, action: "notify")
+      ActiveSupport::Notifications.instrument("pgbus.workflow.wait_timed_out", **base, step_name: "await_approval",
+                                                                                       attempt: 1, action: "pause!")
+
+      expect(appsignal_class.counters).to eq(
+        [["pgbus_workflow_wait_overdue_total", 1, { workflow_class: "SignupWorkflow", step: "await_approval" }]]
+      )
+    end
+
     it "sets the status and stuck-reason gauges" do
       ActiveSupport::Notifications.instrument(
         "pgbus.workflow.gauge",
