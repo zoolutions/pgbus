@@ -17,9 +17,9 @@ RSpec.describe Pgbus::Streams::Presence do
 
   before do
     # Force the single-database path (Pgbus.configuration.connects_to == nil)
-    # so the spec doesn't require BusRecord to be connected. The multi-DB
-    # branch is a one-line delegation to BusRecord.connection.raw_connection
-    # and is exercised by spec/integration/streams/presence_spec.rb.
+    # so the spec doesn't require BusRecord to be connected. The connects_to
+    # branch (Pgbus::BusRecord's adapter) is covered by
+    # spec/pgbus/streams/presence_adapter_lock_spec.rb.
     allow(Pgbus.configuration).to receive(:connects_to).and_return(nil)
     stub_const("ActiveRecord::Base", Class.new)
     allow(ActiveRecord::Base).to receive(:connection).and_return(ar_connection)
@@ -603,9 +603,7 @@ RSpec.describe Pgbus::Streams::Presence do
       end.to raise_error(Pgbus::ConfigurationError, /requires ActiveRecord/)
     end
 
-    # The connects_to branch (Pgbus::BusRecord.connection.raw_connection)
-    # is exercised by spec/integration/streams/presence_spec.rb against
-    # a real DB — it's a 3-line delegation not worth stubbing AR's full
-    # internals for here.
+    # The connects_to branch (Pgbus::BusRecord's adapter) is covered by
+    # spec/pgbus/streams/presence_adapter_lock_spec.rb.
   end
 end

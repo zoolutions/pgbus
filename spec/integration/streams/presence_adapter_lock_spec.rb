@@ -17,13 +17,30 @@ RSpec.describe "Streams: presence statements hold the adapter lock", :integratio
   # (and hold row locks) inside the pinned transaction.
   before do
     presence_class.reset_schema_cache!
-    pool.pin_connection!(true)
+    pin_pool
   end
 
   after do
     threads.each(&:kill)
-    pool.unpin_connection!
+    unpin_pool
     presence_class.reset_schema_cache!
+  end
+
+  # What ActiveRecord::TestFixtures does with lock_threads on: Rails 7.2+
+  # pins the pool, Rails 7.1 locks it to the current thread.
+  def pin_pool
+    return pool.pin_connection!(true) if pool.respond_to?(:pin_connection!)
+
+    pool.connection.begin_transaction(joinable: false, _lazy: false)
+    pool.lock_thread = true
+  end
+
+  def unpin_pool
+    return pool.unpin_connection! if pool.respond_to?(:unpin_connection!)
+
+    connection = pool.connection
+    connection.rollback_transaction if connection.transaction_open?
+    pool.lock_thread = false
   end
 
   def spawn(&)

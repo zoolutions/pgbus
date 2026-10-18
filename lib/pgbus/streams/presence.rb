@@ -72,6 +72,7 @@ module Pgbus
       @schema_mutex = Mutex.new
       @seats_supported = nil
       @probed_at = nil
+      @schema_generation = 0
 
       class << self
         # True when pgbus_presence_members has the seat columns (the
@@ -85,10 +86,11 @@ module Pgbus
         # The probe itself runs outside @schema_mutex (issue #566): it waits
         # for the adapter's lock, and a request inside a transaction holds
         # that lock while it asks seats_supported?. Two threads may probe at
-        # once; a true answer one of them stored is never taken back.
+        # once; a true answer one of them stored is never taken back, and a
+        # probe that a reset_schema_cache! overtook stores nothing.
         def seats_supported?
-          cached = @schema_mutex.synchronize do
-            @seats_supported if schema_answer_fresh?(@seats_supported, @probed_at)
+          cached, generation = @schema_mutex.synchronize do
+            [(@seats_supported if schema_answer_fresh?(@seats_supported, @probed_at)), @schema_generation]
           end
           return cached unless cached.nil?
 
@@ -99,6 +101,8 @@ module Pgbus
           SQL
           supported = !rows.to_a.empty?
           @schema_mutex.synchronize do
+            next supported unless generation == @schema_generation
+
             @probed_at = monotonic_now
             @seats_supported ||= supported
           end
@@ -117,6 +121,7 @@ module Pgbus
 
         def reset_schema_cache!
           @schema_mutex.synchronize do
+            @schema_generation += 1
             @probed_at = nil
             @seats_supported = nil
           end

@@ -98,7 +98,7 @@ main_only:
       guards the test resets of the filters registry and the coalescer; main Ractor
   - name: Pgbus::Streams::Presence.@schema_mutex
     reason: >-
-      guards the seats schema probe; taken by presence writes on the main Ractor
+      guards the seats schema answer and its reset generation (the probe itself runs outside it, issue #566); taken by presence writes on the main Ractor
   - name: Pgbus::Testing.@mode_lock
     reason: >-
       guards the process-wide test mode; the test suite runs on the main Ractor

@@ -4,23 +4,30 @@ require "spec_helper"
 require "pg"
 require "monitor"
 require "pgbus/streams/presence"
+# Loaded with the real ActiveRecord::Base, before the examples stub it.
+require "pgbus/bus_record"
 
 # Every presence statement runs under the ActiveRecord adapter's lock (issue
 # #566). `raw_connection` releases that lock as soon as it returns the
 # PG::Connection, so a statement run on it afterwards is unguarded: on a
 # pinned connection (transactional tests) another thread could put its own
 # statement on the same libpq connection mid-flight. A real Monitor stands in
-# for the adapter's (a ThreadMonitor once the pool is pinned, a NullLock
-# otherwise); spec/integration/streams/presence_adapter_lock_spec.rb drives a
-# real pinned pool.
+# for the adapter's (a ThreadMonitor once the pool is pinned to a thread, a
+# Monitor when pinned to a fiber, a NullLock otherwise);
+# spec/integration/streams/presence_adapter_lock_spec.rb drives a real pinned
+# pool.
 RSpec.describe Pgbus::Streams::Presence do
   subject(:presence) { described_class.new(stream) }
 
   let(:stream) { double("Pgbus::Streams::Stream", name: "room:42") }
   let(:raw_connection) { double("PG::Connection") }
   let(:adapter_lock) { Monitor.new }
+  # Like AbstractAdapter#raw_connection: with_raw_connection takes the lock
+  # to hand the connection out and releases it on return.
   let(:ar_connection) do
-    double("ActiveRecord::ConnectionAdapters::PostgreSQLAdapter", raw_connection: raw_connection, lock: adapter_lock)
+    double("ActiveRecord::ConnectionAdapters::PostgreSQLAdapter", lock: adapter_lock).tap do |adapter|
+      allow(adapter).to receive(:raw_connection) { adapter_lock.synchronize { raw_connection } }
+    end
   end
   let(:seat_row) do
     { "member_id" => "7", "metadata" => "{}", "joined_at" => "t", "last_seen_at" => "t",
@@ -75,6 +82,35 @@ RSpec.describe Pgbus::Streams::Presence do
       expect(held).to eq([true])
     ensure
       described_class.reset_schema_cache!
+    end
+  end
+
+  context "with connects_to (the pgbus tables in their own database)" do
+    let(:bus_lock) { Monitor.new }
+    let(:bus_raw_connection) { double("PG::Connection (pgbus database)") }
+    let(:bus_adapter) do
+      double("ActiveRecord::ConnectionAdapters::PostgreSQLAdapter (pgbus)", lock: bus_lock).tap do |adapter|
+        allow(adapter).to receive(:raw_connection) { bus_lock.synchronize { bus_raw_connection } }
+      end
+    end
+
+    before do
+      allow(Pgbus.configuration).to receive(:connects_to).and_return({ database: { writing: :pgbus } })
+      stub_const("Pgbus::BusRecord", Class.new)
+      allow(Pgbus::BusRecord).to receive(:connection).and_return(bus_adapter)
+    end
+
+    it "runs the statement on Pgbus::BusRecord's connection while holding that adapter's lock" do
+      held = []
+      allow(bus_raw_connection).to receive(:exec_params) do
+        held << bus_lock.mon_owned?
+        [{ "n" => "2" }]
+      end
+      allow(raw_connection).to receive(:exec_params)
+
+      expect(presence.count).to eq(2)
+      expect(held).to eq([true])
+      expect(raw_connection).not_to have_received(:exec_params)
     end
   end
 
@@ -178,6 +214,23 @@ RSpec.describe Pgbus::Streams::Presence do
 
       expect(described_class.seats_supported?).to be(true)
       expect(probes).to eq(2)
+    end
+
+    # A request that hit the pre-seat conflict target resets the cache while
+    # a sweep's probe, started before the migration, is still in flight. The
+    # sweep's stale "no seats" must not become the fresh cached answer, or the
+    # destructive member-keyed statements would drop `connection_id IS NULL`.
+    it "does not store an answer from a probe that a reset overtook" do
+      answers = [[], [{ "present" => "1" }]]
+      allow(raw_connection).to receive(:exec_params) do
+        answer = answers.shift
+        described_class.reset_schema_cache! if answers.size == 1
+        answer
+      end
+
+      expect(described_class.seats_supported?).to be(false)
+      expect(described_class.seats_supported?).to be(true)
+      expect(answers).to be_empty
     end
   end
 end
