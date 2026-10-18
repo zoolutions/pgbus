@@ -1,0 +1,26 @@
+lib/pgbus/process/worker.rb
+  s_0abf69c445fa20::t_4a2ab71378d5ac 410-415,418-419,421,424
+spec/integration/uniqueness_retry_wait_spec.rb
+  s_0abf69c445fa20::t_711b4e5e6b0317 225-248
+spec/integration/dashboard_failed_lock_priority_spec.rb
+  s_0abf69c445fa20::t_e32ac28bae457e 89-91,96,102-103
+  s_0abf69c445fa20::t_ba5a40ea7048fc 17-18,25
+spec/pgbus/process/worker_spec.rb
+  s_0abf69c445fa20::t_373ec804d5f626 537-551
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "482058854f335229ad4d72cbf4f0dd6b9e241f06",
+  "prompts": {},
+  "sessions": {
+    "s_0abf69c445fa20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "780215a4-ac92-4464-839c-86e03bcf05b0",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
