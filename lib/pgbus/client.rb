@@ -776,23 +776,24 @@ module Pgbus
     end
 
     # Same tri-state as message_exists?: true / false / nil (unknown).
+    # A logical name probes the archive of every physical table the strategy
+    # owns, like message_exists?; a physical name (prefixed: false) its own.
     def message_archived?(queue_name, msg_id:, prefixed: true)
-      full_name = resolve_full_queue_name(queue_name, prefixed: prefixed)
-      sanitized = QueueNameValidator.sanitize!(full_name)
+      tables = lookup_physical_queue_names(queue_name, prefixed: prefixed).map { |name| QueueNameValidator.sanitize!(name) }
+      determined = false
 
       synchronized do
         with_raw_connection do |conn|
-          msg_id_archived?(conn, sanitized, msg_id.to_i)
+          tables.each do |sanitized|
+            archived = probe_archive_presence(conn, sanitized, msg_id.to_i)
+            return true if archived == true
+
+            determined = true unless archived == :missing
+          end
         end
       end
-    rescue ActiveRecord::StatementInvalid => e
-      raise unless undefined_table_error?(e)
 
-      nil
-    rescue StandardError => e
-      raise unless defined?(PG::UndefinedTable) && e.is_a?(PG::UndefinedTable)
-
-      nil
+      determined ? false : nil # rubocop:disable Style/ReturnNilInPredicateMethodDefinition -- tri-state: nil means unknown
     end
 
     def message_exists?(queue_name, msg_id: nil, uniqueness_key: nil, prefixed: true)
@@ -1098,12 +1099,6 @@ module Pgbus
       end
     end
 
-    # The physical name of a logical name, or a physical name (prefixed: false)
-    # as given. Coerces symbols to strings so callers can pass either form.
-    def resolve_full_queue_name(queue_name, prefixed:)
-      prefixed ? config.queue_name(queue_name) : queue_name.to_s
-    end
-
     # Logical names expand through QueueFactory so a priority queue's _pN
     # tables are included; a physical name (prefixed: false) stays as is.
     def lookup_physical_queue_names(queue_name, prefixed:)
@@ -1116,6 +1111,18 @@ module Pgbus
       else
         uniqueness_key_present?(conn, sanitized, uniqueness_key)
       end
+    rescue ActiveRecord::StatementInvalid => e
+      raise unless undefined_table_error?(e)
+
+      :missing
+    rescue StandardError => e
+      raise unless defined?(PG::UndefinedTable) && e.is_a?(PG::UndefinedTable)
+
+      :missing
+    end
+
+    def probe_archive_presence(conn, sanitized, msg_id)
+      msg_id_archived?(conn, sanitized, msg_id)
     rescue ActiveRecord::StatementInvalid => e
       raise unless undefined_table_error?(e)
 

@@ -1610,6 +1610,37 @@ RSpec.describe Pgbus::Client do
 
       expect(client.message_archived?("pgbus_test_default_p1", msg_id: 42, prefixed: false)).to be true
     end
+
+    context "when priority sub-queues are enabled" do
+      before do
+        config.priority_levels = 3
+        client.instance_variable_set(:@queue_strategy, Pgbus::QueueFactory.for(config))
+        stub_const("PG::UndefinedTable", Class.new(StandardError)) unless defined?(PG::UndefinedTable)
+      end
+
+      after { config.priority_levels = nil }
+
+      it "expands a logical name to every _pN archive and returns true on a hit" do
+        allow(conn).to receive(:exec_params) do |sql, _binds|
+          double("result", ntuples: sql.include?("a_pgbus_test_default_p1 ") ? 1 : 0)
+        end
+
+        expect(client.message_archived?("default", msg_id: 42)).to be true
+      end
+
+      it "returns false when every archive was probed and none holds the msg_id" do
+        allow(conn).to receive(:exec_params).and_return(double("result", ntuples: 0))
+
+        expect(client.message_archived?("default", msg_id: 42)).to be false
+        expect(conn).to have_received(:exec_params).exactly(3).times
+      end
+
+      it "returns nil when every archive table is missing" do
+        allow(conn).to receive(:exec_params).and_raise(PG::UndefinedTable, "relation does not exist")
+
+        expect(client.message_archived?("default", msg_id: 42)).to be_nil
+      end
+    end
   end
 
   describe "#message_exists?" do

@@ -179,6 +179,10 @@ RSpec.describe "Dashboard failed event handlers (integration)", :integration do
       it "resets the existing message instead of enqueueing a duplicate" do
         msg_id = setup_failed_message
         client.read_message(queue_name, vt: 600)
+        vt_before = ActiveRecord::Base.connection.select_value(
+          "SELECT vt FROM pgmq.q_#{full_queue} WHERE msg_id = $1", "test", [msg_id]
+        )
+        expect(Time.parse(vt_before.to_s)).to be > Time.current
 
         event = data_source.failed_events.first
         data_source.retry_failed_event(event["id"])
