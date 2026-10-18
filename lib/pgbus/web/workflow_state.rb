@@ -6,8 +6,8 @@ module Pgbus
     # (its status, or "scheduled" for a ready run whose step waits for a
     # time still ahead) and what it is doing and what happens next, as a
     # pgbus.workflows.next.<key>_html key and its arguments. Arguments named
-    # :step, :signal and :batch are names, :ago a past moment and :time a
-    # future one; the helper renders each. Pure.
+    # :step, :signal and :batch are names, :ago and :late past moments and
+    # :time a future one; the helper renders each. Pure.
     module WorkflowState
       BADGE_TONES = { "ready" => :gray, "scheduled" => :gray, "performing" => :blue, "waiting" => :yellow,
                       "paused" => :yellow, "finished" => :green, "cancelled" => :red }.freeze
@@ -51,7 +51,20 @@ module Pgbus
         return ["waiting", "waiting_step", { step: step }] unless row[:waiting_for]
 
         args = { signal: row[:waiting_for], ago: row[:waiting_since] }
-        row[:timeout_at] ? ["waiting", "waiting_signal_timeout", args.merge(time: row[:timeout_at])] : ["waiting", "waiting_signal", args]
+        return ["waiting", "waiting_signal", args] unless row[:timeout_at]
+
+        signal_deadline(row, args.merge(time: row[:timeout_at]))
+      end
+
+      # An on_timeout: :notify deadline sends a late notice and the wait goes
+      # on (issue #565); late_since is the first deadline the wait missed.
+      def signal_deadline(row, args)
+        # A deploy that changed on_timeout since the last notice: the next
+        # deadline does something else (nil: the class is not loaded here).
+        late = row[:late_since] && [nil, "notify"].include?(row[:on_timeout]&.to_s)
+        return ["waiting", "waiting_signal_late", args.merge(late: row[:late_since])] if late
+
+        ["waiting", row[:on_timeout].to_s == "notify" ? "waiting_signal_notify" : "waiting_signal_timeout", args]
       end
 
       def paused(row, step)

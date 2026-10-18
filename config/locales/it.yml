@@ -1349,6 +1349,8 @@ it:
         unknown_html: 'Stato: %{status}.'
         waiting_batch_html: In attesa del lotto %{batch} (%{done} lavori su %{total} completati).
         waiting_signal_html: In attesa del segnale %{signal} da %{ago}.
+        waiting_signal_late_html: In attesa del segnale %{signal} da %{ago} (in ritardo da %{late}). Il prossimo avviso di ritardo parte %{time}.
+        waiting_signal_notify_html: In attesa del segnale %{signal} da %{ago}. Un avviso di ritardo parte %{time} e l'attesa continua.
         waiting_signal_timeout_html: In attesa del segnale %{signal} da %{ago}. L'attesa scade %{time}.
         waiting_step_html: In attesa di %{step}.
       not_found:
@@ -1451,7 +1453,7 @@ it:
         ready: Pronti
         waiting: In attesa
       timeline:
-        caption: 'Ogni tentativo, il più vecchio in alto: atteso (la sua attesa), in coda (previsto, non ancora preso), eseguito (colorato in base a come è finito) e in attesa (di un segnale o del suo lotto), con le pause su una riga a parte. La tabella dei tentativi qui sotto riporta le stesse durate.'
+        caption: 'Ogni tentativo, il più vecchio in alto: atteso (la sua attesa), in coda (previsto, non ancora preso), eseguito (colorato in base a come è finito) e in attesa (di un segnale o del suo lotto), con le pause su una riga a parte. La tabella dei tentativi qui sotto riporta le stesse durate. Una linea tratteggiata segna ogni volta che un''attesa ha superato la scadenza.'
         empty: Ancora nessun tentativo.
         paused_period_html: In pausa dalle %{from} per %{duration}
         paused_row: In pausa
@@ -1465,3 +1467,4 @@ it:
           waited: Atteso
           waiting: In attesa
         title: Cronologia
+        wait_timeout_html: 'L''attesa di %{step} ha superato la scadenza alle %{time} (on_timeout: %{action}).'

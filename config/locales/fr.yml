@@ -1349,6 +1349,8 @@ fr:
         unknown_html: 'Statut : %{status}.'
         waiting_batch_html: En attente du lot %{batch} (%{done} travaux sur %{total} terminés).
         waiting_signal_html: En attente du signal %{signal} depuis %{ago}.
+        waiting_signal_late_html: En attente du signal %{signal} depuis %{ago} (en retard depuis %{late}). Le prochain avis de retard part %{time}.
+        waiting_signal_notify_html: En attente du signal %{signal} depuis %{ago}. Un avis de retard part %{time} et l'attente continue.
         waiting_signal_timeout_html: En attente du signal %{signal} depuis %{ago}. L'attente expire %{time}.
         waiting_step_html: En attente de %{step}.
       not_found:
@@ -1451,7 +1453,7 @@ fr:
         ready: Prêts
         waiting: En attente
       timeline:
-        caption: 'Chaque tentative, la plus ancienne en haut : attente (son délai), en file (due, pas encore prise), exécution (colorée selon son issue) et en attente (d''un signal ou de son lot), avec les pauses sur leur propre ligne. Le tableau des tentatives ci-dessous donne les mêmes durées.'
+        caption: 'Chaque tentative, la plus ancienne en haut : attente (son délai), en file (due, pas encore prise), exécution (colorée selon son issue) et en attente (d''un signal ou de son lot), avec les pauses sur leur propre ligne. Le tableau des tentatives ci-dessous donne les mêmes durées. Une ligne pointillée marque chaque fois qu''une attente a dépassé son échéance.'
         empty: Aucune tentative pour l'instant.
         paused_period_html: En pause à %{from} pendant %{duration}
         paused_row: En pause
@@ -1465,3 +1467,4 @@ fr:
           waited: Attendu
           waiting: En attente
         title: Chronologie
+        wait_timeout_html: 'L''attente de %{step} a dépassé son échéance à %{time} (on_timeout: %{action}).'

@@ -1349,6 +1349,8 @@ fi:
         unknown_html: 'Tila: %{status}.'
         waiting_batch_html: Odottaa erää %{batch} (%{done} / %{total} tehtävää valmis).
         waiting_signal_html: Odottaa signaalia %{signal}, alkoi %{ago}.
+        waiting_signal_late_html: Odottaa signaalia %{signal}, alkoi %{ago} (myöhässä alkaen %{late}). Seuraava myöhästymisilmoitus lähtee %{time}.
+        waiting_signal_notify_html: Odottaa signaalia %{signal}, alkoi %{ago}. Myöhästymisilmoitus lähtee %{time}, ja odotus jatkuu.
         waiting_signal_timeout_html: Odottaa signaalia %{signal}, alkoi %{ago}. Odotus aikakatkaistaan %{time}.
         waiting_step_html: Odottaa vaihetta %{step}.
       not_found:
@@ -1451,7 +1453,7 @@ fi:
         ready: Valmiina
         waiting: Odottaa
       timeline:
-        caption: 'Jokainen yritys, vanhin ylimpänä: odotettu (sen odotus), jonossa (erääntynyt, ei vielä otettu), ajettu (väri kertoo lopputuloksen) ja odottaa (signaalia tai erää), keskeytykset omalla rivillään. Alla oleva yritystaulukko listaa samat kestot.'
+        caption: 'Jokainen yritys, vanhin ylimpänä: odotettu (sen odotus), jonossa (erääntynyt, ei vielä otettu), ajettu (väri kertoo lopputuloksen) ja odottaa (signaalia tai erää), keskeytykset omalla rivillään. Alla oleva yritystaulukko listaa samat kestot. Katkoviiva merkitsee jokaista kertaa, kun odotus ylitti määräaikansa.'
         empty: Ei vielä yrityksiä.
         paused_period_html: Keskeytetty %{from} ajaksi %{duration}
         paused_row: Keskeytetty
@@ -1465,3 +1467,4 @@ fi:
           waited: Odotettu
           waiting: Odottaa
         title: Aikajana
+        wait_timeout_html: 'Vaiheen %{step} odotus ylitti määräaikansa %{time} (on_timeout: %{action}).'
