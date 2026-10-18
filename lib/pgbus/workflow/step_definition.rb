@@ -123,13 +123,15 @@ module Pgbus
 
       # What the per-run wait_timeout: returns on +workflow+: a Time (an
       # absolute deadline), seconds from now, or nil (no timeout). It runs as
-      # a guard does (a flow-control verb raises NotInStep). Anything else
-      # raises ArgumentError, as an error it raises goes up, for the step's
-      # exception policies.
+      # a guard does (a flow-control verb raises NotInStep), in a savepoint:
+      # a query of its own that fails in the database must not abort the
+      # run's transaction, which the step's outcome is written in. Anything
+      # else raises ArgumentError, as an error it raises goes up, for the
+      # step's exception policies.
       def resolve_wait_timeout(workflow)
         callable = wait_timeout_callable
-        value = workflow.send(:guarding) do
-          callable.is_a?(Symbol) ? workflow.send(callable) : workflow.instance_exec(&callable)
+        value = WorkflowEntry.transaction(requires_new: true) do
+          workflow.send(:guarding) { callable.is_a?(Symbol) ? workflow.send(callable) : workflow.instance_exec(&callable) }
         end
         return nil if value.nil?
         if value.is_a?(Numeric) || self.class.duration?(value)

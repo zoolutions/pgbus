@@ -12,7 +12,7 @@ module Pgbus
     #   config.workflow_max_payload_size = 131_072      # bytes: arguments and step outputs
     #   config.workflow_error_backtrace_lines = 50      # backtrace lines kept on a failed step
     #   config.workflow_waiting_visibility_threshold = 7.days # a step waiting this long without a
-    #                                                   # wait_timeout: counts as stuck (waiting_overdue)
+    #                                                   # deadline counts as stuck (waiting_overdue)
     #   config.workflow_subject_url = ->(type, id) { "/admin/#{type.underscore.pluralize}/#{id}" }
     #                                                   # the dashboard's subject link (nil: plain text)
     module WorkflowSettings

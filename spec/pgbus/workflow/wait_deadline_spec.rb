@@ -25,6 +25,10 @@ RSpec.describe Pgbus::Workflow::StepDefinition, "#timeout_at_for" do
     end.new(nil)
   end
 
+  # The callable runs in a savepoint (spec/integration/workflow/wait_timeout_spec.rb
+  # fails a query in it against a real database).
+  before { allow(Pgbus::WorkflowEntry).to receive(:transaction).with(requires_new: true).and_yield }
+
   def definition(wait_timeout)
     described_class.new(name: :await_reply, body: :await_reply, wait_for: :replied, wait_timeout: wait_timeout)
   end
@@ -65,9 +69,10 @@ RSpec.describe Pgbus::Workflow::StepDefinition, "#timeout_at_for" do
     expect(timeout_at(nil)).to be_nil
   end
 
-  it "calls the instance method a Symbol names, once" do
+  it "calls the instance method a Symbol names, once, in a savepoint" do
     expect(timeout_at(now + 60, wait_timeout: :reply_deadline)).to eq(now + 60)
     expect(seen).to eq([:reply_deadline])
+    expect(Pgbus::WorkflowEntry).to have_received(:transaction).with(requires_new: true).once
   end
 
   it "raises ArgumentError, naming the step, for a value that is neither a deadline nor a duration" do

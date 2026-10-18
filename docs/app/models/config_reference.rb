@@ -80,7 +80,7 @@ module ConfigReference
       { name: "workflow_max_payload_size", type: "Integer", default: "131_072", desc: "Byte cap on a workflow's serialized arguments and on each step's output; larger raises Pgbus::Workflow::PayloadTooLarge." },
       { name: "workflow_error_backtrace_lines", type: "Integer", default: "50", desc: "Backtrace lines kept on a failed step row (cleaned through Rails.backtrace_cleaner when Rails is loaded)." },
       { name: "workflow_subject_url", type: "Callable, nil", default: "nil", desc: "->(subject_type, subject_id) { URL or nil }: where the Workflows dashboard links a run's subject. Only an http(s) URL or a path starting with a single / is linked; anything else, or a lambda that raises, shows as text." },
-      { name: "workflow_waiting_visibility_threshold", type: "Duration", default: "7.days", desc: "A step waiting this long for a signal or its batch, without a wait_timeout:, counts as stuck (the waiting_overdue reason in the pgbus_workflows_stuck gauge)." }
+      { name: "workflow_waiting_visibility_threshold", type: "Duration", default: "7.days", desc: "A step waiting this long for a signal or its batch, without a deadline (no wait_timeout:, or a per-run one that set none), counts as stuck (the waiting_overdue reason in the pgbus_workflows_stuck gauge)." }
     ],
     "Outbox" => [
       { name: "outbox_enabled", type: "Boolean", default: "false", desc: "Enable the transactional outbox poller." },

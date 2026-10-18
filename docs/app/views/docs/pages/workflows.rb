@@ -390,7 +390,8 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
 
         It is evaluated once per attempt, when the step parks, under the run's
         row lock, so it must be fast and free of side effects, as a matcher
-        is. Under `on_timeout: :run`, a step that reattempts parks again and
+        is. It runs in a savepoint: a query of its own that fails in the
+        database goes to the exception policies like any other error. Under `on_timeout: :run`, a step that reattempts parks again and
         evaluates it again: a callable that keeps returning the same past
         deadline times out each attempt at once. A paused run's deadline moves
         by the length of the pause, a `Time` one too. A static
@@ -590,7 +591,7 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
           [ [ :code, "workflow_max_payload_size" ], [ :code, "131_072" ], "Byte cap on arguments and on each step output." ],
           [ [ :code, "workflow_error_backtrace_lines" ], [ :code, "50" ], "Backtrace lines kept on a failed step." ],
           [ [ :code, "workflow_waiting_visibility_threshold" ], [ :code, "7.days" ],
-            [ :md, "A wait without a `wait_timeout:` this long counts as stuck (`waiting_overdue`)." ] ]
+            [ :md, "A wait without a deadline (no `wait_timeout:`, or a per-run one that set none) this long counts as stuck (`waiting_overdue`)." ] ]
         ]
       )
     end
@@ -833,9 +834,11 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
         (paused on a step that failed), `stalled` (paused on `StepStalled`),
         `paused_manual` (the step called `pause!`, or an outside `pause!`),
         `overdue` (a scheduled step nobody picked up), `waiting_overdue` (a
-        wait without a `wait_timeout:` older than
-        `workflow_waiting_visibility_threshold`; a `:notify` wait has a
-        deadline, and `pgbus_workflow_wait_overdue_total` instead).
+        wait without a deadline older than
+        `workflow_waiting_visibility_threshold`: no `wait_timeout:`, or a
+        per-run one that set none or cleared it after a `:notify` notice; a
+        `:notify` wait with a deadline has
+        `pgbus_workflow_wait_overdue_total` instead).
 
         **Errors** reach `Pgbus::ErrorReporter` with
         `{ workflow_class:, workflow_id:, step_name:, attempt:, outcome: }` as

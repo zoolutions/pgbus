@@ -367,6 +367,39 @@ RSpec.describe "Workflow wait timeouts (integration)", :integration do
       expect(logged).to eq([:after])
     end
 
+    # A query the lambda runs fails in the database (a column a deploy
+    # dropped, a statement_timeout under the row lock): its savepoint keeps
+    # the run's transaction usable, so the policies still apply.
+    def failing_query = -> { Pgbus::WorkflowStep.connection.select_value("SELECT expires_at FROM no_such_offers_574") }
+
+    it "hands a query that fails in the database to the exception policies, with the claim kept" do
+      wf = start_offer(define_offer("FailingQueryDeadline", wait_timeout: failing_query))
+
+      expect(wf.status).to eq("paused")
+      expect(steps_of(wf).last).to have_attributes(step_name: "await_reply", status: "failed", outcome: "paused",
+                                                   error_class: "ActiveRecord::StatementInvalid")
+      expect(events_of(wf)).to include("step_started", "step_failed")
+    end
+
+    it "keeps a :run step's absolute deadline when the run is paused while it waits: resume! moves it by the pause" do
+      deadline = 2.hours.from_now.change(usec: 0)
+      wf = start_offer(define_offer("PausedOffer", wait_timeout: -> { deadline }))
+      wf.pause!
+      Pgbus::WorkflowEntry.where(workflow_id: wf.workflow_id).update_all(paused_at: 1.hour.ago)
+      steps_of(wf).last.update_columns(waiting_since: 2.hours.ago)
+
+      wf.resume!
+
+      expect(wf.status).to eq("waiting")
+      expect(steps_of(wf).last.timeout_at).to be_within(5).of(deadline + 1.hour)
+    end
+
+    it "takes a Date as its midnight, as any #to_time does" do
+      wf = start_offer(define_offer("DatedOffer", wait_timeout: -> { Date.tomorrow }))
+
+      expect(steps_of(wf).last.timeout_at).to eq(Date.tomorrow.to_time)
+    end
+
     it "applies on_timeout through expire_wait before the deadline" do
       wf = start_offer(define_offer("InlineOffer", wait_timeout: -> { 3.days.from_now }))
 
@@ -442,6 +475,23 @@ RSpec.describe "Workflow wait timeouts (integration)", :integration do
         expect(steps_of(wf).last).to have_attributes(status: "failed", outcome: "paused", error_class: "KeyError",
                                                      error_message: "offer is gone")
         expect(Pgbus::ErrorReporter).to have_received(:report).with(an_instance_of(KeyError), anything)
+      end
+
+      it "pauses the run when a query the lambda runs fails in the database, and the sweep goes on to the next wait" do
+        calls = []
+        query = failing_query
+        wf = start_offer(define_offer("NotifyFailingQuery", wait_timeout: lambda {
+          calls << :evaluated
+          calls.size > 1 ? instance_exec(&query) : 1.hour
+        }, on_timeout: :notify))
+        other = park(define("OtherDueWait", on_timeout: :pause!))
+        [wf, other].each { |run| expire!(run) }
+
+        expect(sweep).to include(timed_out: 2)
+        expect(wf.reload.status).to eq("paused")
+        expect(steps_of(wf).last).to have_attributes(status: "failed", outcome: "paused",
+                                                     error_class: "ActiveRecord::StatementInvalid")
+        expect(other.reload.status).to eq("paused")
       end
     end
   end
