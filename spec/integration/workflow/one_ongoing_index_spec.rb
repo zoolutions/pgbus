@@ -51,11 +51,12 @@ RSpec.describe "Workflow one-ongoing index predicate (integration)", :integratio
 
   # The install migration also installs PGMQ, creates the default queues and
   # tunes their tables. The integration database has PGMQ already, so the
-  # statements that touch it are skipped; every pgbus table is still created.
+  # statements that reach into the pgmq schema are skipped; every pgbus table,
+  # pgbus_pgmq_schema_versions included, is still created.
   it "dumps the same predicate after a schema load as after the install migration" do
     migration = migration_from("migration.rb.erb", :CreatePgbusTables, pgmq_schema_mode: "embedded")
     def migration.execute(sql, ...)
-      super unless sql.include?("pgmq")
+      super unless sql.include?("pgmq.")
     end
 
     expect_round_trip_after(migration)
