@@ -407,6 +407,32 @@ RSpec.describe Pgbus::Configuration do
       expect(config.queue_name("orders-handler").delete_prefix("#{config.queue_prefix}_")).to eq("orders_handler")
     end
 
+    # A pattern-valid prefix is kept as written, but the separator after an
+    # edge or doubled underscore collapses only for a queue name that needs
+    # normalizing, so those queues' tables cannot be traced back to their
+    # queue. Rejecting it would stop existing deployments booting, and
+    # rewriting it would rename their tables: it is warned at validate!.
+    %w[myapp_ _myapp my__app].each do |prefix|
+      it "warns about #{prefix.inspect} at validate!, and accepts it" do
+        config.queue_prefix = prefix
+        warnings = []
+        allow(Pgbus.logger).to receive(:warn) { |&block| warnings << block.call }
+
+        expect { config.validate! }.not_to raise_error
+        expect(config.queue_prefix).to eq(prefix)
+        expect(warnings).to include(a_string_including("queue_prefix #{prefix.inspect}").and(including("underscore")))
+      end
+    end
+
+    it "does not warn about a prefix without edge or doubled underscores" do
+      config.queue_prefix = "my-app"
+      allow(Pgbus.logger).to receive(:warn)
+
+      config.validate!
+
+      expect(Pgbus.logger).not_to have_received(:warn)
+    end
+
     it "leaves a value it cannot spell as a table name for validate! to reject" do
       config.queue_prefix = "!!!"
       expect(config.queue_prefix).to eq("!!!")

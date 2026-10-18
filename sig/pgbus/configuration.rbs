@@ -293,6 +293,7 @@ module Pgbus
     def visibility_heartbeat_interval=: (untyped value) -> untyped
     def visibility_timeout: () -> Numeric?
     def visibility_timeout=: (untyped value) -> untyped
+    def warn_queue_prefix_underscores: () -> untyped
     def warn_read_ahead_without_heartbeat: (untyped settings) -> untyped
     def web_actor: () -> untyped
     def web_actor=: (untyped) -> untyped
