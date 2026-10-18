@@ -32,8 +32,10 @@ class AddPgbusWorkflows < ActiveRecord::Migration<%= migration_version %>
 
     add_index :pgbus_workflows, :workflow_id,
       unique: true, name: "idx_pgbus_workflows_workflow_id", if_not_exists: true
+    # status::text keeps the predicate stable in schema.rb: without the cast, a
+    # migrated and a schema-loaded database dump it differently (issue #573).
     add_index :pgbus_workflows, [:workflow_class, :subject_type, :subject_id],
-      unique: true, where: "status IN ('ready','performing','waiting','paused')",
+      unique: true, where: "status::text IN ('ready','performing','waiting','paused')",
       name: "idx_pgbus_workflows_one_ongoing", if_not_exists: true
     add_index :pgbus_workflows, [:workflow_class, :idempotency_key],
       unique: true, where: "idempotency_key IS NOT NULL",
