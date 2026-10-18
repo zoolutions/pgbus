@@ -1,0 +1,58 @@
+app/models/pgbus/uniqueness_key.rb
+  s_0abf69c445fa20::t_2fb861d28b4abe 151-152,156-164,166-167
+  s_0abf69c445fa20::t_eb7b60542ca4d8 165
+  s_0abf69c445fa20::t_9bb2f1734049ee 110,124
+  s_0abf69c445fa20::t_1ae798b2022936 140
+CHANGELOG.md
+  s_0abf69c445fa20::t_f68a36271e9494 22
+spec/integration/dead_letter_reason_spec.rb
+  s_0abf69c445fa20::t_b4ee61529152a9 74-75
+lib/pgbus/dead_letter_header.rb
+  s_0abf69c445fa20::t_8a6c8ccebad88b 33-37,49
+lib/pgbus/process/consumer.rb
+  s_0abf69c445fa20::t_0d7ad6297b1da2 299-300
+docs/app/views/docs/pages/retries_dead_letters.rb
+  s_0abf69c445fa20::t_3476ffe5571026 118
+spec/pgbus/active_job/executor_spec.rb
+  s_0abf69c445fa20::t_8f20e6c5ef3393 176
+spec/integration/dashboard_discard_locks_spec.rb
+  s_0abf69c445fa20::t_6dadabb6b575bc 221-239
+  s_0abf69c445fa20::t_047532867fa3ab 133-142,144,147,155-164,171,175-181
+spec/pgbus/web/data_source_spec.rb
+  s_0abf69c445fa20::t_42ae8df9e676d3 397-423
+  s_0abf69c445fa20::t_a764fb2a74efee 12-15
+  s_0abf69c445fa20::t_5b5fec01b02b18 480-481,484,490-493
+  s_0abf69c445fa20::t_ec64e70584e59b 504
+  s_0abf69c445fa20::t_be8308ab9f8d8c 543
+  s_0abf69c445fa20::t_b12413c813f462 472-476,478-479,482
+  s_0abf69c445fa20::t_970c56125f9739 510,512-517
+spec/integration/job_uniqueness_spec.rb
+  s_0abf69c445fa20::t_f8939bdecda069 253-299
+lib/pgbus/web/data_source.rb
+  s_0abf69c445fa20::t_0fea99b9391364 1607
+  s_0abf69c445fa20::t_9fb9f51b5ff298 324
+  s_0abf69c445fa20::t_716abba3f2c065 1615-1623,1625-1627,1632
+  s_0abf69c445fa20::t_263306e65d58d3 1575-1576,1582-1591
+lib/pgbus/active_job/executor.rb
+  s_0abf69c445fa20::t_07e56541bd9bea 453-454
+spec/pgbus/dead_letter_header_spec.rb
+  s_0abf69c445fa20::t_fd6ecc75be448f 41-46
+spec/pgbus/process/consumer_spec.rb
+  s_0abf69c445fa20::t_67aee0550a6401 476-477
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "7075a34c9f495edba4cbb1a3ee08f90c332228bb",
+  "prompts": {},
+  "sessions": {
+    "s_0abf69c445fa20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "780215a4-ac92-4464-839c-86e03bcf05b0",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
