@@ -1,6 +1,7 @@
 <%# The timeline (issue #542): one range-bar row per attempt, split into
     waited, queued and ran (ran coloured by how the attempt ended), with the
-    waits and pauses as their own segments. charts.js renderTimeline draws
+    waits and pauses as their own segments and a dashed line per missed wait
+    deadline. charts.js renderTimeline draws
     it from the payload embedded once below; the attempts table under it is
     the full text alternative. %>
 <% timeline = @workflow[:timeline] %>
@@ -21,6 +22,15 @@
         <% timeline[:paused].each do |period| %>
           <li><%= t("pgbus.workflows.timeline.paused_period_html", from: pgbus_absolute_time(Time.at(period[:from] / 1000.0)),
                     duration: period[:duration]) %></li>
+        <% end %>
+      </ul>
+    <% end %>
+    <%# The missed wait deadlines as text: the chart's dashed lines (issue #565). %>
+    <% if timeline[:wait_timeouts].any? %>
+      <ul class="mt-2 space-y-1 text-sm text-gray-700 dark:text-gray-300" data-testid="workflow-wait-timeouts">
+        <% timeline[:wait_timeouts].each do |mark| %>
+          <li><%= t("pgbus.workflows.timeline.wait_timeout_html", step: tag.code(mark[:step], class: "font-mono"),
+                    time: pgbus_absolute_time(Time.at(mark[:at] / 1000.0)), action: tag.code(mark[:action], class: "font-mono")) %></li>
         <% end %>
       </ul>
     <% end %>

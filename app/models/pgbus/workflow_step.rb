@@ -55,6 +55,13 @@ module Pgbus
       where(id: id, status: "waiting").update_all(status: "in_progress")
     end
 
+    # A waiting row's next deadline (on_timeout: :notify keeps the attempt
+    # waiting). Written without the model callback, so no StepJob goes out.
+    # Returns the number of rows moved.
+    def self.move_deadline!(id, timeout_at:)
+      where(id: id, status: "waiting").update_all(timeout_at: timeout_at)
+    end
+
     # waiting rows of waiting runs past their timeout_at (the sweep applies
     # their on_timeout).
     def self.wait_expired(now: Time.current)

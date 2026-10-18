@@ -35,6 +35,7 @@
         "http://localhost:3003/pgbus/workflows/definitions/Billing::InvoiceWorkflow",
         "http://localhost:3003/pgbus/workflows/0b8f5c2e-6d1a-4c39-9e7b-2f4a8c1d5e60",
         "http://localhost:3003/pgbus/workflows/1c9a6d3f-7e2b-4d4a-8f8c-3a5b9d2e6f71",
+        "http://localhost:3003/pgbus/workflows/f4d2afb1-c0d1-4e2f-8a3b-1239df06475f",
         "http://localhost:3003/pgbus/dlq",
         "http://localhost:3003/pgbus/dlq/501",
         "http://localhost:3003/pgbus/outbox",

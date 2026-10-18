@@ -1349,6 +1349,8 @@ es:
         unknown_html: 'Estado: %{status}.'
         waiting_batch_html: Esperando el lote %{batch} (%{done} de %{total} trabajos terminados).
         waiting_signal_html: Esperando la señal %{signal} desde %{ago}.
+        waiting_signal_late_html: Esperando la señal %{signal} desde %{ago} (con retraso desde %{late}). El próximo aviso de retraso sale %{time}.
+        waiting_signal_notify_html: Esperando la señal %{signal} desde %{ago}. Un aviso de retraso sale %{time} y la espera continúa.
         waiting_signal_timeout_html: Esperando la señal %{signal} desde %{ago}. La espera caduca %{time}.
         waiting_step_html: Esperando a %{step}.
       not_found:
@@ -1451,7 +1453,7 @@ es:
         ready: Listos
         waiting: En espera
       timeline:
-        caption: 'Cada intento, el más antiguo arriba: esperó (su espera), en cola (vencido, aún sin tomar), se ejecutó (coloreado según cómo terminó) y en espera (de una señal o de su lote), con las pausas en su propia fila. La tabla de intentos de abajo muestra las mismas duraciones.'
+        caption: 'Cada intento, el más antiguo arriba: esperó (su espera), en cola (vencido, aún sin tomar), se ejecutó (coloreado según cómo terminó) y en espera (de una señal o de su lote), con las pausas en su propia fila. La tabla de intentos de abajo muestra las mismas duraciones. Una línea discontinua marca cada vez que una espera superó su plazo.'
         empty: Aún no hay intentos.
         paused_period_html: En pausa desde %{from} durante %{duration}
         paused_row: En pausa
@@ -1465,3 +1467,4 @@ es:
           waited: Esperó
           waiting: En espera
         title: Cronología
+        wait_timeout_html: 'La espera de %{step} superó su plazo en %{time} (on_timeout: %{action}).'

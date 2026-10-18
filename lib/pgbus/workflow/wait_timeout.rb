@@ -12,10 +12,13 @@ module Pgbus
     #   :skip!   the step is skipped and the run moves on
     #   :run     the step is scheduled again; its body runs with
     #            received_signal nil and timed_out? true
+    #   :notify  only the event and the instrumentation (issue #565): the
+    #            same attempt keeps waiting and timeout_at moves to its next
+    #            deadline, one wait_timeout on (see next_deadline)
     #
     # A signal that arrives after the timeout fired stays pending, like any
-    # signal no step waits for. A paused run's wait does not time out until
-    # it is resumed.
+    # signal no step waits for, except under :notify, whose step still waits
+    # for it. A paused run's wait does not time out until it is resumed.
     module WaitTimeout
       module_function
 
@@ -53,15 +56,33 @@ module Pgbus
                                                            timeout_at: step.timeout_at&.utc&.iso8601(3) }.compact)
         notes.instrument("pgbus.workflow.wait_timed_out",
                          Runner.payload_for(record, step_name: step.step_name, attempt: step.attempt, action: action.to_s))
-        apply(record, step, action, notes: notes, now: now)
+        apply(record, step, action, notes: notes, now: now, wait_timeout: definition&.wait_timeout)
         action
       end
 
-      def apply(record, step, action, notes:, now:)
+      def apply(record, step, action, notes:, now:, wait_timeout: nil)
+        return notify!(step, wait_timeout, now: now) if action == :notify
         return Waiting.wake!(record, step, now: now, timeout_at: [step.timeout_at, now].compact.min) if action == :run
 
         error = action == :pause! ? timed_out_error(step, now) : nil
         Waiting.resolve!(record, step, FlowControl::Outcome.for(action), notes: notes, error: error)
+      end
+
+      # The run and the step row stay as they are (no outcome, no StepJob);
+      # only timeout_at moves.
+      def notify!(step, wait_timeout, now:)
+        timeout_at = next_deadline(step.timeout_at, wait_timeout, now)
+        step.timeout_at = timeout_at if WorkflowStep.move_deadline!(step.id, timeout_at: timeout_at).positive?
+      end
+
+      # The first deadline after +now+ on the wait's wait_timeout grid: one
+      # wait_timeout on when the sweep is within a period of the deadline
+      # (and for expire_wait ahead of it). A sweep that missed several
+      # deadlines (the dispatcher was down) reports them once: a deadline
+      # still behind now would be selected again by the next batch.
+      def next_deadline(timeout_at, wait_timeout, now)
+        missed = timeout_at > now ? 0 : ((now - timeout_at) / wait_timeout).floor
+        timeout_at + ((missed + 1) * wait_timeout)
       end
 
       def timed_out_error(step, now)

@@ -1349,6 +1349,8 @@ sv:
         unknown_html: 'Status: %{status}.'
         waiting_batch_html: Väntar på gruppen %{batch} (%{done} av %{total} jobb klara).
         waiting_signal_html: Väntar på signalen %{signal} sedan %{ago}.
+        waiting_signal_late_html: Väntar på signalen %{signal} sedan %{ago} (sen sedan %{late}). Nästa förseningsavisering går ut %{time}.
+        waiting_signal_notify_html: Väntar på signalen %{signal} sedan %{ago}. En förseningsavisering går ut %{time}, och väntan fortsätter.
         waiting_signal_timeout_html: Väntar på signalen %{signal} sedan %{ago}. Väntan tar slut %{time}.
         waiting_step_html: Väntar på %{step}.
       not_found:
@@ -1451,7 +1453,7 @@ sv:
         ready: Redo
         waiting: Väntar
       timeline:
-        caption: 'Varje försök, äldst överst: väntade (dess väntetid), köad (förfallen, ännu inte hämtad), körde (färgad efter utfall) och väntar (på en signal eller sin grupp), med pauserna på en egen rad. Försökstabellen nedan visar samma tider.'
+        caption: 'Varje försök, äldst överst: väntade (dess väntetid), köad (förfallen, ännu inte hämtad), körde (färgad efter utfall) och väntar (på en signal eller sin grupp), med pauserna på en egen rad. Försökstabellen nedan visar samma tider. En streckad linje markerar varje gång en väntan passerade sin tidsgräns.'
         empty: Inga försök ännu.
         paused_period_html: Pausad %{from} i %{duration}
         paused_row: Pausad
@@ -1465,3 +1467,4 @@ sv:
           waited: Väntade
           waiting: Väntar
         title: Tidslinje
+        wait_timeout_html: 'Väntan för %{step} passerade sin tidsgräns %{time} (on_timeout: %{action}).'

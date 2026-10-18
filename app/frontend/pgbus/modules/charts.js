@@ -233,7 +233,25 @@ export async function renderTimeline(data, i18n) {
     yaxis: { labels: { style: { colors: colors.text } } },
     legend: { position: "top", labels: { colors: colors.text } },
     tooltip: { theme: colors.mode, custom: timelineTooltip },
+    annotations: { xaxis: waitTimeoutMarks(data, i18n, colors) },
   });
+}
+
+// A dashed line where a wait passed its deadline (issue #565): the waiting
+// colour, labelled in the page's text colour on the card, so it reads in
+// both themes. The page lists the same moments as text.
+function waitTimeoutMarks(data, i18n, colors) {
+  return (data.wait_timeouts || []).map((mark) => ({
+    x: mark.at,
+    borderColor: colors.timeline.waiting,
+    strokeDashArray: 4,
+    label: {
+      text: i18n.wait_timed_out,
+      orientation: "horizontal",
+      borderColor: colors.timeline.waiting,
+      style: { color: colors.text, background: colors.card },
+    },
+  }));
 }
 
 // The workflow insights (issue #549): runs started, finished and cancelled

@@ -1349,6 +1349,8 @@ en:
         unknown_html: 'Status: %{status}.'
         waiting_batch_html: Waiting for batch %{batch} (%{done} of %{total} jobs done).
         waiting_signal_html: Waiting for signal %{signal} since %{ago}.
+        waiting_signal_late_html: Waiting for signal %{signal} since %{ago} (late since %{late}). The next late notice goes out %{time}.
+        waiting_signal_notify_html: Waiting for signal %{signal} since %{ago}. A late notice goes out %{time}, and the wait goes on.
         waiting_signal_timeout_html: Waiting for signal %{signal} since %{ago}. The wait times out %{time}.
         waiting_step_html: Waiting on %{step}.
       not_found:
@@ -1451,7 +1453,7 @@ en:
         ready: Ready
         waiting: Waiting
       timeline:
-        caption: 'Each attempt, oldest at the top: waited (its wait), queued (due, not yet picked up), ran (coloured by how it ended) and waiting (for a signal or its batch), with the pauses on their own row. The attempts table below lists the same durations.'
+        caption: 'Each attempt, oldest at the top: waited (its wait), queued (due, not yet picked up), ran (coloured by how it ended) and waiting (for a signal or its batch), with the pauses on their own row. The attempts table below lists the same durations. A dashed line marks each time a wait passed its deadline.'
         empty: No attempts yet.
         paused_period_html: Paused at %{from} for %{duration}
         paused_row: Paused
@@ -1465,3 +1467,4 @@ en:
           waited: Waited
           waiting: Waiting
         title: Timeline
+        wait_timeout_html: "%{step}'s wait passed its deadline at %{time} (on_timeout: %{action})."
