@@ -60,12 +60,18 @@ RSpec.describe Pgbus::Workflow do
       }
     end
 
-    it "keeps a blank actor as given, and records app with no reason when neither is passed" do
-      klass.start!(nil, actor: "")
-      klass.start!(nil, actor: nil)
+    it "records app with no reason when neither keyword is passed" do
+      klass.start!(nil)
 
-      expect(events.map { |e| [e[:event], e[:actor], e[:reason]] })
-        .to eq([["started", "", nil], ["step_scheduled", "", nil], ["started", "app", nil], ["step_scheduled", "app", nil]])
+      expect(events.map { |e| [e[:event], e[:actor], e[:reason]] }).to eq([["started", "app", nil], ["step_scheduled", "app", nil]])
+    end
+
+    it "records app for actor: nil and keeps a blank actor as given, like the outside verbs" do
+      klass.start!(nil, actor: nil)
+      klass.start!(nil, actor: "")
+
+      expect(events.map { |e| [e[:event], e[:actor]] })
+        .to eq([%w[started app], %w[step_scheduled app], ["started", ""], ["step_scheduled", ""]])
     end
 
     it "serializes the arguments through ActiveJob::Arguments" do

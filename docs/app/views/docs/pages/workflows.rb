@@ -75,11 +75,10 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
         end
 
         wf = SignupWorkflow.start!(user, plan: "pro")
+        # or, started by a person, with who and why on the audit trail (not in arguments):
+        #   wf = SignupWorkflow.start!(user, plan: "pro", actor: "alice", reason: "invited by support")
         wf.status        # => "ready"
         wf.workflow_id   # => "6f1c…"
-
-        # Started by a person: who and why go on the audit trail, not in arguments.
-        SignupWorkflow.start!(invitee, plan: "pro", actor: "alice", reason: "invited by support")
       RUBY
       md <<~'MD'
         Step forms: `step :name do … end`, an anonymous `step { … }` (named
