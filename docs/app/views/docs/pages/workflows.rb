@@ -326,8 +326,8 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
         - `signal_ready?` — the gate runs this attempt with a signal: one the
           step holds, or a pending one its `wait_for:` matcher takes. The
           guard above skips only when no signal is held or pending for the
-          step; a woken step and one whose signal came first both complete,
-          and the gate consumes the signal.
+          step; a woken step and one whose signal came first both complete:
+          the gate claims the signal, and it is consumed when the step ends.
         - `woken?` — narrower: this attempt holds a signal before its gate
           (`signal!` woke it, or an earlier attempt took one and reattempted
           or failed into a pause). False on a first claim, even when a

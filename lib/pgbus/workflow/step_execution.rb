@@ -107,7 +107,9 @@ module Pgbus
 
         unless definition
           if klass.workflow_steps.removed?(step.step_name)
-            Signals.adopt_held(step, WorkflowSignal.held_by_step(record.workflow_id, step.step_name))
+            # The definition is gone, so whether it waited is unknown: look for a
+            # held signal only where the signal schema exists.
+            Signals.adopt_held(step, WorkflowSignal.held_by_step(record.workflow_id, step.step_name)) if Sweep.waiting_ready?
             return skip!(record, step, notes, klass)
           end
 
