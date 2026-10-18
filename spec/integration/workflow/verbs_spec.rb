@@ -34,6 +34,39 @@ RSpec.describe "Workflow start! and outside verbs (integration)", :integration d
                                            subject_id: user.id.to_s, definition_digest: OrderWorkflow.definition_digest)
       expect(steps_of(wf).map { |s| [s.step_name, s.status, s.attempt] }).to eq([["charge", "scheduled", 1]])
       expect(wf.events.map { |e| [e.event, e.actor] }).to eq([%w[started app], %w[step_scheduled app]])
+      expect(wf.events.map(&:reason)).to eq([nil, nil])
+    end
+
+    it "records actor: and reason: on started and the actor on the first step_scheduled, not in the arguments (issue #571)" do
+      user = create_user
+      wf = OrderWorkflow.start!(user, plan: "pro", actor: "alice", reason: "monthly close")
+
+      expect(wf.events.map { |e| [e.event, e.actor, e.reason] })
+        .to eq([["started", "alice", "monthly close"], ["step_scheduled", "alice", nil]])
+      arguments = OrderWorkflow.find(wf.workflow_id).arguments
+      expect(arguments[:plan]).to eq("pro")
+      expect(arguments.keys).not_to include("actor", "reason")
+    end
+
+    it "keeps the first caller's actor on a duplicate start, and writes no events for it (issue #571)" do
+      first = OrderWorkflow.start!(nil, idempotency_key: "close-1", actor: "alice", reason: "monthly close")
+      second = OrderWorkflow.start!(nil, idempotency_key: "close-1", actor: "bob", reason: "again")
+
+      expect(second.workflow_id).to eq(first.workflow_id)
+      expect(second).to be_duplicate_start
+      expect(Pgbus::WorkflowEvent.where(workflow_id: first.workflow_id).map { |e| [e.event, e.actor, e.reason] })
+        .to contain_exactly(["started", "alice", "monthly close"], ["step_scheduled", "alice", nil])
+    end
+
+    it "leaves no run and no events when the application transaction around it rolls back (issue #571)" do
+      ActiveRecord::Base.transaction do
+        OrderWorkflow.start!(create_user, actor: "alice", reason: "monthly close")
+        raise ActiveRecord::Rollback
+      end
+
+      expect(Pgbus::WorkflowEntry.count).to eq(0)
+      expect(Pgbus::WorkflowEvent.count).to eq(0)
+      expect(queue_depth).to eq(0)
     end
 
     it "round-trips the arguments through ActiveJob::Arguments, a GlobalID argument included" do

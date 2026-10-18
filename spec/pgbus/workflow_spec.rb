@@ -49,6 +49,25 @@ RSpec.describe Pgbus::Workflow do
       expect(events.map { |e| [e[:event], e[:actor]] }).to eq([%w[started app], %w[step_scheduled app]])
     end
 
+    it "records actor: and reason: on the started event and the actor on the first step_scheduled (issue #571)" do
+      klass.start!(nil, plan: "pro", actor: "alice", reason: "monthly close")
+
+      expect(events.map { |e| [e[:event], e[:actor], e[:reason]] })
+        .to eq([["started", "alice", "monthly close"], ["step_scheduled", "alice", nil]])
+      expect(Pgbus::WorkflowEntry).to have_received(:insert_run!) { |attrs|
+        expect(attrs[:arguments]).to include("plan" => "pro")
+        expect(attrs[:arguments]).not_to include("actor", "reason")
+      }
+    end
+
+    it "keeps a blank actor as given, and records app with no reason when neither is passed" do
+      klass.start!(nil, actor: "")
+      klass.start!(nil, actor: nil)
+
+      expect(events.map { |e| [e[:event], e[:actor], e[:reason]] })
+        .to eq([["started", "", nil], ["step_scheduled", "", nil], ["started", "app", nil], ["step_scheduled", "app", nil]])
+    end
+
     it "serializes the arguments through ActiveJob::Arguments" do
       klass.start!(nil, plan: "pro", count: 2)
 
@@ -84,10 +103,11 @@ RSpec.describe Pgbus::Workflow do
       allow(Pgbus::WorkflowEntry).to receive(:where).with(workflow_class: "SpecOrderWorkflow", idempotency_key: "k")
                                                     .and_return(double("scope", take!: record))
 
-      wf = klass.start!(nil, idempotency_key: "k")
+      wf = klass.start!(nil, idempotency_key: "k", actor: "bob", reason: "again")
 
       expect(wf).to be_duplicate_start
       expect(Pgbus::WorkflowStep).not_to have_received(:insert_next!)
+      expect(events).to be_empty
     end
 
     it "rejects a class with no steps or no name" do

@@ -68,11 +68,11 @@ module Pgbus
 
       # --- start! and rerun! --------------------------------------------
 
-      def start(klass, subject:, arguments:, idempotency_key: nil)
+      def start(klass, subject:, arguments:, idempotency_key: nil, actor: DEFAULT_ACTOR, reason: nil)
         attrs = run_attributes(klass, idempotency_key: idempotency_key)
                 .merge(Payload.subject_attributes(subject))
                 .merge(arguments: Payload.dump(arguments, what: "arguments of #{klass.name}"))
-        insert_run(klass, attrs, actor: DEFAULT_ACTOR)
+        insert_run(klass, attrs, actor: actor, reason: reason)
       end
 
       # A finished or cancelled run started again: same subject and
