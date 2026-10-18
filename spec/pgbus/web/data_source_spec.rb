@@ -9,6 +9,10 @@ RSpec.describe Pgbus::Web::DataSource do
 
   let(:mock_client) { double("Pgbus::Client", pgmq: double("pgmq")) }
   let(:mock_connection) { double("ActiveRecord::Connection") }
+  # What a failed job's discard reads to release the lock its message holds.
+  let(:failed_lock_holders_sql) do
+    "SELECT queue_name, msg_id, payload, failed_at::timestamptz AS failed_at FROM pgbus_failed_events WHERE"
+  end
 
   before do
     allow(Pgbus::BusRecord).to receive(:connection).and_return(mock_connection)
@@ -390,6 +394,33 @@ RSpec.describe Pgbus::Web::DataSource do
     end
   end
 
+  # The queue and msg_id a message's uniqueness lock is bound under.
+  describe "#lock_holder" do
+    before { allow(Pgbus.configuration).to receive(:queue_prefix).and_return("pgbus") }
+
+    it "is the message's own for a live message" do
+      expect(data_source.send(:lock_holder, "pgbus_default", 42, nil)).to eq(["default", 42])
+    end
+
+    it "is the original message's for a dead-lettered copy whose header names it" do
+      headers = Pgbus::DeadLetterHeader.build(
+        existing: nil, reason: Pgbus::DeadLetterHeader::REASON_MAX_RETRIES, source: "worker",
+        source_queue: "pgbus_default", source_msg_id: 7, attempts: 6, max_retries: 5
+      )
+
+      expect(data_source.send(:lock_holder, "pgbus_default_dlq", 42, headers)).to eq(["default", 7])
+    end
+
+    it "is the copy's own for a dead-lettered copy written before source_msg_id was recorded" do
+      headers = Pgbus::DeadLetterHeader.build(
+        existing: nil, reason: Pgbus::DeadLetterHeader::REASON_MAX_RETRIES, source: "worker",
+        source_queue: "pgbus_default", attempts: 6, max_retries: 5
+      )
+
+      expect(data_source.send(:lock_holder, "pgbus_default_dlq", 42, headers)).to eq(["default_dlq", 42])
+    end
+  end
+
   describe "#discard_job" do
     it "archives the message and releases the uniqueness lock" do
       allow(Pgbus.configuration).to receive(:queue_prefix).and_return("pgbus")
@@ -438,25 +469,28 @@ RSpec.describe Pgbus::Web::DataSource do
   end
 
   describe "#discard_failed_event" do
-    it "deletes the event, releases the uniqueness lock, and archives the queue message" do
-      allow(mock_connection).to receive(:select_one)
-        .with(anything, "Pgbus Failed Event", [1])
-        .and_return({
-                      "id" => 1,
-                      "queue_name" => "default",
-                      "msg_id" => 42,
-                      "payload" => '{"job_class":"FailedJob","pgbus_uniqueness_key":"failed-1"}'
-                    })
+    let(:failed_at) { Time.utc(2026, 10, 18, 10, 30) }
+    let(:event) do
+      { "id" => 1, "queue_name" => "default", "msg_id" => 42,
+        "payload" => '{"job_class":"FailedJob","pgbus_uniqueness_key":"failed-1"}' }
+    end
 
+    it "deletes the event, releases the uniqueness lock, and archives the queue message" do
+      allow(mock_connection).to receive(:select_one).with(anything, "Pgbus Failed Event", [1]).and_return(event)
+      allow(mock_connection).to receive(:select_all)
+        .with("#{failed_lock_holders_sql} id = $1", "Pgbus Collect Failed Keys", [1])
+        .and_return([event.except("id").merge("failed_at" => failed_at)])
       allow(mock_connection).to receive(:exec_delete)
-      allow(Pgbus::UniquenessKey).to receive(:release_held_by!).and_return(1)
+      allow(Pgbus::UniquenessKey).to receive(:release_all_held_by!).and_return(1)
       allow(mock_client).to receive(:archive_message)
 
       data_source.discard_failed_event(1)
 
       expect(mock_connection).to have_received(:exec_delete)
-      expect(Pgbus::UniquenessKey).to have_received(:release_held_by!).with(
-        "failed-1", queue_name: "default", msg_id: 42, enqueued_at: nil
+      # The failure was recorded after the job's lock was acquired: failed_at
+      # bounds which unbound lock is the job's own.
+      expect(Pgbus::UniquenessKey).to have_received(:release_all_held_by!).with(
+        [["failed-1", "default", 42, failed_at]]
       )
       expect(mock_client).to have_received(:archive_message).with("default", 42)
     end
@@ -467,17 +501,20 @@ RSpec.describe Pgbus::Web::DataSource do
   describe "#discard_all_failed" do
     let(:not_handler) { "NOT (queue_name = ANY($1::text[]))" }
     let(:handler_names) { ["{orders_handler,pgbus_orders_handler}"] }
+    let(:failed_at) { Time.utc(2026, 10, 18, 10, 30) }
 
     before do
       allow(data_source).to receive(:registered_subscribers)
         .and_return([{ queue_name: "orders_handler", physical_queue_name: "pgbus_orders_handler" }])
       allow(mock_connection).to receive(:select_all)
-        .with("SELECT queue_name, msg_id, payload FROM pgbus_failed_events WHERE #{not_handler}",
-              "Pgbus Collect Failed Keys", handler_names)
+        .with("#{failed_lock_holders_sql} #{not_handler}", "Pgbus Collect Failed Keys", handler_names)
         .and_return([
-                      { "queue_name" => "default", "msg_id" => 10, "payload" => '{"pgbus_uniqueness_key":"k1"}' },
-                      { "queue_name" => "default", "msg_id" => 11, "payload" => '{"pgbus_uniqueness_key":"k2"}' },
-                      { "queue_name" => "low", "msg_id" => 99, "payload" => '{"job_class":"PlainJob"}' }
+                      { "queue_name" => "default", "msg_id" => 10, "failed_at" => failed_at,
+                        "payload" => '{"pgbus_uniqueness_key":"k1"}' },
+                      { "queue_name" => "default", "msg_id" => 11, "failed_at" => failed_at,
+                        "payload" => '{"pgbus_uniqueness_key":"k2"}' },
+                      { "queue_name" => "low", "msg_id" => 99, "failed_at" => failed_at,
+                        "payload" => '{"job_class":"PlainJob"}' }
                     ])
 
       allow(mock_connection).to receive(:select_all)
@@ -503,7 +540,7 @@ RSpec.describe Pgbus::Web::DataSource do
     it "releases the uniqueness lock each failed job's message holds" do
       data_source.discard_all_failed
       expect(Pgbus::UniquenessKey).to have_received(:release_all_held_by!).with(
-        [["k1", "default", 10, nil], ["k2", "default", 11, nil]]
+        [["k1", "default", 10, failed_at], ["k2", "default", 11, failed_at]]
       )
     end
 

@@ -450,8 +450,8 @@ module Pgbus
         end
         headers = DeadLetterHeader.build(
           existing: message.headers, reason: DeadLetterHeader::REASON_MAX_RETRIES, source: "worker",
-          source_queue: source_queue || config.queue_name(queue_name), attempts: message.read_ct.to_i,
-          max_retries: config.max_retries, error: last_error
+          source_queue: source_queue || config.queue_name(queue_name), source_msg_id: message.msg_id.to_i,
+          attempts: message.read_ct.to_i, max_retries: config.max_retries, error: last_error
         )
         if source_queue
           client.ensure_dead_letter_queue(queue_name)

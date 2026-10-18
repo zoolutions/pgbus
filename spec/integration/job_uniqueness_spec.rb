@@ -250,6 +250,53 @@ RSpec.describe "Job uniqueness (integration)", :integration do
       conn&.execute("SET TIME ZONE 'UTC'")
     end
 
+    # The dashboard reads enqueued_at through ActiveRecord, which hands over
+    # a Time, not PGMQ's string: it has to reach the cast with its offset.
+    %w[Asia/Tokyo America/New_York].each do |zone|
+      context "with a Time and a #{zone} session" do
+        let(:conn) { Pgbus::UniquenessKey.connection }
+
+        before do
+          conn.execute("SET TIME ZONE #{conn.quote(zone)}")
+          Pgbus::UniquenessKey.acquire!("unique-order-42", queue_name: "default", msg_id: 0)
+        end
+
+        after { conn.execute("SET TIME ZONE 'UTC'") }
+
+        def instant
+          Time.at(conn.select_value(
+            "SELECT extract(epoch FROM created_at::timestamptz) FROM pgbus_uniqueness_keys " \
+            "WHERE lock_key = 'unique-order-42'"
+          ).to_f)
+        end
+
+        it "releases one at a time on the right side of the lock's acquire" do
+          sent = instant
+
+          expect(release(enqueued_at: sent - 1)).to eq(0)
+          expect(release(enqueued_at: sent + 1)).to eq(1)
+        end
+
+        it "releases in bulk on the right side of the lock's acquire" do
+          sent = instant
+
+          expect(Pgbus::UniquenessKey.release_all_held_by!([["unique-order-42", "default", 7, sent - 1]])).to eq(0)
+          expect(Pgbus::UniquenessKey.release_all_held_by!([["unique-order-42", "default", 7, sent + 1]])).to eq(1)
+        end
+
+        it "hands over only on the right side of the lock's acquire" do
+          sent = instant
+          unbind = lambda do |sent_at|
+            Pgbus::UniquenessKey.unbind!("unique-order-42", from_queue_name: "default", from_msg_id: 7,
+                                                            from_enqueued_at: sent_at, queue_name: "default")
+          end
+
+          expect(unbind.call(sent - 1)).to be_nil
+          expect(unbind.call(sent + 1)).not_to be_nil
+        end
+      end
+    end
+
     it "releases the synthetic pending row like an unbound one" do
       Pgbus::UniquenessKey.acquire!("unique-order-42", queue_name: "pending", msg_id: 0)
 

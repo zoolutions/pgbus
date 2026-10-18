@@ -71,7 +71,8 @@ RSpec.describe "Dead-letter reason headers (integration)", :integration do
     block = headers_of(rows.first).fetch("pgbus_dead_letter")
     expect(block).to include(
       "version" => 1, "reason" => "max_retries_exceeded", "source" => "worker",
-      "source_queue" => config.queue_name(queue), "attempts" => 3, "max_retries" => 2,
+      "source_queue" => config.queue_name(queue), "source_msg_id" => source.msg_id.to_i,
+      "attempts" => 3, "max_retries" => 2,
       "error_class" => "ArgumentError", "error_message" => "card declined", "error_attempt" => 2
     )
     expect(block["backtrace"]).not_to be_empty

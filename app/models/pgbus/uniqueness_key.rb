@@ -107,7 +107,7 @@ module Pgbus
       Thread.current[:pgbus_uniqueness_created_at]&.delete(lock_key)
       connection.exec_delete(
         "DELETE FROM #{table_name} WHERE #{HELD_BY_CONDITION}",
-        "UniquenessKey Release Held By", held_by_binds(lock_key, queue_name, msg_id, enqueued_at || "infinity")
+        "UniquenessKey Release Held By", held_by_binds(lock_key, queue_name, msg_id, sent_at_literal(enqueued_at, "infinity"))
       )
     end
 
@@ -121,7 +121,7 @@ module Pgbus
     # bind!, or nil when the attempt no longer holds the key. Without the
     # attempt's enqueued_at only a row bound to it is taken.
     def self.unbind!(lock_key, from_queue_name:, from_msg_id:, from_enqueued_at:, queue_name:)
-      binds = held_by_binds(lock_key, from_queue_name, from_msg_id, from_enqueued_at || "-infinity")
+      binds = held_by_binds(lock_key, from_queue_name, from_msg_id, sent_at_literal(from_enqueued_at, "-infinity"))
       result = connection.exec_query(
         "UPDATE #{table_name} SET queue_name = $6, msg_id = 0, created_at = CURRENT_TIMESTAMP " \
         "WHERE #{HELD_BY_CONDITION} RETURNING created_at",
@@ -136,9 +136,8 @@ module Pgbus
     def self.release_all_held_by!(holders)
       holders.each_slice(1000).sum do |slice|
         values = slice.map do |lock_key, queue_name, msg_id, enqueued_at|
-          sent_at = enqueued_at.is_a?(Numeric) ? Time.at(enqueued_at) : (enqueued_at || "infinity")
           "(#{connection.quote(lock_key.to_s)}, #{connection.quote(queue_name.to_s)}, #{msg_id.to_i}, " \
-            "#{connection.quote(sent_at)}::timestamptz)"
+            "#{connection.quote(sent_at_literal(enqueued_at, "infinity"))}::timestamptz)"
         end
         connection.exec_delete(
           "DELETE FROM #{table_name} AS u USING (VALUES #{values.join(", ")}) AS m(lock_key, queue_name, msg_id, sent_at) " \
@@ -149,11 +148,23 @@ module Pgbus
       end
     end
 
-    def self.held_by_binds(lock_key, queue_name, msg_id, enqueued_at)
-      enqueued_at = Time.at(enqueued_at) if enqueued_at.is_a?(Numeric)
-      [lock_key, queue_name.to_s, msg_id.to_i, enqueued_at, Uniqueness::PLACEHOLDER_QUEUE]
+    def self.held_by_binds(lock_key, queue_name, msg_id, sent_at)
+      [lock_key, queue_name.to_s, msg_id.to_i, sent_at, Uniqueness::PLACEHOLDER_QUEUE]
     end
     private_class_method :held_by_binds
+
+    # A message's enqueued_at as a timestamptz literal that carries its own
+    # offset. PGMQ hands over a String that already does; a Time (the
+    # dashboard reads it through ActiveRecord) or epoch seconds would
+    # otherwise be bound as zone-less digits and read in the session's zone.
+    # +missing+ stands in for an unknown send time.
+    def self.sent_at_literal(enqueued_at, missing)
+      sent_at = enqueued_at.is_a?(Numeric) ? Time.at(enqueued_at) : enqueued_at
+      return missing if sent_at.nil?
+
+      sent_at.respond_to?(:iso8601) ? sent_at.iso8601(6) : sent_at.to_s
+    end
+    private_class_method :sent_at_literal
 
     # Release a lock only while it is still UNBOUND (msg_id = 0) AND was
     # acquired no later than +acquired_before+. Used when discarding a parked

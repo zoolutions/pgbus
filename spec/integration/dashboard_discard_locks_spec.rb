@@ -130,18 +130,21 @@ RSpec.describe "Dashboard discard operations clear locks (integration)", :integr
     end
   end
 
-  describe "#discard_failed_event clears associated lock" do
-    before do
-      ActiveRecord::Base.connection.execute(<<~SQL)
-        INSERT INTO pgbus_failed_events (queue_name, payload, headers, error_class, error_message, failed_at)
-        VALUES ('#{full_queue}',
-                '{"job_class":"FailedJob","arguments":[1],"pgbus_uniqueness_key":"failed-1","pgbus_uniqueness_strategy":"until_executed"}',
-                '{}', 'RuntimeError', 'boom', NOW())
-      SQL
-    end
+  # A failed job's lock was acquired before its message was sent, so before
+  # the failure was recorded: failed_at bounds which unbound lock is its own.
+  def record_failure(key, arguments: [1])
+    ActiveRecord::Base.connection.execute(<<~SQL)
+      INSERT INTO pgbus_failed_events (queue_name, payload, headers, error_class, error_message, failed_at)
+      VALUES ('#{full_queue}',
+              '{"job_class":"FailedJob","arguments":#{arguments.to_json},"pgbus_uniqueness_key":"#{key}","pgbus_uniqueness_strategy":"until_executed"}',
+              '{}', 'RuntimeError', 'boom', NOW())
+    SQL
+  end
 
+  describe "#discard_failed_event clears associated lock" do
     it "releases the lock when discarding a failed event" do
       Pgbus::UniquenessKey.acquire!("failed-1", queue_name: queue_name, msg_id: 0)
+      record_failure("failed-1")
       expect(Pgbus::UniquenessKey.locked?("failed-1")).to be true
 
       event = data_source.failed_events.first
@@ -149,19 +152,33 @@ RSpec.describe "Dashboard discard operations clear locks (integration)", :integr
 
       expect(Pgbus::UniquenessKey.locked?("failed-1")).to be false
     end
+
+    it "keeps a successor's unbound lock taken after the failure was recorded" do
+      record_failure("failed-1")
+      Pgbus::UniquenessKey.acquire!("failed-1", queue_name: queue_name, msg_id: 0)
+
+      event = data_source.failed_events.first
+      data_source.discard_failed_event(event["id"])
+
+      expect(Pgbus::UniquenessKey.locked?("failed-1")).to be true
+    end
   end
 
   describe "#discard_all_failed clears associated locks" do
     before do
       3.times do |i|
-        ActiveRecord::Base.connection.execute(<<~SQL)
-          INSERT INTO pgbus_failed_events (queue_name, payload, headers, error_class, error_message, failed_at)
-          VALUES ('#{full_queue}',
-                  '{"job_class":"FailedJob","arguments":[#{i}],"pgbus_uniqueness_key":"failed-#{i}","pgbus_uniqueness_strategy":"until_executed"}',
-                  '{}', 'RuntimeError', 'boom #{i}', NOW())
-        SQL
         Pgbus::UniquenessKey.acquire!("failed-#{i}", queue_name: queue_name, msg_id: 0)
+        record_failure("failed-#{i}", arguments: [i])
       end
+    end
+
+    it "keeps a successor's unbound lock taken after the failure was recorded" do
+      record_failure("failed-late", arguments: [9])
+      Pgbus::UniquenessKey.acquire!("failed-late", queue_name: queue_name, msg_id: 0)
+
+      data_source.discard_all_failed
+
+      expect(Pgbus::UniquenessKey.pluck(:lock_key)).to eq(["failed-late"])
     end
 
     it "releases all locks for discarded failed events" do
@@ -199,6 +216,25 @@ RSpec.describe "Dashboard discard operations clear locks (integration)", :integr
       data_source.discard_dlq_message(full_dlq, msg["msg_id"])
 
       expect(Pgbus::UniquenessKey.locked?("dlq-1")).to be false
+    end
+
+    # The executor's own release failed when it dead-lettered the job, so the
+    # lock is still bound to the original message. The copy's header names it.
+    it "releases the lock still bound to the message the DLQ copy was moved from" do
+      Pgbus::UniquenessKey.acquire!("dlq-3", queue_name: queue_name, msg_id: 0)
+      original_id = client.send_message(queue_name, unique_payload("dlq-3", job_class: "DlqJob")).to_i
+      Pgbus::UniquenessKey.bind!("dlq-3", queue_name: queue_name, msg_id: original_id)
+      original = client.read_batch(queue_name, qty: 1, vt: 30).first
+      headers = Pgbus::DeadLetterHeader.build(
+        existing: nil, reason: Pgbus::DeadLetterHeader::REASON_MAX_RETRIES, source: "worker",
+        source_queue: full_queue, source_msg_id: original_id, attempts: 6, max_retries: 5
+      )
+      client.move_to_dead_letter(queue_name, original, headers: headers)
+      dead = ActiveRecord::Base.connection.select_one("SELECT msg_id FROM pgmq.q_#{full_dlq} ORDER BY msg_id DESC LIMIT 1")
+
+      data_source.discard_dlq_message(full_dlq, dead["msg_id"])
+
+      expect(Pgbus::UniquenessKey.locked?("dlq-3")).to be(false)
     end
 
     # The attempt was redelivered after it had handed its lock to a retry,

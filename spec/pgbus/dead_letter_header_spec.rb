@@ -38,6 +38,12 @@ RSpec.describe Pgbus::DeadLetterHeader do
       )
     end
 
+    # The copy's own msg_id is a DLQ sequence number; the original's lets a
+    # discard of the copy find the uniqueness lock still bound to it (#564).
+    it "records the message's msg_id in its source queue when given" do
+      expect(block_of(build(source_msg_id: 42))).to include("source_msg_id" => 42)
+    end
+
     it "adds the error fields from the last recorded failure" do
       block = block_of(build(error: error))
 

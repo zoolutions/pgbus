@@ -30,7 +30,11 @@ module Pgbus
 
     # error: FailedEventRecorder.last_error's Hash, or nil when no failure
     # was recorded. Returns the merged headers as a JSON string.
-    def build(existing:, reason:, source:, source_queue:, attempts:, max_retries:, error: nil, now: Time.now.utc)
+    # source_msg_id: the message's id in source_queue (the copy gets a new one
+    # in the DLQ), which a discard of the copy uses to find a uniqueness lock
+    # still bound to the original (issue #564).
+    def build(existing:, reason:, source:, source_queue:, attempts:, max_retries:, error: nil, source_msg_id: nil,
+              now: Time.now.utc)
       headers = decode(existing, warn: true)
       retries = count(headers.delete(RETRIES_KEY))
       block = {
@@ -42,6 +46,7 @@ module Pgbus
         "max_retries" => max_retries,
         "dead_lettered_at" => iso(now)
       }
+      block["source_msg_id"] = source_msg_id if source_msg_id
       block["retries_from_dlq"] = retries if retries.positive?
       block.merge!(error_fields(error)) if error
       JSON.generate(headers.merge(KEY => block))

@@ -115,6 +115,7 @@ class Views::Docs::Pages::RetriesDeadLetters < DocsUI::Page
           [ [ :code, "reason" ], [ :md, "`max_retries_exceeded`, the only reason today." ] ],
           [ [ :code, "source" ], [ :md, "`worker` (ActiveJob) or `consumer` (event bus)." ] ],
           [ [ :code, "source_queue" ], [ :md, "The physical queue it was deleted from, a priority sub-queue (`…_p2`) included." ] ],
+          [ [ :code, "source_msg_id" ], [ :md, "Its `msg_id` in `source_queue` (the copy gets a new one in the DLQ); discarding the copy uses it to free a uniqueness lock still bound to the original. Absent on copies dead-lettered by earlier releases." ] ],
           [ [ :code, "attempts" ], [ :md, "`read_ct` of the read that routed it." ] ],
           [ [ :code, "max_retries" ], [ :md, "`max_retries` at that moment." ] ],
           [ [ :code, "dead_lettered_at" ], "UTC ISO 8601." ],
