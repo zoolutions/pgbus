@@ -40,6 +40,11 @@ RSpec.describe Pgbus::Web::WorkflowState do
       .to eq(["waiting", "waiting_signal_late", { signal: "approved", ago: now - 10_800, late: now - 7200, time: now + 3600 }])
     expect(said(**waiting, on_timeout: "pause!", waiting_since: now - 60, timeout_at: now + 60).second)
       .to eq("waiting_signal_timeout")
+    # A deploy switched the step to :pause! after a late notice: the next deadline pauses.
+    expect(said(**waiting, on_timeout: "pause!", waiting_since: now - 60, timeout_at: now + 60, late_since: now - 30).second)
+      .to eq("waiting_signal_timeout")
+    expect(said(**waiting, on_timeout: nil, waiting_since: now - 60, timeout_at: now + 60, late_since: now - 30).second)
+      .to eq("waiting_signal_late")
   end
 
   it "says why a run is paused" do

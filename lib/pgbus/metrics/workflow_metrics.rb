@@ -12,7 +12,7 @@ module Pgbus
     #   pgbus_workflows_paused_total{workflow_class, error_class}            counter (error_class absent for a manual pause)
     #   pgbus_workflows_cancelled_total{workflow_class}                      counter
     #   pgbus_workflow_stalls_total{workflow_class, step, detection}         counter (detection: redelivery | sweep)
-    #   pgbus_workflow_wait_overdue_total{workflow_class, step}              counter (a missed on_timeout: :notify deadline)
+    #   pgbus_workflow_wait_overdue_total{workflow_class, step}              counter (a late notice of an on_timeout: :notify wait)
     #   pgbus_workflows{workflow_class, status}                              gauge, from each sweep
     #   pgbus_workflows_stuck{workflow_class, reason}                        gauge, from each sweep
     #

@@ -305,9 +305,9 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
         `:notify`.
 
         **A soft deadline.** `on_timeout: :notify` reports a late signal and
-        keeps waiting for it: each missed deadline writes a `wait_timed_out`
-        event (`action: "notify"`), sends `pgbus.workflow.wait_timed_out` and
-        counts once in `pgbus_workflow_wait_overdue_total`, while the same
+        keeps waiting for it: a late notice writes a `wait_timed_out` event
+        (`action: "notify"`), sends `pgbus.workflow.wait_timed_out` and counts
+        once in `pgbus_workflow_wait_overdue_total`, while the same
         attempt stays waiting and its deadline moves one `wait_timeout:` on.
         No attempt fails, so the step's outcomes and the step-failing alert
         below are untouched, and a signal that arrives later wakes that
@@ -720,8 +720,9 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
       md <<~'MD'
         StatsD reads timer values as milliseconds, so it receives the step
         histogram as `pgbus_workflow_step_duration_ms` (seconds × 1000).
-        `pgbus_workflow_wait_overdue_total` counts each deadline an
-        `on_timeout: :notify` wait missed; the other `on_timeout:` values end
+        `pgbus_workflow_wait_overdue_total` counts the late notices of
+        `on_timeout: :notify` waits (one per deadline, or one for a sweep that
+        missed several); the other `on_timeout:` values end
         the wait and show in the step and run counters instead.
 
         **Stuck reasons** (the `pgbus_workflows_stuck` gauge): `paused_error`

@@ -273,7 +273,7 @@ module Pgbus
 
         # Enough finished runs that ?status=all has a second page.
         def sample_exports(now)
-          Array.new(SampleData::PAGED_ROWS - 14) do |i|
+          Array.new(SampleData::PAGED_ROWS - 15) do |i|
             day = now - (86_400 * (i + 2))
             wf_row(now, format("f%07d-0000-4000-8000-%012d", i, i), "NightlyExportWorkflow", "finished", "upload",
                    subject_type: nil, subject_id: nil, step_status: "completed", created_at: day, updated_at: day + 900,

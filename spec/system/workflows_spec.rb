@@ -78,7 +78,7 @@ RSpec.describe "Workflows", type: :system do
       fill_in "Workflow class", with: "NightlyExportWorkflow"
       click_button "Apply filters"
 
-      expect(page).to have_css("tr[data-workflow-id]", count: 16)
+      expect(page).to have_css("tr[data-workflow-id]", count: 15)
       expect(page).to have_no_text("CheckoutWorkflow")
 
       visit "/pgbus/workflows?status=all"

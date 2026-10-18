@@ -59,7 +59,10 @@ module Pgbus
       # An on_timeout: :notify deadline sends a late notice and the wait goes
       # on (issue #565); late_since is when the first one went out.
       def signal_deadline(row, args)
-        return ["waiting", "waiting_signal_late", args.merge(late: row[:late_since])] if row[:late_since]
+        # A deploy that changed on_timeout since the last notice: the next
+        # deadline does something else (nil: the class is not loaded here).
+        late = row[:late_since] && [nil, "notify"].include?(row[:on_timeout]&.to_s)
+        return ["waiting", "waiting_signal_late", args.merge(late: row[:late_since])] if late
 
         ["waiting", row[:on_timeout].to_s == "notify" ? "waiting_signal_notify" : "waiting_signal_timeout", args]
       end

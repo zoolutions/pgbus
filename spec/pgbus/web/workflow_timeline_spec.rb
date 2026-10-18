@@ -118,6 +118,14 @@ RSpec.describe Pgbus::Web::WorkflowTimeline do
       expect(described_class.chart([step], [], status: "finished", now: now)[:wait_timeouts]).to eq([])
     end
 
+    it "places a mark at the deadline the event reports, not when the sweep sent it" do
+      event = { event: "wait_timed_out", step_name: "capture", attempt: 1, created_at: now - 60,
+                details: { "action" => "notify", "timeout_at" => (now - 290).utc.iso8601(3) } }
+
+      expect(described_class.chart([step], [event], status: "waiting", now: now)[:wait_timeouts].sole[:at])
+        .to eq((now - 290).to_i * 1000)
+    end
+
     it "colours ran by how the attempt ended" do
       series = %w[completed skipped failed in_progress waiting cancelled].map do |status|
         row = described_class.chart([step(status: status, finished_at: (now - 400 unless %w[in_progress waiting].include?(status)))], [],
