@@ -1,0 +1,38 @@
+spec/integration/workflow/wait_timeout_spec.rb
+  s_6dc718aa5ed0fb::t_eb001cdb02f383 95,99-100,103-175
+  s_6dc718aa5ed0fb::t_cf24b1b6ef30db 96-98,101-102
+lib/pgbus/instrumentation.rb
+  s_6dc718aa5ed0fb::t_98032822c3efed 82-83,85
+lib/pgbus/metrics/workflow_metrics.rb
+  s_6dc718aa5ed0fb::t_91637c400c797c 15,24,41,54-59
+spec/pgbus/integrations/appsignal/subscriber_spec.rb
+  s_6dc718aa5ed0fb::t_907658aa6b7bb0 498-499,501,503-508
+  s_6dc718aa5ed0fb::t_cf24b1b6ef30db 500,502
+lib/pgbus/workflow/step_definition.rb
+  s_6dc718aa5ed0fb::t_1371c7d864a73e 11-13,120
+lib/pgbus/workflow/wait_timeout.rb
+  s_6dc718aa5ed0fb::t_7dd3cd90e35b68 15-17,20-21,59,63-64,71-85
+spec/pgbus/metrics/subscriber_spec.rb
+  s_6dc718aa5ed0fb::t_907658aa6b7bb0 280-281,283-284,286-292
+  s_6dc718aa5ed0fb::t_cf24b1b6ef30db 282,285
+spec/pgbus/workflow/waiting_declarations_spec.rb
+  s_6dc718aa5ed0fb::t_a85e874c373ab7 109,115,120,125-127,143-145
+app/models/pgbus/workflow_step.rb
+  s_6dc718aa5ed0fb::t_7dd3cd90e35b68 58-64
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "9151b21c0cf9ba32ae14488bae9337cd81b1112d",
+  "prompts": {},
+  "sessions": {
+    "s_6dc718aa5ed0fb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1fb31b65-82d7-41b6-84c2-41c5d368ce3e",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
