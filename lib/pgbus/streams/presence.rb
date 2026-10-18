@@ -72,6 +72,7 @@ module Pgbus
       @schema_mutex = Mutex.new
       @seats_supported = nil
       @probed_at = nil
+      @schema_generation = 0
 
       class << self
         # True when pgbus_presence_members has the seat columns (the
@@ -81,17 +82,29 @@ module Pgbus
         # The answer is read and written under @schema_mutex only (issue
         # #527). A successful probe is kept as above; a probe that raises is
         # not, so the next call probes again.
+        #
+        # The probe itself runs outside @schema_mutex (issue #566): it waits
+        # for the adapter's lock, and a request inside a transaction holds
+        # that lock while it asks seats_supported?. Two threads may probe at
+        # once; a true answer one of them stored is never taken back, and a
+        # probe that a reset_schema_cache! overtook stores nothing.
         def seats_supported?
-          @schema_mutex.synchronize do
-            next @seats_supported if schema_answer_fresh?(@seats_supported, @probed_at)
+          cached, generation = @schema_mutex.synchronize do
+            [(@seats_supported if schema_answer_fresh?(@seats_supported, @probed_at)), @schema_generation]
+          end
+          return cached unless cached.nil?
 
-            rows = connection.exec_params(<<~SQL, [])
-              SELECT 1 AS present FROM information_schema.columns
-              WHERE table_name = 'pgbus_presence_members' AND column_name = 'connection_id'
-                AND table_schema = ANY (current_schemas(false))
-            SQL
+          rows = exec_params(<<~SQL, [])
+            SELECT 1 AS present FROM information_schema.columns
+            WHERE table_name = 'pgbus_presence_members' AND column_name = 'connection_id'
+              AND table_schema = ANY (current_schemas(false))
+          SQL
+          supported = !rows.to_a.empty?
+          @schema_mutex.synchronize do
+            next supported unless generation == @schema_generation
+
             @probed_at = monotonic_now
-            @seats_supported = !rows.to_a.empty?
+            @seats_supported ||= supported
           end
         end
 
@@ -108,6 +121,7 @@ module Pgbus
 
         def reset_schema_cache!
           @schema_mutex.synchronize do
+            @schema_generation += 1
             @probed_at = nil
             @seats_supported = nil
           end
@@ -124,7 +138,7 @@ module Pgbus
         def expire_seats!(ttl_for:, min_ttl:)
           return [] unless seats_supported?
 
-          candidates = connection.exec_params(<<~SQL, [min_ttl])
+          candidates = exec_params(<<~SQL, [min_ttl])
             SELECT stream_name, connection_id FROM pgbus_presence_members
             WHERE connection_id IS NOT NULL AND last_seen_at < NOW() - make_interval(secs => $1)
           SQL
@@ -133,23 +147,23 @@ module Pgbus
           end
         end
 
+        # The PG::Connection under the adapter. Run SQL through exec_params,
+        # not on this: the adapter's lock is released once it is returned.
         def connection
-          # Respect multi-database setups (connects_to). When
-          # Pgbus.configuration.connects_to is set, the pgbus tables
-          # live in a separate database accessed via Pgbus::BusRecord;
-          # the default path uses ActiveRecord::Base. Matches the
-          # canonical pattern in Pgbus::Process::QueueLock#connection
-          # and Pgbus::Configuration's connection probe.
-          unless defined?(::ActiveRecord::Base)
-            raise Pgbus::ConfigurationError,
-                  "Pgbus::Streams::Presence requires ActiveRecord (no AR connection available)"
-          end
+          adapter.raw_connection
+        end
 
-          if Pgbus.configuration.connects_to
-            Pgbus::BusRecord.connection.raw_connection
-          else
-            ::ActiveRecord::Base.connection.raw_connection
-          end
+        # Runs one statement on the adapter's PG::Connection while holding
+        # the adapter's lock (issue #566). raw_connection takes that lock
+        # only to hand the connection out; on a pinned pool (transactional
+        # tests) every thread shares the one adapter, and its lock is all
+        # that keeps a second thread's statement off the libpq connection
+        # while this one is in flight. Unpinned, the lock is a NullLock. The
+        # lock is reentrant, so a thread already holding it (a request
+        # inside a transaction) re-enters it.
+        def exec_params(sql, binds)
+          adapter = self.adapter
+          adapter.lock.synchronize { adapter.raw_connection.exec_params(sql, binds) }
         end
 
         # Reports a seat join/leave to streams_presence_on_change (issue #515).
@@ -171,6 +185,21 @@ module Pgbus
 
         private
 
+        # Respect multi-database setups (connects_to). When
+        # Pgbus.configuration.connects_to is set, the pgbus tables
+        # live in a separate database accessed via Pgbus::BusRecord;
+        # the default path uses ActiveRecord::Base. Matches the
+        # canonical pattern in Pgbus::Process::QueueLock#connection
+        # and Pgbus::Configuration's connection probe.
+        def adapter
+          unless defined?(::ActiveRecord::Base)
+            raise Pgbus::ConfigurationError,
+                  "Pgbus::Streams::Presence requires ActiveRecord (no AR connection available)"
+          end
+
+          Pgbus.configuration.connects_to ? Pgbus::BusRecord.connection : ::ActiveRecord::Base.connection
+        end
+
         def schema_answer_fresh?(supported, probed_at)
           return false if supported.nil? || probed_at.nil?
 
@@ -178,7 +207,7 @@ module Pgbus
         end
 
         def expire_stream_seats(stream_name, connection_ids, ttl)
-          rows = connection.exec_params(<<~SQL, [stream_name, text_array(connection_ids), ttl])
+          rows = exec_params(<<~SQL, [stream_name, text_array(connection_ids), ttl])
             DELETE FROM pgbus_presence_members
             WHERE stream_name = $1 AND connection_id = ANY($2::text[])
               AND last_seen_at < NOW() - make_interval(secs => $3)
@@ -306,7 +335,7 @@ module Pgbus
         return touch_seats(Array(connection_id)) if connection_id
 
         member_id = member_id.to_s
-        connection.exec_params(<<~SQL, [@stream.name, member_id])
+        exec_params(<<~SQL, [@stream.name, member_id])
           UPDATE pgbus_presence_members
           SET last_seen_at = NOW()
           WHERE stream_name = $1 AND member_id = $2#{" AND connection_id IS NULL" if seats_now?}
@@ -320,7 +349,7 @@ module Pgbus
       def set_state(connection_id:, state:)
         raise ArgumentError, "set_state takes a Hash (got #{state.class})" unless state.is_a?(Hash)
 
-        rows = connection.exec_params(<<~SQL, [@stream.name, connection_id.to_s, JSON.generate(state)])
+        rows = exec_params(<<~SQL, [@stream.name, connection_id.to_s, JSON.generate(state)])
           UPDATE pgbus_presence_members
           SET state = state || $3::jsonb, last_seen_at = NOW()
           WHERE stream_name = $1 AND connection_id = $2
@@ -335,7 +364,7 @@ module Pgbus
       # table each row is one seat and also carries connection_id, seat
       # and state; group by "id" for one entry per member.
       def members
-        rows = connection.exec_params(<<~SQL, [@stream.name])
+        rows = exec_params(<<~SQL, [@stream.name])
           SELECT #{seats? ? SEAT_RECORD_COLUMNS : RECORD_COLUMNS}
           FROM pgbus_presence_members
           WHERE stream_name = $1
@@ -347,7 +376,7 @@ module Pgbus
       # Returns the count of current members. Faster than members.size
       # because it doesn't deserialize metadata.
       def count
-        rows = connection.exec_params(<<~SQL, [@stream.name])
+        rows = exec_params(<<~SQL, [@stream.name])
           SELECT COUNT(*) AS n FROM pgbus_presence_members WHERE stream_name = $1
         SQL
         rows.first["n"].to_i
@@ -362,7 +391,7 @@ module Pgbus
       # workers running the sweep concurrently won't double-emit leave
       # events. Yields each expired record when a block is given.
       def sweep!(older_than:)
-        rows = connection.exec_params(<<~SQL, [@stream.name, older_than])
+        rows = exec_params(<<~SQL, [@stream.name, older_than])
           DELETE FROM pgbus_presence_members
           WHERE stream_name = $1 AND last_seen_at < $2#{" AND connection_id IS NULL" if seats_now?}
           RETURNING #{RECORD_COLUMNS}
@@ -388,7 +417,7 @@ module Pgbus
 
       def upsert_member_once(member_id, metadata)
         conflict = seats? ? "(stream_name, member_id) WHERE connection_id IS NULL" : "(stream_name, member_id)"
-        rows = connection.exec_params(<<~SQL, [@stream.name, member_id, JSON.generate(metadata)])
+        rows = exec_params(<<~SQL, [@stream.name, member_id, JSON.generate(metadata)])
           INSERT INTO pgbus_presence_members (stream_name, member_id, metadata, joined_at, last_seen_at)
           VALUES ($1, $2, $3::jsonb, NOW(), NOW())
           ON CONFLICT #{conflict}
@@ -399,7 +428,7 @@ module Pgbus
       end
 
       def upsert_seat(member_id, metadata, connection_id, seat)
-        rows = connection.exec_params(<<~SQL, [@stream.name, member_id, JSON.generate(metadata), connection_id, seat])
+        rows = exec_params(<<~SQL, [@stream.name, member_id, JSON.generate(metadata), connection_id, seat])
           INSERT INTO pgbus_presence_members
             (stream_name, member_id, metadata, connection_id, seat, joined_at, last_seen_at)
           VALUES ($1, $2, $3::jsonb, $4, $5, NOW(), NOW())
@@ -412,7 +441,7 @@ module Pgbus
       end
 
       def delete_member(member_id)
-        rows = connection.exec_params(<<~SQL, [@stream.name, member_id])
+        rows = exec_params(<<~SQL, [@stream.name, member_id])
           DELETE FROM pgbus_presence_members
           WHERE stream_name = $1 AND member_id = $2#{" AND connection_id IS NULL" if seats_now?}
           RETURNING #{RECORD_COLUMNS}
@@ -422,7 +451,7 @@ module Pgbus
       end
 
       def delete_seat(connection_id)
-        rows = connection.exec_params(<<~SQL, [@stream.name, connection_id])
+        rows = exec_params(<<~SQL, [@stream.name, connection_id])
           DELETE FROM pgbus_presence_members
           WHERE stream_name = $1 AND connection_id = $2
           RETURNING #{SEAT_RECORD_COLUMNS}
@@ -434,7 +463,7 @@ module Pgbus
       def touch_seats(connection_ids)
         return [] if connection_ids.empty?
 
-        rows = connection.exec_params(<<~SQL, [@stream.name, self.class.text_array(connection_ids)])
+        rows = exec_params(<<~SQL, [@stream.name, self.class.text_array(connection_ids)])
           UPDATE pgbus_presence_members
           SET last_seen_at = NOW()
           WHERE stream_name = $1 AND connection_id = ANY($2::text[])
@@ -443,8 +472,8 @@ module Pgbus
         rows.to_a.map { |row| row["connection_id"] }
       end
 
-      def connection
-        self.class.connection
+      def exec_params(sql, binds)
+        self.class.exec_params(sql, binds)
       end
     end
   end
