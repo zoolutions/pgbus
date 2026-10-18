@@ -38,13 +38,34 @@ class Views::Docs::Pages::ConcurrencyUniqueness < DocsUI::Page
         end
       RUBY
       DocsUI::Callout(:note) do
-        plain "A successful first enqueue records the logical queue and PGMQ msg_id; retries do not " \
-              "re-bind, and a bind failure leaves a placeholder for reaper recovery. Crash recovery " \
-              "checks the PGMQ queue, not a timer: the dispatcher's reaper releases a lock only when " \
-              "its message is gone. Placeholder rows (pending / msg_id=0) are scanned across live " \
-              "queues — a missing synthetic pending table is never treated as proof the job is gone. " \
-              "A lock backed by a message still in any queue is never touched, however old it looks."
+        plain "A successful first enqueue records the logical queue and PGMQ msg_id; a bind failure " \
+              "leaves a placeholder for reaper recovery. Crash recovery checks the PGMQ queue, not a " \
+              "timer: the dispatcher's reaper releases a lock only when its message is gone. Placeholder " \
+              "rows (pending / msg_id=0) are scanned across live queues and parked jobs — a missing " \
+              "synthetic pending table is never treated as proof the job is gone. A lock backed by a " \
+              "message still in any queue, or by a job parked behind its concurrency limit, is never " \
+              "touched, however old it looks."
       end
+      md <<~'MD'
+        ### Retries keep the lock
+
+        A job that reschedules itself — `retry_job(wait: 5.minutes)` in
+        `perform`, or `retry_on SomeError, wait: 5.minutes` — keeps its
+        `:until_executed` lock for the whole wait. The retry enqueues through
+        the lock the running attempt holds, and the lock moves onto the retry
+        (or, when the retry is parked behind a `limits_concurrency` slot, onto
+        the parked job). A fresh `perform_later` with the same key during the
+        wait is a duplicate and gets the conflict policy.
+
+        A finishing message releases only the lock it holds: a lock that moved
+        onto the job's retry, or that another job took after an operator
+        released it, stays. Discarding a job, a failed job or a dead-lettered
+        copy from the dashboard follows the same rule, judged by when the
+        job's message was sent (a dead-lettered copy carries its original's
+        send time); when that is unknown, only a lock bound to the message is
+        freed and the dispatcher's reaper takes the rest. The Locks page's own
+        Release still frees the key itself.
+      MD
     end
   end
 

@@ -62,5 +62,17 @@ module Pgbus
         .limit(limit)
         .pluck(:concurrency_key)
     end
+
+    # The uniqueness keys, out of +lock_keys+, that a parked job carries. Its
+    # :until_executed row stays unbound until it runs and it sits in no queue,
+    # so the uniqueness reaper asks here before calling the row an orphan. A
+    # row parked before the double-encoding fix is read through its string,
+    # since the reaper can run before the promote sweep repairs it.
+    def self.parked_uniqueness_keys(lock_keys)
+      key = Uniqueness::METADATA_KEY
+      key_path = "CASE WHEN jsonb_typeof(payload) = 'string' " \
+                 "THEN (payload #>> '{}')::jsonb ->> '#{key}' ELSE payload ->> '#{key}' END"
+      where("#{key_path} IN (?)", lock_keys).distinct.pluck(Arel.sql(key_path)).to_set
+    end
   end
 end

@@ -33,7 +33,7 @@ module Pgbus
           FailedEventRecorder.clear!(queue_name: queue_name, msg_id: message.msg_id.to_i)
           signal_concurrency(payload)
           signal_batch_discarded(payload)
-          Uniqueness.release_lock(Uniqueness.extract_key(payload))
+          release_uniqueness_lock(Uniqueness.extract_key(payload), queue_name, message)
           record_stat(payload, queue_name, "dead_lettered", execution_start, message: message)
           instrument(
             "pgbus.job_dead_lettered",
@@ -100,7 +100,10 @@ module Pgbus
           assign_batch_id(job, payload)
           Pgbus.logger.debug { "[Pgbus::Executor] running #{log_tag(message, queue_name)} job_class=#{job_class}" }
           with_visibility_heartbeat(job, queue_name, msg_id, source_queue, payload) do
-            Delivery.with(msg_id: msg_id, read_ct: read_count, queue_name: queue_name) { execute_job(job) }
+            Delivery.with(msg_id: msg_id, read_ct: read_count, queue_name: queue_name,
+                          enqueued_at: message.enqueued_at, job_id: payload["job_id"]) do
+              execute_job(job)
+            end
           end
           # retry_on re-enqueues from inside perform_now and returns normally:
           # this attempt is done (archive it) but the job is not — the retry
@@ -121,7 +124,7 @@ module Pgbus
           end
           Pgbus.logger.debug { "[Pgbus::Executor] archived #{log_tag(message, queue_name)} job_class=#{job_class}" }
           job_succeeded = true
-          release_uniqueness_lock(uniqueness_key)
+          release_uniqueness_lock(uniqueness_key, queue_name, message)
           # Only FailedEventRecorder.record! writes this table, and only after a
           # failed attempt, so a first delivery has no row: skip the per-job
           # DELETE round trip (issue #484). A stale row from a dropped-and-
@@ -146,7 +149,7 @@ module Pgbus
         # A failed :while_executing attempt is no longer executing — release
         # so the retry (same message, after VT) can acquire. :until_executed
         # keeps its lock until success/DLQ by design (#126, #333).
-        release_uniqueness_lock(uniqueness_key) if uniqueness_strategy == :while_executing
+        release_uniqueness_lock(uniqueness_key, queue_name, message) if uniqueness_strategy == :while_executing
         instrument(
           "pgbus.job_failed",
           queue: queue_name,
@@ -192,10 +195,15 @@ module Pgbus
         job.batch_id = batch_id
       end
 
-      def release_uniqueness_lock(key)
+      # Releases only the row this message holds, never the key as such: a
+      # row the job moved onto its retry (issue #564), or a successor's, stays.
+      # The queue is spelled as the row was bound (Uniqueness.lock_queue_name),
+      # as for release_duplicate_execution_lock.
+      def release_uniqueness_lock(key, queue_name, message)
         return unless key
 
-        Uniqueness.release_lock(key)
+        UniquenessKey.release_held_by!(key, queue_name: Uniqueness.lock_queue_name(queue_name, config: config),
+                                            msg_id: message.msg_id.to_i, enqueued_at: message.enqueued_at)
       rescue StandardError => e
         Pgbus.logger.warn { "[Pgbus] Uniqueness release failed: #{e.message}" }
       end
@@ -425,7 +433,8 @@ module Pgbus
 
         # Same queue the execution lock was acquired under, so the match
         # cannot land on another queue's message of the same id.
-        UniquenessKey.release_if_bound!(uniqueness_key, queue_name: queue_name, msg_id: msg_id)
+        UniquenessKey.release_if_bound!(uniqueness_key, queue_name: Uniqueness.lock_queue_name(queue_name, config: config),
+                                                        msg_id: msg_id)
       rescue StandardError => e
         Pgbus.logger.warn { "[Pgbus] Duplicate-execution lock release failed: #{e.message}" }
       end
@@ -442,7 +451,8 @@ module Pgbus
         end
         headers = DeadLetterHeader.build(
           existing: message.headers, reason: DeadLetterHeader::REASON_MAX_RETRIES, source: "worker",
-          source_queue: source_queue || config.queue_name(queue_name), attempts: message.read_ct.to_i,
+          source_queue: source_queue || config.queue_name(queue_name), source_msg_id: message.msg_id.to_i,
+          source_enqueued_at: message.enqueued_at, attempts: message.read_ct.to_i,
           max_retries: config.max_retries, error: last_error
         )
         if source_queue

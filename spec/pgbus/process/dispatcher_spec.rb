@@ -1057,6 +1057,43 @@ RSpec.describe Pgbus::Process::Dispatcher do
       allow(Pgbus::UniquenessKey).to receive_messages(all: keys, where: delete_scope)
       allow(mock_client).to receive(:message_exists?)
       allow(mock_client).to receive(:uniqueness_keys_present).and_return(Set.new)
+      allow(Pgbus::BlockedExecution).to receive(:parked_uniqueness_keys).and_return(Set.new)
+    end
+
+    # Issue #564: a job parked behind its concurrency slot (a fresh one, or a
+    # retry the running attempt parked) is in pgbus_blocked_executions, in no
+    # queue, and its row is unbound until it runs.
+    it "does not reap an aged unbound lock whose job is parked as a blocked execution" do
+      parked = lock(lock_key: "PollJob:1", queue_name: "default", msg_id: 0)
+      allow(Pgbus::UniquenessKey).to receive(:all).and_return([parked])
+      allow(Pgbus::BlockedExecution).to receive(:parked_uniqueness_keys).with(["PollJob:1"]).and_return(Set["PollJob:1"])
+
+      expect(dispatcher.send(:reap_orphaned_uniqueness_keys)).to eq(0)
+      expect(Pgbus::UniquenessKey).not_to have_received(:where)
+    end
+
+    # A promotion sends the job's message before its parked row's delete
+    # commits. Asking the parked jobs first, then the queues, every live job
+    # is seen in one or the other; the other order can miss one in between.
+    it "asks the parked jobs first, then scans the queues only for keys no parked job carries" do
+      parked = lock(lock_key: "Parked", queue_name: "default", msg_id: 0)
+      orphan = lock(lock_key: "Orphan", queue_name: "default", msg_id: 0)
+      order = []
+      allow(Pgbus::UniquenessKey).to receive(:all).and_return([parked, orphan])
+      allow(Pgbus::BlockedExecution).to receive(:parked_uniqueness_keys) do
+        order << :parked
+        Set["Parked"]
+      end
+      allow(mock_client).to receive(:uniqueness_keys_present) do
+        order << :queues
+        Set.new
+      end
+
+      expect(dispatcher.send(:reap_orphaned_uniqueness_keys)).to eq(1)
+      expect(order).to eq(%i[parked queues])
+      expect(Pgbus::BlockedExecution).to have_received(:parked_uniqueness_keys).with(%w[Parked Orphan])
+      expect(mock_client).to have_received(:uniqueness_keys_present).with(["Orphan"])
+      expect(Pgbus::UniquenessKey).to have_received(:where).with(lock_key: ["Orphan"])
     end
 
     it "reaps an aged pending/msg_id=0 lock when no live queue holds the key" do

@@ -505,12 +505,22 @@ module Pgbus
       # Unbound rows (synthetic "pending" queue and/or msg_id=0) must not probe
       # pgmq.q_<prefix>_pending — that table does not exist, message_exists?
       # returns nil, and the reaper would keep the lock forever (issue #418).
-      # Scan every live queue for the payload key instead.
+      # Scan every live queue for the payload key instead. A job parked behind
+      # its concurrency slot is in no queue: its key counts as live while it
+      # is parked (issue #564). The parked jobs are asked first: a promotion
+      # sends the job's message before its parked row's delete commits (or
+      # both in one transaction), so a job promoted between the two reads is
+      # still parked for the first or already queued for the second. Read the
+      # other way round it could be in neither.
       def gone_unbound_locks(unbound)
         return [] if unbound.empty?
 
-        present = Pgbus.client.uniqueness_keys_present(unbound.map(&:lock_key))
-        unbound.reject { |key| present.include?(key.lock_key) }
+        parked = BlockedExecution.parked_uniqueness_keys(unbound.map(&:lock_key))
+        unparked = unbound.reject { |key| parked.include?(key.lock_key) }
+        return [] if unparked.empty?
+
+        present = Pgbus.client.uniqueness_keys_present(unparked.map(&:lock_key))
+        unparked.reject { |key| present.include?(key.lock_key) }
       end
 
       # Returns true if the message referenced by this bound lock is definitely

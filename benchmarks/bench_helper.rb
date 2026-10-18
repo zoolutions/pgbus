@@ -5,6 +5,9 @@ require "json"
 require "securerandom"
 require "concurrent"
 require "pgbus"
+# Pgbus::Client.new loads pgmq-ruby; the stubbed client is allocated, never
+# initialized, so load it the same way for PGMQ::Message.
+Pgbus::Client.load_pgmq_gem!
 
 # Suppress logging during benchmarks
 Pgbus.configure do |c|
@@ -36,6 +39,25 @@ module BenchStubs
       client.instance_variable_set(:@connection_health, Pgbus::Client::ConnectionHealth.new)
       client.instance_variable_set(:@libpq_read_bounds_effective, true)
     end
+  end
+
+  # The executor reads every field a PGMQ read returns (enqueued_at for the
+  # job's delivery and its stats), so a bench message is the real class with
+  # the values PGMQ hands over. A stand-in missing a field fails each job
+  # before perform, and the bench then times the failure path.
+  def self.build_message(msg_id:, message:, read_ct: 1, headers: nil)
+    PGMQ::Message.new(
+      { "msg_id" => msg_id, "read_ct" => read_ct, "enqueued_at" => Time.now.utc.strftime("%Y-%m-%d %H:%M:%S.%6N+00"),
+        "last_read_at" => nil, "vt" => nil, "message" => message, "headers" => headers }
+    )
+  end
+
+  # Abort before timing anything unless the job runs to :success.
+  def self.expect_success!(executor, message, queue_name = "default")
+    result = executor.execute(message, queue_name)
+    return if result == :success
+
+    abort "[bench] Executor#execute returned #{result.inspect}, not :success: the bench would time a failing job"
   end
 
   class MockPgmq

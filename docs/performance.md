@@ -312,6 +312,28 @@ on both; pgbus-owned objects per job 9 on both (`executor_allocation_budget_spec
 The three fiber-locals it sets allocate nothing; an earlier Hash-per-job
 version cost one object and tripped the budget.
 
+### Uniqueness release by holder (issue #564)
+
+`Executor#execute` now sets two more delivery fiber-locals (`enqueued_at`,
+`job_id`) and releases an `:until_executed` / `:while_executing` key with
+`UniquenessKey.release_held_by!` instead of the key-only `release!`. Same
+machine, the same fixed harness in both trees, three interleaved runs:
+`main` 58.0k / 46.0k / 43.4k i/s, this branch 57.5k / 45.7k / 44.8k i/s
+(inside the ±9–26 % run-to-run noise); 69 objects / 6 608 bytes per job and 0
+retained on both. The bench job has no uniqueness key, so the release is not
+in that number; it is a database round trip either way, and both DELETEs
+plan as one `idx_pgbus_uniqueness_keys_key` index scan, the new one with a
+filter on the single matching row.
+
+The harness was wrong before this: its message was a `Struct` without
+`enqueued_at`, so once the executor read that field every iteration raised
+`NoMethodError` before `perform` and the bench timed the failure path (it
+reported a 28 % "speed-up" and 6 fewer objects). On `main` the same `Struct`
+made the stats-enabled run skip recording, since `compute_enqueue_latency`
+raised inside `record_stat`'s rescue. Both benches now build a real
+`PGMQ::Message` (`BenchStubs.build_message`) and abort unless the job returns
+`:success` (`BenchStubs.expect_success!`).
+
 ### Fair share reads (issue #426)
 
 `Client#read_batch_fair` replaces `pgmq.read` on the worker when

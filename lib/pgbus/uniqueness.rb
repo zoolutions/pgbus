@@ -16,8 +16,14 @@ module Pgbus
   #      or executing.
   #   2. Execution: PGMQ's visibility timeout is the execution lock —
   #      no separate claim_for_execution step needed.
-  #   3. Completion/DLQ: DELETE FROM pgbus_uniqueness_keys WHERE lock_key = ?.
-  #   4. Crash recovery: if a worker dies, VT expires, the message becomes
+  #   3. Retry: a retry_job / retry_on re-enqueue passes through the key the
+  #      running attempt holds, and the row is handed to the retry: unbound
+  #      and re-stamped before the retry is sent or parked (unbind!), bound
+  #      to it once sent (bind!).
+  #   4. Completion/DLQ: the finishing message deletes the row only while it
+  #      holds it (release_held_by!), so a row handed to a retry, or a
+  #      successor's, stays. The dashboard's discards do the same.
+  #   5. Crash recovery: if a worker dies, VT expires, the message becomes
   #      readable again. The uniqueness key row stays (correctly — the job
   #      hasn't finished). The next worker picks it up and executes.
   #
@@ -179,12 +185,23 @@ module Pgbus
         return :no_lock unless config[:strategy] == :until_executed
 
         acquired = if msg_id && queue_name
-                     UniquenessKey.acquire!(key, queue_name: queue_name, msg_id: msg_id)
+                     UniquenessKey.acquire!(key, queue_name: lock_queue_name(queue_name), msg_id: msg_id)
                    else
                      # Pre-produce check: use advisory lock + ON CONFLICT
-                     UniquenessKey.acquire!(key, queue_name: queue_name || PLACEHOLDER_QUEUE, msg_id: msg_id || 0)
+                     UniquenessKey.acquire!(key, queue_name: lock_queue_name(queue_name || PLACEHOLDER_QUEUE),
+                                                 msg_id: msg_id || 0)
                    end
         acquired ? :acquired : :locked
+      end
+
+      # The queue a job's uniqueness lock records: the logical name as its
+      # table spells it ("orders-handler" → "orders_handler"), the inverse of
+      # stripping the prefix off the table name. Every writer and releaser of
+      # a job's lock goes through it, so a release that knows only the table
+      # (the dashboard) or a worker that spells the queue the table's way
+      # still finds the row it was bound under (issue #564).
+      def lock_queue_name(queue_name, config: Pgbus.configuration)
+        config.queue_name(queue_name).delete_prefix("#{config.queue_prefix}_")
       end
 
       # Acquire the uniqueness lock at execution time (:while_executing only).
@@ -199,7 +216,7 @@ module Pgbus
         return true unless strategy == :while_executing
 
         queue_name ||= payload["queue_name"] || "unknown"
-        UniquenessKey.acquire!(key, queue_name: queue_name, msg_id: msg_id.to_i,
+        UniquenessKey.acquire!(key, queue_name: lock_queue_name(queue_name), msg_id: msg_id.to_i,
                                     reacquire_same_message: msg_id.to_i.positive?)
       end
 
@@ -217,7 +234,7 @@ module Pgbus
         return unless key
         return unless msg_id.to_i.positive?
 
-        UniquenessKey.bind!(key, queue_name: queue_name, msg_id: msg_id)
+        UniquenessKey.bind!(key, queue_name: lock_queue_name(queue_name), msg_id: msg_id)
       end
 
       # True when the uniqueness row is not yet bound to a real PGMQ message.

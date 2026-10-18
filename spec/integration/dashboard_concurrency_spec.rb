@@ -171,6 +171,22 @@ RSpec.describe "Dashboard concurrency section (integration)", :integration do
       expect(Pgbus::UniquenessKey.locked?("unique-#{key}")).to be(false)
     end
 
+    # The lock is stamped by the database (acquire!, or unbind! for a parked
+    # retry, issue #564), so the parked row has to be too: a park stamped by
+    # an app clock running behind the database looked older than its own lock.
+    it "frees it when the app's clock runs behind the database's" do
+      Pgbus::UniquenessKey.acquire!("unique-#{key}", queue_name: "default", msg_id: 0)
+      behind = Time.now - 60
+      allow(Time).to receive(:now).and_return(behind)
+      park(extra: { Pgbus::Uniqueness::METADATA_KEY => "unique-#{key}",
+                    Pgbus::Uniqueness::STRATEGY_KEY => "until_executed" })
+      allow(Time).to receive(:now).and_call_original
+
+      data_source.discard_parked_jobs(key)
+
+      expect(Pgbus::UniquenessKey.locked?("unique-#{key}")).to be(false)
+    end
+
     it "leaves a successor's bound lock alone when the reaper already took the parked job's" do
       # The reaper removed the parked job's own (unbound) lock, then a successor
       # acquired the same key and was actually sent, binding its lock to a live
@@ -193,12 +209,12 @@ RSpec.describe "Dashboard concurrency section (integration)", :integration do
       # predates it. Without the created_at ceiling this lock is dropped and a
       # duplicate is admitted.
       lock_key = "unique-#{key}"
-      original = Pgbus::Concurrency::BlockedExecution.insert(
+      Pgbus::Concurrency::BlockedExecution.insert(
         concurrency_key: key, queue_name: "default", duration: 900,
         payload: payload(extra: { Pgbus::Uniqueness::METADATA_KEY => lock_key,
                                   Pgbus::Uniqueness::STRATEGY_KEY => "until_executed" })
       )
-      original.update!(created_at: 1.hour.ago)
+      Pgbus::BlockedExecution.where(concurrency_key: key).update_all(created_at: 1.hour.ago)
       Pgbus::UniquenessKey.acquire!(lock_key, queue_name: "default", msg_id: 0)
 
       data_source.discard_parked_jobs(key)

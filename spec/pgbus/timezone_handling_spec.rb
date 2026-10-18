@@ -124,16 +124,16 @@ RSpec.describe Pgbus do
 
   describe "BlockedExecution.insert expires_at" do
     it "sets expires_at relative to current time, not offset by timezone" do
-      allow(Pgbus::BlockedExecution).to receive(:create!)
+      allow(Pgbus::BlockedExecution).to receive(:insert!)
 
       Pgbus::Concurrency::BlockedExecution.insert(
         concurrency_key: "k", queue_name: "q",
         payload: { "job_class" => "T" }, duration: 900
       )
 
-      expect(Pgbus::BlockedExecution).to have_received(:create!).with(
-        hash_including(:expires_at)
-      ) do |args|
+      expect(Pgbus::BlockedExecution).to have_received(:insert!).with(
+        hash_including(:expires_at), record_timestamps: false
+      ) do |args, **|
         # expires_at should be ~900 seconds from now
         delta = args[:expires_at] - Time.current
         expect(delta).to be_within(5).of(900)

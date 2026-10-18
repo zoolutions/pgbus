@@ -473,7 +473,9 @@ RSpec.describe Pgbus::Process::Consumer do
 
       expect(block).to include(
         "reason" => "max_retries_exceeded", "source" => "consumer",
-        "source_queue" => consumer.config.queue_name("q_orders"), "attempts" => 6, "max_retries" => 5
+        "source_queue" => consumer.config.queue_name("q_orders"), "source_msg_id" => 9,
+        "source_enqueued_at" => dlq_message.enqueued_at,
+        "attempts" => 6, "max_retries" => 5
       )
       expect(headers).to include("trace_id" => "t")
     end

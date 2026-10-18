@@ -13,7 +13,8 @@ module Pgbus
     attr_accessor :database_url, :connection_params, :pool_size, :pool_timeout
 
     # Queue settings
-    attr_accessor :default_queue, :queue_prefix
+    attr_accessor :default_queue
+    attr_reader :queue_prefix # rubocop:disable Style/AccessorGrouping -- the writer normalizes (see queue_prefix=)
 
     # Worker settings
     attr_accessor :polling_interval, :prefetch_limit, :execution_mode
@@ -597,6 +598,25 @@ module Pgbus
       @finalized = false
     end
 
+    # Stored the way the queue tables spell it ("my-app" → "my_app"). Table
+    # names are unchanged (queue_name normalizes the joined name the same
+    # way), but code that strips the prefix off a table name to get its queue
+    # back (the dashboard, the worker, a job's uniqueness lock queue) then
+    # finds it. A value normalize cannot spell (nothing table-safe left, or
+    # too long) is kept as given, as before: validate! rejects one that is
+    # too long, and queue_name drops one with nothing table-safe in it.
+    def queue_prefix=(value)
+      @queue_prefix = if value.is_a?(String) && !value.empty?
+                        begin
+                          QueueNameValidator.normalize(value)
+                        rescue ArgumentError
+                          value
+                        end
+                      else
+                        value
+                      end
+    end
+
     def queue_name(name)
       full = "#{queue_prefix}_#{name}"
       QueueNameValidator.normalize(full)
@@ -1002,6 +1022,27 @@ module Pgbus
       raise Pgbus::ConfigurationError, "capsule processes must be a positive Integer (got #{value.inspect})"
     end
 
+    # A prefix with a leading, trailing or doubled underscore is kept as
+    # written (its tables already exist under it), but queue_name collapses
+    # the separator after it only for a queue name that needs normalizing:
+    # "myapp_" gives myapp__orders yet myapp_orders_handler for
+    # "orders-handler". A job's own release and the dashboard derive the same
+    # lock queue for it and still match, but the reaper cannot resolve that
+    # name back to the table, so a lock orphaned there is never reclaimed and
+    # has to be released by key. Legal, but warned.
+    def warn_queue_prefix_underscores
+      return unless queue_prefix.match?(/\A_|_\z|__/)
+
+      suggested = queue_prefix.squeeze("_").delete_prefix("_").delete_suffix("_")
+      suggestion = suggested.empty? ? "" : "; prefer #{suggested.inspect} for new deployments"
+      Pgbus.logger.warn do
+        "[Pgbus] queue_prefix #{queue_prefix.inspect} has a leading, trailing or doubled underscore — a queue " \
+          "whose name needs normalizing (\"orders-handler\") gets a table spelled unlike its queue, so the " \
+          "reaper cannot find that table: a uniqueness lock orphaned there (a worker crash before its release) " \
+          "is never reclaimed and has to be released by key#{suggestion}"
+      end
+    end
+
     # Buffered claims are kept invisible only by the visibility heartbeat.
     # Without it a message buffered longer than visibility_timeout can be
     # claimed by another worker while it still waits here. Legal, but warned.
@@ -1075,6 +1116,7 @@ module Pgbus
       { queue_prefix: queue_prefix, default_queue: default_queue }.each do |name, value|
         raise Pgbus::ConfigurationError, "#{name} must be a non-empty String" unless value.is_a?(String) && !value.empty?
       end
+      warn_queue_prefix_underscores
 
       # web_auth gates the dashboard; a non-callable value silently leaves it
       # open (mirror streams_presence_member).

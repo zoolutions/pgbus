@@ -28,8 +28,17 @@ RSpec.describe "the RBS signatures in sig/" do # rubocop:disable RSpec/DescribeC
 
   # Defined in pgbus's own lib/: not inherited from Object, and not added by
   # ActiveSupport or by Rails (isolate_namespace defines Pgbus.table_name_prefix).
+  # Walks past a wrapper prepended by a spec helper (integration_helper.rb's
+  # reset_client!) to the definition it wraps, so the result does not depend
+  # on which spec files share the process.
   def self.pgbus_defined?(method)
-    method.source_location&.first.to_s.start_with?(File.expand_path("../../lib", __dir__))
+    lib = File.expand_path("../../lib", __dir__)
+    while method
+      return true if method.source_location&.first.to_s.start_with?(lib)
+
+      method = method.super_method
+    end
+    false
   end
 
   # Public instance methods pgbus defines, wherever in the ancestry it does.
@@ -67,6 +76,18 @@ RSpec.describe "the RBS signatures in sig/" do # rubocop:disable RSpec/DescribeC
 
       expect(self.class.declared(environment, constant, kind)).to eq(methods)
     end
+  end
+
+  # A spec helper may prepend a wrapper to a lib method (integration_helper
+  # wraps Pgbus.reset_client!): the method is still pgbus's.
+  it "counts a lib method behind a prepended wrapper as pgbus-defined" do
+    config = Pgbus::Configuration.new
+    config.singleton_class.prepend(Module.new { define_method(:queue_name) { |name| super(name) } })
+    wrapped = config.method(:queue_name)
+
+    expect(wrapped.source_location.first).to eq(__FILE__)
+    expect(self.class.pgbus_defined?(wrapped)).to be(true)
+    expect(self.class.pgbus_defined?(Object.new.method(:to_s))).to be(false)
   end
 
   # The typed surface is for the apps that install the gem.

@@ -80,6 +80,7 @@ module Pgbus
         # reset: once the send returns, msg_id is set and the rescue routes
         # on that instead.
         sending = false
+        retry_lock = hand_lock_to_retry(active_job, payload_hash, queue)
 
         if key && concurrency
           # The check and the park commit together, under the semaphore row
@@ -115,6 +116,9 @@ module Pgbus
         # Bind before backfill so a live message is never left with an unbound
         # uniqueness row if execution-row bookkeeping raises.
         bind_acquired_uniqueness_lock(queue, msg_id) if msg_id
+        bind_retry_lock(retry_lock, queue, msg_id) if msg_id
+        # Dropped by its concurrency limit: no retry will run, the attempt does.
+        return_retry_lock(retry_lock) unless msg_id || blocked
         Batch.backfill_execution(payload_hash, msg_id, physical_queue(queue, priority)) if msg_id
         # A retry re-enqueue that is now live (sent, or parked as a blocked
         # execution) must stop the original attempt from signalling completion.
@@ -135,6 +139,7 @@ module Pgbus
         # database error from the slot upsert or the park is not ambiguous.
         if msg_id.nil? && !(sending && ambiguous_delivery?(e))
           rollback_acquired_uniqueness_lock
+          return_retry_lock(retry_lock)
           uncount_batch_job(payload_hash, active_job)
         else
           # Drop the thread-local so a later discard on this thread cannot
@@ -247,9 +252,10 @@ module Pgbus
         # the executor still holds the key (it releases only on success/DLQ). So
         # a re-enqueue with executions > 0 would otherwise hit its own held key,
         # be rejected as a duplicate (JobNotUnique), and dead-letter the original
-        # while losing the retry. Let the retry through; the existing key row
-        # correctly stays held until the job finally succeeds or dead-letters.
-        # See issue #333.
+        # while losing the retry. Let the retry through (issue #333); the key
+        # row is handed to it (hand_lock_to_retry, then bind_retry_lock once
+        # sent), so the attempt's release leaves it held until the job finally
+        # succeeds or dead-letters (issue #564).
         return false if active_job.executions.to_i.positive?
 
         result = Uniqueness.acquire_enqueue_lock(uniqueness_key, active_job, queue_name: queue)
@@ -283,6 +289,78 @@ module Pgbus
         Uniqueness.bind_lock(key, queue_name: queue, msg_id: msg_id)
       rescue StandardError => e
         Pgbus.logger.warn { "[Pgbus] Uniqueness bind failed: #{e.message}" }
+      end
+
+      # The job's :until_executed key and the delivery of the attempt running
+      # it, when this enqueue is that attempt's retry: the retry is let
+      # through the key the attempt holds and never acquires one, so the key
+      # row has to follow it. nil for a first attempt (it acquired its own
+      # row), a retry enqueued outside the executor (no attempt to take it
+      # from), or a job run inline inside another job, whose delivery it sees.
+      def retry_uniqueness_lock(active_job, payload_hash)
+        key = Uniqueness.extract_key(payload_hash)
+        return unless key && Uniqueness.extract_strategy(payload_hash) == :until_executed
+        return unless active_job.executions.to_i.positive?
+
+        delivery = Delivery.current
+        [key, delivery] if delivery && delivery[:job_id] == active_job.job_id
+      end
+
+      # Take the attempt's row for its retry before the retry exists — sent or
+      # parked — the way a first enqueue acquires before its send (see
+      # UniquenessKey.unbind!). Returns [key, delivery, stamp] for
+      # bind_retry_lock / return_retry_lock, or nil when there is nothing to
+      # hand over. A failure is logged and the retry goes out without the row,
+      # which then stays with the attempt.
+      def hand_lock_to_retry(active_job, payload_hash, queue)
+        key, delivery = retry_uniqueness_lock(active_job, payload_hash)
+        return unless key
+
+        stamp = UniquenessKey.unbind!(key, from_queue_name: Uniqueness.lock_queue_name(delivery[:queue_name]),
+                                           from_msg_id: delivery[:msg_id], from_enqueued_at: delivery[:enqueued_at],
+                                           queue_name: Uniqueness.lock_queue_name(queue))
+        return [key, delivery, stamp] if stamp
+
+        warn_retry_lock_not_held(key)
+        nil
+      rescue StandardError => e
+        Pgbus.logger.warn { "[Pgbus] Uniqueness handoff to retry failed for #{key}: #{e.message}" }
+        nil
+      end
+
+      # Point the handed-over row at the sent retry. The retry is live, so a
+      # failure is logged, not raised: the row stays unbound and stamped
+      # before the send, and the retry's own release takes it.
+      def bind_retry_lock(retry_lock, queue, msg_id)
+        return unless retry_lock
+
+        key, _delivery, stamp = retry_lock
+        UniquenessKey.bind!(key, queue_name: Uniqueness.lock_queue_name(queue), msg_id: msg_id, acquired_at: stamp)
+      rescue StandardError => e
+        Pgbus.logger.warn { "[Pgbus] Uniqueness bind to retry failed for #{key}: #{e.message}" }
+      end
+
+      # No retry came of it (dropped by its concurrency limit, or the send
+      # failed before any message existed): bind the row back to the attempt,
+      # which runs on and releases it when it finishes.
+      def return_retry_lock(retry_lock)
+        return unless retry_lock
+
+        key, delivery, stamp = retry_lock
+        UniquenessKey.bind!(key, queue_name: Uniqueness.lock_queue_name(delivery[:queue_name]),
+                                 msg_id: delivery[:msg_id], acquired_at: stamp)
+      rescue StandardError => e
+        Pgbus.logger.warn { "[Pgbus] Uniqueness return to the attempt failed for #{key}: #{e.message}" }
+      end
+
+      # The row is gone (released by an operator, reaped) or a successor's:
+      # the retry runs without the key, and a fresh enqueue is not deduped
+      # against it.
+      def warn_retry_lock_not_held(key)
+        Pgbus.logger.warn do
+          "[Pgbus] Uniqueness key #{key} is no longer held by the attempt that enqueued its retry; " \
+            "the retry runs without it"
+        end
       end
 
       # Reverses inject_batch_metadata for a job discarded at enqueue time

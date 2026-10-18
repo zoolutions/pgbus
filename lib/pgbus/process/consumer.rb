@@ -296,7 +296,8 @@ module Pgbus
         last_error = FailedEventRecorder.last_error(queue_name: queue_name, msg_id: message.msg_id.to_i)
         headers = DeadLetterHeader.build(
           existing: message.headers, reason: DeadLetterHeader::REASON_MAX_RETRIES, source: "consumer",
-          source_queue: config.queue_name(queue_name), attempts: message.read_ct.to_i,
+          source_queue: config.queue_name(queue_name), source_msg_id: message.msg_id.to_i,
+          source_enqueued_at: message.enqueued_at, attempts: message.read_ct.to_i,
           max_retries: config.max_retries, error: last_error
         )
         Pgbus.client.move_to_dead_letter(queue_name, message, headers: headers)

@@ -390,6 +390,69 @@ RSpec.describe Pgbus::Configuration do
     end
   end
 
+  # Issue #564: code that strips the prefix off a table name to get the queue
+  # back (the dashboard, the worker, the uniqueness lock queue) needs the
+  # prefix spelled the way the tables are.
+  describe "#queue_prefix=" do
+    it "keeps a prefix its tables spell the same" do
+      config.queue_prefix = "my_app2"
+      expect(config.queue_prefix).to eq("my_app2")
+    end
+
+    it "spells the prefix the way its tables do, leaving every table name as it was" do
+      config.queue_prefix = "my-app"
+
+      expect(config.queue_prefix).to eq("my_app")
+      expect(config.queue_name("orders-handler")).to eq("my_app_orders_handler")
+      expect(config.queue_name("orders-handler").delete_prefix("#{config.queue_prefix}_")).to eq("orders_handler")
+    end
+
+    # A pattern-valid prefix is kept as written, but the separator after an
+    # edge or doubled underscore collapses only for a queue name that needs
+    # normalizing, so those queues' tables cannot be traced back to their
+    # queue. Rejecting it would stop existing deployments booting, and
+    # rewriting it would rename their tables: it is warned at validate!.
+    %w[myapp_ _myapp my__app].each do |prefix|
+      it "warns about #{prefix.inspect} at validate!, and accepts it" do
+        config.queue_prefix = prefix
+        warnings = []
+        allow(Pgbus.logger).to receive(:warn) { |&block| warnings << block.call }
+
+        expect { config.validate! }.not_to raise_error
+        expect(config.queue_prefix).to eq(prefix)
+        expect(warnings).to include(a_string_including("queue_prefix #{prefix.inspect}").and(including("underscore")))
+      end
+    end
+
+    it "suggests no spelling for an all-underscore prefix" do
+      config.queue_prefix = "__"
+      warnings = []
+      allow(Pgbus.logger).to receive(:warn) { |&block| warnings << block.call }
+
+      config.validate!
+
+      expect(warnings.sole).to include("queue_prefix \"__\"")
+      expect(warnings.sole).not_to include("prefer")
+    end
+
+    it "does not warn about a prefix without edge or doubled underscores" do
+      config.queue_prefix = "my-app"
+      allow(Pgbus.logger).to receive(:warn)
+
+      config.validate!
+
+      expect(Pgbus.logger).not_to have_received(:warn)
+    end
+
+    # As on main: nothing table-safe is left, so the value is kept and
+    # queue_name drops it.
+    it "keeps a value it cannot spell as a table name as given" do
+      config.queue_prefix = "!!!"
+      expect(config.queue_prefix).to eq("!!!")
+      expect { config.queue_name("x") }.not_to raise_error
+    end
+  end
+
   describe "#dead_letter_queue_name" do
     it "appends dlq suffix to prefixed name" do
       expect(config.dead_letter_queue_name("critical")).to eq("pgbus_critical_dlq")

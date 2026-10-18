@@ -143,7 +143,7 @@ module Pgbus
         key = resolve_uniqueness_key(job_class, config, task)
         return nil unless key
 
-        acquired = UniquenessKey.acquire!(key, queue_name: resolve_queue(task), msg_id: 0)
+        acquired = UniquenessKey.acquire!(key, queue_name: Uniqueness.lock_queue_name(resolve_queue(task)), msg_id: 0)
 
         if acquired
           key

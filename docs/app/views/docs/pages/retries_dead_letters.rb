@@ -111,10 +111,12 @@ class Views::Docs::Pages::RetriesDeadLetters < DocsUI::Page
       DocsUI::Table(
         [ "Key", "Value" ],
         [
-          [ [ :code, "version" ], "1 — bumped when the shape changes." ],
+          [ [ :code, "version" ], [ :md, "1 — bumped when a field changes meaning or goes away; an optional field added later (`source_msg_id`, `source_enqueued_at`) does not bump it." ] ],
           [ [ :code, "reason" ], [ :md, "`max_retries_exceeded`, the only reason today." ] ],
           [ [ :code, "source" ], [ :md, "`worker` (ActiveJob) or `consumer` (event bus)." ] ],
           [ [ :code, "source_queue" ], [ :md, "The physical queue it was deleted from, a priority sub-queue (`…_p2`) included." ] ],
+          [ [ :code, "source_msg_id" ], [ :md, "Its `msg_id` in `source_queue` (the copy gets a new one in the DLQ). Absent on copies dead-lettered by earlier releases." ] ],
+          [ [ :code, "source_enqueued_at" ], [ :md, "When the original was sent (the copy's own `enqueued_at` is the move to the DLQ). With `source_msg_id`, discarding the copy frees only the uniqueness lock the original still holds, never one its job handed to a retry. Absent on copies dead-lettered by earlier releases." ] ],
           [ [ :code, "attempts" ], [ :md, "`read_ct` of the read that routed it." ] ],
           [ [ :code, "max_retries" ], [ :md, "`max_retries` at that moment." ] ],
           [ [ :code, "dead_lettered_at" ], "UTC ISO 8601." ],
