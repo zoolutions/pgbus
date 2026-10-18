@@ -1,0 +1,47 @@
+spec/pgbus/batch_sweep_spec.rb
+  s_5a13e6705d2551::t_165ba98029f624 108-149
+  s_5a13e6705d2551::t_7c1480add78fbb 86-87
+spec/integration/dashboard_failed_event_handlers_spec.rb
+  s_5a13e6705d2551::t_150dac012cd00d 174-194
+spec/integration/batch_flow_spec.rb
+  s_5a13e6705d2551::t_43285b6d05f267 320,322,351
+  s_5a13e6705d2551::t_5f8b09f688f14a 308
+  s_5a13e6705d2551::t_16a8bc037cc771 280-281,283
+  s_5a13e6705d2551::t_333907f1b4e206 318-319,321,323-350,352-360
+sig/pgbus/client.rbs
+  s_5a13e6705d2551::t_f077aa3322bbe9 16,28-31
+lib/pgbus/batch/sweep.rb
+  s_5a13e6705d2551::t_c2aa3a855d4f0e 90-91,99
+  s_5a13e6705d2551::t_5e5ab1207c6174 41-43,45,48-49,51
+CHANGELOG.md
+  s_5a13e6705d2551::t_f10a244aad5b34 22
+spec/pgbus/client_spec.rb
+  s_5a13e6705d2551::t_8567c88ba0ec15 1248,1251-1258
+  s_5a13e6705d2551::t_5b112d70306dff 659-666,676-683
+  s_5a13e6705d2551::t_5185e959ea9a40 1566,1570-1574
+  s_5a13e6705d2551::t_5a3bb3496dfed5 1597-1612
+  s_5a13e6705d2551::t_3cf08889f73ef7 1683-1692,1694,1698
+spec/integration/dispatcher_reaper_spec.rb
+  s_5a13e6705d2551::t_26a90996ad8610 197-220
+lib/pgbus/client.rb
+  s_5a13e6705d2551::t_d260cb63de6ac1 723-727,734-735,744-747
+  s_5a13e6705d2551::t_9c362faedd3326 798,803
+  s_5a13e6705d2551::t_20bef72200565f 1101-1104,1108-1110
+  s_5a13e6705d2551::t_5f487c2a8b03bb 764-768,770-774,779-780
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "645914000e6f6d6806d56423fffdf83e7a234b8b",
+  "prompts": {},
+  "sessions": {
+    "s_5a13e6705d2551": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d69633aa-c65c-406c-9976-dd515d2c9801",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
