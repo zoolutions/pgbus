@@ -1,0 +1,28 @@
+CHANGELOG.md
+  s_0abf69c445fa20::t_db9cff48ca249d 22
+spec/integration/dashboard_failed_lock_priority_spec.rb
+  s_0abf69c445fa20::t_90a5286b4f5996 90-123
+  s_0abf69c445fa20::t_20cb5cc2d033f5 4-5
+lib/pgbus/web/data_source.rb
+  s_0abf69c445fa20::t_f9e807599c3601 1642,1649-1660
+spec/pgbus/web/data_source_spec.rb
+  s_0abf69c445fa20::t_f9fbf8112864e5 651-672
+spec/integration/uniqueness_retry_wait_spec.rb
+  s_0abf69c445fa20::t_79efdf05992f91 225-228
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "405d470b242e8bb353a66bf0fbb18587c9d182c8",
+  "prompts": {},
+  "sessions": {
+    "s_0abf69c445fa20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "780215a4-ac92-4464-839c-86e03bcf05b0",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
