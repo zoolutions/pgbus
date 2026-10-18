@@ -6,8 +6,9 @@ module Pgbus
       # The Workflows pages' sample data (issue #542): one run per state with
       # a believable timeline — paused on an error (with backtrace and cause
       # chain), performing a reattempt, waiting on a signal, waiting on a
-      # signal two late notices past its on_timeout: :notify deadline, waiting
-      # on a fan-out batch at 7 of 12, a reminder scheduled two days out, finished
+      # signal two late notices past its on_timeout: :notify deadline, one
+      # reported once past its per-run deadline, waiting on a fan-out batch at
+      # 7 of 12, a reminder scheduled two days out, finished
       # and cancelled runs and a rerun pair — plus what the needs-attention
       # view groups: three runs paused on one error, a stalled run on an
       # older definition, an overdue step and a wait past the visibility
@@ -26,6 +27,7 @@ module Pgbus
         OVERDUE_ID = "9e7c4fbb-5aad-4fcd-8b6e-bcd37fa0e1f9"
         PARKED_ID = "af8d5acc-6bbe-4ade-9c7f-cde48ab1f20a"
         LATE_ID = "f4d2afb1-c0d1-4e2f-8a3b-1239df06475f"
+        OFFER_ID = "a7e3c1d9-2b4f-4c6a-9d8e-5f1a3b7c9e02"
         TIMEOUT_IDS = %w[b09e6bdd-7ccf-4bef-8d8a-def59bc2031b c1af7cee-8dda-4cfa-9e9b-ef06acd3142c
                          d2b08dff-9eeb-4dab-8fac-f017bde4253d].freeze
         BATCH_ID = "e3c19ea0-af0c-4ebc-9abd-0128cef5364e"
@@ -39,7 +41,7 @@ module Pgbus
 
         def fill_sample_workflows!(now)
           @workflows_list = [sample_paused(now), sample_performing(now), sample_signal_wait(now), sample_late_wait(now),
-                             sample_fan_out(now),
+                             sample_offer_wait(now), sample_fan_out(now),
                              sample_scheduled(now), sample_finished(now), sample_cancelled(now), sample_rerun(now),
                              sample_stalled(now), sample_overdue(now), sample_parked(now), *sample_timeouts(now),
                              *sample_exports(now)]
@@ -158,10 +160,29 @@ module Pgbus
         end
 
         # A wait_timed_out event of the late wait's hourly :notify deadline.
-        def late_notice(id, deadline)
-          wf_event(id, "wait_timed_out", "system", deadline, step_name: "await_approval", attempt: 1,
-                                                             details: { "wait_for" => "approved", "action" => "notify",
+        def late_notice(id, deadline, step_name: "await_approval", wait_for: "approved")
+          wf_event(id, "wait_timed_out", "system", deadline, step_name: step_name, attempt: 1,
+                                                             details: { "wait_for" => wait_for, "action" => "notify",
                                                                         "timeout_at" => deadline.utc.iso8601(3) })
+        end
+
+        # An offer's reply deadline (a per-run wait_timeout:, issue #574) that
+        # passed half an hour ago under on_timeout: :notify: it was reported
+        # once, and the attempt waits on with no deadline.
+        def sample_offer_wait(now)
+          deadline = now - 1800
+          wf_row(now, OFFER_ID, "OfferWorkflow", "waiting", "await_reply",
+                 subject_id: "1050", subject_type: "Offer", step_status: "waiting", waiting_for: "replied",
+                 waiting_since: now - 7200, late_since: deadline, created_at: now - 7210, updated_at: deadline,
+                 step_names: %w[send_offer await_reply close], signal_names: ["replied"],
+                 steps: [wf_step(39, "await_reply", 1, "waiting", now - 7203, started_at: now - 7201, waiting_since: now - 7200,
+                                                                              wait_for: "replied"),
+                         ran(38, "send_offer", 1, now - 7210, 5)],
+                 events: [late_notice(30, deadline, step_name: "await_reply", wait_for: "replied"),
+                          wf_event(29, "step_waiting", "system", now - 7200, step_name: "await_reply", attempt: 1,
+                                                                             details: { "wait_for" => "replied",
+                                                                                        "timeout_at" => deadline.utc.iso8601(3) }),
+                          wf_event(28, "started", "app", now - 7210)])
         end
 
         def sample_fan_out(now)

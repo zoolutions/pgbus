@@ -263,4 +263,237 @@ RSpec.describe "Workflow wait timeouts (integration)", :integration do
 
     expect(logged).to eq([[nil, true]])
   end
+
+  describe "a per-run wait_timeout: (issue #574)" do
+    # An offer whose reply deadline the run knows: a step before the wait
+    # takes a while, then :await_reply parks with +wait_timeout+.
+    def define_offer(name, wait_timeout:, on_timeout: :run, **options, &methods)
+      calls = log
+      stub_const(name, Class.new(Pgbus::Workflow) do
+        step(:send_offer) { sleep 0.2 }
+
+        step :await_reply, wait_for: :replied, wait_timeout: wait_timeout, on_timeout: on_timeout, **options do
+          calls << [received_signal&.name, timed_out?]
+        end
+
+        step(:after) { calls << :after }
+        class_eval(&methods) if methods
+      end)
+    end
+
+    def start_offer(klass, **) = run_until(klass.start!(**), statuses: %w[waiting paused finished])
+
+    it "parks with timeout_at at the Time a lambda returns, whatever the time spent before the wait" do
+      deadline = 2.hours.from_now.change(usec: 0)
+      wf = start_offer(define_offer("OfferWorkflow", wait_timeout: -> { Time.iso8601(arguments[:expires_at]) }, on_timeout: :pause!),
+                       expires_at: deadline.iso8601)
+
+      step = steps_of(wf).last
+      expect(step).to have_attributes(step_name: "await_reply", status: "waiting", timeout_at: deadline)
+      expect(step.waiting_since).to be > steps_of(wf).first.started_at + 0.2
+      expect(wf.events.last.details).to include("timeout_at" => deadline.utc.iso8601(3))
+
+      expect(Pgbus::Workflow::Sweep.repair(now: deadline - 1)).to include(timed_out: 0)
+      expect(Pgbus::Workflow::Sweep.repair(now: deadline + 1)).to include(timed_out: 1)
+      expect(wf.reload.status).to eq("paused")
+      expect(steps_of(wf).last).to have_attributes(status: "failed", error_class: "Pgbus::Workflow::WaitTimedOut")
+      expect(steps_of(wf).last.error_message).to include("timed out at #{deadline.utc.iso8601}")
+    end
+
+    it "times out on the next sweep when the Time is already past" do
+      wf = start_offer(define_offer("ExpiredOffer", wait_timeout: -> { 1.hour.ago }))
+
+      step = steps_of(wf).last
+      expect(step.timeout_at).to eq(step.waiting_since)
+      expect(sweep).to include(timed_out: 1)
+      run_until(wf, statuses: %w[finished])
+      expect(logged).to eq([[nil, true], :after])
+    end
+
+    # :reply_deadline reads the run's subject and arguments, and records what it saw in +seen+.
+    def define_reply_by_method(seen)
+      define_offer("ReplyByMethod", wait_timeout: :reply_deadline) do
+        define_method(:reply_deadline) do
+          seen << [subject&.name, arguments[:ttl]]
+          arguments[:ttl].seconds
+        end
+      end
+    end
+
+    it "calls the instance method a Symbol names when the step parks, with subject and arguments" do
+      seen = []
+      klass = define_reply_by_method(seen)
+      user = create_user(name: "buyer")
+      wf = run_until(klass.start!(user, ttl: 5400), statuses: %w[waiting])
+
+      step = steps_of(wf).last
+      expect(seen).to eq([["buyer", 5400]])
+      expect(step.timeout_at - step.waiting_since).to be_within(0.001).of(5400)
+
+      wf.signal!(:replied)
+      run_until(wf, statuses: %w[finished])
+      expect(seen.size).to eq(1)
+      expect(logged).to eq([["replied", false], :after])
+    end
+
+    it "parks with no timeout_at when the lambda returns nil, and expire_wait says there is none" do
+      wf = start_offer(define_offer("OpenOffer", wait_timeout: -> {}))
+
+      expect(steps_of(wf).last).to have_attributes(status: "waiting", timeout_at: nil)
+      expect { expire_wait(wf) }.to raise_error(Pgbus::Workflow::TestHelpers::Error, /no waiting step with a wait_timeout:/)
+      expect(sweep).to include(timed_out: 0)
+      expect(wf.reload.status).to eq("waiting")
+    end
+
+    it "hands a lambda that returns no deadline to the exception policies: the default pauses the run" do
+      wf = start_offer(define_offer("BadDeadline", wait_timeout: -> { "tomorrow" }))
+
+      expect(wf.status).to eq("paused")
+      expect(steps_of(wf).last).to have_attributes(step_name: "await_reply", status: "failed", outcome: "paused",
+                                                   timeout_at: nil, error_class: "ArgumentError")
+      expect(steps_of(wf).last.error_message).to include("wait_timeout: of step await_reply must return a Time")
+      expect(Pgbus::ErrorReporter).to have_received(:report).with(an_instance_of(ArgumentError), anything)
+      expect(logged).to be_empty
+    end
+
+    it "hands a lambda that raises to the step's own exception policy" do
+      wf = start_offer(define_offer("RaisingDeadline", wait_timeout: -> { raise KeyError, "offer has no deadline" },
+                                                       on_exception: :skip!))
+
+      expect(wf.status).to eq("finished")
+      expect(steps_of(wf).map { |step| [step.step_name, step.status] })
+        .to eq([%w[send_offer completed], %w[await_reply failed], %w[after completed]])
+      expect(steps_of(wf)[1]).to have_attributes(outcome: "skipped", error_class: "KeyError")
+      expect(logged).to eq([:after])
+    end
+
+    # A query the lambda runs fails in the database (a column a deploy
+    # dropped, a statement_timeout under the row lock): its savepoint keeps
+    # the run's transaction usable, so the policies still apply.
+    def failing_query = -> { Pgbus::WorkflowStep.connection.select_value("SELECT expires_at FROM no_such_offers_574") }
+
+    it "hands a query that fails in the database to the exception policies, with the claim kept" do
+      wf = start_offer(define_offer("FailingQueryDeadline", wait_timeout: failing_query))
+
+      expect(wf.status).to eq("paused")
+      expect(steps_of(wf).last).to have_attributes(step_name: "await_reply", status: "failed", outcome: "paused",
+                                                   error_class: "ActiveRecord::StatementInvalid")
+      expect(events_of(wf)).to include("step_started", "step_failed")
+    end
+
+    it "keeps a :run step's absolute deadline when the run is paused while it waits: resume! moves it by the pause" do
+      deadline = 2.hours.from_now.change(usec: 0)
+      wf = start_offer(define_offer("PausedOffer", wait_timeout: -> { deadline }))
+      wf.pause!
+      Pgbus::WorkflowEntry.where(workflow_id: wf.workflow_id).update_all(paused_at: 1.hour.ago)
+      steps_of(wf).last.update_columns(waiting_since: 2.hours.ago)
+
+      wf.resume!
+
+      expect(wf.status).to eq("waiting")
+      expect(steps_of(wf).last.timeout_at).to be_within(5).of(deadline + 1.hour)
+    end
+
+    it "takes a Date as its midnight, as any #to_time does" do
+      day = Date.tomorrow
+      wf = start_offer(define_offer("DatedOffer", wait_timeout: -> { day }))
+
+      expect(steps_of(wf).last.timeout_at).to eq(day.to_time)
+    end
+
+    it "applies on_timeout through expire_wait before the deadline" do
+      wf = start_offer(define_offer("InlineOffer", wait_timeout: -> { 3.days.from_now }))
+
+      expire_wait(wf)
+      expect(wf.status).to eq("ready")
+      perform_next_step(wf)
+
+      expect(logged).to eq([[nil, true]])
+    end
+
+    describe "with on_timeout: :notify" do
+      def deadline_of(workflow) = steps_of(workflow).last.timeout_at
+
+      it "evaluates the lambda again at each notice: a duration moves the deadline one period on" do
+        wf = start_offer(define_offer("NotifyEvery", wait_timeout: -> { arguments[:ttl].seconds }, on_timeout: :notify), ttl: 3600)
+        expire!(wf)
+        missed = deadline_of(wf)
+
+        expect(sweep).to include(timed_out: 1)
+        expect(wf.reload.status).to eq("waiting")
+        expect(deadline_of(wf)).to be_within(0.001).of(missed + 3600)
+        expect(sweep).to include(timed_out: 0)
+      end
+
+      it "moves the deadline to a later Time the lambda returns" do
+        deadlines = [1.hour.from_now, 3.hours.from_now].map { |time| time.change(usec: 0) }
+        wf = start_offer(define_offer("NotifyLater", wait_timeout: -> { deadlines.shift || 1.day.ago }, on_timeout: :notify))
+        later = deadlines.first
+        expire!(wf)
+
+        expect(sweep).to include(timed_out: 1)
+        expect(steps_of(wf).last).to have_attributes(status: "waiting", attempt: 1, timeout_at: later)
+        expect(sweep).to include(timed_out: 0)
+      end
+
+      it "reports a Time not after now once, then waits on with no deadline, for a signal that still wakes it" do
+        expires_at = 2.hours.from_now.change(usec: 0)
+        wf = start_offer(define_offer("NotifyOnce", wait_timeout: -> { expires_at }, on_timeout: :notify))
+        expect(deadline_of(wf)).to eq(expires_at)
+
+        expect(Pgbus::Workflow::Sweep.repair(now: expires_at + 60)).to include(timed_out: 1)
+        expect(steps_of(wf).last).to have_attributes(status: "waiting", attempt: 1, timeout_at: nil)
+        expect(Pgbus::Workflow::Sweep.repair(now: expires_at + 3600)).to include(timed_out: 0)
+        expect(events_of(wf).count("wait_timed_out")).to eq(1)
+
+        wf.signal!(:replied)
+        run_until(wf, statuses: %w[finished])
+        expect(logged).to eq([["replied", false], :after])
+      end
+
+      it "applies through expire_wait too, ahead of the deadline" do
+        wf = start_offer(define_offer("NotifyInlineOffer", wait_timeout: -> { 90.minutes }, on_timeout: :notify))
+        deadline = deadline_of(wf)
+
+        expire_wait(wf)
+
+        expect(wf.status).to eq("waiting")
+        expect(deadline_of(wf)).to be_within(0.001).of(deadline + 5400)
+      end
+
+      it "pauses the run with the error when the lambda raises at a notice" do
+        calls = []
+        wf = start_offer(define_offer("NotifyRaising", wait_timeout: lambda {
+          calls << :evaluated
+          raise KeyError, "offer is gone" if calls.size > 1
+
+          1.hour
+        }, on_timeout: :notify))
+        expire!(wf)
+
+        expect(sweep).to include(timed_out: 1)
+        expect(wf.reload.status).to eq("paused")
+        expect(steps_of(wf).last).to have_attributes(status: "failed", outcome: "paused", error_class: "KeyError",
+                                                     error_message: "offer is gone")
+        expect(Pgbus::ErrorReporter).to have_received(:report).with(an_instance_of(KeyError), anything)
+      end
+
+      it "pauses the run when a query the lambda runs fails in the database, and the sweep goes on to the next wait" do
+        calls = []
+        query = failing_query
+        wf = start_offer(define_offer("NotifyFailingQuery", wait_timeout: lambda {
+          calls << :evaluated
+          calls.size > 1 ? instance_exec(&query) : 1.hour
+        }, on_timeout: :notify))
+        other = park(define("OtherDueWait", on_timeout: :pause!))
+        [wf, other].each { |run| expire!(run) }
+
+        expect(sweep).to include(timed_out: 2)
+        expect(wf.reload.status).to eq("paused")
+        expect(steps_of(wf).last).to have_attributes(status: "failed", outcome: "paused",
+                                                     error_class: "ActiveRecord::StatementInvalid")
+        expect(other.reload.status).to eq("paused")
+      end
+    end
+  end
 end

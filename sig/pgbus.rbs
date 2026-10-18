@@ -57,8 +57,8 @@ module Pgbus
   end
 
   # Partial: only the readers a workflow step's guards and body use to see
-  # its signal (issue #572). The rest of Workflow is not covered by
-  # spec/pgbus/rbs_spec.rb yet.
+  # its signal (issue #572), and a step definition's wait_timeout: (issue
+  # #574). The rest of Workflow is not covered by spec/pgbus/rbs_spec.rb yet.
   class Workflow
     include Instance
 
@@ -80,6 +80,22 @@ module Pgbus
       # The gate runs this attempt with a signal: the held one, or a pending
       # one its wait_for: matcher takes.
       def signal_ready?: () -> bool
+    end
+
+    # One declared step (klass.workflow_steps.fetch(:name)): its wait_timeout:.
+    class StepDefinition
+      # A static wait_timeout: in seconds; nil without one, or for a per-run one.
+      def wait_timeout: () -> Numeric?
+      # A per-run wait_timeout: as declared: a method name or a lambda.
+      def wait_timeout_callable: () -> (Symbol | Proc)?
+      # wait_timeout: is a method name or a lambda, evaluated per run.
+      def dynamic_wait_timeout?: () -> bool
+      # The timeout_at of the step parking at +now+ on +workflow+; nil for no timeout.
+      # +now+ and the result are a Time or an ActiveSupport::TimeWithZone (Time.current
+      # in an app with a time zone), which sig/ does not declare: untyped.
+      def timeout_at_for: (Workflow workflow, untyped now) -> untyped
+      # What a per-run wait_timeout: returns on +workflow+: a deadline, seconds from now, or nil.
+      def resolve_wait_timeout: (Workflow workflow) -> (Time | Numeric)?
     end
   end
 

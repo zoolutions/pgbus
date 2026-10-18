@@ -1167,6 +1167,8 @@ fi:
           skipped: Ohitettu
           step_link: Käynnissä olevat ajot vaiheessa %{step}
           title: Putki
+          wait_timeout: Odotuksen aikaraja
+          wait_timeout_dynamic: dynaaminen (ajokohtainen)
           window_label: Ikkunassa päättyneet yritykset
         summary:
           attention: Vaatii toimia
@@ -1350,6 +1352,7 @@ fi:
         waiting_batch_html: Odottaa erää %{batch} (%{done} / %{total} tehtävää valmis).
         waiting_signal_html: Odottaa signaalia %{signal}, alkoi %{ago}.
         waiting_signal_late_html: Odottaa signaalia %{signal}, alkoi %{ago} (myöhässä alkaen %{late}). Seuraava myöhästymisilmoitus lähtee %{time}.
+        waiting_signal_late_no_deadline_html: Odottaa signaalia %{signal}, alkoi %{ago} (myöhässä alkaen %{late}). Uusia myöhästymisilmoituksia ei lähde.
         waiting_signal_notify_html: Odottaa signaalia %{signal}, alkoi %{ago}. Myöhästymisilmoitus lähtee %{time}, ja odotus jatkuu.
         waiting_signal_timeout_html: Odottaa signaalia %{signal}, alkoi %{ago}. Odotus aikakatkaistaan %{time}.
         waiting_step_html: Odottaa vaihetta %{step}.

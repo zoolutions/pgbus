@@ -15,8 +15,11 @@ module Pgbus
       # (job_options:) may set. Anything else raises at class load.
       JOB_OPTIONS = %i[queue priority wait wait_until].freeze
 
+      # wait_timeout is the static wait_timeout: in seconds (nil for a per-run
+      # one); wait_timeout_callable the per-run one as given, a lambda or a
+      # method name (issue #574).
       attr_reader :name, :body, :wait, :skip_if, :job_options, :timeout, :exception_policies,
-                  :wait_for, :wait_for_name, :wait_timeout, :on_timeout
+                  :wait_for, :wait_for_name, :wait_timeout, :wait_timeout_callable, :on_timeout
 
       def self.validate_job_options!(options)
         raise ArgumentError, "job_options: must be a Hash, got #{options.inspect}" unless options.is_a?(Hash)
@@ -104,6 +107,44 @@ module Pgbus
         result ? true : false
       end
 
+      # True when wait_timeout: is a lambda or a method name, evaluated per run.
+      def dynamic_wait_timeout? = !wait_timeout_callable.nil?
+
+      # The timeout_at of the step parking now on +workflow+: now plus a
+      # static wait_timeout:, what a per-run one returns (a deadline already
+      # past is now, so the next sweep applies on_timeout), or nil.
+      def timeout_at_for(workflow, now)
+        return now + wait_timeout if wait_timeout
+        return nil unless dynamic_wait_timeout?
+
+        deadline = resolve_wait_timeout(workflow)
+        deadline.is_a?(Time) ? [deadline, now].max : deadline && (now + deadline)
+      end
+
+      # What the per-run wait_timeout: returns on +workflow+: a Time (an
+      # absolute deadline), seconds from now, or nil (no timeout). It runs as
+      # a guard does (a flow-control verb raises NotInStep), in a savepoint:
+      # a query of its own that fails in the database must not abort the
+      # run's transaction, which the step's outcome is written in. Anything
+      # else raises ArgumentError, as an error it raises goes up, for the
+      # step's exception policies.
+      def resolve_wait_timeout(workflow)
+        callable = wait_timeout_callable
+        value = WorkflowEntry.transaction(requires_new: true) do
+          workflow.send(:guarding) { callable.is_a?(Symbol) ? workflow.send(callable) : workflow.instance_exec(&callable) }
+        end
+        return nil if value.nil?
+        if value.is_a?(Numeric) || self.class.duration?(value)
+          return self.class.seconds(value, "wait_timeout (step #{name})", positive: true)
+        end
+
+        time = value.to_time if value.respond_to?(:to_time) && !value.is_a?(String)
+        return time if time.is_a?(Time)
+
+        raise ArgumentError, "wait_timeout: of step #{name} must return a Time, a Duration, a number of seconds or nil, " \
+                             "got #{value.inspect}"
+      end
+
       private
 
       def assign_wait(wait_for, wait_timeout, on_timeout)
@@ -112,8 +153,9 @@ module Pgbus
         raise ArgumentError, "on_timeout: needs wait_for: and wait_timeout:" if !on_timeout.nil? && (@wait_for.nil? || wait_timeout.nil?)
         raise ArgumentError, "wait_timeout: needs wait_for: (it bounds the wait for a signal)" if wait_timeout && @wait_for.nil?
 
-        @wait_timeout = self.class.seconds(wait_timeout, "wait_timeout", positive: true)
-        @on_timeout = @wait_timeout && normalize_on_timeout(on_timeout.nil? ? :pause! : on_timeout)
+        @wait_timeout_callable = wait_timeout if wait_timeout.is_a?(Symbol) || wait_timeout.is_a?(Proc)
+        @wait_timeout = @wait_timeout_callable ? nil : self.class.seconds(wait_timeout, "wait_timeout", positive: true)
+        @on_timeout = (@wait_timeout || @wait_timeout_callable) && normalize_on_timeout(on_timeout.nil? ? :pause! : on_timeout)
       end
 
       def normalize_on_timeout(value)

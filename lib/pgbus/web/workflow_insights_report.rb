@@ -47,14 +47,14 @@ module Pgbus
         )
       end
 
-      # [{ name:, kind:, removed:, declared: }] in pipeline order.
+      # [{ name:, kind:, removed:, declared:, wait_timeout: }] in pipeline order.
       def step_list(klass, stats, ongoing, reached, stopped)
         seen = (stats.keys + ongoing.map { |row| row[:step] } + reached.keys + stopped.keys.map(&:first)).compact.uniq
         declared = klass ? klass.workflow_steps.entries.map { |entry| declared_step(entry) } : []
         extra = (seen - declared.map { |entry| entry[:name] }).sort_by do |name|
           [reached.dig(name, :position) || Float::INFINITY, stats.dig(name, :first_seen_at)&.to_f || Float::INFINITY, name]
         end
-        declared + extra.map { |name| { name: name, kind: nil, removed: false, declared: false } }
+        declared + extra.map { |name| { name: name, kind: nil, removed: false, declared: false, wait_timeout: nil } }
       end
 
       def declared_step(entry)
@@ -63,7 +63,15 @@ module Pgbus
                elsif entry.waits_for_signal? then "signal"
                else "step"
                end
-        { name: entry.name, kind: kind, removed: entry.removed?, declared: true }
+        { name: entry.name, kind: kind, removed: entry.removed?, declared: true, wait_timeout: wait_timeout(entry) }
+      end
+
+      # A signal step's wait_timeout: in seconds, "dynamic" for a per-run one
+      # (issue #574), nil without one.
+      def wait_timeout(entry)
+        return nil if entry.removed?
+
+        entry.dynamic_wait_timeout? ? "dynamic" : entry.wait_timeout
       end
 
       def step(entry, stats, ongoing)

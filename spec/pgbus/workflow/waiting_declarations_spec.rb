@@ -152,4 +152,40 @@ RSpec.describe "Pgbus::Workflow waiting step declarations" do # rubocop:disable 
       expect(definition).to have_attributes(wait_timeout: 3600, timeout: 30)
     end
   end
+
+  describe "a per-run wait_timeout: (issue #574)" do
+    it "takes a lambda or a method name, kept as given: wait_timeout is nil and on_timeout defaults to pause!" do
+      deadline = -> { arguments[:expires_at] }
+      klass = workflow_class do
+        step(:by_lambda, wait_for: :x, wait_timeout: deadline) { nil }
+        step(:by_method, wait_for: :x, wait_timeout: :reply_deadline, on_timeout: :notify) { nil }
+      end
+
+      expect(klass.workflow_steps.fetch(:by_lambda))
+        .to have_attributes(wait_timeout: nil, wait_timeout_callable: deadline, dynamic_wait_timeout?: true, on_timeout: :pause!)
+      expect(klass.workflow_steps.fetch(:by_method))
+        .to have_attributes(wait_timeout: nil, wait_timeout_callable: :reply_deadline, dynamic_wait_timeout?: true,
+                            on_timeout: :notify)
+    end
+
+    it "counts as a given wait_timeout: for on_timeout:, and still needs wait_for:" do
+      expect { workflow_class { step(:a, wait_timeout: -> { 60 }) { nil } } }
+        .to raise_error(ArgumentError, /wait_timeout: needs wait_for:/)
+      expect { workflow_class { step(:a, wait_timeout: :deadline, on_timeout: :run) { nil } } }
+        .to raise_error(ArgumentError, /on_timeout: needs wait_for: and wait_timeout:/)
+      expect { workflow_class { step(:a, wait_for: :x, wait_timeout: :deadline, on_timeout: :explode) { nil } } }
+        .to raise_error(ArgumentError, /on_timeout: must be one of :pause!, :cancel!, :skip!, :run, :notify/)
+    end
+
+    it "leaves a static wait_timeout: and a step without one as they were" do
+      steps = workflow_class do
+        step(:static, wait_for: :x, wait_timeout: 1.hour) { nil }
+        step(:none, wait_for: :x) { nil }
+      end.workflow_steps
+
+      expect(steps.fetch(:static)).to have_attributes(wait_timeout: 3600, wait_timeout_callable: nil, dynamic_wait_timeout?: false)
+      expect(steps.fetch(:none)).to have_attributes(wait_timeout: nil, wait_timeout_callable: nil, dynamic_wait_timeout?: false,
+                                                    on_timeout: nil)
+    end
+  end
 end

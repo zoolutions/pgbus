@@ -47,6 +47,11 @@ RSpec.describe Pgbus::Web::WorkflowState do
       .to eq("waiting_signal_late")
   end
 
+  it "says since when a wait is late once a per-run deadline was reported and cleared under :notify (issue #574)" do
+    expect(said(status: "waiting", waiting_for: "replied", waiting_since: now - 10_800, late_since: now - 3600))
+      .to eq(["waiting", "waiting_signal_late_no_deadline", { signal: "replied", ago: now - 10_800, late: now - 3600 }])
+  end
+
   it "says why a run is paused" do
     expect(said(status: "paused", error_class: "Timeout::Error"))
       .to eq(["paused", "paused_error", { step: "capture", error: "Timeout::Error" }])

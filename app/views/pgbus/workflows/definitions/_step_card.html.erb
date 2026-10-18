@@ -10,6 +10,9 @@
     </h3>
     <%= pgbus_insight_kind(step) %>
   </div>
+  <% if step[:wait_timeout] %>
+    <p class="mt-2 text-sm"><span class="text-gray-600 dark:text-gray-300"><%= t("pgbus.workflow_insights.show.pipeline.wait_timeout") %></span> <span class="font-mono text-gray-900 dark:text-white"><%= pgbus_insight_wait_timeout(step[:wait_timeout]) %></span></p>
+  <% end %>
   <ul class="mt-3 grid grid-cols-2 gap-x-3 gap-y-1 text-sm" aria-label="<%= t("pgbus.workflow_insights.show.pipeline.now_label") %>">
     <% Pgbus::WorkflowInsightsHelper::LIVE_STATUSES.each do |status| %>
       <% count = step[:counts][status.to_sym] %>
