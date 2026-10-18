@@ -8,7 +8,9 @@ module Pgbus
     class StepDefinition
       OPTIONS = %i[wait skip_if job_options timeout on_exception wait_for wait_timeout on_timeout].freeze
       # What a wait_for: step does when its wait_timeout: passes first.
-      ON_TIMEOUT = %i[pause! cancel! skip! run].freeze
+      ON_TIMEOUT = %i[pause! cancel! skip! run notify].freeze
+      # The values written without a bang (they do not end the wait as a verb would).
+      PLAIN_ON_TIMEOUT = %w[run notify].freeze
       # The StepJob options a class (set_step_job_options) or a step
       # (job_options:) may set. Anything else raises at class load.
       JOB_OPTIONS = %i[queue priority wait wait_until].freeze
@@ -115,7 +117,7 @@ module Pgbus
       end
 
       def normalize_on_timeout(value)
-        verb = value.to_s == "run" ? :run : :"#{value.to_s.delete_suffix("!")}!"
+        verb = PLAIN_ON_TIMEOUT.include?(value.to_s) ? value.to_sym : :"#{value.to_s.delete_suffix("!")}!"
         return verb if ON_TIMEOUT.include?(verb)
 
         raise ArgumentError, "on_timeout: must be one of #{ON_TIMEOUT.map(&:inspect).join(", ")}, got #{value.inspect}"

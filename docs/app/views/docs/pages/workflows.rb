@@ -227,6 +227,11 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
           step :capture, wait_for: :payment_confirmed, wait_timeout: 2.days, on_timeout: :pause! do
             PaymentGateway.capture(subject, amount: received_signal.payload["amount"])
           end
+
+          # Late after an hour, and again every hour, until the approval comes.
+          step :approve, wait_for: :approved, wait_timeout: 1.hour, on_timeout: :notify do
+            subject.update!(approved_by: received_signal.payload["by"])
+          end
         end
 
         wf.signal!(:payment_confirmed, payload: { amount: 42 }, idempotency_key: event.id)
@@ -288,15 +293,27 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
         gets stuck, so a waiting step can carry a deadline:
         `wait_timeout:` (seconds or a Duration) and `on_timeout:`, one of `:pause!`
         (default: the step fails with `Pgbus::Workflow::WaitTimedOut`),
-        `:cancel!`, `:skip!` or `:run` (the body runs with `received_signal`
-        nil and `timed_out?` true). `timeout:` keeps its meaning on every
-        step: it bounds the in-progress attempt from its claim, while `wait_timeout:`
-        bounds the wait before it. The sweep fires timeouts, so one fires
-        within `config.workflow_sweep_interval` of its deadline. A paused run's
-        wait does not time out while it is paused, and the time spent paused
-        does not count against it: `resume!` moves the deadline by the length
-        of the pause. A signal that arrives after the timeout fired stays
-        pending.
+        `:cancel!`, `:skip!`, `:run` (the body runs with `received_signal`
+        nil and `timed_out?` true) or `:notify` (below). `timeout:` keeps its
+        meaning on every step: it bounds the in-progress attempt from its
+        claim, while `wait_timeout:` bounds the wait before it. The sweep
+        fires timeouts, so one fires within `config.workflow_sweep_interval`
+        of its deadline. A paused run's wait does not time out while it is
+        paused, and the time spent paused does not count against it:
+        `resume!` moves the deadline by the length of the pause. A signal
+        that arrives after the timeout fired stays pending, except under
+        `:notify`.
+
+        **A soft deadline.** `on_timeout: :notify` reports a late signal and
+        keeps waiting for it: a late notice writes a `wait_timed_out` event
+        (`action: "notify"`), sends `pgbus.workflow.wait_timed_out` and counts
+        once in `pgbus_workflow_wait_overdue_total`, while the same
+        attempt stays waiting and its deadline moves one `wait_timeout:` on.
+        No attempt fails, so the step's outcomes and the step-failing alert
+        below are untouched, and a signal that arrives later wakes that
+        attempt as usual (`timed_out?` is never true under `:notify`). A sweep
+        that missed several deadlines (the dispatcher was down) reports them
+        once and moves to the next one ahead.
 
         **A wait without a timeout** has three escape hatches: `skip!` (the
         run moves on), `cancel!`, or `pause!` then `resume_at!`. One waiting
@@ -631,10 +648,10 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
         `pgbus_workflows_attention` takes `workflow_class:`.
 
         **Alerts** belong in Prometheus or AppSignal, on the metrics below.
-        Two starting points: a step whose attempts end in a reattempt or a
+        Three starting points: a step whose attempts end in a reattempt or a
         pause (an exception, or the body's own `reattempt!`/`pause!`) more
-        than 5 % of the time for 15 minutes, and runs needing a person for an
-        hour:
+        than 5 % of the time for 15 minutes, runs needing a person for an
+        hour, and a `:notify` wait that missed its deadline:
       MD
       DocsUI::Code(<<~'YAML', filename: "prometheus/rules/pgbus_workflows.yml", lexer: :yaml)
         groups:
@@ -652,11 +669,15 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
                 for: 1h
                 annotations:
                   summary: "{{ $value }} {{ $labels.workflow_class }} runs need a person: /pgbus/workflows/attention"
+              - alert: PgbusWorkflowWaitLate
+                expr: sum by (workflow_class, step) (increase(pgbus_workflow_wait_overdue_total[15m])) > 0
+                annotations:
+                  summary: "{{ $labels.workflow_class }}#{{ $labels.step }} is still waiting past its deadline"
       YAML
       md <<~'MD'
         On AppSignal, the bundled `main` dashboard (`pgbus dashboard main`) has
-        a workflows row: steps per outcome, step run time, workflows by status
-        and stuck workflows.
+        a workflows row: steps per outcome, step run time, workflows by
+        status, stuck workflows and late waits.
       MD
     end
   end
@@ -674,7 +695,8 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
         `stall_detected`, `late_completion_ignored`, and for waiting steps
         `step_waiting` (details: `wait_for` or `batch_id`), `signal_received`
         (`name`, `idempotency_key`, `duplicate`), `signal_claimed`,
-        `wait_timed_out`, `fan_out_opened` (`batch_id`, `size`) and
+        `wait_timed_out` (`wait_for`, `action`, the missed `timeout_at`),
+        `fan_out_opened` (`batch_id`, `size`) and
         `fan_out_finished` (`failed_jobs`, `total_jobs`). `signal!` takes
         `actor:` too.
 
@@ -690,6 +712,7 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
           [ [ :code, "pgbus_workflows_paused_total" ], "counter", "workflow_class, error_class" ],
           [ [ :code, "pgbus_workflows_cancelled_total" ], "counter", "workflow_class" ],
           [ [ :code, "pgbus_workflow_stalls_total" ], "counter", "workflow_class, step, detection" ],
+          [ [ :code, "pgbus_workflow_wait_overdue_total" ], "counter", "workflow_class, step" ],
           [ [ :code, "pgbus_workflows" ], "gauge", "workflow_class, status" ],
           [ [ :code, "pgbus_workflows_stuck" ], "gauge", "workflow_class, reason" ]
         ]
@@ -697,13 +720,18 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
       md <<~'MD'
         StatsD reads timer values as milliseconds, so it receives the step
         histogram as `pgbus_workflow_step_duration_ms` (seconds × 1000).
+        `pgbus_workflow_wait_overdue_total` counts the late notices of
+        `on_timeout: :notify` waits (one per deadline, or one for a sweep that
+        missed several); the other `on_timeout:` values end
+        the wait and show in the step and run counters instead.
 
         **Stuck reasons** (the `pgbus_workflows_stuck` gauge): `paused_error`
         (paused on a step that failed), `stalled` (paused on `StepStalled`),
         `paused_manual` (the step called `pause!`, or an outside `pause!`),
         `overdue` (a scheduled step nobody picked up), `waiting_overdue` (a
         wait without a `wait_timeout:` older than
-        `workflow_waiting_visibility_threshold`).
+        `workflow_waiting_visibility_threshold`; a `:notify` wait has a
+        deadline, and `pgbus_workflow_wait_overdue_total` instead).
 
         **Errors** reach `Pgbus::ErrorReporter` with
         `{ workflow_class:, workflow_id:, step_name:, attempt:, outcome: }` as
@@ -756,7 +784,8 @@ class Views::Docs::Pages::Workflows < DocsUI::Page
         member of the waiting step's batch (without running them) and runs
         its `BatchFinishedJob` inline; `deliver_signal` calls `signal!` and
         runs the step it scheduled; `expire_wait` applies the waiting step's
-        `on_timeout` whatever its deadline.
+        `on_timeout` whatever its deadline (under `:notify` the step stays
+        waiting: assert the `wait_timed_out` event and the moved `timeout_at`).
       MD
     end
   end

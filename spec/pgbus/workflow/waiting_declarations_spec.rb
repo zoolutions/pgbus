@@ -106,22 +106,25 @@ RSpec.describe "Pgbus::Workflow waiting step declarations" do # rubocop:disable 
   end
 
   describe "wait_timeout: and on_timeout:" do
-    it "defaults on_timeout to pause! and takes each of pause!, cancel!, skip! and run" do
+    it "defaults on_timeout to pause! and takes each of pause!, cancel!, skip!, run and notify" do
       klass = workflow_class do
         step(:a, wait_for: :x, wait_timeout: 2.days) { nil }
         step(:b, wait_for: :x, wait_timeout: 60, on_timeout: :cancel) { nil }
         step(:c, wait_for: :x, wait_timeout: 60, on_timeout: :skip!) { nil }
         step(:d, wait_for: :x, wait_timeout: 60, on_timeout: :run) { nil }
+        step(:e, wait_for: :x, wait_timeout: 60, on_timeout: "notify") { nil }
       end
 
       steps = klass.workflow_steps
       expect(steps.fetch(:a)).to have_attributes(wait_timeout: 2.days.to_i, on_timeout: :pause!)
-      expect(%i[b c d].map { |name| steps.fetch(name).on_timeout }).to eq(%i[cancel! skip! run])
+      expect(%i[b c d e].map { |name| steps.fetch(name).on_timeout }).to eq(%i[cancel! skip! run notify])
     end
 
     it "rejects an unknown on_timeout: and a non-positive wait_timeout:" do
       expect { workflow_class { step(:a, wait_for: :x, wait_timeout: 60, on_timeout: :explode) { nil } } }
-        .to raise_error(ArgumentError, /on_timeout: must be one of :pause!, :cancel!, :skip!, :run/)
+        .to raise_error(ArgumentError, /on_timeout: must be one of :pause!, :cancel!, :skip!, :run, :notify/)
+      expect { workflow_class { step(:a, wait_for: :x, wait_timeout: 60, on_timeout: :notify!) { nil } } }
+        .to raise_error(ArgumentError, /got :notify!/)
       [0, -5, "1d"].each do |bad|
         expect { workflow_class { step(:a, wait_for: :x, wait_timeout: bad) { nil } } }
           .to raise_error(ArgumentError, /wait_timeout: must be a positive number of seconds/), "for #{bad.inspect}"
@@ -136,6 +139,10 @@ RSpec.describe "Pgbus::Workflow waiting step declarations" do # rubocop:disable 
       expect { workflow_class { step(:a, wait_for: :x, on_timeout: :cancel!) { nil } } }
         .to raise_error(ArgumentError, /on_timeout: needs wait_for: and wait_timeout:/)
       expect { workflow_class { step(:a, wait_for: :x, on_timeout: false) { nil } } }
+        .to raise_error(ArgumentError, /on_timeout: needs wait_for: and wait_timeout:/)
+      expect { workflow_class { step(:a, wait_for: :x, on_timeout: :notify) { nil } } }
+        .to raise_error(ArgumentError, /on_timeout: needs wait_for: and wait_timeout:/)
+      expect { workflow_class { step(:a, wait_timeout: 60, on_timeout: :notify) { nil } } }
         .to raise_error(ArgumentError, /on_timeout: needs wait_for: and wait_timeout:/)
     end
 

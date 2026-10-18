@@ -73,7 +73,7 @@ module Pgbus
         case key
         when :step, :signal then [key, tag.code(value, class: "font-mono")]
         when :batch then [key, pgbus_workflow_batch_link(value, row[:batch_id])]
-        when :ago then [key, pgbus_time(value)]
+        when :ago, :late then [key, pgbus_time(value)]
         when :time then [key, pgbus_time(value, clock: true)]
         else [key, value]
         end
@@ -158,7 +158,7 @@ module Pgbus
     def pgbus_workflow_chart_i18n
       series = %w[waited queued waiting paused ran_ok ran_failed ran_open ran_cancelled]
       { series: series.index_with { |name| t("pgbus.workflows.timeline.series.#{name}") },
-        paused_row: t("pgbus.workflows.timeline.paused_row"),
+        paused_row: t("pgbus.workflows.timeline.paused_row"), wait_timed_out: t("pgbus.workflows.events.wait_timed_out"),
         statuses: Workflow::States::STEP.index_with { |status| t("pgbus.workflows.step_statuses.#{status}") } }
     end
   end

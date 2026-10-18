@@ -4,7 +4,7 @@
   ],
   "dashboard": {
     "title": "Pgbus",
-    "description": "PostgreSQL-native job processing and event bus built on PGMQ.\nMonitor job throughput, queue depth, latency, dead letter queues,\nworker processes, event handlers, and stream broadcasts.\nWorkflow step outcomes and run times, and stuck workflows.\n",
+    "description": "PostgreSQL-native job processing and event bus built on PGMQ.\nMonitor job throughput, queue depth, latency, dead letter queues,\nworker processes, event handlers, and stream broadcasts.\nWorkflow step outcomes and run times, stuck workflows and late waits.\n",
     "visuals": [
       {
         "type": "timeseries",
@@ -515,6 +515,35 @@
               },
               {
                 "key": "reason",
+                "value": "*"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "timeseries",
+        "display": "LINE",
+        "title": "Late workflow waits",
+        "description": "Deadlines an on_timeout: :notify wait missed, by class and step: the run keeps waiting for its signal.",
+        "line_label": "%workflow_class% - %step%",
+        "format": "number",
+        "draw_null_as_zero": true,
+        "metrics": [
+          {
+            "name": "pgbus_workflow_wait_overdue_total",
+            "fields": [
+              {
+                "field": "COUNTER"
+              }
+            ],
+            "tags": [
+              {
+                "key": "workflow_class",
+                "value": "*"
+              },
+              {
+                "key": "step",
                 "value": "*"
               }
             ]

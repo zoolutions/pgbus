@@ -6,7 +6,8 @@ module Pgbus
       # The Workflows pages' sample data (issue #542): one run per state with
       # a believable timeline — paused on an error (with backtrace and cause
       # chain), performing a reattempt, waiting on a signal, waiting on a
-      # fan-out batch at 7 of 12, a reminder scheduled two days out, finished
+      # signal two late notices past its on_timeout: :notify deadline, waiting
+      # on a fan-out batch at 7 of 12, a reminder scheduled two days out, finished
       # and cancelled runs and a rerun pair — plus what the needs-attention
       # view groups: three runs paused on one error, a stalled run on an
       # older definition, an overdue step and a wait past the visibility
@@ -24,6 +25,7 @@ module Pgbus
         STALLED_ID = "8d6b3eaa-4f9c-4ebc-9a5d-abc26e9fd0e8"
         OVERDUE_ID = "9e7c4fbb-5aad-4fcd-8b6e-bcd37fa0e1f9"
         PARKED_ID = "af8d5acc-6bbe-4ade-9c7f-cde48ab1f20a"
+        LATE_ID = "f4d2afb1-c0d1-4e2f-8a3b-1239df06475f"
         TIMEOUT_IDS = %w[b09e6bdd-7ccf-4bef-8d8a-def59bc2031b c1af7cee-8dda-4cfa-9e9b-ef06acd3142c
                          d2b08dff-9eeb-4dab-8fac-f017bde4253d].freeze
         BATCH_ID = "e3c19ea0-af0c-4ebc-9abd-0128cef5364e"
@@ -36,7 +38,8 @@ module Pgbus
         private
 
         def fill_sample_workflows!(now)
-          @workflows_list = [sample_paused(now), sample_performing(now), sample_signal_wait(now), sample_fan_out(now),
+          @workflows_list = [sample_paused(now), sample_performing(now), sample_signal_wait(now), sample_late_wait(now),
+                             sample_fan_out(now),
                              sample_scheduled(now), sample_finished(now), sample_cancelled(now), sample_rerun(now),
                              sample_stalled(now), sample_overdue(now), sample_parked(now), *sample_timeouts(now),
                              *sample_exports(now)]
@@ -46,7 +49,8 @@ module Pgbus
         def wf_row(now, id, workflow_class, status, current_step, **attrs)
           { workflow_id: id, workflow_class: workflow_class, subject_type: "Order", subject_id: id[0, 4].to_i(16).to_s,
             status: status, current_step: current_step, current_attempt: 1, step_status: nil, waiting_for: nil,
-            waiting_since: nil, timeout_at: nil, batch_id: nil, batch_progress: nil, scheduled_at: nil, error_class: nil,
+            waiting_since: nil, timeout_at: nil, on_timeout: nil, late_since: nil, batch_id: nil, batch_progress: nil,
+            scheduled_at: nil, error_class: nil,
             error_message: nil, paused_at: nil, finished_at: nil, cancelled_at: nil, rerun_of_workflow_id: nil,
             created_at: now - 3600, updated_at: now - 60, step_names: CHECKOUT_STEPS,
             arguments: { "currency" => "EUR", "amount_cents" => 4_999 } }.merge(attrs)
@@ -120,7 +124,7 @@ module Pgbus
         def sample_signal_wait(now)
           wf_row(now, SIGNAL_ID, "ShippingWorkflow", "waiting", "ship",
                  subject_id: "1044", step_status: "waiting", waiting_for: "shipped", waiting_since: now - 10_800,
-                 timeout_at: now + 248_400, created_at: now - 11_000, updated_at: now - 10_800,
+                 timeout_at: now + 248_400, on_timeout: "pause!", created_at: now - 11_000, updated_at: now - 10_800,
                  step_names: %w[label ship notify], signal_names: ["shipped"],
                  steps: [wf_step(33, "ship", 1, "waiting", now - 10_802, started_at: now - 10_801, waiting_since: now - 10_800,
                                                                          wait_for: "shipped", timeout_at: now + 248_400),
@@ -134,6 +138,30 @@ module Pgbus
                           wf_event(21, "step_waiting", "system", now - 10_800, step_name: "ship", attempt: 1,
                                                                                details: { "wait_for" => "shipped" }),
                           wf_event(20, "started", "app", now - 11_000)])
+        end
+
+        # An hourly on_timeout: :notify deadline the approval missed twice: the
+        # same attempt still waits, and the next late notice is an hour out.
+        def sample_late_wait(now)
+          wf_row(now, LATE_ID, "RefundWorkflow", "waiting", "await_approval",
+                 subject_id: "1049", step_status: "waiting", waiting_for: "approved", waiting_since: now - 10_800,
+                 timeout_at: now + 3600, on_timeout: "notify", late_since: now - 7200, created_at: now - 10_810,
+                 updated_at: now - 10_800, step_names: %w[request await_approval refund], signal_names: ["approved"],
+                 steps: [wf_step(36, "await_approval", 1, "waiting", now - 10_803, started_at: now - 10_801,
+                                                                                   waiting_since: now - 10_800, wait_for: "approved",
+                                                                                   timeout_at: now + 3600),
+                         ran(35, "request", 1, now - 10_810, 5)],
+                 events: [late_notice(27, now - 3600), late_notice(26, now - 7200),
+                          wf_event(25, "step_waiting", "system", now - 10_800, step_name: "await_approval", attempt: 1,
+                                                                               details: { "wait_for" => "approved" }),
+                          wf_event(24, "started", "app", now - 10_810)])
+        end
+
+        # A wait_timed_out event of the late wait's hourly :notify deadline.
+        def late_notice(id, deadline)
+          wf_event(id, "wait_timed_out", "system", deadline, step_name: "await_approval", attempt: 1,
+                                                             details: { "wait_for" => "approved", "action" => "notify",
+                                                                        "timeout_at" => deadline.utc.iso8601(3) })
         end
 
         def sample_fan_out(now)
@@ -245,7 +273,7 @@ module Pgbus
 
         # Enough finished runs that ?status=all has a second page.
         def sample_exports(now)
-          Array.new(SampleData::PAGED_ROWS - 14) do |i|
+          Array.new(SampleData::PAGED_ROWS - 15) do |i|
             day = now - (86_400 * (i + 2))
             wf_row(now, format("f%07d-0000-4000-8000-%012d", i, i), "NightlyExportWorkflow", "finished", "upload",
                    subject_type: nil, subject_id: nil, step_status: "completed", created_at: day, updated_at: day + 900,
