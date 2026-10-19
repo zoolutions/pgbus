@@ -507,7 +507,8 @@ RSpec.describe Pgbus::Web::DataSource do
     # Issue #577: the row records the logical queue; under priority routing the
     # message sits in a _pN sub-queue, and its msg_id may repeat in a sibling.
     it "resets the vt in the physical queue whose message carries the job's job_id" do
-      allow(mock_client).to receive(:locate_message).with("default", msg_id: 42, job_id: "j-1").and_return("pgbus_default_p1")
+      allow(mock_client).to receive(:locate_message)
+        .with("default", msg_id: 42, job_id: "j-1", prefixed: true).and_return("pgbus_default_p1")
 
       expect(data_source.retry_failed_event(1)).to be(true)
 
@@ -526,9 +527,22 @@ RSpec.describe Pgbus::Web::DataSource do
       expect(mock_client).not_to have_received(:set_visibility_timeout)
     end
 
+    # Issue #583: a row that names the physical table its message was read
+    # from is looked up there alone, so a sibling sub-queue is never probed.
+    it "resets the vt in the physical queue the row names" do
+      event["source_queue"] = "pgbus_default_p1"
+      allow(mock_client).to receive(:locate_message)
+        .with("pgbus_default_p1", msg_id: 42, job_id: "j-1", prefixed: false).and_return("pgbus_default_p1")
+
+      expect(data_source.retry_failed_event(1)).to be(true)
+
+      expect(mock_client).to have_received(:set_visibility_timeout).with("pgbus_default_p1", 42, vt: 0, prefixed: false)
+      expect(mock_client).not_to have_received(:locate_message).with("default", any_args)
+    end
+
     it "locates by msg_id alone when the payload carries no job_id" do
       event["payload"] = '{"job_class":"FailedJob"}'
-      allow(mock_client).to receive(:locate_message).with("default", msg_id: 42, job_id: nil).and_return("pgbus_default")
+      allow(mock_client).to receive(:locate_message).with("default", msg_id: 42, job_id: nil, prefixed: true).and_return("pgbus_default")
 
       data_source.retry_failed_event(1)
 
@@ -558,6 +572,7 @@ RSpec.describe Pgbus::Web::DataSource do
 
     before do
       allow(Pgbus.configuration).to receive(:queue_prefix).and_return("pgbus")
+      allow(Pgbus::FailedEventRecorder).to receive(:source_queue_column?).and_return(false)
       # Each sub-queue read runs in its own savepoint.
       allow(mock_connection).to receive(:transaction).with(requires_new: true).and_yield
       allow(mock_connection).to receive(:select_one).with(anything, "Pgbus Failed Event", [1]).and_return(event)
@@ -591,7 +606,18 @@ RSpec.describe Pgbus::Web::DataSource do
     # matched by the job's job_id when the payload carries one.
     it "archives the message from the physical queue whose message carries the job's job_id" do
       event["payload"] = '{"job_class":"FailedJob","job_id":"j-1"}'
-      allow(mock_client).to receive(:locate_message).with("default", msg_id: 42, job_id: "j-1").and_return("pgbus_default_p0")
+      allow(mock_client).to receive(:locate_message)
+        .with("default", msg_id: 42, job_id: "j-1", prefixed: true).and_return("pgbus_default_p0")
+
+      data_source.discard_failed_event(1)
+
+      expect(mock_client).to have_received(:archive_message).with("pgbus_default_p0", 42, prefixed: false)
+    end
+
+    it "archives the message from the physical queue the row names" do
+      event.merge!("payload" => '{"job_class":"FailedJob","job_id":"j-1"}', "source_queue" => "pgbus_default_p0")
+      allow(mock_client).to receive(:locate_message)
+        .with("pgbus_default_p0", msg_id: 42, job_id: "j-1", prefixed: false).and_return("pgbus_default_p0")
 
       data_source.discard_failed_event(1)
 
@@ -624,6 +650,24 @@ RSpec.describe Pgbus::Web::DataSource do
       data_source.discard_failed_event(1)
 
       expect(Pgbus::UniquenessKey).to have_received(:release_all_held_by!).with([["failed-1", "default", 42, earlier]])
+    end
+
+    # Issue #583: a row that names its sub-queue is that table's message, so
+    # a sibling's send for the same msg_id and key is not the job's.
+    it "takes the send time from the sub-queue the row names" do
+      allow(Pgbus::FailedEventRecorder).to receive(:source_queue_column?).and_return(true)
+      allow(mock_connection).to receive(:select_all)
+        .with("SELECT queue_name, msg_id, payload, source_queue FROM pgbus_failed_events WHERE id = $1",
+              "Pgbus Collect Failed Keys", [1])
+        .and_return([event.except("id").merge("source_queue" => "pgbus_default_p1")])
+      allow(mock_connection).to receive(:select_all)
+        .with(format(queued_send_times_sql, table: "pgbus_default_p0"), "Pgbus Failed Message Sent At", ["{42}"])
+        .and_return([{ "msg_id" => 42, "enqueued_at" => sent_at - 60, "lock_key" => "failed-1" }])
+
+      data_source.discard_failed_event(1)
+
+      expect(Pgbus::UniquenessKey).to have_received(:release_all_held_by!).with([["failed-1", "default", 42, sent_at]])
+      expect(mock_client).not_to have_received(:physical_queue_names)
     end
 
     it "skips a sub-queue whose table does not exist" do
@@ -690,6 +734,7 @@ RSpec.describe Pgbus::Web::DataSource do
     let(:sent_at) { Time.utc(2026, 10, 18, 10, 30) }
 
     before do
+      allow(Pgbus::FailedEventRecorder).to receive(:source_queue_column?).and_return(false)
       allow(data_source).to receive(:registered_subscribers)
         .and_return([{ queue_name: "orders_handler", physical_queue_name: "pgbus_orders_handler" }])
       allow(mock_connection).to receive(:select_all)
@@ -716,9 +761,10 @@ RSpec.describe Pgbus::Web::DataSource do
                       { "id" => 2, "queue_name" => "default", "msg_id" => 11, "payload" => '{"job_id":"j-11"}' },
                       { "id" => 3, "queue_name" => "low", "msg_id" => 99, "payload" => '{"job_id":"j-99"}' }
                     ])
-      allow(mock_client).to receive(:locate_messages).with("default", [[10, "j-10"], [11, "j-11"]])
+      allow(mock_client).to receive(:locate_messages).with("default", [[10, "j-10"], [11, "j-11"]], prefixed: true)
                                                      .and_return(10 => "pgbus_test_default", 11 => "pgbus_test_default")
-      allow(mock_client).to receive(:locate_messages).with("low", [[99, "j-99"]]).and_return(99 => "pgbus_test_low")
+      allow(mock_client).to receive(:locate_messages).with("low", [[99, "j-99"]], prefixed: true)
+                                                     .and_return(99 => "pgbus_test_low")
 
       allow(mock_connection).to receive(:exec_delete)
         .with("DELETE FROM pgbus_failed_events WHERE #{not_handler}", "Pgbus Discard All Failed", handler_names)
@@ -782,7 +828,8 @@ RSpec.describe Pgbus::Web::DataSource do
     # A msg_id another job's message reuses (a queue dropped and recreated)
     # is not the failed job's message, as for a single Discard.
     it "archives only the messages that still carry their row's job_id" do
-      allow(mock_client).to receive(:locate_messages).with("default", anything).and_return(10 => "pgbus_test_default")
+      allow(mock_client).to receive(:locate_messages).with("default", anything, prefixed: true)
+                                                     .and_return(10 => "pgbus_test_default")
 
       data_source.discard_all_failed
 
@@ -797,7 +844,7 @@ RSpec.describe Pgbus::Web::DataSource do
 
       data_source.discard_all_failed
 
-      expect(mock_client).to have_received(:locate_message).with("default", msg_id: 10, job_id: "j-10")
+      expect(mock_client).to have_received(:locate_message).with("default", msg_id: 10, job_id: "j-10", prefixed: true)
       expect(mock_client).to have_received(:archive_message).with("pgbus_test_default", 10, prefixed: false)
       expect(mock_client).to have_received(:archive_message).with("pgbus_test_default", 11, prefixed: false)
       # The good queue still uses archive_batch.
@@ -807,7 +854,7 @@ RSpec.describe Pgbus::Web::DataSource do
     # Issue #577: under priority routing a msg_id repeats across the _pN
     # sub-queues, so no batch by logical name can address the right messages.
     it "archives each message of a priority queue from the sub-queue holding it" do
-      allow(mock_client).to receive(:locate_messages).with("default", anything)
+      allow(mock_client).to receive(:locate_messages).with("default", anything, prefixed: true)
                                                      .and_return(10 => "pgbus_test_default_p1", 11 => "pgbus_test_default_p0")
 
       data_source.discard_all_failed
@@ -819,6 +866,50 @@ RSpec.describe Pgbus::Web::DataSource do
 
     it "returns the number of rows deleted, leaving handler-queue rows to the Events page" do
       expect(data_source.discard_all_failed).to eq(3)
+    end
+
+    # Issue #583: two sub-queues' failures with the same msg_id each have a
+    # row naming its table, and each message is located in that table alone.
+    context "when the failed rows name their physical queue" do
+      before do
+        allow(Pgbus::FailedEventRecorder).to receive(:source_queue_column?).and_return(true)
+        allow(mock_connection).to receive(:select_all)
+          .with("#{failed_lock_holders_sql.sub("payload", "payload, source_queue")} #{not_handler}",
+                "Pgbus Collect Failed Keys", handler_names)
+          .and_return([])
+        allow(mock_connection).to receive(:select_all)
+          .with(
+            "SELECT id, queue_name, msg_id, payload, source_queue FROM pgbus_failed_events " \
+            "WHERE msg_id IS NOT NULL AND #{not_handler}",
+            "Pgbus Collect Failed Messages", handler_names
+          )
+          .and_return([
+                        { "id" => 1, "queue_name" => "default", "msg_id" => 10, "payload" => '{"job_id":"j-a"}',
+                          "source_queue" => "pgbus_test_default_p0" },
+                        { "id" => 2, "queue_name" => "default", "msg_id" => 10, "payload" => '{"job_id":"j-b"}',
+                          "source_queue" => "pgbus_test_default_p1" },
+                        { "id" => 3, "queue_name" => "low", "msg_id" => 99, "payload" => '{"job_id":"j-99"}',
+                          "source_queue" => nil }
+                      ])
+        allow(mock_client).to receive(:locate_messages)
+          .with("pgbus_test_default_p0", [[10, "j-a"]], prefixed: false).and_return(10 => "pgbus_test_default_p0")
+        allow(mock_client).to receive(:locate_messages)
+          .with("pgbus_test_default_p1", [[10, "j-b"]], prefixed: false).and_return(10 => "pgbus_test_default_p1")
+      end
+
+      it "archives each failed message from the table its row names" do
+        data_source.discard_all_failed
+
+        expect(mock_client).to have_received(:archive_batch).with("pgbus_test_default_p0", [10], prefixed: false)
+        expect(mock_client).to have_received(:archive_batch).with("pgbus_test_default_p1", [10], prefixed: false)
+      end
+
+      it "locates a row written before source_queue under its logical queue" do
+        data_source.discard_all_failed
+
+        expect(mock_client).to have_received(:locate_messages).with("low", [[99, "j-99"]], prefixed: true)
+        expect(mock_client).to have_received(:archive_batch).with("pgbus_test_low", [99], prefixed: false)
+      end
     end
   end
 

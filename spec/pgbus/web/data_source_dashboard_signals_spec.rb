@@ -35,6 +35,7 @@ RSpec.describe Pgbus::Web::DataSource::DashboardSignals do
     allow(data_source).to receive_messages(queues_with_metrics: queues, processes: processes,
                                            handler_queue_physical_names: %w[pgbus_test_billing],
                                            stream_queue_names: Set.new)
+    allow(Pgbus::FailedEventRecorder).to receive(:source_queue_column?).and_return(true)
   end
 
   describe "#retrying_signal" do
@@ -74,6 +75,8 @@ RSpec.describe Pgbus::Web::DataSource::DashboardSignals do
       # The newest error comes from the rows still backing off, not from any
       # failed event (one that already re-ran or was dead-lettered).
       expect(sql).to include("SELECT m.vt, f.error_class, f.failed_at", "(array_agg(error_class ORDER BY failed_at DESC))[1]")
+      # A priority sub-queue's failed row is its own table's (issue #583).
+      expect(sql).to include("AND (f.source_queue IS NULL OR f.source_queue = 'pgbus_test_default')")
     end
 
     it "flags a capped count" do

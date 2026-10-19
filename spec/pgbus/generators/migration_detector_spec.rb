@@ -383,23 +383,55 @@ RSpec.describe Pgbus::Generators::MigrationDetector do
       end
     end
 
-    context "with failed events index detection" do
-      it "queues add_failed_events_index when the table exists but the unique index does not" do
-        stub_indexes("pgbus_failed_events", %w[idx_pgbus_failed_events_queue idx_pgbus_failed_events_time])
+    # Issue #583: add_failed_events_source_queue creates the unique index the
+    # recorder's upsert needs, (queue_name, msg_id, source_queue), and drops
+    # the old (queue_name, msg_id) one, so the old index generator is never
+    # queued: it would put back the index that collapses two sub-queues' rows.
+    context "with failed events source_queue detection" do
+      let(:current_indexes) { %w[idx_pgbus_failed_events_queue_msg_source] }
 
-        expect(detector.missing_migrations).to include(:add_failed_events_index)
-      end
-
-      it "does not queue it when the unique index already exists" do
+      it "queues add_failed_events_source_queue when the column is missing" do
         stub_indexes("pgbus_failed_events", %w[idx_pgbus_failed_events_queue_msg])
 
+        expect(detector.missing_migrations).to include(:add_failed_events_source_queue)
         expect(detector.missing_migrations).not_to include(:add_failed_events_index)
+      end
+
+      it "queues it when the table has neither unique index (a pre-upsert install)" do
+        stub_indexes("pgbus_failed_events", %w[idx_pgbus_failed_events_queue idx_pgbus_failed_events_time])
+
+        expect(detector.missing_migrations).to include(:add_failed_events_source_queue)
+        expect(detector.missing_migrations).not_to include(:add_failed_events_index)
+      end
+
+      it "queues it when the column exists but its unique index does not" do
+        stub_columns("pgbus_failed_events", %w[id queue_name source_queue msg_id])
+        stub_indexes("pgbus_failed_events", %w[idx_pgbus_failed_events_queue_msg])
+
+        expect(detector.missing_migrations).to include(:add_failed_events_source_queue)
+      end
+
+      # pgbus:add_failed_events_index run by name after the migration puts the
+      # old index back; it rejects a second sub-queue's failure with the same
+      # msg_id, so its presence alone means the migration has to run again.
+      it "queues it when the old (queue_name, msg_id) unique index is back beside the new one" do
+        stub_columns("pgbus_failed_events", %w[id queue_name source_queue msg_id])
+        stub_indexes("pgbus_failed_events", current_indexes + %w[idx_pgbus_failed_events_queue_msg])
+
+        expect(detector.missing_migrations).to include(:add_failed_events_source_queue)
+      end
+
+      it "queues nothing once the column and its unique index exist" do
+        stub_columns("pgbus_failed_events", %w[id queue_name source_queue msg_id])
+        stub_indexes("pgbus_failed_events", current_indexes)
+
+        expect(detector.missing_migrations).not_to include(:add_failed_events_source_queue, :add_failed_events_index)
       end
 
       it "does not queue it when the table itself does not exist (fresh install handles it)" do
         remove_table("pgbus_failed_events")
 
-        expect(detector.missing_migrations).not_to include(:add_failed_events_index)
+        expect(detector.missing_migrations).not_to include(:add_failed_events_source_queue, :add_failed_events_index)
       end
     end
 
@@ -548,6 +580,7 @@ RSpec.describe Pgbus::Generators::MigrationDetector do
           :add_outbox,
           :add_deploy_tasks,
           :add_workflows,
+          :add_failed_events_source_queue,
           :add_processed_event_completion,
           :add_batch_executions,
           :add_batch_callback_jobs,
@@ -580,7 +613,7 @@ RSpec.describe Pgbus::Generators::MigrationDetector do
       keys = %i[
         uniqueness_keys add_job_stats add_job_stats_latency
         add_job_stats_queue_index add_stream_stats add_presence
-        add_queue_states add_outbox add_recurring add_failed_events_index
+        add_queue_states add_outbox add_recurring add_failed_events_source_queue
         add_processed_event_completion add_batch_executions add_batch_callback_jobs
         add_stream_queues tune_autovacuum tune_fillfactor add_presence_seats add_deploy_tasks
         add_workflows add_workflow_signals

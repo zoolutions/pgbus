@@ -1,0 +1,27 @@
+class AddPgbusFailedEventsSourceQueue < ActiveRecord::Migration<%= migration_version %>
+  # Under priority routing each _pN sub-queue numbers its messages from its
+  # own sequence, so two jobs can fail with the same msg_id under one logical
+  # queue. source_queue names the physical table the message was read from,
+  # and the failure upsert is keyed on it. Rows written before this keep
+  # NULL there: pgbus reads them as belonging to any table of their queue.
+  def up
+    add_column :pgbus_failed_events, :source_queue, :string, if_not_exists: true
+    add_index :pgbus_failed_events, %i[queue_name msg_id source_queue],
+      unique: true, name: "idx_pgbus_failed_events_queue_msg_source", if_not_exists: true
+    remove_index :pgbus_failed_events, name: "idx_pgbus_failed_events_queue_msg", if_exists: true
+  end
+
+  # (queue_name, msg_id) can repeat once source_queue is in use: the latest
+  # row of each pair is kept so the old unique index can be built again.
+  def down
+    execute <<~SQL
+      DELETE FROM pgbus_failed_events older
+      USING pgbus_failed_events newer
+      WHERE older.queue_name = newer.queue_name AND older.msg_id = newer.msg_id AND older.id < newer.id
+    SQL
+    add_index :pgbus_failed_events, %i[queue_name msg_id],
+      unique: true, name: "idx_pgbus_failed_events_queue_msg", if_not_exists: true
+    remove_index :pgbus_failed_events, name: "idx_pgbus_failed_events_queue_msg_source", if_exists: true
+    remove_column :pgbus_failed_events, :source_queue, if_exists: true
+  end
+end

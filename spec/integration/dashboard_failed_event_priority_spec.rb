@@ -42,10 +42,17 @@ RSpec.describe "Failed-job Retry and Discard under priority routing (integration
     )
   end
 
-  def record_failure(id = msg_id)
-    Pgbus::FailedEventRecorder.record!(queue_name: queue, msg_id: id, payload: payload, headers: nil,
-                                       error: StandardError.new("boom"), retry_count: 1)
-    data_source.failed_events.find { |e| e["msg_id"].to_i == id.to_i }
+  # As the executor records it: under the logical queue and the sub-queue the
+  # message was read from (issue #583). legacy: true makes the row one written
+  # before source_queue existed, which is located by the job's job_id alone.
+  def record_failure(id = msg_id, level: 1, legacy: false)
+    Pgbus::FailedEventRecorder.record!(queue_name: queue, msg_id: id, source_queue: physical(level),
+                                       payload: payload, headers: nil, error: StandardError.new("boom"), retry_count: 1)
+    event = data_source.failed_events.find { |e| e["msg_id"].to_i == id.to_i }
+    return event unless legacy
+
+    conn.exec_update("UPDATE pgbus_failed_events SET source_queue = NULL WHERE id = $1", "spec", [event["id"]])
+    event.merge("source_queue" => nil)
   end
 
   def visible?(level, id = msg_id)
@@ -91,6 +98,16 @@ RSpec.describe "Failed-job Retry and Discard under priority routing (integration
       expect(queued_total).to eq(2)
     end
 
+    it "finds the job's message by its job_id when the row predates source_queue" do
+      plant(0, payload.merge("job_id" => "someone-else"))
+      plant(1, payload)
+
+      expect(data_source.retry_failed_event(record_failure(legacy: true)["id"])).to be(true)
+
+      expect(visible?(1)).to be(true)
+      expect(visible?(0)).to be(false)
+    end
+
     it "enqueues a fresh copy when no sub-queue holds the job's message any more" do
       plant(0, payload.merge("job_id" => "someone-else"))
 
@@ -110,6 +127,16 @@ RSpec.describe "Failed-job Retry and Discard under priority routing (integration
 
       expect(queued?(1)).to be(false)
       expect(archived?(1)).to be(true)
+      expect(queued?(0)).to be(true)
+    end
+
+    it "finds the job's message by its job_id when the row predates source_queue" do
+      plant(0, payload.merge("job_id" => "someone-else"))
+      plant(1, payload)
+
+      expect(data_source.discard_failed_event(record_failure(legacy: true)["id"])).to be(true)
+
+      expect(queued?(1)).to be(false)
       expect(queued?(0)).to be(true)
     end
   end

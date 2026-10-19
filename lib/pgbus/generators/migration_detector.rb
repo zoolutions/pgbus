@@ -97,6 +97,7 @@ module Pgbus
         add_workflows: "pgbus:add_workflows",
         add_workflow_signals: "pgbus:add_workflow_signals",
         add_failed_events_index: "pgbus:add_failed_events_index",
+        add_failed_events_source_queue: "pgbus:add_failed_events_source_queue",
         add_processed_event_completion: "pgbus:add_processed_event_completion",
         add_batch_executions: "pgbus:add_batch_executions",
         add_batch_callback_jobs: "pgbus:add_batch_callback_jobs",
@@ -122,6 +123,7 @@ module Pgbus
         add_workflows: "workflow tables (durable multi-step workflows: runs, step attempts, audit trail)",
         add_workflow_signals: "waiting workflow steps (fan_out, wait_for: signals, wait timeouts)",
         add_failed_events_index: "unique index on pgbus_failed_events (queue_name, msg_id)",
+        add_failed_events_source_queue: "source_queue on pgbus_failed_events (one row per priority sub-queue's failure)",
         add_processed_event_completion: "completed_at on pgbus_processed_events (two-phase idempotency claim)",
         add_batch_executions: "batch execution-row tracking (self-healing completion, on_failure rename)",
         add_batch_callback_jobs: "batch callback-job columns (configured ActiveJob instances as batch callbacks)",
@@ -151,7 +153,7 @@ module Pgbus
           *recurring_migrations,
           *deploy_tasks_migrations,
           *workflows_migrations,
-          *failed_events_index_migrations,
+          *failed_events_migrations,
           *processed_event_completion_migrations,
           *batch_executions_migrations,
           *batch_callback_jobs_migrations,
@@ -266,16 +268,21 @@ module Pgbus
         migrations
       end
 
-      def failed_events_index_migrations
-        # pgbus_failed_events is created by pgbus:install, but the
-        # unique (queue_name, msg_id) index was added later via its own
-        # generator. If the table exists without the unique index,
-        # FailedEventRecorder's upsert silently swallows ON CONFLICT
-        # errors — so this is a real bug waiting to bite.
+      # FailedEventRecorder's upsert needs the unique index that matches its
+      # ON CONFLICT target, or it fails and the failure goes unrecorded. The
+      # source_queue migration (issue #583) adds the column, creates the
+      # (queue_name, msg_id, source_queue) index and drops the old
+      # (queue_name, msg_id) one, so it is the only migration queued here:
+      # add_failed_events_index would put back the index that collapses two
+      # priority sub-queues' failures into one row. That index still present
+      # (or put back by running the old generator by name) queues it again.
+      def failed_events_migrations
         return [] unless table_exists?("pgbus_failed_events")
-        return [] if index_exists?("pgbus_failed_events", "idx_pgbus_failed_events_queue_msg")
+        return [] if column_names("pgbus_failed_events").include?("source_queue") &&
+                     index_exists?("pgbus_failed_events", "idx_pgbus_failed_events_queue_msg_source") &&
+                     !index_exists?("pgbus_failed_events", "idx_pgbus_failed_events_queue_msg")
 
-        [:add_failed_events_index]
+        [:add_failed_events_source_queue]
       end
 
       # completed_at backs the two-phase idempotency claim (issue #385).

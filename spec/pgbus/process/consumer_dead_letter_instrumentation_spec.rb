@@ -184,7 +184,8 @@ RSpec.describe Pgbus::Process::Consumer, "#handle_message emits pgbus.event_dead
       expect { handle_with_raising_subscriber }.not_to raise_error
 
       expect(mock_client).to have_received(:move_to_dead_letter).once
-      expect(Pgbus::FailedEventRecorder).to have_received(:clear!).with(queue_name: "q_orders", msg_id: 7)
+      expect(Pgbus::FailedEventRecorder).to have_received(:clear!)
+        .with(queue_name: "q_orders", msg_id: 7, source_queue: consumer.config.queue_name("q_orders"))
       expect(Pgbus::FailedEventRecorder).not_to have_received(:record!)
     end
 

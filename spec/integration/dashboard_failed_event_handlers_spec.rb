@@ -48,6 +48,7 @@ RSpec.describe "Dashboard failed event handlers (integration)", :integration do
     Pgbus::FailedEventRecorder.record!(
       queue_name: queue_name,
       msg_id: msg_id,
+      source_queue: Pgbus.configuration.queue_name(queue_name),
       payload: payload,
       headers: nil,
       error: StandardError.new("boom"),
@@ -112,7 +113,8 @@ RSpec.describe "Dashboard failed event handlers (integration)", :integration do
         Pgbus::UniquenessKey.acquire!(key, queue_name: queue_name, msg_id: 0)
         msg_id = client.send_message(queue_name, msg_payload)
         Pgbus::FailedEventRecorder.record!(
-          queue_name: queue_name, msg_id: msg_id, payload: msg_payload, headers: nil,
+          queue_name: queue_name, msg_id: msg_id, source_queue: Pgbus.configuration.queue_name(queue_name),
+          payload: msg_payload, headers: nil,
           error: StandardError.new("boom #{i}"), retry_count: 0
         )
         msg_id

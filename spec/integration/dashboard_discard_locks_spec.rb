@@ -164,7 +164,8 @@ RSpec.describe "Dashboard discard operations clear locks (integration)", :integr
   # As the executor records it: under the logical queue, with the msg_id.
   def record_failure(key, msg_id)
     Pgbus::FailedEventRecorder.record!(
-      queue_name: queue_name, msg_id: msg_id, payload: unique_payload(key, job_class: "FailedJob"),
+      queue_name: queue_name, msg_id: msg_id, source_queue: Pgbus.configuration.queue_name(queue_name),
+      payload: unique_payload(key, job_class: "FailedJob"),
       headers: nil, error: RuntimeError.new("boom"), retry_count: 0
     )
   end

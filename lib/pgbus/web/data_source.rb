@@ -1627,20 +1627,22 @@ module Pgbus
       # lock handed to a retry before the failure would count as the job's.
       # A message that is gone has no send time, so only a bound lock goes.
       def release_locks_held_by_failed_events(condition, binds)
+        source = FailedEventRecorder.source_queue_column? ? ", source_queue" : ""
         rows = connection.select_all(
-          "SELECT queue_name, msg_id, payload FROM pgbus_failed_events WHERE #{condition}",
+          "SELECT queue_name, msg_id, payload#{source} FROM pgbus_failed_events WHERE #{condition}",
           "Pgbus Collect Failed Keys", binds
         )
 
         # queue_name is the logical name the executor saw: the message is looked
-        # up under it, and the lock is released under its table spelling.
+        # up under it (or in the table source_queue names), and the lock is
+        # released under its table spelling.
         # A key proc may return a number; the queue lookup reads it as text.
         holders = rows.to_a.filter_map do |row|
           key = extract_uniqueness_key_from_payload_str(row["payload"])&.to_s
-          [key, row["queue_name"], row["msg_id"].to_i] if key && row["msg_id"]
+          [key, row["queue_name"], row["msg_id"].to_i, row["source_queue"]] if key && row["msg_id"]
         end
-        holders = holders.group_by { |_key, queue, _msg_id| queue }.flat_map do |queue, entries|
-          failed_queue_lock_holders(queue, entries)
+        holders = holders.group_by { |_key, queue, _msg_id, table| [queue, table] }.flat_map do |(queue, table), entries|
+          failed_queue_lock_holders(queue, table, entries)
         end
         UniquenessKey.release_all_held_by!(holders) if holders.any?
       rescue StandardError => e
@@ -1650,8 +1652,8 @@ module Pgbus
       # The release tuples for one queue's failed jobs. A queue that cannot
       # be resolved (a stored name no longer valid as a table name) is skipped
       # with a warning, so it does not stop the other queues' release.
-      def failed_queue_lock_holders(queue, entries)
-        sent = queued_send_times(queue, entries)
+      def failed_queue_lock_holders(queue, table, entries)
+        sent = queued_send_times(queue, table, entries)
         lock_queue = Uniqueness.lock_queue_name(queue)
         entries.map { |key, _queue, msg_id| [key, lock_queue, msg_id, sent[[msg_id, key]]] }
       rescue ActiveRecord::StatementInvalid
@@ -1662,13 +1664,15 @@ module Pgbus
       end
 
       # { [msg_id, uniqueness key] => enqueued_at } for the messages of
-      # +entries+ ([key, queue, msg_id]) still in the logical queue. Every
-      # priority sub-queue is searched: a failed event records the logical
-      # queue only, and msg_ids repeat across sub-queues, so the key must
+      # +entries+ ([key, queue, msg_id, table]) still queued. A row that names
+      # its table (issue #583) is that table's message. A row written before
+      # source_queue records the logical queue only, so every priority
+      # sub-queue is searched: msg_ids repeat across them, so the key must
       # match too, and the earliest send wins.
-      def queued_send_times(queue, entries)
+      def queued_send_times(queue, table, entries)
         msg_ids = "{#{entries.map { |_key, _queue, msg_id| msg_id }.uniq.join(",")}}"
-        @client.physical_queue_names(queue).each_with_object({}) do |physical, found|
+        tables = table ? [table] : @client.physical_queue_names(queue)
+        tables.each_with_object({}) do |physical, found|
           queued_rows(physical, msg_ids).each do |row|
             pair = [row["msg_id"].to_i, row["lock_key"]]
             found[pair] = [found[pair], row["enqueued_at"]].compact.min
@@ -1722,15 +1726,22 @@ module Pgbus
       end
 
       # The physical queue holding a failed job's message, or nil when it is
-      # gone. The row records the logical queue only, and under priority
-      # routing a msg_id repeats across the _pN sub-queues, so the job's
-      # job_id must match too (issue #577). Two sub-queues' failures with the
-      # same msg_id share one row, which keeps the first one's payload: that
-      # is the message found (issue #583).
+      # gone. The job's job_id must match too: under priority routing a msg_id
+      # repeats across the _pN sub-queues (issue #577). A row that names the
+      # table its message was read from is looked up there alone (issue
+      # #583); a row written before source_queue, under every table of its
+      # logical queue.
       def failed_message_queue(event)
         return unless event["queue_name"] && event["msg_id"]
 
-        @client.locate_message(event["queue_name"], msg_id: event["msg_id"].to_i, job_id: failed_job_id(event))
+        name, prefixed = failed_message_scope(event)
+        @client.locate_message(name, msg_id: event["msg_id"].to_i, job_id: failed_job_id(event), prefixed: prefixed)
+      end
+
+      # [queue, prefixed] to look a failed row's message up under: the physical
+      # table the row names, else its logical queue.
+      def failed_message_scope(event)
+        event["source_queue"] ? [event["source_queue"], false] : [event["queue_name"], true]
       end
 
       def failed_job_id(event)
@@ -1756,16 +1767,19 @@ module Pgbus
       # per-row roundtrips. Falls back to per-row archive inside a rescue if
       # a batch fails, so one bad queue can't block progress on the others.
       def archive_all_failed_messages
+        source = FailedEventRecorder.source_queue_column? ? ", source_queue" : ""
         rows = connection.select_all(
-          "SELECT id, queue_name, msg_id, payload FROM pgbus_failed_events WHERE msg_id IS NOT NULL AND #{NOT_HANDLER_QUEUE}",
+          "SELECT id, queue_name, msg_id, payload#{source} FROM pgbus_failed_events " \
+          "WHERE msg_id IS NOT NULL AND #{NOT_HANDLER_QUEUE}",
           "Pgbus Collect Failed Messages", [handler_queue_names_literal]
         )
 
-        grouped = rows.to_a.group_by { |row| row["queue_name"] }
-        grouped.each do |queue_name, events|
+        grouped = rows.to_a.group_by { |row| failed_message_scope(row) }
+        grouped.each do |(queue_name, prefixed), events|
           # A priority queue's msg_ids repeat across its _pN sub-queues, so
           # each message is located first and archived from its own table.
-          located = @client.locate_messages(queue_name, events.map { |row| [row["msg_id"].to_i, failed_job_id(row)] })
+          located = @client.locate_messages(queue_name, events.map { |row| [row["msg_id"].to_i, failed_job_id(row)] },
+                                            prefixed: prefixed)
           located.group_by { |_msg_id, physical| physical }.each do |physical, pairs|
             @client.archive_batch(physical, pairs.map(&:first), prefixed: false)
           end

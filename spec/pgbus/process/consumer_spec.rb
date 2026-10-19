@@ -496,7 +496,8 @@ RSpec.describe Pgbus::Process::Consumer do
       consumer.send(:handle_message, dlq_message, "q_orders")
 
       expect(block).to include("error_class" => "KeyError", "error_attempt" => 5)
-      expect(Pgbus::FailedEventRecorder).to have_received(:last_error).with(queue_name: "q_orders", msg_id: 9).ordered
+      expect(Pgbus::FailedEventRecorder).to have_received(:last_error)
+        .with(queue_name: "q_orders", msg_id: 9, source_queue: consumer.config.queue_name("q_orders")).ordered
       expect(mock_client).to have_received(:move_to_dead_letter).ordered
     end
   end
@@ -532,7 +533,8 @@ RSpec.describe Pgbus::Process::Consumer do
       deliver(read_ct: 3, raising: error)
 
       expect(Pgbus::FailedEventRecorder).to have_received(:record!).with(
-        queue_name: "q_orders", msg_id: 11, payload: message_body, headers: '{"trace_id":"t"}',
+        queue_name: "q_orders", msg_id: 11, source_queue: consumer.config.queue_name("q_orders"),
+        payload: message_body, headers: '{"trace_id":"t"}',
         error: error, retry_count: 2
       )
     end
@@ -553,7 +555,8 @@ RSpec.describe Pgbus::Process::Consumer do
     it "clears the failed row when a redelivered message succeeds" do
       deliver(read_ct: 2)
 
-      expect(Pgbus::FailedEventRecorder).to have_received(:clear!).with(queue_name: "q_orders", msg_id: 11)
+      expect(Pgbus::FailedEventRecorder).to have_received(:clear!)
+        .with(queue_name: "q_orders", msg_id: 11, source_queue: consumer.config.queue_name("q_orders"))
     end
 
     it "does not touch pgbus_failed_events on a first-delivery success (no hot-path query)" do
@@ -568,7 +571,8 @@ RSpec.describe Pgbus::Process::Consumer do
 
       expect(Pgbus::FailedEventRecorder).to have_received(:last_error).ordered
       expect(mock_client).to have_received(:move_to_dead_letter).ordered
-      expect(Pgbus::FailedEventRecorder).to have_received(:clear!).with(queue_name: "q_orders", msg_id: 11).ordered
+      expect(Pgbus::FailedEventRecorder).to have_received(:clear!)
+        .with(queue_name: "q_orders", msg_id: 11, source_queue: consumer.config.queue_name("q_orders")).ordered
     end
 
     it "keeps the handler's failed row, unchanged, when the DLQ move raises" do
