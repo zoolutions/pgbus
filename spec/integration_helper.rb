@@ -89,6 +89,7 @@ def bootstrap_integration_tables(conn)
       ON pgbus_failed_events (queue_name, msg_id, source_queue);
     DROP INDEX IF EXISTS idx_pgbus_failed_events_queue_msg;
   SQL
+  Pgbus::FailedEventRecorder.reset_source_queue_column_check!
 
   # Transactional outbox — mirrors lib/generators/pgbus/templates/add_outbox.rb.erb.
   # The Poller reads OutboxEntry.unpublished (published_at IS NULL), so the
