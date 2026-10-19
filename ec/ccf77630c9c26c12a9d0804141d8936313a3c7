@@ -1,0 +1,19 @@
+lib/pgbus/web/data_source.rb
+  s_dd5c3529520d7c::t_6d46a9664cd9ce 1727-1729
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "ecccf77630c9c26c12a9d0804141d8936313a3c7",
+  "prompts": {},
+  "sessions": {
+    "s_dd5c3529520d7c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "47901efd-c153-4e0e-80ef-4a3efb2a1193",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
