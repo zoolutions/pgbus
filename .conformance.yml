@@ -57,6 +57,9 @@ main_only:
   - name: Pgbus::EventBus::Registry.@singleton__mutex__
     reason: >-
       Ruby's Singleton lock for Registry.instance; the registry is built and read on the main Ractor
+  - name: Pgbus::FailedEventRecorder.@source_queue_column_mutex
+    reason: >-
+      guards the schema probe for the source_queue column; taken by job threads, event handlers and dashboard requests on the main Ractor
   - name: Pgbus::Integrations::Appsignal.@lock
     reason: >-
       makes AppSignal install! atomic and guards the dashboard memos; installed at boot on the main Ractor
