@@ -411,6 +411,16 @@ RSpec.describe Pgbus::Generators::MigrationDetector do
         expect(detector.missing_migrations).to include(:add_failed_events_source_queue)
       end
 
+      # pgbus:add_failed_events_index run by name after the migration puts the
+      # old index back; it rejects a second sub-queue's failure with the same
+      # msg_id, so its presence alone means the migration has to run again.
+      it "queues it when the old (queue_name, msg_id) unique index is back beside the new one" do
+        stub_columns("pgbus_failed_events", %w[id queue_name source_queue msg_id])
+        stub_indexes("pgbus_failed_events", current_indexes + %w[idx_pgbus_failed_events_queue_msg])
+
+        expect(detector.missing_migrations).to include(:add_failed_events_source_queue)
+      end
+
       it "queues nothing once the column and its unique index exist" do
         stub_columns("pgbus_failed_events", %w[id queue_name source_queue msg_id])
         stub_indexes("pgbus_failed_events", current_indexes)

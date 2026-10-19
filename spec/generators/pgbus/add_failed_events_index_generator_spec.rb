@@ -41,5 +41,15 @@ RSpec.describe Pgbus::Generators::AddFailedEventsIndexGenerator do
         expect(content).to include("if_not_exists: true")
       end
     end
+
+    # Issue #583: the (queue_name, msg_id, source_queue) index supersedes it;
+    # the old one would collapse two priority sub-queues' failures again.
+    it "adds nothing once the source_queue unique index exists" do
+      generate_migration(described_class, basename: basename) do |_path, content|
+        expect(content).to include(
+          'return if index_name_exists?(:pgbus_failed_events, "idx_pgbus_failed_events_queue_msg_source")'
+        )
+      end
+    end
   end
 end

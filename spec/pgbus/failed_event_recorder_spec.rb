@@ -42,6 +42,28 @@ RSpec.describe Pgbus::FailedEventRecorder do
       end
     end
 
+    # A process started before the migration finds the column once the
+    # interval has passed, without needing a failed write to re-probe.
+    context "when the column is migrated while the process runs" do
+      let(:source_column) { false }
+      let(:interval) { described_class::SOURCE_QUEUE_RECHECK_SECONDS }
+
+      it "probes again only once the recheck interval has passed, and warns once" do
+        allow(Pgbus.logger).to receive(:warn)
+        allow(described_class).to receive(:monotonic_now).and_return(100.0)
+        expect(described_class.source_queue_column?).to be(false)
+
+        allow(mock_connection).to receive(:column_exists?).and_return(true)
+        allow(described_class).to receive(:monotonic_now).and_return(100.0 + interval - 1)
+        expect(described_class.source_queue_column?).to be(false)
+
+        allow(described_class).to receive(:monotonic_now).and_return(100.0 + interval + 1)
+        expect(described_class.source_queue_column?).to be(true)
+        expect(mock_connection).to have_received(:column_exists?).twice
+        expect(Pgbus.logger).to have_received(:warn).once
+      end
+    end
+
     it "does not memoize a probe that raised" do
       allow(mock_connection).to receive(:column_exists?).and_raise(ActiveRecord::ConnectionNotEstablished)
 

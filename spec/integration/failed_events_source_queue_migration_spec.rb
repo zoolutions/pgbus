@@ -9,6 +9,7 @@ require "erb"
 RSpec.describe "pgbus_failed_events source_queue migration (integration)", :integration do
   let(:conn) { ActiveRecord::Base.connection }
   let(:scratch_schema) { "pgbus_failed_source_probe_#{Process.pid}" }
+  let(:migration) { migration_from("add_failed_events_source_queue.rb.erb", :AddPgbusFailedEventsSourceQueue) }
 
   def migration_from(template, class_name, **locals)
     path = File.expand_path("../../lib/generators/pgbus/templates/#{template}", __dir__)
@@ -57,8 +58,6 @@ RSpec.describe "pgbus_failed_events source_queue migration (integration)", :inte
     SQL
   end
 
-  let(:migration) { migration_from("add_failed_events_source_queue.rb.erb", :AddPgbusFailedEventsSourceQueue) }
-
   it "keeps the old rows, with no source_queue, and lets two sub-queues' failures share a msg_id" do
     in_scratch_schema do
       create_old_table
@@ -99,6 +98,18 @@ RSpec.describe "pgbus_failed_events source_queue migration (integration)", :inte
       expect(unique_indexes).to eq("idx_pgbus_failed_events_queue_msg" => %w[queue_name msg_id])
       expect(conn.column_exists?(:pgbus_failed_events, :source_queue)).to be(false)
       expect(conn.select_rows("SELECT msg_id, error_message FROM pgbus_failed_events")).to eq([[7, "second"]])
+    end
+  end
+
+  it "is not undone by the old unique-index generator run afterwards" do
+    old_index = migration_from("add_failed_events_unique_index.rb.erb", :AddPgbusFailedEventsUniqueIndex)
+
+    in_scratch_schema do
+      create_old_table
+      run(migration, :up)
+      run(old_index, :up)
+
+      expect(unique_indexes.keys).to eq(%w[idx_pgbus_failed_events_queue_msg_source])
     end
   end
 

@@ -1627,20 +1627,22 @@ module Pgbus
       # lock handed to a retry before the failure would count as the job's.
       # A message that is gone has no send time, so only a bound lock goes.
       def release_locks_held_by_failed_events(condition, binds)
+        source = FailedEventRecorder.source_queue_column? ? ", source_queue" : ""
         rows = connection.select_all(
-          "SELECT queue_name, msg_id, payload FROM pgbus_failed_events WHERE #{condition}",
+          "SELECT queue_name, msg_id, payload#{source} FROM pgbus_failed_events WHERE #{condition}",
           "Pgbus Collect Failed Keys", binds
         )
 
         # queue_name is the logical name the executor saw: the message is looked
-        # up under it, and the lock is released under its table spelling.
+        # up under it (or in the table source_queue names), and the lock is
+        # released under its table spelling.
         # A key proc may return a number; the queue lookup reads it as text.
         holders = rows.to_a.filter_map do |row|
           key = extract_uniqueness_key_from_payload_str(row["payload"])&.to_s
-          [key, row["queue_name"], row["msg_id"].to_i] if key && row["msg_id"]
+          [key, row["queue_name"], row["msg_id"].to_i, row["source_queue"]] if key && row["msg_id"]
         end
-        holders = holders.group_by { |_key, queue, _msg_id| queue }.flat_map do |queue, entries|
-          failed_queue_lock_holders(queue, entries)
+        holders = holders.group_by { |_key, queue, _msg_id, table| [queue, table] }.flat_map do |(queue, table), entries|
+          failed_queue_lock_holders(queue, table, entries)
         end
         UniquenessKey.release_all_held_by!(holders) if holders.any?
       rescue StandardError => e
@@ -1650,8 +1652,8 @@ module Pgbus
       # The release tuples for one queue's failed jobs. A queue that cannot
       # be resolved (a stored name no longer valid as a table name) is skipped
       # with a warning, so it does not stop the other queues' release.
-      def failed_queue_lock_holders(queue, entries)
-        sent = queued_send_times(queue, entries)
+      def failed_queue_lock_holders(queue, table, entries)
+        sent = queued_send_times(queue, table, entries)
         lock_queue = Uniqueness.lock_queue_name(queue)
         entries.map { |key, _queue, msg_id| [key, lock_queue, msg_id, sent[[msg_id, key]]] }
       rescue ActiveRecord::StatementInvalid
@@ -1662,13 +1664,15 @@ module Pgbus
       end
 
       # { [msg_id, uniqueness key] => enqueued_at } for the messages of
-      # +entries+ ([key, queue, msg_id]) still in the logical queue. Every
-      # priority sub-queue is searched: a failed event records the logical
-      # queue only, and msg_ids repeat across sub-queues, so the key must
+      # +entries+ ([key, queue, msg_id, table]) still queued. A row that names
+      # its table (issue #583) is that table's message. A row written before
+      # source_queue records the logical queue only, so every priority
+      # sub-queue is searched: msg_ids repeat across them, so the key must
       # match too, and the earliest send wins.
-      def queued_send_times(queue, entries)
+      def queued_send_times(queue, table, entries)
         msg_ids = "{#{entries.map { |_key, _queue, msg_id| msg_id }.uniq.join(",")}}"
-        @client.physical_queue_names(queue).each_with_object({}) do |physical, found|
+        tables = table ? [table] : @client.physical_queue_names(queue)
+        tables.each_with_object({}) do |physical, found|
           queued_rows(physical, msg_ids).each do |row|
             pair = [row["msg_id"].to_i, row["lock_key"]]
             found[pair] = [found[pair], row["enqueued_at"]].compact.min

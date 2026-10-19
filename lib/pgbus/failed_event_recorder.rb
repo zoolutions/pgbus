@@ -15,6 +15,10 @@ module Pgbus
   # and is read as belonging to any table of its queue. Until the column is
   # migrated, every query keeps its (queue_name, msg_id) shape.
   class FailedEventRecorder
+    # How long a "column missing" answer stands before the schema is probed
+    # again, so a process started before the migration picks the column up.
+    SOURCE_QUEUE_RECHECK_SECONDS = 60
+
     @source_queue_column_mutex = Mutex.new
 
     class << self
@@ -110,18 +114,26 @@ module Pgbus
       end
 
       # Whether pgbus_failed_events has the source_queue column (issue #583).
-      # Probed once per process, like ProcessedEvent.completion_column?: a
-      # gem upgraded before its migration gets false, a one-time warning, and
-      # the (queue_name, msg_id) queries. A probe that raises is not memoized.
+      # Probed like ProcessedEvent.completion_column?: a gem upgraded before
+      # its migration gets false, a one-time warning, and the (queue_name,
+      # msg_id) queries. A present column is remembered for good; a missing
+      # one for SOURCE_QUEUE_RECHECK_SECONDS. A probe that raises is not
+      # memoized.
       def source_queue_column?
-        # Double-checked: the unlocked read only skips the lock once the
-        # answer is set; it is written under @source_queue_column_mutex.
-        detected = @source_queue_column # rubocop:disable ThreadSafety/ClassInstanceVariable
-        return detected unless detected.nil?
+        # Double-checked: the unlocked read only skips the lock while the
+        # answer stands; it is written under @source_queue_column_mutex. The
+        # state is true, nil (never probed) or the monotonic time a missing
+        # column's answer runs out.
+        known = source_queue_column_answer(@source_queue_column) # rubocop:disable ThreadSafety/ClassInstanceVariable
+        return known unless known.nil?
 
         @source_queue_column_mutex.synchronize do
-          @source_queue_column = detect_source_queue_column if @source_queue_column.nil?
-          @source_queue_column
+          known = source_queue_column_answer(@source_queue_column)
+          next known unless known.nil?
+
+          supported = detect_source_queue_column(warn: @source_queue_column.nil?)
+          @source_queue_column = supported || (monotonic_now + SOURCE_QUEUE_RECHECK_SECONDS)
+          supported
         end
       end
 
@@ -141,9 +153,20 @@ module Pgbus
          [queue_name, msg_id.to_i, source_queue]]
       end
 
-      def detect_source_queue_column
+      # true, false while a missing column's answer stands, nil to probe.
+      def source_queue_column_answer(state)
+        return true if state == true
+
+        false if state && monotonic_now < state
+      end
+
+      def monotonic_now
+        ::Process.clock_gettime(::Process::CLOCK_MONOTONIC)
+      end
+
+      def detect_source_queue_column(warn:)
         supported = connection.column_exists?(:pgbus_failed_events, :source_queue)
-        unless supported
+        if warn && !supported
           Pgbus.logger.warn do
             "[Pgbus] pgbus_failed_events is missing the source_queue column; under priority routing two " \
               "sub-queues' failures with the same msg_id share one row. " \

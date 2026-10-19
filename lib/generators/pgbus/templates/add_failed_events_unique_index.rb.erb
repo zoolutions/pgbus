@@ -1,5 +1,10 @@
 class AddPgbusFailedEventsUniqueIndex < ActiveRecord::Migration<%= migration_version %>
   def change
+    # Superseded by pgbus:add_failed_events_source_queue's (queue_name, msg_id,
+    # source_queue) index: this one would make two priority sub-queues'
+    # failures with the same msg_id share one row again.
+    return if index_name_exists?(:pgbus_failed_events, "idx_pgbus_failed_events_queue_msg_source")
+
     add_index :pgbus_failed_events, [:queue_name, :msg_id],
       unique: true, name: "idx_pgbus_failed_events_queue_msg",
       if_not_exists: true

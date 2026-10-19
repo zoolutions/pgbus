@@ -572,6 +572,7 @@ RSpec.describe Pgbus::Web::DataSource do
 
     before do
       allow(Pgbus.configuration).to receive(:queue_prefix).and_return("pgbus")
+      allow(Pgbus::FailedEventRecorder).to receive(:source_queue_column?).and_return(false)
       # Each sub-queue read runs in its own savepoint.
       allow(mock_connection).to receive(:transaction).with(requires_new: true).and_yield
       allow(mock_connection).to receive(:select_one).with(anything, "Pgbus Failed Event", [1]).and_return(event)
@@ -649,6 +650,24 @@ RSpec.describe Pgbus::Web::DataSource do
       data_source.discard_failed_event(1)
 
       expect(Pgbus::UniquenessKey).to have_received(:release_all_held_by!).with([["failed-1", "default", 42, earlier]])
+    end
+
+    # Issue #583: a row that names its sub-queue is that table's message, so
+    # a sibling's send for the same msg_id and key is not the job's.
+    it "takes the send time from the sub-queue the row names" do
+      allow(Pgbus::FailedEventRecorder).to receive(:source_queue_column?).and_return(true)
+      allow(mock_connection).to receive(:select_all)
+        .with("SELECT queue_name, msg_id, payload, source_queue FROM pgbus_failed_events WHERE id = $1",
+              "Pgbus Collect Failed Keys", [1])
+        .and_return([event.except("id").merge("source_queue" => "pgbus_default_p1")])
+      allow(mock_connection).to receive(:select_all)
+        .with(format(queued_send_times_sql, table: "pgbus_default_p0"), "Pgbus Failed Message Sent At", ["{42}"])
+        .and_return([{ "msg_id" => 42, "enqueued_at" => sent_at - 60, "lock_key" => "failed-1" }])
+
+      data_source.discard_failed_event(1)
+
+      expect(Pgbus::UniquenessKey).to have_received(:release_all_held_by!).with([["failed-1", "default", 42, sent_at]])
+      expect(mock_client).not_to have_received(:physical_queue_names)
     end
 
     it "skips a sub-queue whose table does not exist" do
@@ -854,6 +873,10 @@ RSpec.describe Pgbus::Web::DataSource do
     context "when the failed rows name their physical queue" do
       before do
         allow(Pgbus::FailedEventRecorder).to receive(:source_queue_column?).and_return(true)
+        allow(mock_connection).to receive(:select_all)
+          .with("#{failed_lock_holders_sql.sub("payload", "payload, source_queue")} #{not_handler}",
+                "Pgbus Collect Failed Keys", handler_names)
+          .and_return([])
         allow(mock_connection).to receive(:select_all)
           .with(
             "SELECT id, queue_name, msg_id, payload, source_queue FROM pgbus_failed_events " \

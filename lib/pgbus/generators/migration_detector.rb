@@ -274,11 +274,13 @@ module Pgbus
       # (queue_name, msg_id, source_queue) index and drops the old
       # (queue_name, msg_id) one, so it is the only migration queued here:
       # add_failed_events_index would put back the index that collapses two
-      # priority sub-queues' failures into one row.
+      # priority sub-queues' failures into one row. That index still present
+      # (or put back by running the old generator by name) queues it again.
       def failed_events_migrations
         return [] unless table_exists?("pgbus_failed_events")
         return [] if column_names("pgbus_failed_events").include?("source_queue") &&
-                     index_exists?("pgbus_failed_events", "idx_pgbus_failed_events_queue_msg_source")
+                     index_exists?("pgbus_failed_events", "idx_pgbus_failed_events_queue_msg_source") &&
+                     !index_exists?("pgbus_failed_events", "idx_pgbus_failed_events_queue_msg")
 
         [:add_failed_events_source_queue]
       end

@@ -50,14 +50,17 @@ RSpec.describe "Failed-job discard under priority routing (integration)", :integ
     )
   end
 
-  # The failed job's message is the one planted in sub-queue 1.
-  def record_failure
+  # The failed job's message is the one planted in sub-queue 1. legacy: true
+  # makes the row one written before source_queue existed (issue #583).
+  def record_failure(legacy: false)
     Pgbus::FailedEventRecorder.record!(
       queue_name: queue, msg_id: msg_id, source_queue: physical(1),
       payload: { "job_class" => "PrioJob", Pgbus::Uniqueness::METADATA_KEY => key },
       headers: nil, error: RuntimeError.new("boom"), retry_count: 0
     )
-    data_source.failed_events.find { |e| e["msg_id"].to_i == msg_id }
+    event = data_source.failed_events.find { |e| e["msg_id"].to_i == msg_id }
+    conn.exec_update("UPDATE pgbus_failed_events SET source_queue = NULL WHERE id = $1", "spec", [event["id"]]) if legacy
+    event
   end
 
   def lock_created_at
@@ -77,7 +80,22 @@ RSpec.describe "Failed-job discard under priority routing (integration)", :integ
     expect(Pgbus::UniquenessKey.locked?(key)).to be(false)
   end
 
-  it "keeps the lock when the key's earliest send in any sub-queue predates it" do
+  # A row written before source_queue does not say which sub-queue's message
+  # is the job's, so the earliest send of its key in any of them bounds it.
+  it "keeps the lock when the key's earliest send in any sub-queue predates it, for a row without source_queue" do
+    Pgbus::UniquenessKey.acquire!(key, queue_name: queue, msg_id: 0)
+    acquired = lock_created_at
+    plant(0, key, acquired - 60)
+    plant(1, key, acquired + 1)
+
+    data_source.discard_failed_event(record_failure(legacy: true)["id"])
+
+    expect(Pgbus::UniquenessKey.locked?(key)).to be(true)
+  end
+
+  # Issue #583: the row names its sub-queue, so a sibling's earlier send of
+  # the same msg_id and key is another message's, not the job's.
+  it "takes the send time from the sub-queue the row names" do
     Pgbus::UniquenessKey.acquire!(key, queue_name: queue, msg_id: 0)
     acquired = lock_created_at
     plant(0, key, acquired - 60)
@@ -85,7 +103,7 @@ RSpec.describe "Failed-job discard under priority routing (integration)", :integ
 
     data_source.discard_failed_event(record_failure["id"])
 
-    expect(Pgbus::UniquenessKey.locked?(key)).to be(true)
+    expect(Pgbus::UniquenessKey.locked?(key)).to be(false)
   end
 
   # The adapter binds the lock for the job's queue_as; the dashboard knows only
