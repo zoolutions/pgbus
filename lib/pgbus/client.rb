@@ -766,6 +766,24 @@ module Pgbus
       determined ? false : nil # rubocop:disable Style/ReturnNilInPredicateMethodDefinition -- tri-state: nil means unknown
     end
 
+    # The physical table that holds message +msg_id+, or nil when none does.
+    # A logical name expands to every table the strategy owns, and under
+    # priority routing each `_pN` sub-queue numbers its messages from its own
+    # sequence: pass the job's +job_id+ and only the message carrying it
+    # matches (issue #577). A physical name with +prefixed: false+ is probed
+    # alone. A table that does not exist holds nothing; other errors raise.
+    def locate_message(queue_name, msg_id:, job_id: nil, prefixed: true)
+      tables = lookup_physical_queue_names(queue_name, prefixed: prefixed)
+
+      synchronized do
+        with_raw_connection do |conn|
+          tables.find do |name|
+            probe_message_location(conn, QueueNameValidator.sanitize!(name), msg_id.to_i, job_id) == true
+          end
+        end
+      end
+    end
+
     # DLQ companion of a logical queue name, or of a physical table name passed
     # with +prefixed: false+.
     def dead_letter_physical_name(queue_name, prefixed: true)
@@ -1151,6 +1169,18 @@ module Pgbus
       :missing
     end
 
+    def probe_message_location(conn, sanitized, msg_id, job_id)
+      job_id ? msg_id_with_job_id_present?(conn, sanitized, msg_id, job_id) : msg_id_present?(conn, sanitized, msg_id)
+    rescue ActiveRecord::StatementInvalid => e
+      raise unless undefined_table_error?(e)
+
+      :missing
+    rescue StandardError => e
+      raise unless defined?(PG::UndefinedTable) && e.is_a?(PG::UndefinedTable)
+
+      :missing
+    end
+
     def scan_uniqueness_keys(conn, sanitized, keys, found)
       placeholders = keys.each_index.map { |i| "$#{i + 1}" }.join(", ")
       result = conn.exec_params(
@@ -1180,6 +1210,13 @@ module Pgbus
                  )
                end
       result.ntuples.positive?
+    end
+
+    def msg_id_with_job_id_present?(conn, sanitized, msg_id, job_id)
+      conn.exec_params(
+        "SELECT 1 FROM pgmq.q_#{sanitized} WHERE msg_id = $1 AND message->>'job_id' = $2 LIMIT 1",
+        [msg_id, job_id]
+      ).ntuples.positive?
     end
 
     def msg_id_archived?(conn, sanitized, msg_id)

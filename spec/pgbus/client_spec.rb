@@ -1299,6 +1299,74 @@ RSpec.describe Pgbus::Client do
     end
   end
 
+  describe "#locate_message" do
+    let(:raw_conn) { double("PG::Connection") }
+
+    before do
+      allow(client).to receive(:with_raw_connection).and_yield(raw_conn)
+      stub_const("PG::UndefinedTable", Class.new(StandardError)) unless defined?(PG::UndefinedTable)
+    end
+
+    it "returns the single physical table holding the msg_id under the standard strategy" do
+      allow(raw_conn).to receive(:exec_params).with(/pgmq\.q_pgbus_test_default WHERE msg_id = \$1 LIMIT/, [42])
+                                              .and_return(double(ntuples: 1))
+
+      expect(client.locate_message("default", msg_id: 42)).to eq("pgbus_test_default")
+    end
+
+    it "matches the job_id too when one is given" do
+      allow(raw_conn).to receive(:exec_params).with(/msg_id = \$1 AND message->>'job_id' = \$2/, [42, "j-1"])
+                                              .and_return(double(ntuples: 0))
+
+      expect(client.locate_message("default", msg_id: 42, job_id: "j-1")).to be_nil
+    end
+
+    it "probes a physical name as itself with prefixed: false" do
+      allow(raw_conn).to receive(:exec_params).with(/pgmq\.q_pgbus_test_default_p1 /, [42]).and_return(double(ntuples: 1))
+
+      expect(client.locate_message("pgbus_test_default_p1", msg_id: 42, prefixed: false)).to eq("pgbus_test_default_p1")
+    end
+
+    it "returns nil when the table is missing" do
+      allow(raw_conn).to receive(:exec_params).and_raise(PG::UndefinedTable, "relation does not exist")
+
+      expect(client.locate_message("default", msg_id: 42)).to be_nil
+    end
+
+    it "raises any other error" do
+      allow(raw_conn).to receive(:exec_params).and_raise(StandardError, "statement timeout")
+
+      expect { client.locate_message("default", msg_id: 42) }.to raise_error(StandardError, "statement timeout")
+    end
+
+    # Issue #577: each _pN table numbers its messages from its own sequence.
+    context "when priority routing is enabled" do
+      let(:config) do
+        Pgbus::Configuration.new.tap do |c|
+          c.database_url = "postgres://localhost/pgbus_test"
+          c.queue_prefix = "pgbus_test"
+          c.priority_levels = 3
+        end
+      end
+
+      it "returns the sub-queue whose message carries the job_id, skipping a missing one" do
+        allow(raw_conn).to receive(:exec_params).with(/q_pgbus_test_default_p0 /, [42, "j-1"])
+                                                .and_raise(PG::UndefinedTable, "relation does not exist")
+        allow(raw_conn).to receive(:exec_params).with(/q_pgbus_test_default_p1 /, [42, "j-1"]).and_return(double(ntuples: 1))
+
+        expect(client.locate_message("default", msg_id: 42, job_id: "j-1")).to eq("pgbus_test_default_p1")
+        expect(raw_conn).not_to have_received(:exec_params).with(/q_pgbus_test_default_p2 /, anything)
+      end
+
+      it "returns nil when no sub-queue holds the message" do
+        allow(raw_conn).to receive(:exec_params).and_return(double(ntuples: 0))
+
+        expect(client.locate_message("default", msg_id: 42, job_id: "j-1")).to be_nil
+        expect(raw_conn).to have_received(:exec_params).exactly(3).times
+      end
+    end
+  end
+
   describe "#pgmq_installed?" do
     let(:raw_conn) { double("PG::Connection") }
 

@@ -299,9 +299,9 @@ module Pgbus
         # duplicate (the original is still in the queue waiting for retry).
         # Falls back to enqueueing a fresh copy only if the original is gone
         # (e.g., already moved to DLQ).
-        msg_id = event["msg_id"]
-        if msg_id && @client.message_exists?(event["queue_name"], msg_id: msg_id.to_i)
-          @client.set_visibility_timeout(event["queue_name"], msg_id.to_i, vt: 0)
+        physical = failed_message_queue(event)
+        if physical
+          @client.set_visibility_timeout(physical, event["msg_id"].to_i, vt: 0, prefixed: false)
         else
           payload = JSON.parse(event["payload"])
           headers = event["headers"]
@@ -1721,12 +1721,24 @@ module Pgbus
         nil
       end
 
+      # The physical queue holding a failed job's message, or nil when it is
+      # gone. The row records the logical queue only, and under priority
+      # routing a msg_id repeats across the _pN sub-queues, so the job's
+      # job_id must match too (issue #577).
+      def failed_message_queue(event)
+        return unless event["queue_name"] && event["msg_id"]
+
+        payload = event["payload"]
+        payload = JSON.parse(payload) if payload.is_a?(String)
+        job_id = payload["job_id"] if payload.is_a?(Hash)
+        @client.locate_message(event["queue_name"], msg_id: event["msg_id"].to_i, job_id: job_id)
+      end
+
       # Archive the queue message a failed_event row points to. Idempotent —
       # silently no-ops if the message no longer exists in the queue.
       def archive_failed_message(event)
-        return unless event["queue_name"] && event["msg_id"]
-
-        @client.archive_message(event["queue_name"], event["msg_id"].to_i)
+        physical = failed_message_queue(event)
+        @client.archive_message(physical, event["msg_id"].to_i, prefixed: false) if physical
       rescue StandardError => e
         Pgbus.logger.debug do
           "[Pgbus::Web] Error archiving message for failed event #{event["id"]}: #{e.message}"
@@ -1740,7 +1752,7 @@ module Pgbus
       # so one bad queue can't block progress on the others.
       def archive_all_failed_messages
         rows = connection.select_all(
-          "SELECT id, queue_name, msg_id FROM pgbus_failed_events WHERE msg_id IS NOT NULL AND #{NOT_HANDLER_QUEUE}",
+          "SELECT id, queue_name, msg_id, payload FROM pgbus_failed_events WHERE msg_id IS NOT NULL AND #{NOT_HANDLER_QUEUE}",
           "Pgbus Collect Failed Messages", [handler_queue_names_literal]
         )
 
@@ -1750,6 +1762,10 @@ module Pgbus
           next if msg_ids.empty?
 
           begin
+            # A priority queue's msg_ids repeat across its _pN sub-queues: no
+            # batch by logical name addresses them, each is located on its own.
+            next events.each { |row| archive_failed_message(row) } if @client.physical_queue_names(queue_name).size > 1
+
             @client.archive_batch(queue_name, msg_ids)
           rescue StandardError => e
             Pgbus.logger.debug do
