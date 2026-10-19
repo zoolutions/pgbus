@@ -50,8 +50,8 @@ RSpec.describe "Dashboard job list (integration)", :integration do
   def payload(name) = { "job_class" => name, "arguments" => [] }
 
   def fail_attempt(msg_id, error: StandardError.new("boom"))
-    Pgbus::FailedEventRecorder.record!(queue_name: queue, msg_id: msg_id, payload: payload("FailJob"),
-                                       headers: nil, error: error, retry_count: 0)
+    Pgbus::FailedEventRecorder.record!(queue_name: queue, msg_id: msg_id, source_queue: Pgbus.configuration.queue_name(queue),
+                                       payload: payload("FailJob"), headers: nil, error: error, retry_count: 0)
   end
 
   def read_one(vt:)

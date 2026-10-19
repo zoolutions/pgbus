@@ -1722,15 +1722,22 @@ module Pgbus
       end
 
       # The physical queue holding a failed job's message, or nil when it is
-      # gone. The row records the logical queue only, and under priority
-      # routing a msg_id repeats across the _pN sub-queues, so the job's
-      # job_id must match too (issue #577). Two sub-queues' failures with the
-      # same msg_id share one row, which keeps the first one's payload: that
-      # is the message found (issue #583).
+      # gone. The job's job_id must match too: under priority routing a msg_id
+      # repeats across the _pN sub-queues (issue #577). A row that names the
+      # table its message was read from is looked up there alone (issue
+      # #583); a row written before source_queue, under every table of its
+      # logical queue.
       def failed_message_queue(event)
         return unless event["queue_name"] && event["msg_id"]
 
-        @client.locate_message(event["queue_name"], msg_id: event["msg_id"].to_i, job_id: failed_job_id(event))
+        name, prefixed = failed_message_scope(event)
+        @client.locate_message(name, msg_id: event["msg_id"].to_i, job_id: failed_job_id(event), prefixed: prefixed)
+      end
+
+      # [queue, prefixed] to look a failed row's message up under: the physical
+      # table the row names, else its logical queue.
+      def failed_message_scope(event)
+        event["source_queue"] ? [event["source_queue"], false] : [event["queue_name"], true]
       end
 
       def failed_job_id(event)
@@ -1756,16 +1763,19 @@ module Pgbus
       # per-row roundtrips. Falls back to per-row archive inside a rescue if
       # a batch fails, so one bad queue can't block progress on the others.
       def archive_all_failed_messages
+        source = FailedEventRecorder.source_queue_column? ? ", source_queue" : ""
         rows = connection.select_all(
-          "SELECT id, queue_name, msg_id, payload FROM pgbus_failed_events WHERE msg_id IS NOT NULL AND #{NOT_HANDLER_QUEUE}",
+          "SELECT id, queue_name, msg_id, payload#{source} FROM pgbus_failed_events " \
+          "WHERE msg_id IS NOT NULL AND #{NOT_HANDLER_QUEUE}",
           "Pgbus Collect Failed Messages", [handler_queue_names_literal]
         )
 
-        grouped = rows.to_a.group_by { |row| row["queue_name"] }
-        grouped.each do |queue_name, events|
+        grouped = rows.to_a.group_by { |row| failed_message_scope(row) }
+        grouped.each do |(queue_name, prefixed), events|
           # A priority queue's msg_ids repeat across its _pN sub-queues, so
           # each message is located first and archived from its own table.
-          located = @client.locate_messages(queue_name, events.map { |row| [row["msg_id"].to_i, failed_job_id(row)] })
+          located = @client.locate_messages(queue_name, events.map { |row| [row["msg_id"].to_i, failed_job_id(row)] },
+                                            prefixed: prefixed)
           located.group_by { |_msg_id, physical| physical }.each do |physical, pairs|
             @client.archive_batch(physical, pairs.map(&:first), prefixed: false)
           end

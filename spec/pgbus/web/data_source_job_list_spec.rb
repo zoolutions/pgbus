@@ -13,6 +13,7 @@ RSpec.describe Pgbus::Web::DataSource::JobList do
     allow(Pgbus::BusRecord).to receive(:connection).and_return(mock_connection)
     allow(Pgbus.configuration).to receive(:queue_prefix).and_return("pgbus_test")
     allow(data_source).to receive(:queues_with_metrics).and_return(queue_names.map { |name| { name: name } })
+    allow(Pgbus::FailedEventRecorder).to receive(:source_queue_column?).and_return(true)
   end
 
   def captured_sql(name)
@@ -37,7 +38,8 @@ RSpec.describe Pgbus::Web::DataSource::JobList do
       expect(sql).not_to include("pgmq.q_pgbus_test_default_dlq")
       expect(sql).to include(described_class::STATE_CASE)
       expect(sql).to include("LEFT JOIN LATERAL", "FROM pgbus_failed_events")
-      expect(sql).to include("f.queue_name IN ('default', 'pgbus_test_default')")
+      expect(sql).to include("f.queue_name IN ('default', 'pgbus_test_default') AND f.msg_id = m.msg_id " \
+                             "AND (f.source_queue IS NULL OR f.source_queue = 'pgbus_test_default')")
       expect(sql).to include("ORDER BY q.msg_id DESC LIMIT 20")
       expect(sql).to match(/ORDER BY sort_at DESC NULLS LAST, id DESC\s+LIMIT \$1 OFFSET \$2/)
       expect(binds).to eq([10, 10])
@@ -46,7 +48,8 @@ RSpec.describe Pgbus::Web::DataSource::JobList do
     it "adds orphaned failed rows and blocked executions to the All tab" do
       sql, = captured_sql("Pgbus Job List") { data_source.job_rows }
 
-      expect(sql).to include("NOT EXISTS (SELECT 1 FROM pgmq.q_pgbus_test_default m WHERE m.msg_id = f.msg_id)")
+      expect(sql).to include("NOT EXISTS (SELECT 1 FROM pgmq.q_pgbus_test_default m WHERE m.msg_id = f.msg_id " \
+                             "AND (f.source_queue IS NULL OR f.source_queue = 'pgbus_test_default'))")
       expect(sql).to include("NOT (f.queue_name = ANY(ARRAY['default', 'pgbus_test_default', 'mailers', 'pgbus_test_mailers']))")
       expect(sql).to include("FROM pgbus_blocked_executions b")
       expect(sql).to include("LEFT JOIN pgbus_semaphores s ON s.key = b.concurrency_key")
@@ -126,6 +129,21 @@ RSpec.describe Pgbus::Web::DataSource::JobList do
       expect(data_source.job_rows).to eq([])
       expect(Pgbus.logger).to have_received(:error)
     end
+
+    # Issue #583: a priority queue's _pN sub-queues number their messages on
+    # their own, so a failed row joins, and counts as gone from, only the
+    # table it names. Until the column is migrated the SQL keeps its shape.
+    context "when pgbus_failed_events has no source_queue column yet" do
+      before { allow(Pgbus::FailedEventRecorder).to receive(:source_queue_column?).and_return(false) }
+
+      it "joins and orphans failed rows by queue and msg_id alone" do
+        sql, = captured_sql("Pgbus Job List") { data_source.job_rows }
+
+        expect(sql).not_to include("source_queue")
+        expect(sql).to include("f.queue_name IN ('default', 'pgbus_test_default') AND f.msg_id = m.msg_id\n")
+        expect(sql).to include("NOT EXISTS (SELECT 1 FROM pgmq.q_pgbus_test_default m WHERE m.msg_id = f.msg_id)")
+      end
+    end
   end
 
   # The Events page lists the handler queues only; the Jobs page leaves them
@@ -136,7 +154,8 @@ RSpec.describe Pgbus::Web::DataSource::JobList do
 
       expect(sql).to include("FROM pgmq.q_pgbus_test_mailers m")
       expect(sql).not_to include("pgmq.q_pgbus_test_default ")
-      expect(sql).to include("NOT EXISTS (SELECT 1 FROM pgmq.q_pgbus_test_mailers m WHERE m.msg_id = f.msg_id)")
+      expect(sql).to include("NOT EXISTS (SELECT 1 FROM pgmq.q_pgbus_test_mailers m WHERE m.msg_id = f.msg_id " \
+                             "AND (f.source_queue IS NULL OR f.source_queue = 'pgbus_test_mailers'))")
       expect(sql).not_to include("ANY(ARRAY")
       expect(sql).to include("WHERE b.queue_name IN ('mailers', 'pgbus_test_mailers')")
     end

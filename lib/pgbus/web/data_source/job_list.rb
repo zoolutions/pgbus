@@ -10,7 +10,8 @@ module Pgbus
       # Sources, one UNION ALL fragment each:
       # - every non-DLQ queue table, LEFT JOINed to its pgbus_failed_events row
       #   (failed_events.queue_name is the LOGICAL name; the physical one is
-      #   matched too for rows older code wrote)
+      #   matched too for rows older code wrote; source_queue, when set, names
+      #   the one table the row's message was read from — issue #583)
       # - failed rows whose message is no longer in its queue ("orphans")
       # - pgbus_blocked_executions (jobs parked by limits_concurrency)
       #
@@ -187,7 +188,7 @@ module Pgbus
               SELECT f.id, f.error_class::text AS error_class, f.error_message,
                      f.failed_at::timestamptz AS failed_at
               FROM pgbus_failed_events f
-              WHERE f.queue_name IN ('#{logical}', '#{qtable}') AND f.msg_id = m.msg_id
+              WHERE f.queue_name IN ('#{logical}', '#{qtable}') AND f.msg_id = m.msg_id#{failed_in(qtable)}
               ORDER BY f.failed_at DESC LIMIT 1
             ) f ON true
           SQL
@@ -197,7 +198,9 @@ module Pgbus
         # queue, plus (unfiltered) one for rows whose queue no longer exists.
         def orphan_fragments(scope, fetch)
           fragments = scope[:by_logical].map do |logical, tables|
-            missing = tables.map { |(qtable, _)| "NOT EXISTS (SELECT 1 FROM pgmq.q_#{qtable} m WHERE m.msg_id = f.msg_id)" }
+            missing = tables.map do |(qtable, _)|
+              "NOT EXISTS (SELECT 1 FROM pgmq.q_#{qtable} m WHERE m.msg_id = f.msg_id#{failed_in(qtable)})"
+            end
             names = quoted_list([logical, *tables.map(&:first)])
             orphan_fragment("'#{logical}'::text", "f.queue_name IN (#{names}) AND #{missing.join(" AND ")}", fetch)
           end
@@ -207,6 +210,16 @@ module Pgbus
           known += scope[:excluded].flat_map { |(qtable, logical)| [logical, qtable] }
           where = known.empty? ? "true" : "NOT (f.queue_name = ANY(ARRAY[#{quoted_list(known)}]))"
           fragments << orphan_fragment("f.queue_name::text", where, fetch)
+        end
+
+        # Under priority routing each _pN sub-queue numbers its messages from
+        # its own sequence: a row that names its table belongs to that table's
+        # message only. A row written before source_queue (NULL), or any row
+        # before the column is migrated, matches every table of its queue.
+        def failed_in(qtable)
+          return "" unless FailedEventRecorder.source_queue_column?
+
+          " AND (f.source_queue IS NULL OR f.source_queue = '#{qtable}')"
         end
 
         def orphan_fragment(logical_sql, where, fetch)

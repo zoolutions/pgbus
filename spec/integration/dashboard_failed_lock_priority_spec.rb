@@ -50,9 +50,10 @@ RSpec.describe "Failed-job discard under priority routing (integration)", :integ
     )
   end
 
+  # The failed job's message is the one planted in sub-queue 1.
   def record_failure
     Pgbus::FailedEventRecorder.record!(
-      queue_name: queue, msg_id: msg_id,
+      queue_name: queue, msg_id: msg_id, source_queue: physical(1),
       payload: { "job_class" => "PrioJob", Pgbus::Uniqueness::METADATA_KEY => key },
       headers: nil, error: RuntimeError.new("boom"), retry_count: 0
     )

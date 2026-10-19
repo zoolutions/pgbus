@@ -138,7 +138,17 @@ RSpec.describe Pgbus::ActiveJob::Executor do
         expect(executor.execute(message, queue_name)).to eq(:success)
 
         expect(Pgbus::FailedEventRecorder).to have_received(:clear!).with(
-          queue_name: queue_name, msg_id: 5
+          queue_name: queue_name, msg_id: 5, source_queue: config.queue_name(queue_name)
+        )
+      end
+
+      # Issue #583: each _pN sub-queue numbers its messages from its own
+      # sequence, so only this sub-queue's row is the job's to clear.
+      it "clears only the row of the priority sub-queue the message was read from" do
+        expect(executor.execute(message, queue_name, source_queue: "pgbus_default_p1")).to eq(:success)
+
+        expect(Pgbus::FailedEventRecorder).to have_received(:clear!).with(
+          queue_name: queue_name, msg_id: 5, source_queue: "pgbus_default_p1"
         )
       end
     end
@@ -179,7 +189,8 @@ RSpec.describe Pgbus::ActiveJob::Executor do
           "error_class" => "Stripe::CardError", "error_message" => "Your card was declined",
           "backtrace" => "app/jobs/pay.rb:12", "error_attempt" => config.max_retries
         )
-        expect(Pgbus::FailedEventRecorder).to have_received(:last_error).with(queue_name: queue_name, msg_id: 7)
+        expect(Pgbus::FailedEventRecorder).to have_received(:last_error)
+          .with(queue_name: queue_name, msg_id: 7, source_queue: config.queue_name(queue_name))
       end
 
       it "keeps the message's own headers next to the block" do
@@ -247,13 +258,22 @@ RSpec.describe Pgbus::ActiveJob::Executor do
           )
           expect(mock_client).not_to have_received(:move_to_dead_letter)
         end
+
+        it "reads and clears the failure row of that sub-queue only" do
+          executor.execute(message, queue_name, source_queue: "pgbus_test_default_p2")
+
+          expect(Pgbus::FailedEventRecorder).to have_received(:last_error)
+            .with(queue_name: queue_name, msg_id: 7, source_queue: "pgbus_test_default_p2")
+          expect(Pgbus::FailedEventRecorder).to have_received(:clear!)
+            .with(queue_name: queue_name, msg_id: 7, source_queue: "pgbus_test_default_p2")
+        end
       end
 
       it "clears any prior failed event record" do
         executor.execute(message, queue_name)
 
         expect(Pgbus::FailedEventRecorder).to have_received(:clear!).with(
-          queue_name: queue_name, msg_id: 7
+          queue_name: queue_name, msg_id: 7, source_queue: config.queue_name(queue_name)
         )
       end
     end
@@ -325,11 +345,21 @@ RSpec.describe Pgbus::ActiveJob::Executor do
         expect(Pgbus::FailedEventRecorder).to have_received(:record!).with(
           queue_name: queue_name,
           msg_id: 3,
+          source_queue: config.queue_name(queue_name),
           payload: job_payload,
           headers: nil,
           error: error,
           retry_count: 0
         )
+      end
+
+      # Issue #583: two sub-queues can each hold a msg_id 3, so the row names
+      # the physical table the message was read from.
+      it "records the failure under the priority sub-queue the message was read from" do
+        executor.execute(message, queue_name, source_queue: "pgbus_default_p2")
+
+        expect(Pgbus::FailedEventRecorder).to have_received(:record!)
+          .with(hash_including(queue_name: queue_name, msg_id: 3, source_queue: "pgbus_default_p2"))
       end
     end
 
@@ -419,6 +449,7 @@ RSpec.describe Pgbus::ActiveJob::Executor do
         expect(Pgbus::FailedEventRecorder).to have_received(:record!).with(
           queue_name: queue_name,
           msg_id: 126,
+          source_queue: config.queue_name(queue_name),
           payload: job_payload,
           headers: nil,
           error: fiber_stop,
@@ -1046,6 +1077,18 @@ RSpec.describe Pgbus::ActiveJob::Executor do
         allow(mock_client).to receive(:set_visibility_timeout).and_raise(StandardError, "pg gone")
 
         expect { executor.execute(message, queue_name) }.not_to raise_error
+      end
+
+      # Issue #582: priority routing never creates the logical queue's base
+      # table, so the backoff lands on the _pN sub-queue the message was read
+      # from, as the heartbeat and the archive do.
+      it "sets the backoff on the priority sub-queue the worker read the message from" do
+        executor.execute(message, queue_name, source_queue: "pgbus_default_p1")
+
+        expect(mock_client).to have_received(:set_visibility_timeout).with(
+          "pgbus_default_p1", 50, vt: a_value_between(4, 6), prefixed: false
+        )
+        expect(mock_client).to have_received(:set_visibility_timeout).once
       end
     end
 

@@ -296,7 +296,7 @@ module Pgbus
         @rate_counter.increment(:dequeued, tagged_messages.size)
         client = Pgbus.client
         tagged_messages.each do |queue_name, message, source_queue|
-          detect_zombie(queue_name, message)
+          detect_zombie(queue_name, message, source_queue)
           @in_flight.increment
           @claim_buffer.push(queue_name, message, source_queue, client: client)
         end
@@ -603,11 +603,12 @@ module Pgbus
         [RESTORE_COOLDOWN_BASE * (2**@restore_streak), RESTORE_COOLDOWN_MAX].min
       end
 
-      def detect_zombie(queue_name, message)
+      def detect_zombie(queue_name, message, source_queue = nil)
         return unless config.zombie_detection
         return unless message.read_ct.to_i > 1
 
-        return if FailedEventRecorder.exists?(queue_name: queue_name, msg_id: message.msg_id.to_i)
+        return if FailedEventRecorder.exists?(queue_name: queue_name, msg_id: message.msg_id.to_i,
+                                              source_queue: source_queue || config.queue_name(queue_name))
 
         Pgbus.logger.warn do
           "[Pgbus] Zombie message redelivered: queue=#{queue_name} msg_id=#{message.msg_id} " \

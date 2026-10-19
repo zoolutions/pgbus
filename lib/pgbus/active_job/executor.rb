@@ -28,9 +28,11 @@ module Pgbus
         if read_count > config.max_retries
           # Read the last error before clear! deletes the only row that has
           # it: the DLQ copy carries it in its headers (issue #495).
-          last_error = FailedEventRecorder.last_error(queue_name: queue_name, msg_id: message.msg_id.to_i)
+          last_error = FailedEventRecorder.last_error(queue_name: queue_name, msg_id: message.msg_id.to_i,
+                                                      source_queue: physical_queue(queue_name, source_queue))
           handle_dead_letter(message, queue_name, payload, source_queue: source_queue, last_error: last_error)
-          FailedEventRecorder.clear!(queue_name: queue_name, msg_id: message.msg_id.to_i)
+          FailedEventRecorder.clear!(queue_name: queue_name, msg_id: message.msg_id.to_i,
+                                     source_queue: physical_queue(queue_name, source_queue))
           signal_concurrency(payload)
           signal_batch_discarded(payload)
           release_uniqueness_lock(Uniqueness.extract_key(payload), queue_name, message)
@@ -129,7 +131,10 @@ module Pgbus
           # failed attempt, so a first delivery has no row: skip the per-job
           # DELETE round trip (issue #484). A stale row from a dropped-and-
           # recreated queue reusing this msg_id is the dispatcher's to sweep.
-          FailedEventRecorder.clear!(queue_name: queue_name, msg_id: msg_id) if read_count > 1
+          if read_count > 1
+            FailedEventRecorder.clear!(queue_name: queue_name, msg_id: msg_id,
+                                       source_queue: physical_queue(queue_name, source_queue))
+          end
         end
 
         instrument("pgbus.job_completed", queue: queue_name, job_class: job_class)
@@ -145,7 +150,7 @@ module Pgbus
         # Before this, a fiber interruption between perform_now and archive_from
         # silently lost control flow — no failed event row, no job_failed
         # notification, uniqueness lock held until VT expired. See issue #126.
-        handle_failure(message, queue_name, e, payload: payload)
+        handle_failure(message, queue_name, e, payload: payload, source_queue: source_queue)
         # A failed :while_executing attempt is no longer executing — release
         # so the retry (same message, after VT) can acquire. :until_executed
         # keeps its lock until success/DLQ by design (#126, #333).
@@ -186,6 +191,14 @@ module Pgbus
       # debug logging is on (issue #484).
       def log_tag(message, queue_name)
         "msg_id=#{message.msg_id} queue=#{queue_name} read_ct=#{message.read_ct}"
+      end
+
+      # The table the message was read from: the _pN sub-queue under priority
+      # routing, else the logical queue's own. Each table numbers its messages
+      # from its own sequence, so a failed-event row is keyed on it (issue
+      # #583). Built only on the failure and redelivery paths.
+      def physical_queue(queue_name, source_queue)
+        source_queue || config.queue_name(queue_name)
       end
 
       def assign_batch_id(job, payload)
@@ -298,7 +311,7 @@ module Pgbus
         [((Time.now.utc - enqueued_at) * 1000).round, 0].max
       end
 
-      def handle_failure(message, queue_name, error, payload: nil)
+      def handle_failure(message, queue_name, error, payload: nil, source_queue: nil)
         ctx = { action: "execute_job", queue: queue_name, job_class: payload&.dig("job_class"),
                 msg_id: message.msg_id.to_i, read_ct: message.read_ct.to_i }
         ErrorReporter.report(error, ctx)
@@ -311,20 +324,23 @@ module Pgbus
         FailedEventRecorder.record!(
           queue_name: queue_name,
           msg_id: message.msg_id.to_i,
+          source_queue: physical_queue(queue_name, source_queue),
           payload: payload || message.message,
           headers: message.respond_to?(:headers) ? message.headers : nil,
           error: error,
           retry_count: [message.read_ct.to_i - 1, 0].max
         )
 
-        apply_retry_backoff(message, queue_name, payload)
+        apply_retry_backoff(message, queue_name, payload, source_queue: source_queue)
       end
 
       # Extend the message's visibility timeout with exponential backoff
       # so retries aren't all bunched at the default flat VT interval.
       # Skipped on the first read (read_ct=1) — that's the initial
-      # attempt, not a retry.
-      def apply_retry_backoff(message, queue_name, payload)
+      # attempt, not a retry. Under priority routing the message sits in the
+      # _pN sub-queue the worker read it from; the logical name resolves to a
+      # base table that is never created (issue #582).
+      def apply_retry_backoff(message, queue_name, payload, source_queue: nil)
         attempt = message.read_ct.to_i - 1
         return if attempt < 1
 
@@ -335,7 +351,11 @@ module Pgbus
                   RetryBackoff.compute_delay(attempt: attempt)
                 end
 
-        client.set_visibility_timeout(queue_name, message.msg_id.to_i, vt: delay)
+        if source_queue
+          client.set_visibility_timeout(source_queue, message.msg_id.to_i, vt: delay, prefixed: false)
+        else
+          client.set_visibility_timeout(queue_name, message.msg_id.to_i, vt: delay)
+        end
       rescue StandardError => e
         Pgbus.logger.debug { "[Pgbus] Retry backoff VT update failed: #{e.message}" }
       end

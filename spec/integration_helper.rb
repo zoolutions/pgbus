@@ -63,6 +63,7 @@ def bootstrap_integration_tables(conn)
       CREATE TABLE pgbus_failed_events (
         id BIGSERIAL PRIMARY KEY,
         queue_name VARCHAR NOT NULL,
+        source_queue VARCHAR,
         msg_id BIGINT,
         payload JSONB,
         headers JSONB,
@@ -75,15 +76,18 @@ def bootstrap_integration_tables(conn)
     SQL
   end
 
-  # Always ensure the unique index exists, even if the table was created
-  # by an older bootstrap (e.g. CI workflow's "Set up pgbus tables" step
-  # that predates the upsert). FailedEventRecorder.record! does
-  # ON CONFLICT (queue_name, msg_id) UPDATE — without this index it raises
-  # "no unique or exclusion constraint matching the ON CONFLICT specification"
-  # and silently swallows the error, leaving failed_events.first nil in tests.
+  # Always bring the table to the current shape, even if it was created by an
+  # older bootstrap (a prepared local database, or a CI step that predates the
+  # column) — mirrors add_failed_events_source_queue.rb.erb (issue #583).
+  # FailedEventRecorder.record! does ON CONFLICT (queue_name, source_queue,
+  # msg_id) UPDATE: without this index it raises "no unique or exclusion
+  # constraint matching the ON CONFLICT specification" and silently swallows
+  # the error, leaving failed_events.first nil in tests.
   conn.execute(<<~SQL)
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_pgbus_failed_events_queue_msg
-      ON pgbus_failed_events (queue_name, msg_id);
+    ALTER TABLE pgbus_failed_events ADD COLUMN IF NOT EXISTS source_queue VARCHAR;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_pgbus_failed_events_queue_msg_source
+      ON pgbus_failed_events (queue_name, msg_id, source_queue);
+    DROP INDEX IF EXISTS idx_pgbus_failed_events_queue_msg;
   SQL
 
   # Transactional outbox — mirrors lib/generators/pgbus/templates/add_outbox.rb.erb.

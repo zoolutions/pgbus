@@ -356,6 +356,7 @@ jobs:
               CREATE TABLE IF NOT EXISTS pgbus_failed_events (
                 id BIGSERIAL PRIMARY KEY,
                 queue_name VARCHAR NOT NULL,
+                source_queue VARCHAR,
                 msg_id BIGINT,
                 payload JSONB,
                 headers JSONB,
@@ -369,8 +370,8 @@ jobs:
                 ON pgbus_failed_events (queue_name);
               CREATE INDEX IF NOT EXISTS idx_pgbus_failed_events_time
                 ON pgbus_failed_events (failed_at);
-              CREATE UNIQUE INDEX IF NOT EXISTS idx_pgbus_failed_events_queue_msg
-                ON pgbus_failed_events (queue_name, msg_id);
+              CREATE UNIQUE INDEX IF NOT EXISTS idx_pgbus_failed_events_queue_msg_source
+                ON pgbus_failed_events (queue_name, msg_id, source_queue);
             SQL
             conn.close
           "

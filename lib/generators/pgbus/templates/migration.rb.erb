@@ -53,9 +53,12 @@ class CreatePgbusTables < ActiveRecord::Migration<%= migration_version %>
     add_index :pgbus_processes, :last_heartbeat_at,
       name: "idx_pgbus_processes_heartbeat"
 
-    # Failed events log (for dashboard visibility)
+    # Failed events log (for dashboard visibility). queue_name is the logical
+    # queue, source_queue the physical table the message was read from: under
+    # priority routing each _pN sub-queue numbers its messages on its own.
     create_table :pgbus_failed_events do |t|
       t.string :queue_name, null: false
+      t.string :source_queue
       t.bigint :msg_id
       t.jsonb :payload
       t.jsonb :headers
@@ -68,8 +71,8 @@ class CreatePgbusTables < ActiveRecord::Migration<%= migration_version %>
 
     add_index :pgbus_failed_events, :queue_name, name: "idx_pgbus_failed_events_queue"
     add_index :pgbus_failed_events, :failed_at, name: "idx_pgbus_failed_events_time"
-    add_index :pgbus_failed_events, [:queue_name, :msg_id],
-      unique: true, name: "idx_pgbus_failed_events_queue_msg"
+    add_index :pgbus_failed_events, [:queue_name, :msg_id, :source_queue],
+      unique: true, name: "idx_pgbus_failed_events_queue_msg_source"
 
     # Concurrency semaphores (counting locks for job concurrency limits)
     create_table :pgbus_semaphores do |t|

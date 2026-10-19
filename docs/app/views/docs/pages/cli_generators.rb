@@ -188,6 +188,8 @@ class Views::Docs::Pages::CliGenerators < DocsUI::Page
       )
       DocsUI::Callout(:note) do
         plain "A few migration-maintenance generators also ship for existing installs: "
+        code { "add_failed_events_source_queue" }
+        plain ", "
         code { "add_failed_events_index" }
         plain ", "
         code { "add_job_stats_latency" }

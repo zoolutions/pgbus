@@ -79,7 +79,8 @@ RSpec.describe "Dead-letter reason headers (integration)", :integration do
     expect(block["backtrace"]).not_to be_empty
     expect(block["backtrace"].lines.size).to be <= 10
     expect(Time.iso8601(block["dead_lettered_at"])).to be_between(started - 1, Time.now.utc + 1)
-    expect(Pgbus::FailedEventRecorder.exists?(queue_name: queue, msg_id: source.msg_id)).to be(false)
+    expect(Pgbus::FailedEventRecorder.exists?(queue_name: queue, msg_id: source.msg_id,
+                                              source_queue: config.queue_name(queue))).to be(false)
   end
 
   it "strips the block on retry and counts every trip out of the DLQ" do

@@ -1249,10 +1249,27 @@ RSpec.describe Pgbus::Process::Worker do
         worker.send(:claim_and_execute)
 
         expect(Pgbus::FailedEventRecorder).to have_received(:exists?)
-          .with(queue_name: "default", msg_id: 99)
+          .with(queue_name: "default", msg_id: 99, source_queue: worker.config.queue_name("default"))
         zombie_log = warn_messages.find { |m| m.include?("Zombie message redelivered") }
         expect(zombie_log).to include("msg_id=99")
         expect(zombie_log).to include("read_ct=2")
+      end
+
+      # Issue #583: a sibling sub-queue's failure with the same msg_id is not
+      # this message's, so the lookup names the sub-queue it was read from.
+      it "looks the prior failure up in the priority sub-queue the message was read from" do
+        Pgbus.configuration.priority_levels = 2
+        msg = build_message_double(msg_id: 99, message: '{"job_class":"TestJob"}', read_ct: 2)
+        allow(mock_client).to receive(:read_batch_prioritized).and_return([["pgbus_default_p1", msg]])
+        allow(pool).to receive(:post).and_yield
+        allow(executor).to receive(:execute).and_return(:success)
+
+        worker.send(:claim_and_execute)
+
+        expect(Pgbus::FailedEventRecorder).to have_received(:exists?)
+          .with(queue_name: "default", msg_id: 99, source_queue: "pgbus_default_p1")
+      ensure
+        Pgbus.configuration.priority_levels = nil
       end
 
       it "does not warn for first-time messages (read_ct=1)" do

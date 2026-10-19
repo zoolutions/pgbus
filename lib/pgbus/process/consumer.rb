@@ -267,7 +267,10 @@ module Pgbus
         Pgbus.client.archive_message(queue_name, message.msg_id.to_i)
         # A redelivery that succeeds leaves no stale failure behind. First
         # deliveries never had one: no query on the hot path (#484's gate).
-        FailedEventRecorder.clear!(queue_name: queue_name, msg_id: message.msg_id.to_i) if message.read_ct.to_i > 1
+        if message.read_ct.to_i > 1
+          FailedEventRecorder.clear!(queue_name: queue_name, msg_id: message.msg_id.to_i,
+                                     source_queue: config.queue_name(queue_name))
+        end
         @circuit_breaker.record_success(queue_name)
         record_stat(message, queue_name, "success", execution_start)
       rescue StandardError => e
@@ -293,7 +296,8 @@ module Pgbus
       # failed-event row, then announce it. A move that raises keeps the row,
       # so the next attempt still carries the reason, and announces nothing.
       def dead_letter(message, queue_name)
-        last_error = FailedEventRecorder.last_error(queue_name: queue_name, msg_id: message.msg_id.to_i)
+        last_error = FailedEventRecorder.last_error(queue_name: queue_name, msg_id: message.msg_id.to_i,
+                                                    source_queue: config.queue_name(queue_name))
         headers = DeadLetterHeader.build(
           existing: message.headers, reason: DeadLetterHeader::REASON_MAX_RETRIES, source: "consumer",
           source_queue: config.queue_name(queue_name), source_msg_id: message.msg_id.to_i,
@@ -301,7 +305,8 @@ module Pgbus
           max_retries: config.max_retries, error: last_error
         )
         Pgbus.client.move_to_dead_letter(queue_name, message, headers: headers)
-        FailedEventRecorder.clear!(queue_name: queue_name, msg_id: message.msg_id.to_i)
+        FailedEventRecorder.clear!(queue_name: queue_name, msg_id: message.msg_id.to_i,
+                                   source_queue: config.queue_name(queue_name))
         instrument_dead_lettered(message, queue_name, last_error)
       end
 
@@ -361,10 +366,12 @@ module Pgbus
       # failure, under the LOGICAL queue name, so the dashboard reads the event
       # as retrying with its error. No ErrorReporter call: Handler#process!
       # already instruments pgbus.event_failed, which feeds the reporters.
+      # A handler queue has no priority sub-queues: its one table is the source.
       def record_failed_event(message, queue_name, error)
         FailedEventRecorder.record!(
-          queue_name: queue_name, msg_id: message.msg_id.to_i, payload: message.message,
-          headers: message.headers, error: error, retry_count: [message.read_ct.to_i - 1, 0].max
+          queue_name: queue_name, msg_id: message.msg_id.to_i, source_queue: config.queue_name(queue_name),
+          payload: message.message, headers: message.headers, error: error,
+          retry_count: [message.read_ct.to_i - 1, 0].max
         )
       end
 
