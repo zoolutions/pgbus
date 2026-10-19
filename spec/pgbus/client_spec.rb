@@ -1299,44 +1299,52 @@ RSpec.describe Pgbus::Client do
     end
   end
 
-  describe "#locate_message" do
+  describe "#locate_messages" do
     let(:raw_conn) { double("PG::Connection") }
+    let(:sql) { "SELECT msg_id, message::jsonb ->> 'job_id' AS job_id FROM pgmq.q_%s WHERE msg_id = ANY($1::bigint[])" }
 
     before do
       allow(client).to receive(:with_raw_connection).and_yield(raw_conn)
       stub_const("PG::UndefinedTable", Class.new(StandardError)) unless defined?(PG::UndefinedTable)
     end
 
-    it "returns the single physical table holding the msg_id under the standard strategy" do
-      allow(raw_conn).to receive(:exec_params).with(/pgmq\.q_pgbus_test_default WHERE msg_id = \$1 LIMIT/, [42])
-                                              .and_return(double(ntuples: 1))
-
-      expect(client.locate_message("default", msg_id: 42)).to eq("pgbus_test_default")
+    def rows(*pairs)
+      pairs.map { |msg_id, job_id| { "msg_id" => msg_id.to_s, "job_id" => job_id } }
     end
 
-    it "matches the job_id too when one is given" do
-      allow(raw_conn).to receive(:exec_params).with(/msg_id = \$1 AND message->>'job_id' = \$2/, [42, "j-1"])
-                                              .and_return(double(ntuples: 0))
+    it "maps each msg_id whose message carries its job_id to the table, in one query per table" do
+      allow(raw_conn).to receive(:exec_params).with(format(sql, "pgbus_test_default"), ["{42,43,44}"])
+                                              .and_return(rows([42, "j-42"], [43, "someone-else"]))
 
-      expect(client.locate_message("default", msg_id: 42, job_id: "j-1")).to be_nil
+      located = client.locate_messages("default", [[42, "j-42"], [43, "j-43"], [44, "j-44"]])
+
+      expect(located).to eq(42 => "pgbus_test_default")
+    end
+
+    it "matches the msg_id alone for a message without a job_id" do
+      allow(raw_conn).to receive(:exec_params).and_return(rows([42, nil]))
+
+      expect(client.locate_messages("default", [[42, nil]])).to eq(42 => "pgbus_test_default")
     end
 
     it "probes a physical name as itself with prefixed: false" do
-      allow(raw_conn).to receive(:exec_params).with(/pgmq\.q_pgbus_test_default_p1 /, [42]).and_return(double(ntuples: 1))
+      allow(raw_conn).to receive(:exec_params).with(format(sql, "pgbus_test_default_p1"), ["{42}"])
+                                              .and_return(rows([42, "j-1"]))
 
-      expect(client.locate_message("pgbus_test_default_p1", msg_id: 42, prefixed: false)).to eq("pgbus_test_default_p1")
+      expect(client.locate_messages("pgbus_test_default_p1", [[42, "j-1"]], prefixed: false))
+        .to eq(42 => "pgbus_test_default_p1")
     end
 
-    it "returns nil when the table is missing" do
+    it "locates nothing in a table that is missing" do
       allow(raw_conn).to receive(:exec_params).and_raise(PG::UndefinedTable, "relation does not exist")
 
-      expect(client.locate_message("default", msg_id: 42)).to be_nil
+      expect(client.locate_messages("default", [[42, "j-1"]])).to eq({})
     end
 
     it "raises any other error" do
       allow(raw_conn).to receive(:exec_params).and_raise(StandardError, "statement timeout")
 
-      expect { client.locate_message("default", msg_id: 42) }.to raise_error(StandardError, "statement timeout")
+      expect { client.locate_messages("default", [[42, "j-1"]]) }.to raise_error(StandardError, "statement timeout")
     end
 
     # Issue #577: each _pN table numbers its messages from its own sequence.
@@ -1349,21 +1357,40 @@ RSpec.describe Pgbus::Client do
         end
       end
 
-      it "returns the sub-queue whose message carries the job_id, skipping a missing one" do
-        allow(raw_conn).to receive(:exec_params).with(/q_pgbus_test_default_p0 /, [42, "j-1"])
+      it "takes each msg_id from the sub-queue whose message carries its job_id, skipping a missing one" do
+        allow(raw_conn).to receive(:exec_params).with(format(sql, "pgbus_test_default_p0"), ["{42,43}"])
                                                 .and_raise(PG::UndefinedTable, "relation does not exist")
-        allow(raw_conn).to receive(:exec_params).with(/q_pgbus_test_default_p1 /, [42, "j-1"]).and_return(double(ntuples: 1))
+        allow(raw_conn).to receive(:exec_params).with(format(sql, "pgbus_test_default_p1"), ["{42,43}"])
+                                                .and_return(rows([42, "someone-else"], [43, "j-43"]))
+        allow(raw_conn).to receive(:exec_params).with(format(sql, "pgbus_test_default_p2"), ["{42}"])
+                                                .and_return(rows([42, "j-42"]))
 
-        expect(client.locate_message("default", msg_id: 42, job_id: "j-1")).to eq("pgbus_test_default_p1")
-        expect(raw_conn).not_to have_received(:exec_params).with(/q_pgbus_test_default_p2 /, anything)
+        located = client.locate_messages("default", [[42, "j-42"], [43, "j-43"]])
+
+        expect(located).to eq(42 => "pgbus_test_default_p2", 43 => "pgbus_test_default_p1")
       end
 
-      it "returns nil when no sub-queue holds the message" do
-        allow(raw_conn).to receive(:exec_params).and_return(double(ntuples: 0))
+      it "stops once every message is located" do
+        allow(raw_conn).to receive(:exec_params).and_return(rows([42, "j-42"]))
 
-        expect(client.locate_message("default", msg_id: 42, job_id: "j-1")).to be_nil
-        expect(raw_conn).to have_received(:exec_params).exactly(3).times
+        client.locate_messages("default", [[42, "j-42"]])
+
+        expect(raw_conn).to have_received(:exec_params).once
       end
+    end
+  end
+
+  describe "#locate_message" do
+    let(:raw_conn) { double("PG::Connection") }
+
+    before { allow(client).to receive(:with_raw_connection).and_yield(raw_conn) }
+
+    it "returns the physical table holding the message, or nil" do
+      allow(raw_conn).to receive(:exec_params).with(/q_pgbus_test_default WHERE/, ["{42}"])
+                                              .and_return([{ "msg_id" => "42", "job_id" => "j-1" }])
+
+      expect(client.locate_message("default", msg_id: 42, job_id: "j-1")).to eq("pgbus_test_default")
+      expect(client.locate_message("default", msg_id: 42, job_id: "j-2")).to be_nil
     end
   end
 

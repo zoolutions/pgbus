@@ -716,7 +716,9 @@ RSpec.describe Pgbus::Web::DataSource do
                       { "id" => 2, "queue_name" => "default", "msg_id" => 11, "payload" => '{"job_id":"j-11"}' },
                       { "id" => 3, "queue_name" => "low", "msg_id" => 99, "payload" => '{"job_id":"j-99"}' }
                     ])
-      allow(mock_client).to receive(:physical_queue_names).with("low").and_return(%w[pgbus_test_low])
+      allow(mock_client).to receive(:locate_messages).with("default", [[10, "j-10"], [11, "j-11"]])
+                                                     .and_return(10 => "pgbus_test_default", 11 => "pgbus_test_default")
+      allow(mock_client).to receive(:locate_messages).with("low", [[99, "j-99"]]).and_return(99 => "pgbus_test_low")
 
       allow(mock_connection).to receive(:exec_delete)
         .with("DELETE FROM pgbus_failed_events WHERE #{not_handler}", "Pgbus Discard All Failed", handler_names)
@@ -771,15 +773,25 @@ RSpec.describe Pgbus::Web::DataSource do
       expect(warnings).to include(a_string_including("!!!").and(including("invalid queue name")))
     end
 
-    it "batches archives by queue to avoid per-row PGMQ roundtrips" do
+    it "batches archives by physical queue to avoid per-row PGMQ roundtrips" do
       data_source.discard_all_failed
-      expect(mock_client).to have_received(:archive_batch).with("default", [10, 11])
-      expect(mock_client).to have_received(:archive_batch).with("low", [99])
+      expect(mock_client).to have_received(:archive_batch).with("pgbus_test_default", [10, 11], prefixed: false)
+      expect(mock_client).to have_received(:archive_batch).with("pgbus_test_low", [99], prefixed: false)
+    end
+
+    # A msg_id another job's message reuses (a queue dropped and recreated)
+    # is not the failed job's message, as for a single Discard.
+    it "archives only the messages that still carry their row's job_id" do
+      allow(mock_client).to receive(:locate_messages).with("default", anything).and_return(10 => "pgbus_test_default")
+
+      data_source.discard_all_failed
+
+      expect(mock_client).to have_received(:archive_batch).with("pgbus_test_default", [10], prefixed: false)
     end
 
     it "falls back to per-row archive when archive_batch raises" do
       allow(mock_client).to receive(:archive_batch)
-        .with("default", anything)
+        .with("pgbus_test_default", anything, prefixed: false)
         .and_raise(StandardError, "boom")
       allow(mock_client).to receive(:locate_message) { |queue, **| "pgbus_test_#{queue}" }
 
@@ -789,28 +801,20 @@ RSpec.describe Pgbus::Web::DataSource do
       expect(mock_client).to have_received(:archive_message).with("pgbus_test_default", 10, prefixed: false)
       expect(mock_client).to have_received(:archive_message).with("pgbus_test_default", 11, prefixed: false)
       # The good queue still uses archive_batch.
-      expect(mock_client).to have_received(:archive_batch).with("low", [99])
+      expect(mock_client).to have_received(:archive_batch).with("pgbus_test_low", [99], prefixed: false)
     end
 
     # Issue #577: under priority routing a msg_id repeats across the _pN
     # sub-queues, so no batch by logical name can address the right messages.
     it "archives each message of a priority queue from the sub-queue holding it" do
-      allow(mock_client).to receive(:physical_queue_names).with("default")
-                                                          .and_return(%w[pgbus_test_default_p0 pgbus_test_default_p1])
-      %w[pgbus_test_default_p0 pgbus_test_default_p1].each do |table|
-        allow(mock_connection).to receive(:select_all)
-          .with(format(queued_send_times_sql, table: table), "Pgbus Failed Message Sent At", ["{10,11}"])
-          .and_return([])
-      end
-      allow(mock_client).to receive(:locate_message).with("default", msg_id: 10, job_id: "j-10")
-                                                    .and_return("pgbus_test_default_p1")
-      allow(mock_client).to receive(:locate_message).with("default", msg_id: 11, job_id: "j-11").and_return(nil)
+      allow(mock_client).to receive(:locate_messages).with("default", anything)
+                                                     .and_return(10 => "pgbus_test_default_p1", 11 => "pgbus_test_default_p0")
 
       data_source.discard_all_failed
 
-      expect(mock_client).to have_received(:archive_message).with("pgbus_test_default_p1", 10, prefixed: false).once
+      expect(mock_client).to have_received(:archive_batch).with("pgbus_test_default_p1", [10], prefixed: false)
+      expect(mock_client).to have_received(:archive_batch).with("pgbus_test_default_p0", [11], prefixed: false)
       expect(mock_client).not_to have_received(:archive_batch).with("default", anything)
-      expect(mock_client).to have_received(:archive_batch).with("low", [99])
     end
 
     it "returns the number of rows deleted, leaving handler-queue rows to the Events page" do

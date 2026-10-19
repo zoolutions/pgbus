@@ -767,21 +767,40 @@ module Pgbus
     end
 
     # The physical table that holds message +msg_id+, or nil when none does.
-    # A logical name expands to every table the strategy owns, and under
-    # priority routing each `_pN` sub-queue numbers its messages from its own
-    # sequence: pass the job's +job_id+ and only the message carrying it
-    # matches (issue #577). A physical name with +prefixed: false+ is probed
-    # alone. A table that does not exist holds nothing; other errors raise.
+    # See locate_messages.
     def locate_message(queue_name, msg_id:, job_id: nil, prefixed: true)
+      locate_messages(queue_name, [[msg_id, job_id]], prefixed: prefixed)[msg_id.to_i]
+    end
+
+    # { msg_id => physical table } for each [msg_id, job_id] pair whose
+    # message is queued, one query per table on one connection. A logical
+    # name expands to every table the strategy owns, and under priority
+    # routing each `_pN` sub-queue numbers its messages from its own
+    # sequence: only a message carrying the pair's job_id matches, or any
+    # message with that msg_id when job_id is nil, the first table winning
+    # (issue #577). A physical name with +prefixed: false+ is probed alone.
+    # A table that does not exist holds nothing; other errors raise.
+    def locate_messages(queue_name, messages, prefixed: true)
+      wanted = messages.to_h { |msg_id, job_id| [msg_id.to_i, job_id&.to_s] }
       tables = lookup_physical_queue_names(queue_name, prefixed: prefixed)
+      located = {}
 
       synchronized do
         with_raw_connection do |conn|
-          tables.find do |name|
-            probe_message_location(conn, QueueNameValidator.sanitize!(name), msg_id.to_i, job_id) == true
+          tables.each do |name|
+            pending = wanted.keys - located.keys
+            break if pending.empty?
+
+            queued_job_ids(conn, QueueNameValidator.sanitize!(name), pending).each do |row|
+              msg_id = row["msg_id"].to_i
+              job_id = wanted[msg_id]
+              located[msg_id] ||= name if job_id.nil? || row["job_id"] == job_id
+            end
           end
         end
       end
+
+      located
     end
 
     # DLQ companion of a logical queue name, or of a physical table name passed
@@ -1169,16 +1188,20 @@ module Pgbus
       :missing
     end
 
-    def probe_message_location(conn, sanitized, msg_id, job_id)
-      job_id ? msg_id_with_job_id_present?(conn, sanitized, msg_id, job_id) : msg_id_present?(conn, sanitized, msg_id)
+    # msg_ids are integers, so the array literal is safe.
+    def queued_job_ids(conn, sanitized, msg_ids)
+      conn.exec_params(
+        "SELECT msg_id, message::jsonb ->> 'job_id' AS job_id FROM pgmq.q_#{sanitized} WHERE msg_id = ANY($1::bigint[])",
+        ["{#{msg_ids.join(",")}}"]
+      )
     rescue ActiveRecord::StatementInvalid => e
       raise unless undefined_table_error?(e)
 
-      :missing
+      []
     rescue StandardError => e
       raise unless defined?(PG::UndefinedTable) && e.is_a?(PG::UndefinedTable)
 
-      :missing
+      []
     end
 
     def scan_uniqueness_keys(conn, sanitized, keys, found)
@@ -1210,13 +1233,6 @@ module Pgbus
                  )
                end
       result.ntuples.positive?
-    end
-
-    def msg_id_with_job_id_present?(conn, sanitized, msg_id, job_id)
-      conn.exec_params(
-        "SELECT 1 FROM pgmq.q_#{sanitized} WHERE msg_id = $1 AND message->>'job_id' = $2 LIMIT 1",
-        [msg_id, job_id]
-      ).ntuples.positive?
     end
 
     def msg_id_archived?(conn, sanitized, msg_id)
