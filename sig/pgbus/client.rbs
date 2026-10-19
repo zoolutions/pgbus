@@ -25,6 +25,8 @@ module Pgbus
     def in_recovery?: () -> bool
     def list_notify_insert_throttles: () -> untyped
     def list_queues: () -> untyped
+    def locate_message: (untyped queue_name, msg_id: untyped, ?job_id: untyped, ?prefixed: untyped) -> String?
+    def locate_messages: (untyped queue_name, Array[[untyped, untyped]] messages, ?prefixed: untyped) -> Hash[Integer, String]
     def message_archived?: (untyped queue_name, msg_id: untyped, ?prefixed: untyped) -> bool?
     def message_exists?: (untyped queue_name, ?msg_id: untyped, ?uniqueness_key: untyped, ?prefixed: untyped) -> bool?
     def message_in_queue?: (untyped queue_name, msg_id: untyped, ?prefixed: untyped) -> bool?

@@ -299,9 +299,9 @@ module Pgbus
         # duplicate (the original is still in the queue waiting for retry).
         # Falls back to enqueueing a fresh copy only if the original is gone
         # (e.g., already moved to DLQ).
-        msg_id = event["msg_id"]
-        if msg_id && @client.message_exists?(event["queue_name"], msg_id: msg_id.to_i)
-          @client.set_visibility_timeout(event["queue_name"], msg_id.to_i, vt: 0)
+        physical = failed_message_queue(event)
+        if physical
+          @client.set_visibility_timeout(physical, event["msg_id"].to_i, vt: 0, prefixed: false)
         else
           payload = JSON.parse(event["payload"])
           headers = event["headers"]
@@ -1721,12 +1721,29 @@ module Pgbus
         nil
       end
 
+      # The physical queue holding a failed job's message, or nil when it is
+      # gone. The row records the logical queue only, and under priority
+      # routing a msg_id repeats across the _pN sub-queues, so the job's
+      # job_id must match too (issue #577). Two sub-queues' failures with the
+      # same msg_id share one row, which keeps the first one's payload: that
+      # is the message found (issue #583).
+      def failed_message_queue(event)
+        return unless event["queue_name"] && event["msg_id"]
+
+        @client.locate_message(event["queue_name"], msg_id: event["msg_id"].to_i, job_id: failed_job_id(event))
+      end
+
+      def failed_job_id(event)
+        payload = event["payload"]
+        payload = JSON.parse(payload) if payload.is_a?(String)
+        payload["job_id"] if payload.is_a?(Hash)
+      end
+
       # Archive the queue message a failed_event row points to. Idempotent —
       # silently no-ops if the message no longer exists in the queue.
       def archive_failed_message(event)
-        return unless event["queue_name"] && event["msg_id"]
-
-        @client.archive_message(event["queue_name"], event["msg_id"].to_i)
+        physical = failed_message_queue(event)
+        @client.archive_message(physical, event["msg_id"].to_i, prefixed: false) if physical
       rescue StandardError => e
         Pgbus.logger.debug do
           "[Pgbus::Web] Error archiving message for failed event #{event["id"]}: #{e.message}"
@@ -1734,30 +1751,30 @@ module Pgbus
       end
 
       # Archive every queue message referenced by a failed_event row.
-      # Groups by queue and uses archive_batch so an N-event discard is
-      # one SQL statement per queue instead of N per-row roundtrips.
-      # Falls back to per-row archive inside a rescue if a batch fails,
-      # so one bad queue can't block progress on the others.
+      # Groups by queue, then locates and archive_batches per physical table,
+      # so an N-event discard is two SQL statements per table instead of N
+      # per-row roundtrips. Falls back to per-row archive inside a rescue if
+      # a batch fails, so one bad queue can't block progress on the others.
       def archive_all_failed_messages
         rows = connection.select_all(
-          "SELECT id, queue_name, msg_id FROM pgbus_failed_events WHERE msg_id IS NOT NULL AND #{NOT_HANDLER_QUEUE}",
+          "SELECT id, queue_name, msg_id, payload FROM pgbus_failed_events WHERE msg_id IS NOT NULL AND #{NOT_HANDLER_QUEUE}",
           "Pgbus Collect Failed Messages", [handler_queue_names_literal]
         )
 
         grouped = rows.to_a.group_by { |row| row["queue_name"] }
         grouped.each do |queue_name, events|
-          msg_ids = events.filter_map { |row| row["msg_id"]&.to_i }
-          next if msg_ids.empty?
-
-          begin
-            @client.archive_batch(queue_name, msg_ids)
-          rescue StandardError => e
-            Pgbus.logger.debug do
-              "[Pgbus::Web] archive_batch failed for #{queue_name} (#{e.message}); " \
-                "falling back to per-row archive"
-            end
-            events.each { |row| archive_failed_message(row) }
+          # A priority queue's msg_ids repeat across its _pN sub-queues, so
+          # each message is located first and archived from its own table.
+          located = @client.locate_messages(queue_name, events.map { |row| [row["msg_id"].to_i, failed_job_id(row)] })
+          located.group_by { |_msg_id, physical| physical }.each do |physical, pairs|
+            @client.archive_batch(physical, pairs.map(&:first), prefixed: false)
           end
+        rescue StandardError => e
+          Pgbus.logger.debug do
+            "[Pgbus::Web] archive_batch failed for #{queue_name} (#{e.message}); " \
+              "falling back to per-row archive"
+          end
+          events.each { |row| archive_failed_message(row) }
         end
       rescue StandardError => e
         Pgbus.logger.debug { "[Pgbus::Web] Error archiving failed messages: #{e.message}" }
