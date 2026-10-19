@@ -9,7 +9,7 @@ module Pgbus
         tool_name "pgbus_workflows_attention"
         title "Pgbus Workflows Needing Attention"
         description <<~DESC
-          Ongoing Pgbus::Workflow runs that need a person, grouped by (workflow_class, step_name, reason, error_class): reason is paused_error, stalled, paused_manual, overdue (due but not picked up past workflow_stall_threshold) or waiting_overdue (waiting past workflow_waiting_visibility_threshold without a wait_timeout). Each group has its run count, first_seen_at/last_seen_at, the status its runs are in and the actions that status allows; total_runs sums the groups (at most 200 groups, biggest first). workflow_class narrows them to one class. The newest error message is redacted unless the server allows payloads and include_payloads is set.
+          Ongoing Pgbus::Workflow runs that need a person, grouped by (workflow_class, step_name, reason, error_class): reason is paused_error, stalled, paused_manual, overdue (due but not picked up past workflow_stall_threshold) or waiting_overdue (waiting past workflow_waiting_visibility_threshold without a deadline: no wait_timeout, or a per-run one that set none or cleared it after a :notify notice). Each group has its run count, first_seen_at/last_seen_at, the status its runs are in and the actions that status allows; total_runs sums the groups (at most 200 groups, biggest first). workflow_class narrows them to one class. The newest error message is redacted unless the server allows payloads and include_payloads is set.
         DESC
 
         input_schema(

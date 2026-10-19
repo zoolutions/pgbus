@@ -55,8 +55,9 @@ module Pgbus
     #   paused_manual paused otherwise (the step called pause!, or an outside pause!)
     #   overdue       ready, its scheduled step due more than +threshold+ ago
     #   waiting_overdue waiting longer than +waiting_threshold+ on a step
-    #                 without a wait_timeout: (only with +waiting_threshold+,
-    #                 which needs the waiting-step columns)
+    #                 without a deadline (no timeout_at: no wait_timeout:, or
+    #                 a per-run one that set none or cleared it; only with
+    #                 +waiting_threshold+, which needs the waiting-step columns)
     # With +workflow_class+, that class's runs only (the workflow insights,
     # issue #549).
     def self.stuck_reason_counts(threshold:, now: Time.current, waiting_threshold: nil, workflow_class: nil)

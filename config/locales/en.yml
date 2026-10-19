@@ -1167,6 +1167,8 @@ en:
           skipped: Skipped
           step_link: Ongoing runs at %{step}
           title: Pipeline
+          wait_timeout: Wait timeout
+          wait_timeout_dynamic: dynamic (per run)
           window_label: Attempts that finished in the window
         summary:
           attention: Need attention
@@ -1350,6 +1352,7 @@ en:
         waiting_batch_html: Waiting for batch %{batch} (%{done} of %{total} jobs done).
         waiting_signal_html: Waiting for signal %{signal} since %{ago}.
         waiting_signal_late_html: Waiting for signal %{signal} since %{ago} (late since %{late}). The next late notice goes out %{time}.
+        waiting_signal_late_no_deadline_html: Waiting for signal %{signal} since %{ago} (late since %{late}). No further late notice is due.
         waiting_signal_notify_html: Waiting for signal %{signal} since %{ago}. A late notice goes out %{time}, and the wait goes on.
         waiting_signal_timeout_html: Waiting for signal %{signal} since %{ago}. The wait times out %{time}.
         waiting_step_html: Waiting on %{step}.

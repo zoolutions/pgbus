@@ -1167,6 +1167,8 @@ de:
           skipped: Übersprungen
           step_link: Laufende Läufe bei %{step}
           title: Pipeline
+          wait_timeout: Warte-Timeout
+          wait_timeout_dynamic: dynamisch (pro Lauf)
           window_label: Im Zeitfenster beendete Versuche
         summary:
           attention: Brauchen Aufmerksamkeit
@@ -1350,6 +1352,7 @@ de:
         waiting_batch_html: Wartet auf Stapel %{batch} (%{done} von %{total} Jobs erledigt).
         waiting_signal_html: Wartet auf Signal %{signal} seit %{ago}.
         waiting_signal_late_html: Wartet auf Signal %{signal} seit %{ago} (verspätet seit %{late}). Die nächste Verspätungsmeldung folgt %{time}.
+        waiting_signal_late_no_deadline_html: Wartet auf Signal %{signal} seit %{ago} (verspätet seit %{late}). Es folgt keine weitere Verspätungsmeldung.
         waiting_signal_notify_html: Wartet auf Signal %{signal} seit %{ago}. Eine Verspätungsmeldung folgt %{time}, und das Warten geht weiter.
         waiting_signal_timeout_html: Wartet auf Signal %{signal} seit %{ago}. Das Warten läuft ab %{time}.
         waiting_step_html: Wartet auf %{step}.

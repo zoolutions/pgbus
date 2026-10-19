@@ -1167,6 +1167,8 @@ nl:
           skipped: Overgeslagen
           step_link: Lopende runs bij %{step}
           title: Pipeline
+          wait_timeout: Wachttime-out
+          wait_timeout_dynamic: dynamisch (per run)
           window_label: Pogingen die in het venster eindigden
         summary:
           attention: Aandacht nodig
@@ -1350,6 +1352,7 @@ nl:
         waiting_batch_html: Wacht op groep %{batch} (%{done} van %{total} taken klaar).
         waiting_signal_html: Wacht op signaal %{signal}, gestart %{ago}.
         waiting_signal_late_html: Wacht op signaal %{signal}, gestart %{ago} (te laat sinds %{late}). De volgende melding over de vertraging gaat %{time} uit.
+        waiting_signal_late_no_deadline_html: Wacht op signaal %{signal}, gestart %{ago} (te laat sinds %{late}). Er gaat geen nieuwe melding over de vertraging meer uit.
         waiting_signal_notify_html: Wacht op signaal %{signal}, gestart %{ago}. Een melding over de vertraging gaat %{time} uit, en het wachten gaat door.
         waiting_signal_timeout_html: Wacht op signaal %{signal}, gestart %{ago}. De wachttijd verloopt %{time}.
         waiting_step_html: Wacht op %{step}.
