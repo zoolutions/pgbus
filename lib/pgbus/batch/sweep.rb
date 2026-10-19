@@ -38,14 +38,17 @@ module Pgbus
           swept
         end
 
+        # A row with a msg_id was backfilled with the physical table its message
+        # was sent to (the `_pN` sub-queue under priority routing), so every
+        # probe takes that name as is.
         def classify_stale(row, client)
-          in_queue = client.message_in_queue?(row.queue_name, msg_id: row.msg_id)
+          in_queue = client.message_in_queue?(row.queue_name, msg_id: row.msg_id, prefixed: false)
           return :still_present if in_queue != false
 
-          dlq = client.dead_letter_physical_name(row.queue_name)
-          return :failed if client.message_with_job_id?(dlq, job_id: row.job_id) == true
+          dlq = client.dead_letter_physical_name(row.queue_name, prefixed: false)
+          return :failed if client.message_with_job_id?(dlq, job_id: row.job_id, prefixed: false) == true
 
-          return :completed if client.message_archived?(row.queue_name, msg_id: row.msg_id) == true
+          return :completed if client.message_archived?(row.queue_name, msg_id: row.msg_id, prefixed: false) == true
 
           Pgbus.logger.warn do
             "[Pgbus] Batch execution #{row.job_id} (batch #{row.batch_id}) has no queue, " \
@@ -84,6 +87,8 @@ module Pgbus
           swept
         end
 
+        # A row without a msg_id still holds the logical queue name it was
+        # inserted with (the job's queue_name); the backfill was never applied.
         def classify_orphan(row, client)
           return :live if row.queue_name.nil?
 
@@ -91,7 +96,7 @@ module Pgbus
           return :live if in_queue != false
 
           dlq = client.dead_letter_physical_name(row.queue_name)
-          return :failed if client.message_with_job_id?(dlq, job_id: row.job_id) == true
+          return :failed if client.message_with_job_id?(dlq, job_id: row.job_id, prefixed: false) == true
 
           :orphan
         end

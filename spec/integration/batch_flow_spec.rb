@@ -277,9 +277,10 @@ RSpec.describe "Batch flow (integration)", :integration do
       batch = Pgbus::Batch.new(on_finish: on_finish_job, on_failure: on_discard_job)
       batch.enqueue { worker_job.perform_later }
       row = Pgbus::BatchExecution.find_by!(batch_id: batch.batch_id)
-      # Simulate a backfill that never landed: message is live, row has no msg_id.
+      # Simulate a backfill that never landed: message is live, the row keeps
+      # the insert's logical queue name and no msg_id.
       msg_id = row.msg_id
-      row.update_columns(msg_id: nil, created_at: 1.hour.ago)
+      row.update_columns(msg_id: nil, queue_name: work_queue, created_at: 1.hour.ago)
 
       Pgbus::Batch.sweep_stalled(stalled_for: 0)
 
@@ -304,13 +305,56 @@ RSpec.describe "Batch flow (integration)", :integration do
       end
       row = Pgbus::BatchExecution.where(batch_id: batch.batch_id).order(:id).first
       client.delete_message(work_queue, row.msg_id.to_i)
-      row.update_columns(msg_id: nil, created_at: 1.hour.ago)
+      row.update_columns(msg_id: nil, queue_name: work_queue, created_at: 1.hour.ago)
 
       Pgbus::Batch.sweep_stalled(stalled_for: 0)
 
       expect(Pgbus::BatchEntry.find_by(batch_id: batch.batch_id)).to have_attributes(status: "processing", total_jobs: 1)
       complete_next(batch.batch_id)
       expect(Pgbus::BatchEntry.find_by(batch_id: batch.batch_id).status).to eq("finished")
+    end
+  end
+
+  # Issue #569: a logical queue whose own name starts with the prefix. An
+  # orphan row holds the logical name, a backfilled row the physical table
+  # (pgbus_int_pgbus_int_sweep_work); each probe must use the name it holds.
+  describe "sweep of a queue whose logical name starts with the prefix" do
+    let(:work_queue) { "pgbus_int_sweep_work" }
+
+    it "un-counts an orphan row whose message exists nowhere" do
+      batch = enqueue_batch(on_finish: on_finish_job)
+      row = Pgbus::BatchExecution.where(batch_id: batch.batch_id).order(:id).first
+      client.delete_message(work_queue, row.msg_id.to_i)
+      row.update_columns(msg_id: nil, queue_name: work_queue, created_at: 1.hour.ago)
+
+      Pgbus::Batch.sweep_stalled(stalled_for: 0)
+
+      expect(Pgbus::BatchEntry.find_by(batch_id: batch.batch_id)).to have_attributes(total_jobs: 1)
+    end
+
+    it "resolves an orphan row as failed once its message is dead-lettered" do
+      batch = Pgbus::Batch.new(on_finish: on_finish_job, on_failure: on_discard_job)
+      batch.enqueue { worker_job.perform_later }
+      row = Pgbus::BatchExecution.find_by!(batch_id: batch.batch_id)
+      row.update_columns(msg_id: nil, queue_name: work_queue, created_at: 1.hour.ago)
+      client.move_to_dead_letter(work_queue, client.read_message(work_queue, vt: 30))
+
+      Pgbus::Batch.sweep_stalled(stalled_for: 0)
+
+      expect(Pgbus::BatchEntry.find_by(batch_id: batch.batch_id)).to have_attributes(status: "finished", failed_jobs: 1)
+    end
+
+    it "resolves a backfilled row as failed once its message is dead-lettered" do
+      batch = Pgbus::Batch.new(on_finish: on_finish_job, on_failure: on_discard_job)
+      batch.enqueue { worker_job.perform_later }
+      row = Pgbus::BatchExecution.find_by!(batch_id: batch.batch_id)
+      expect(row.queue_name).to eq("pgbus_int_pgbus_int_sweep_work")
+      row.update_columns(created_at: 1.hour.ago)
+      client.move_to_dead_letter(work_queue, client.read_message(work_queue, vt: 30))
+
+      Pgbus::Batch.sweep_stalled(stalled_for: 0)
+
+      expect(Pgbus::BatchEntry.find_by(batch_id: batch.batch_id)).to have_attributes(status: "finished", failed_jobs: 1)
     end
   end
 

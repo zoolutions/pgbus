@@ -83,7 +83,8 @@ RSpec.describe Pgbus::Batch::Sweep do
 
     it "resolves a row as failed when its message sits in the DLQ" do
       allow(client).to receive(:message_with_job_id?).with("default", job_id: "j1").and_return(false)
-      allow(client).to receive(:message_with_job_id?).with("pgbus_test_default_dlq", job_id: "j1").and_return(true)
+      allow(client).to receive(:message_with_job_id?)
+        .with("pgbus_test_default_dlq", job_id: "j1", prefixed: false).and_return(true)
 
       described_class.send(:sweep_orphan_rows, stalled_for: 300, batch_size: 50, client: client)
 
@@ -101,6 +102,48 @@ RSpec.describe Pgbus::Batch::Sweep do
       expect(swept).to eq(1)
       expect(Pgbus::BatchEntry).to have_received(:decrement_total_jobs!).with("b1")
       expect(Pgbus::Batch).to have_received(:try_finish!).with("b1")
+    end
+  end
+
+  describe ".sweep_stale_executions (issue #569)" do
+    let(:client) { double("client") }
+    # A row with a msg_id was backfilled with the physical table it was sent to.
+    let(:row) do
+      double("BatchExecution", batch_id: "b1", job_id: "j1", msg_id: 42, queue_name: "pgbus_test_default_p1")
+    end
+    let(:relation) { double("relation") }
+
+    before do
+      allow(Pgbus::BatchExecution).to receive_message_chain(:where, :not).and_return(relation) # rubocop:disable RSpec/MessageChain
+      allow(relation).to receive(:where).and_return(relation)
+      allow(relation).to receive(:find_each).and_yield(row)
+      allow(client).to receive(:dead_letter_physical_name)
+        .with("pgbus_test_default_p1", prefixed: false).and_return("pgbus_test_default_dlq")
+      allow(Pgbus::Batch).to receive_messages(job_completed: nil, job_discarded: nil)
+    end
+
+    it "probes the row's physical table as is: queue, DLQ and archive" do
+      allow(client).to receive(:message_in_queue?).with("pgbus_test_default_p1", msg_id: 42, prefixed: false)
+                                                  .and_return(false)
+      allow(client).to receive(:message_with_job_id?).with("pgbus_test_default_dlq", job_id: "j1", prefixed: false)
+                                                     .and_return(false)
+      allow(client).to receive(:message_archived?).with("pgbus_test_default_p1", msg_id: 42, prefixed: false)
+                                                  .and_return(true)
+
+      described_class.send(:sweep_stale_executions, batch_size: 50, client: client, stalled_for: 300)
+
+      expect(Pgbus::Batch).to have_received(:job_completed).with("b1", job_id: "j1")
+    end
+
+    it "resolves the row as failed when the DLQ holds its job" do
+      allow(client).to receive(:message_in_queue?).with("pgbus_test_default_p1", msg_id: 42, prefixed: false)
+                                                  .and_return(false)
+      allow(client).to receive(:message_with_job_id?).with("pgbus_test_default_dlq", job_id: "j1", prefixed: false)
+                                                     .and_return(true)
+
+      described_class.send(:sweep_stale_executions, batch_size: 50, client: client, stalled_for: 300)
+
+      expect(Pgbus::Batch).to have_received(:job_discarded).with("b1", job_id: "j1")
     end
   end
 

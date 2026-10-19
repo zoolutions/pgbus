@@ -656,6 +656,14 @@ RSpec.describe Pgbus::Client do
       expect(client.dead_letter_physical_name("orders_p0")).to eq("pgbus_test_orders_p0_dlq")
     end
 
+    it "prefixes a logical name that itself starts with the prefix (issue #569)" do
+      expect(client.dead_letter_physical_name("pgbus_test_mailers")).to eq("pgbus_test_pgbus_test_mailers_dlq")
+    end
+
+    it "uses a physical name as is with prefixed: false" do
+      expect(client.dead_letter_physical_name("pgbus_test_default", prefixed: false)).to eq("pgbus_test_default_dlq")
+    end
+
     context "when priority levels are configured" do
       let(:config) do
         Pgbus::Configuration.new.tap do |c|
@@ -665,9 +673,14 @@ RSpec.describe Pgbus::Client do
         end
       end
 
-      it "strips a priority suffix so _pN sub-queues share the logical DLQ" do
-        expect(client.dead_letter_physical_name("pgbus_test_default_p0")).to eq("pgbus_test_default_dlq")
-        expect(client.dead_letter_physical_name("default_p2")).to eq("pgbus_test_default_dlq")
+      it "strips a physical sub-queue's priority suffix so _pN sub-queues share the logical DLQ" do
+        expect(client.dead_letter_physical_name("pgbus_test_default_p0", prefixed: false)).to eq("pgbus_test_default_dlq")
+        expect(client.dead_letter_physical_name("pgbus_test_default_p2", prefixed: false)).to eq("pgbus_test_default_dlq")
+      end
+
+      it "keeps a logical name's own _pN: it names a queue, not a sub-queue" do
+        expect(client.dead_letter_physical_name("default")).to eq("pgbus_test_default_dlq")
+        expect(client.dead_letter_physical_name("orders_p2")).to eq("pgbus_test_orders_p2_dlq")
       end
     end
   end
@@ -1232,10 +1245,17 @@ RSpec.describe Pgbus::Client do
       expect(client.message_with_job_id?("default", job_id: "j-1")).to be(true)
     end
 
-    it "probes an already-physical name as itself" do
+    it "probes a physical name as itself with prefixed: false" do
       allow(raw_conn).to receive(:exec_params).with(/pgmq\.q_pgbus_test_default_dlq /, ["j-1"]).and_return(double(ntuples: 0))
 
-      expect(client.message_with_job_id?("pgbus_test_default_dlq", job_id: "j-1")).to be(false)
+      expect(client.message_with_job_id?("pgbus_test_default_dlq", job_id: "j-1", prefixed: false)).to be(false)
+    end
+
+    it "expands a logical name that itself starts with the prefix (issue #569)" do
+      allow(raw_conn).to receive(:exec_params).with(/pgmq\.q_pgbus_test_pgbus_test_mailers /, ["j-1"])
+                                              .and_return(double(ntuples: 1))
+
+      expect(client.message_with_job_id?("pgbus_test_mailers", job_id: "j-1")).to be(true)
     end
 
     it "returns nil (unknown) when the table is missing" do
@@ -1543,9 +1563,15 @@ RSpec.describe Pgbus::Client do
 
   describe "#message_in_queue?" do
     it "delegates to message_exists? by msg_id" do
-      allow(client).to receive(:message_exists?).with("default", msg_id: 7).and_return(true)
+      allow(client).to receive(:message_exists?).with("default", msg_id: 7, prefixed: true).and_return(true)
 
       expect(client.message_in_queue?("default", msg_id: 7)).to be true
+    end
+
+    it "passes prefixed: false through for a physical name" do
+      allow(client).to receive(:message_exists?).with("pgbus_test_default", msg_id: 7, prefixed: false).and_return(true)
+
+      expect(client.message_in_queue?("pgbus_test_default", msg_id: 7, prefixed: false)).to be true
     end
   end
 
@@ -1567,6 +1593,53 @@ RSpec.describe Pgbus::Client do
       allow(conn).to receive(:exec_params).and_return(double("result", ntuples: 0))
 
       expect(client.message_archived?("default", msg_id: 42)).to be false
+    end
+
+    it "prefixes a logical name that itself starts with the prefix (issue #569)" do
+      allow(conn).to receive(:exec_params).with(
+        a_string_matching(/FROM pgmq\.a_pgbus_test_pgbus_test_mailers WHERE/), [42]
+      ).and_return(double("result", ntuples: 1))
+
+      expect(client.message_archived?("pgbus_test_mailers", msg_id: 42)).to be true
+    end
+
+    it "probes a physical name's archive as is with prefixed: false" do
+      allow(conn).to receive(:exec_params).with(
+        a_string_matching(/FROM pgmq\.a_pgbus_test_default_p1 WHERE/), [42]
+      ).and_return(double("result", ntuples: 1))
+
+      expect(client.message_archived?("pgbus_test_default_p1", msg_id: 42, prefixed: false)).to be true
+    end
+
+    context "when priority sub-queues are enabled" do
+      before do
+        config.priority_levels = 3
+        client.instance_variable_set(:@queue_strategy, Pgbus::QueueFactory.for(config))
+        stub_const("PG::UndefinedTable", Class.new(StandardError)) unless defined?(PG::UndefinedTable)
+      end
+
+      after { config.priority_levels = nil }
+
+      it "expands a logical name to every _pN archive and returns true on a hit" do
+        allow(conn).to receive(:exec_params) do |sql, _binds|
+          double("result", ntuples: sql.include?("a_pgbus_test_default_p1 ") ? 1 : 0)
+        end
+
+        expect(client.message_archived?("default", msg_id: 42)).to be true
+      end
+
+      it "returns false when every archive was probed and none holds the msg_id" do
+        allow(conn).to receive(:exec_params).and_return(double("result", ntuples: 0))
+
+        expect(client.message_archived?("default", msg_id: 42)).to be false
+        expect(conn).to have_received(:exec_params).exactly(3).times
+      end
+
+      it "returns nil when every archive table is missing" do
+        allow(conn).to receive(:exec_params).and_raise(PG::UndefinedTable, "relation does not exist")
+
+        expect(client.message_archived?("default", msg_id: 42)).to be_nil
+      end
     end
   end
 
@@ -1638,13 +1711,22 @@ RSpec.describe Pgbus::Client do
         expect(client.message_exists?("default", msg_id: 42)).to be(false)
       end
 
-      it "accepts an already-prefixed physical queue name" do
+      it "probes a physical queue name as is with prefixed: false" do
         allow(conn).to receive(:exec_params).with(
-          a_string_matching(/pgmq\.q_pgbus_test_default/),
+          a_string_matching(/FROM pgmq\.q_pgbus_test_default WHERE/),
           [42]
         ).and_return(double("result", ntuples: 1))
 
-        expect(client.message_exists?("pgbus_test_default", msg_id: 42)).to be(true)
+        expect(client.message_exists?("pgbus_test_default", msg_id: 42, prefixed: false)).to be(true)
+      end
+
+      it "expands a logical name that itself starts with the prefix (issue #569)" do
+        allow(conn).to receive(:exec_params).with(
+          a_string_matching(/FROM pgmq\.q_pgbus_test_pgbus_test_mailers WHERE/),
+          [42]
+        ).and_return(double("result", ntuples: 1))
+
+        expect(client.message_exists?("pgbus_test_mailers", msg_id: 42)).to be(true)
       end
     end
 
