@@ -1724,7 +1724,9 @@ module Pgbus
       # The physical queue holding a failed job's message, or nil when it is
       # gone. The row records the logical queue only, and under priority
       # routing a msg_id repeats across the _pN sub-queues, so the job's
-      # job_id must match too (issue #577).
+      # job_id must match too (issue #577). Two sub-queues' failures with the
+      # same msg_id share one row, which keeps the first one's payload: that
+      # is the message found (issue #583).
       def failed_message_queue(event)
         return unless event["queue_name"] && event["msg_id"]
 
