@@ -1,0 +1,22 @@
+spec/pgbus/web/data_source_dashboard_signals_spec.rb
+  s_0530e423b65674::t_4e2c3fa117d948 38
+  s_0530e423b65674::t_ccb8352d0c3b3a 78-79
+spec/integration_helper.rb
+  s_0530e423b65674::t_4e2c3fa117d948 92
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "da8d38728bb7c7fd9ae62bb0bcb014ad69c8829c",
+  "prompts": {},
+  "sessions": {
+    "s_0530e423b65674": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8b0a3559-361c-4658-b524-183990dcc762",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
