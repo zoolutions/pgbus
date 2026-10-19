@@ -1,0 +1,42 @@
+spec/integration/failed_events_source_queue_migration_spec.rb
+  s_0530e423b65674::t_8d8f8a6f7862a4 12
+  s_0530e423b65674::t_5c49ace955f301 104-115
+lib/generators/pgbus/templates/add_failed_events_unique_index.rb.erb
+  s_0530e423b65674::t_0cdc63431f68db 3-7
+spec/pgbus/generators/migration_detector_spec.rb
+  s_0530e423b65674::t_11bbd4901d154e 414-423
+spec/generators/pgbus/add_failed_events_index_generator_spec.rb
+  s_0530e423b65674::t_5a6b994ee04a88 44-53
+lib/pgbus/web/data_source.rb
+  s_0530e423b65674::t_12ee4e23728e70 1630,1632,1637-1638,1642,1644-1645,1655-1656,1667-1670,1672,1674-1675
+lib/pgbus/failed_event_recorder.rb
+  s_0530e423b65674::t_60ffb2299f2140 18-21,117-121,123-128,131-136,156-167,169
+spec/pgbus/web/data_source_spec.rb
+  s_0530e423b65674::t_e2c9a054cd56b6 575,655-670
+  s_0530e423b65674::t_098a339f962d89 877-879
+lib/pgbus/generators/migration_detector.rb
+  s_0530e423b65674::t_95b562aed5afa3 277-278,282-283
+spec/pgbus/failed_event_recorder_spec.rb
+  s_0530e423b65674::t_37a60943c581a7 45-66
+spec/integration/dashboard_failed_lock_priority_spec.rb
+  s_0530e423b65674::t_6645d9f45187d7 53-55,61-63,83-85,91,96-106
+spec/integration/failed_events_unmigrated_spec.rb
+  s_0530e423b65674::t_53206ebbe64174 8-11,32-39,41-46
+  s_0530e423b65674::t_00ae68edbb84c7 1-7,12-31,40,47-79
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "0c505e16f5ee695d3470d6997a4c32f7d3066b3c",
+  "prompts": {},
+  "sessions": {
+    "s_0530e423b65674": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8b0a3559-361c-4658-b524-183990dcc762",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
