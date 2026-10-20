@@ -32,6 +32,7 @@ module Pgbus
       end
 
       def start
+        @started = true
         register_process
         @timer = Concurrent::TimerTask.new(execution_interval: INTERVAL) { beat }
         @timer.execute
@@ -44,7 +45,8 @@ module Pgbus
       end
 
       def beat
-        return unless @process_id && !@stopped
+        return if @stopped
+        return retry_registration unless @process_id
 
         @on_beat&.call
         updates = { last_heartbeat_at: Time.current }
@@ -56,6 +58,15 @@ module Pgbus
       end
 
       private
+
+      # The registration at start failed (a DB blip at boot). Retry it here so
+      # the process does not stay invisible: a pipeless child checks in with
+      # the supervisor's boot deadline only through this row (issue #587).
+      def retry_registration
+        return unless @started
+
+        @mutex.synchronize { register_process unless @stopped }
+      end
 
       # Build the metadata hash to persist on this beat. Returns nil when no
       # supplier is configured so heartbeats without dynamic metadata

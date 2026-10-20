@@ -15,6 +15,7 @@ class Views::Docs::Pages::RunningWorkers < DocsUI::Page
     roles
     recycling
     processes
+    watchdog
     circuit_breaker
     connection_circuit_breaker
     read_timeouts
@@ -185,7 +186,7 @@ class Views::Docs::Pages::RunningWorkers < DocsUI::Page
         and concurrency controls behave as with one process. Each fork has its own
         restart backoff, liveness pipe and `pgbus_processes` row; a crashed fork
         restarts alone. The boot banner prints `processes=N`, readiness counts every
-        fork, and the Processes page labels each row `capsule render ·
+        fork once it has checked in, and the Processes page labels each row `capsule render ·
         process 2/4`.
 
         Budget `boot RSS + peak job RSS` per process; the forks share the booted
@@ -198,6 +199,64 @@ class Views::Docs::Pages::RunningWorkers < DocsUI::Page
         single-queue capsule the extra forks are hot standbys.
 
         When to reach for which, with worked examples: [Sizing capsules](/docs/sizing-capsules).
+      MD
+    end
+  end
+
+  def watchdog
+    DocsUI::Section("Supervisor watchdog", description: "Wedged children are killed and forked again.") do
+      md <<~'MD'
+        The supervisor restarts a child that exits, with crash-loop backoff. Every
+        10 seconds its watchdog also looks for children that are alive but stuck,
+        and SIGKILLs them so the same restart path forks them again:
+
+        - **A child that never checks in.** A fork checks in when it registers its
+          `pgbus_processes` row on this host (every kind), or writes its first
+          liveness byte (workers and consumers). A row older than the fork, left
+          by a killed predecessor with the same pid, does not count. One that has
+          done neither `boot_timeout` seconds after the fork (default 120) is hung
+          in boot (an initializer, an eager load, a connection) and is killed.
+          Its restart always gets the crash-loop backoff (1 second, doubling up
+          to 60), so a boot that hangs every time is not re-forked at full speed.
+          Set `boot_timeout` above your slowest cold boot; `nil` turns it off.
+        - **A worker or consumer whose loop stopped.** Once checked in, a worker or
+          consumer whose claim loop has not advanced for `stall_threshold`
+          seconds (default 90) on both its process row and its liveness pipe is
+          killed. A dispatcher, scheduler or outbox poller has no loop beacon, so
+          only the boot deadline applies to it.
+
+        When the watchdog's own read of the process table fails, it skips the
+        boot deadline for that pass rather than kill children it cannot see, and
+        keeps judging loops on the liveness pipe.
+      MD
+      DocsUI::Code(<<~RUBY, filename: "config/initializers/pgbus.rb")
+        Pgbus.configure do |config|
+          config.boot_timeout    = 180 # a slow cold boot
+          config.stall_threshold = 90
+        end
+      RUBY
+      md <<~'MD'
+        Before each SIGKILL the watchdog logs the reason at ERROR (`boot timeout` or
+        `claim loop stalled`) and sends the child `TTIN`, then waits 2 seconds.
+        Every pgbus child answers `TTIN` by logging each of its threads with its
+        backtrace at ERROR, so the log shows where a hang sat. You can send it
+        yourself to a running child; it keeps running:
+      MD
+      DocsUI::Code(<<~SHELL, lexer: :shell)
+        kill -TTIN <child pid>
+      SHELL
+      md <<~'MD'
+        The dump is best effort: a child blocked in native code that holds the GVL
+        never runs the handler, and is killed without one.
+
+        On the supervisor's standalone `/readyz`, `forked` is the number of children
+        in the fork table and `live` the number that have checked in. A child that
+        is still booting, or hung before its first check-in, keeps
+        `live < expected` and the probe at 503 `DEGRADED`. A dispatcher, scheduler
+        or outbox poller checks in through its process row, which the watchdog
+        reads every 10 seconds, so `/readyz` can turn 200 up to 10 seconds after
+        the last one registers, and stays at 503 while the database is
+        unreachable. See [Rolling restarts](/docs/rolling-restarts).
       MD
     end
   end

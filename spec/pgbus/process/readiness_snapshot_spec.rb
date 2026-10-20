@@ -35,6 +35,29 @@ RSpec.describe Pgbus::Process::ReadinessSnapshot do
     end
   end
 
+  # Issue #587: forked counts the fork table, live only the children that
+  # checked in. A wedged boot keeps live < expected.
+  describe "#forked" do
+    it "defaults to live when not given" do
+      snapshot = described_class.new(booted: true, shutting_down: false, expected: 3, live: 2)
+
+      expect(snapshot.forked).to eq(2)
+    end
+
+    it "is not ready while a forked child has not checked in" do
+      snapshot = described_class.new(booted: true, shutting_down: false, expected: 6, live: 5, forked: 6)
+
+      expect(snapshot.ready?).to be false
+      expect(snapshot.status).to eq("DEGRADED")
+    end
+
+    it "is ready once every forked child has checked in" do
+      snapshot = described_class.new(booted: true, shutting_down: false, expected: 6, live: 6, forked: 6)
+
+      expect(snapshot.ready?).to be true
+    end
+  end
+
   describe "#status" do
     it "reports BOOTING before boot completes" do
       snapshot = described_class.new(booted: false, shutting_down: false, expected: 0, live: 0)

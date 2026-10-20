@@ -24,6 +24,8 @@ module Pgbus
     def batch_stall_threshold=: (untyped value) -> untyped
     def batch_sweep_interval: () -> Numeric?
     def batch_sweep_interval=: (untyped value) -> untyped
+    def boot_timeout: () -> Numeric?
+    def boot_timeout=: (untyped) -> untyped
     def capsule: (untyped name, queues: untyped, threads: untyped, **untyped options) -> untyped
     def capsule_named: (untyped name) -> untyped
     def circuit_breaker_enabled: () -> bool

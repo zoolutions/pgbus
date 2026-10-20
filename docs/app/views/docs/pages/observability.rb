@@ -244,8 +244,8 @@ class Views::Docs::Pages::Observability < DocsUI::Page
         `STALLED` verdict as the MCP `pgbus_health` tool — `DEGRADED` deliberately
         stays ready; only the silent-wedge `STALLED` signal fails readiness. Served
         standalone from the supervisor (`health_port`), `/readyz` is
-        **container-local**: did *this* supervisor finish booting, and are all the
-        children it forked alive? That is the signal a rolling deploy's health gate
+        **container-local**: did *this* supervisor finish booting, and have all the
+        children it forked checked in? That is the signal a rolling deploy's health gate
         needs — see [Rolling restarts](/docs/rolling-restarts).
       MD
       DocsUI::Table(
@@ -254,8 +254,8 @@ class Views::Docs::Pages::Observability < DocsUI::Page
           [ [ :code, "/livez" ], "GET", [ :md, "always (`ok`)" ], "never", "no" ],
           [ [ :md, "`/readyz` (mounted)" ], "GET", [ :md, "verdict `OK` or `DEGRADED`" ],
             [ :md, "verdict `STALLED`, or DB unreachable (`{\"status\":\"ERROR\"}`)" ], "yes" ],
-          [ [ :md, "`/readyz` (supervisor)" ], "GET", [ :md, "`OK` — booted, all children live" ],
-            [ :md, "`BOOTING`, `DEGRADED` (child down), `DRAINING` (stopping)" ], "no" ]
+          [ [ :md, "`/readyz` (supervisor)" ], "GET", [ :md, "`OK` — booted, all children checked in" ],
+            [ :md, "`BOOTING`, `DEGRADED` (child down or not checked in), `DRAINING` (stopping)" ], "no" ]
         ]
       )
       md <<~'MD'

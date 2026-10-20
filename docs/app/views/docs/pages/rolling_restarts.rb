@@ -50,19 +50,22 @@ class Views::Docs::Pages::RollingRestarts < DocsUI::Page
         one had forked a single child. (The Rails-mounted `Pgbus::Web::HealthApp`
         keeps the cluster-wide verdict — the two probes answer different questions.)
 
-        The body is a snapshot of the supervisor's fork table:
+        The body is a snapshot of the supervisor's fork table. `forked` counts the
+        children in it; `live` counts those that have checked in (registered their
+        process row, or written their first liveness byte), so a child hung in boot
+        is forked but not live:
       MD
       DocsUI::Code(<<~'JSON', filename: "GET /readyz", lexer: :json)
-        { "status": "OK", "expected": 3, "live": 3 }
+        { "status": "OK", "expected": 3, "live": 3, "forked": 3 }
       JSON
       DocsUI::Table(
         [ "Status", "HTTP", "Meaning" ],
         [
           [ [ :code, "BOOTING" ], "503",
             "Connection not yet verified, queues not bootstrapped, or children not yet forked." ],
-          [ [ :code, "OK" ], "200", "Every child forked at boot is currently alive." ],
+          [ [ :code, "OK" ], "200", "Every child forked at boot is alive and has checked in." ],
           [ [ :code, "DEGRADED" ], "503",
-            "A child died and is waiting out crash-restart backoff." ],
+            "A child died and is waiting out crash-restart backoff, or has not checked in yet." ],
           [ [ :code, "DRAINING" ], "503", "A stop signal arrived; the container is leaving." ]
         ]
       )

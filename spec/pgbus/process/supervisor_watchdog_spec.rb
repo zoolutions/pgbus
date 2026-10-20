@@ -10,11 +10,23 @@ RSpec.describe Pgbus::Process::Supervisor do
 
     before do
       allow(Pgbus::Process::Heartbeat).to receive(:new).and_return(mock_heartbeat)
+      # The TTIN-to-KILL grace is a real 2s sleep in production.
+      allow(supervisor).to receive(:dump_grace_sleep)
       config.stall_threshold = 90
+      config.boot_timeout = 120
     end
 
     after do
       config.stall_threshold = 90
+      config.boot_timeout = 120
+    end
+
+    # Records Process.kill calls and the TTIN grace in the order they happen.
+    def record_kill_sequence
+      calls = []
+      allow(Process).to receive(:kill) { |sig, pid| calls << [sig, pid] }
+      allow(supervisor).to receive(:dump_grace_sleep) { calls << :grace }
+      calls
     end
 
     describe "check_stalled_workers (private)" do
@@ -42,7 +54,7 @@ RSpec.describe Pgbus::Process::Supervisor do
 
       it "kills a worker whose loop_tick_at exceeds stall_threshold" do
         allow(Pgbus::ProcessEntry).to receive(:where)
-          .with(kind: %w[worker consumer], pid: [1001, 1002])
+          .with(hostname: Socket.gethostname, pid: [1001, 1002])
           .and_return(double(to_a: [stalled_entry, healthy_entry]))
         allow(Process).to receive(:kill)
 
@@ -54,7 +66,7 @@ RSpec.describe Pgbus::Process::Supervisor do
 
       it "does not kill a worker within threshold" do
         allow(Pgbus::ProcessEntry).to receive(:where)
-          .with(kind: %w[worker consumer], pid: [1001, 1002])
+          .with(hostname: Socket.gethostname, pid: [1001, 1002])
           .and_return(double(to_a: [healthy_entry]))
         allow(Process).to receive(:kill)
 
@@ -63,8 +75,9 @@ RSpec.describe Pgbus::Process::Supervisor do
         expect(Process).not_to have_received(:kill)
       end
 
-      it "skips when stall_threshold is nil" do
+      it "skips the DB when stall_threshold is nil and every fork has checked in" do
         config.stall_threshold = nil
+        supervisor.forks.each_value { |info| info[:checked_in] = true }
         allow(Pgbus::ProcessEntry).to receive(:where)
         allow(Process).to receive(:kill)
 
@@ -76,9 +89,9 @@ RSpec.describe Pgbus::Process::Supervisor do
 
       it "handles Errno::ESRCH when process is already gone" do
         allow(Pgbus::ProcessEntry).to receive(:where)
-          .with(kind: %w[worker consumer], pid: [1001, 1002])
+          .with(hostname: Socket.gethostname, pid: [1001, 1002])
           .and_return(double(to_a: [stalled_entry]))
-        allow(Process).to receive(:kill).with("KILL", 1001).and_raise(Errno::ESRCH)
+        allow(Process).to receive(:kill).and_raise(Errno::ESRCH)
 
         expect { supervisor.send(:check_stalled_workers) }.not_to raise_error
       end
@@ -88,7 +101,7 @@ RSpec.describe Pgbus::Process::Supervisor do
                                kind: "worker", pid: 1001,
                                metadata: { "queues" => ["default"] })
         allow(Pgbus::ProcessEntry).to receive(:where)
-          .with(kind: %w[worker consumer], pid: [1001, 1002])
+          .with(hostname: Socket.gethostname, pid: [1001, 1002])
           .and_return(double(to_a: [entry_no_tick]))
         allow(Process).to receive(:kill)
 
@@ -106,10 +119,10 @@ RSpec.describe Pgbus::Process::Supervisor do
         expect(Pgbus::ProcessEntry).not_to have_received(:where)
       end
 
-      it "does not check non-worker forks" do
+      it "does not check non-worker forks once they have checked in" do
         supervisor.forks = {
-          2001 => { type: :dispatcher },
-          2002 => { type: :scheduler }
+          2001 => { type: :dispatcher, checked_in: true },
+          2002 => { type: :scheduler, checked_in: true }
         }
 
         allow(Pgbus::ProcessEntry).to receive(:where)
@@ -142,20 +155,20 @@ RSpec.describe Pgbus::Process::Supervisor do
         supervisor.last_watchdog_at = 0.0
       end
 
-      it "queries the process table for worker AND consumer kinds" do
+      it "queries this host's process rows for consumer forks" do
         allow(Pgbus::ProcessEntry).to receive(:where)
-          .with(kind: %w[worker consumer], pid: [4001])
+          .with(hostname: Socket.gethostname, pid: [4001])
           .and_return(double(to_a: []))
         allow(Process).to receive(:kill)
 
         supervisor.send(:check_stalled_workers)
 
-        expect(Pgbus::ProcessEntry).to have_received(:where).with(kind: %w[worker consumer], pid: [4001])
+        expect(Pgbus::ProcessEntry).to have_received(:where).with(hostname: Socket.gethostname, pid: [4001])
       end
 
       it "kills a consumer whose loop_tick_at exceeds stall_threshold" do
         allow(Pgbus::ProcessEntry).to receive(:where)
-          .with(kind: %w[worker consumer], pid: [4001])
+          .with(hostname: Socket.gethostname, pid: [4001])
           .and_return(double(to_a: [stalled_consumer]))
         allow(Process).to receive(:kill)
 
@@ -169,7 +182,7 @@ RSpec.describe Pgbus::Process::Supervisor do
         allow(Pgbus::ProcessEntry).to receive(:where).and_raise(StandardError, "connection lost")
         supervisor.forks = {
           4001 => { type: :consumer, config: { topics: ["orders.#"] },
-                    liveness_reader: nil, last_pipe_tick_at: now - 120, pipe_seen: true }
+                    liveness_reader: nil, last_pipe_tick_at: now - 120, pipe_seen: true, checked_in: true }
         }
         allow(Process).to receive(:kill)
 
@@ -190,12 +203,12 @@ RSpec.describe Pgbus::Process::Supervisor do
         allow(Process).to receive(:kill)
       end
 
-      def set_forks(pid, last_pipe_tick_at:, pipe_seen:)
+      def set_forks(pid, last_pipe_tick_at:, pipe_seen:, spawned_at: nil)
         supervisor.forks = {
           pid => { type: :worker, config: { queues: ["default"] },
-                   liveness_reader: nil,
+                   liveness_reader: nil, spawned_at: spawned_at,
                    last_pipe_tick_at: last_pipe_tick_at,
-                   pipe_seen: pipe_seen }
+                   pipe_seen: pipe_seen, checked_in: pipe_seen }
         }
       end
 
@@ -219,8 +232,9 @@ RSpec.describe Pgbus::Process::Supervisor do
 
       it "does NOT kill a worker whose pipe is unarmed (booting, no byte seen yet)" do
         allow(Pgbus::ProcessEntry).to receive(:where).and_raise(StandardError, "connection lost")
-        # Seeded far in the past but never armed — a slow-booting worker.
-        set_forks(1001, last_pipe_tick_at: now - 999, pipe_seen: false)
+        # Seeded far in the past but never armed — a slow-booting worker,
+        # forked inside the boot window.
+        set_forks(1001, last_pipe_tick_at: now - 999, pipe_seen: false, spawned_at: now - 5)
 
         supervisor.send(:check_stalled_workers)
 
@@ -231,7 +245,7 @@ RSpec.describe Pgbus::Process::Supervisor do
         stale_db = double("ProcessEntry", kind: "worker", pid: 1001,
                                           metadata: { "loop_tick_at" => (Time.now.to_f - 300) })
         allow(Pgbus::ProcessEntry).to receive(:where)
-          .with(kind: %w[worker consumer], pid: [1001])
+          .with(hostname: Socket.gethostname, pid: [1001])
           .and_return(double(to_a: [stale_db]))
         set_forks(1001, last_pipe_tick_at: now - 1, pipe_seen: true)
 
@@ -244,13 +258,284 @@ RSpec.describe Pgbus::Process::Supervisor do
         stale_db = double("ProcessEntry", kind: "worker", pid: 1001,
                                           metadata: { "loop_tick_at" => (Time.now.to_f - 300) })
         allow(Pgbus::ProcessEntry).to receive(:where)
-          .with(kind: %w[worker consumer], pid: [1001])
+          .with(hostname: Socket.gethostname, pid: [1001])
           .and_return(double(to_a: [stale_db]))
         set_forks(1001, last_pipe_tick_at: now - 120, pipe_seen: true)
 
         supervisor.send(:check_stalled_workers)
 
         expect(Process).to have_received(:kill).with("KILL", 1001)
+      end
+    end
+
+    # Issue #587: a child that forks and hangs before its first liveness signal
+    # (no process row on this host, no pipe byte) used to be skipped forever.
+    describe "boot deadline (issue #587)" do
+      let(:now) { Process.clock_gettime(Process::CLOCK_MONOTONIC) }
+      let(:log_output) { StringIO.new }
+
+      before do
+        supervisor.last_watchdog_at = 0.0
+        allow(Process).to receive(:kill)
+        allow(Pgbus::ProcessEntry).to receive(:where).and_return(double(to_a: []))
+        allow(Pgbus).to receive(:logger).and_return(Logger.new(log_output))
+      end
+
+      def pending_fork(type, spawned_ago:)
+        info = { type: type, spawned_at: now - spawned_ago, spawned_wall_at: Time.current - spawned_ago,
+                 checked_in: false }
+        if %i[worker consumer].include?(type)
+          info.merge!(config: {}, liveness_reader: nil, last_pipe_tick_at: now - spawned_ago, pipe_seen: false)
+        end
+        info
+      end
+
+      %i[worker consumer dispatcher scheduler outbox_poller].each do |type|
+        it "logs, sends TTIN, waits the grace, then SIGKILLs a #{type} that never checked in" do
+          supervisor.forks = { 4242 => pending_fork(type, spawned_ago: 600) }
+          calls = record_kill_sequence
+
+          supervisor.send(:check_stalled_workers)
+
+          expect(calls).to eq([["TTIN", 4242], :grace, ["KILL", 4242]])
+          expect(log_output.string).to match(/ERROR.*#{type} pid=4242 boot timeout/)
+        end
+      end
+
+      it "reads only this host's process rows" do
+        supervisor.forks = { 4242 => pending_fork(:dispatcher, spawned_ago: 5) }
+
+        supervisor.send(:check_stalled_workers)
+
+        expect(Pgbus::ProcessEntry).to have_received(:where).with(hostname: Socket.gethostname, pid: [4242])
+      end
+
+      it "tolerates a slow-but-alive boot inside the window" do
+        supervisor.forks = { 4242 => pending_fork(:worker, spawned_ago: 5) }
+
+        supervisor.send(:check_stalled_workers)
+
+        expect(Process).not_to have_received(:kill)
+      end
+
+      it "does nothing when boot_timeout is nil" do
+        config.boot_timeout = nil
+        supervisor.forks = { 4242 => pending_fork(:dispatcher, spawned_ago: 600) }
+
+        supervisor.send(:check_stalled_workers)
+
+        expect(Process).not_to have_received(:kill)
+      end
+
+      def row_for(pid, kind, heartbeat_at: Time.current)
+        double("ProcessEntry", kind: kind, pid: pid, metadata: {}, last_heartbeat_at: heartbeat_at)
+      end
+
+      it "still marks forks checked in from their process row when both thresholds are nil" do
+        config.boot_timeout = nil
+        config.stall_threshold = nil
+        supervisor.forks = { 4242 => pending_fork(:dispatcher, spawned_ago: 5) }
+        row = row_for(4242, "dispatcher")
+        allow(Pgbus::ProcessEntry).to receive(:where).and_return(double(to_a: [row]))
+
+        supervisor.send(:check_stalled_workers)
+
+        expect(supervisor.forks[4242][:checked_in]).to be(true)
+      end
+
+      it "never kills a fork that checked in with a process row, past the window" do
+        supervisor.forks = { 4242 => pending_fork(:dispatcher, spawned_ago: 600) }
+        row = row_for(4242, "dispatcher", heartbeat_at: Time.current - 60)
+        allow(Pgbus::ProcessEntry).to receive(:where).and_return(double(to_a: [row]))
+
+        supervisor.send(:check_stalled_workers)
+
+        expect(Process).not_to have_received(:kill)
+        expect(supervisor.forks[4242][:checked_in]).to be(true)
+      end
+
+      # A SIGKILLed or OOM-killed predecessor never deletes its row, and after
+      # a container restart in place the same pids come back on the same
+      # hostname. A row whose last beat predates this fork is not this child.
+      it "ignores a row last beaten before the fork, and kills the hung child" do
+        supervisor.forks = { 4242 => pending_fork(:dispatcher, spawned_ago: 600) }
+        stale = row_for(4242, "dispatcher", heartbeat_at: Time.current - 900)
+        allow(Pgbus::ProcessEntry).to receive(:where).and_return(double(to_a: [stale]))
+
+        supervisor.send(:check_stalled_workers)
+
+        expect(supervisor.forks[4242][:checked_in]).to be(false)
+        expect(Process).to have_received(:kill).with("KILL", 4242)
+      end
+
+      it "checks in a row registered in the fork's own second on a whole-second column" do
+        fork = pending_fork(:dispatcher, spawned_ago: 600)
+        fork[:spawned_wall_at] = Time.at(fork[:spawned_wall_at].to_i + 0.75)
+        supervisor.forks = { 4242 => fork }
+        row = row_for(4242, "dispatcher", heartbeat_at: fork[:spawned_wall_at].floor)
+        allow(Pgbus::ProcessEntry).to receive(:where).and_return(double(to_a: [row]))
+
+        supervisor.send(:check_stalled_workers)
+
+        expect(supervisor.forks[4242][:checked_in]).to be(true)
+      end
+
+      it "marks a boot-deadline victim so its restart backs off" do
+        supervisor.forks = { 4242 => pending_fork(:dispatcher, spawned_ago: 600) }
+
+        supervisor.send(:check_stalled_workers)
+
+        expect(supervisor.forks[4242][:boot_timed_out]).to be(true)
+      end
+
+      it "never kills a worker that checked in over the pipe, past the window" do
+        supervisor.forks = {
+          4242 => pending_fork(:worker, spawned_ago: 600).merge(pipe_seen: true, checked_in: true,
+                                                                last_pipe_tick_at: now - 1)
+        }
+
+        supervisor.send(:check_stalled_workers)
+
+        expect(Process).not_to have_received(:kill)
+      end
+
+      it "leaves a checked-in worker to the stall rules, whatever its age" do
+        config.stall_threshold = nil
+        supervisor.forks = {
+          4242 => pending_fork(:worker, spawned_ago: 600).merge(pipe_seen: true, checked_in: true,
+                                                                last_pipe_tick_at: now - 500)
+        }
+
+        supervisor.send(:check_stalled_workers)
+
+        expect(Process).not_to have_received(:kill)
+      end
+
+      it "applies no boot deadline when the process-row read fails" do
+        allow(Pgbus::ProcessEntry).to receive(:where).and_raise(StandardError, "connection lost")
+        supervisor.forks = { 4242 => pending_fork(:dispatcher, spawned_ago: 600) }
+
+        supervisor.send(:check_stalled_workers)
+
+        expect(Process).not_to have_received(:kill)
+      end
+
+      it "ignores a fork with no spawned_at" do
+        supervisor.forks = { 4242 => { type: :dispatcher, checked_in: false } }
+
+        supervisor.send(:check_stalled_workers)
+
+        expect(Process).not_to have_received(:kill)
+      end
+
+      it "waits one grace for every child killed in the same pass" do
+        supervisor.forks = {
+          4242 => pending_fork(:dispatcher, spawned_ago: 600),
+          4243 => pending_fork(:scheduler, spawned_ago: 600)
+        }
+
+        supervisor.send(:check_stalled_workers)
+
+        expect(supervisor).to have_received(:dump_grace_sleep).once
+        expect(Process).to have_received(:kill).with("KILL", 4242)
+        expect(Process).to have_received(:kill).with("KILL", 4243)
+      end
+
+      it "does not SIGKILL a child that is already gone at TTIN" do
+        allow(Process).to receive(:kill).with("TTIN", 4242).and_raise(Errno::ESRCH)
+        supervisor.forks = { 4242 => pending_fork(:dispatcher, spawned_ago: 600) }
+
+        supervisor.send(:check_stalled_workers)
+
+        expect(Process).not_to have_received(:kill).with("KILL", 4242)
+      end
+
+      it "re-forks the killed child through the restart path once it is reaped" do
+        supervisor.forks = { 4242 => pending_fork(:dispatcher, spawned_ago: 600) }
+        supervisor.send(:check_stalled_workers)
+        killed = instance_double(Process::Status, success?: false, exitstatus: nil, signaled?: true, termsig: 9)
+        allow(Process).to receive(:waitpid2).and_return([4242, killed], nil)
+        allow(supervisor).to receive(:fork_dispatcher)
+
+        supervisor.send(:reap_children)
+        # Past the first crash backoff (1s): a boot-deadline kill backs off.
+        allow(supervisor).to receive(:monotonic_now).and_return(now + 2)
+        supervisor.send(:process_pending_restarts)
+
+        expect(supervisor.forks).not_to have_key(4242)
+        expect(supervisor).to have_received(:fork_dispatcher)
+      end
+    end
+
+    describe "stall kill sequence (issue #587)" do
+      it "sends TTIN and waits the grace before the stall SIGKILL" do
+        supervisor.forks = { 1001 => { type: :worker, config: {} } }
+        supervisor.last_watchdog_at = 0.0
+        stale = double("ProcessEntry", kind: "worker", pid: 1001,
+                                       metadata: { "loop_tick_at" => (Time.now.to_f - 120) })
+        allow(Pgbus::ProcessEntry).to receive(:where).and_return(double(to_a: [stale]))
+        calls = record_kill_sequence
+
+        supervisor.send(:check_stalled_workers)
+
+        expect(calls).to eq([["TTIN", 1001], :grace, ["KILL", 1001]])
+      end
+    end
+
+    # Issue #587: `kill -TTIN <child>` dumps every thread's backtrace to the
+    # pgbus logger and the child keeps running. A real fork, because the
+    # handler runs in trap context, where Logger cannot take its lock.
+    describe "thread dump on TTIN (issue #587)" do
+      let!(:log) { Tempfile.new("pgbus-ttin") } # created before the fork, so both sides share the path
+
+      after { log.close! }
+
+      # Fork a child that runs the real child setup, parks a named thread in
+      # sleep, and reports ready. Never returns in the child.
+      def fork_parked_child
+        ready_r, ready_w = IO.pipe
+        pid = fork do
+          ready_r.close
+          Pgbus.configuration.logger = Logger.new(log.path)
+          supervisor.send(:setup_child_process)
+          Thread.new { sleep }.name = "parked-helper" # rubocop:disable ThreadSafety/NewThread
+          ready_w.write("1")
+          loop { sleep 0.05 }
+        ensure
+          exit!(1)
+        end
+        ready_w.close
+        ready_r.read(1)
+        ready_r.close
+        pid
+      end
+
+      def wait_for_log(text, timeout: 5)
+        deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + timeout
+        sleep 0.05 until File.read(log.path).include?(text) ||
+                         Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
+        File.read(log.path)
+      end
+
+      def kill_child(pid)
+        Process.kill("KILL", pid)
+        Process.waitpid(pid)
+      rescue Errno::ESRCH, Errno::ECHILD
+        nil
+      end
+
+      it "logs every thread's backtrace and keeps the child running" do
+        pid = fork_parked_child
+
+        Process.kill("TTIN", pid)
+        output = wait_for_log("parked-helper")
+
+        expect(output).to include("Thread dump pid=#{pid}")
+        # Ruby 3.3 prints a frame as "in `sleep'", 3.4+ as "in 'Kernel#sleep'".
+        expect(output).to match(/ERROR.*parked-helper.*\n.*in [`'](Kernel#)?sleep'/)
+        expect(Process.waitpid(pid, Process::WNOHANG)).to be_nil
+      ensure
+        kill_child(pid) if pid
       end
     end
 
@@ -269,6 +554,7 @@ RSpec.describe Pgbus::Process::Supervisor do
 
         info = supervisor.forks[1001]
         expect(info[:pipe_seen]).to be(true)
+        expect(info[:checked_in]).to be(true)
         expect(info[:last_pipe_tick_at]).to be > 0.0
       ensure
         reader.close unless reader.closed?

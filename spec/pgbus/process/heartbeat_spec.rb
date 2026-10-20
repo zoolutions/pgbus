@@ -93,6 +93,33 @@ RSpec.describe Pgbus::Process::Heartbeat do
       end
     end
 
+    # Issue #587: a pipeless child checks in with the supervisor only through
+    # its row, so a registration that failed once (a DB blip at boot) is
+    # retried on the next beat instead of leaving the process invisible.
+    context "when the registration at start failed" do
+      before do
+        allow(Pgbus::ProcessEntry).to receive(:create!).and_invoke(
+          ->(**) { raise StandardError, "db down" },
+          ->(**) { process_record }
+        )
+        allow(Pgbus.logger).to receive(:warn)
+        heartbeat.start
+      end
+
+      it "registers on the next beat" do
+        heartbeat.beat
+
+        expect(Pgbus::ProcessEntry).to have_received(:create!).twice
+      end
+
+      it "does not register after stop" do
+        heartbeat.stop
+        heartbeat.beat
+
+        expect(Pgbus::ProcessEntry).to have_received(:create!).once
+      end
+    end
+
     # The row can vanish underneath a live process (stale-process reaper after
     # a heartbeat gap, manual cleanup, another host's clock skew). update_all
     # by id then matches 0 rows and raises nothing — the process must

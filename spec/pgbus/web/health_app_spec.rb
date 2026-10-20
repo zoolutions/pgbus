@@ -149,10 +149,10 @@ RSpec.describe Pgbus::Web::HealthApp do
       expect(headers["Content-Type"]).to eq("application/json")
     end
 
-    it "includes status, expected, and live in the body" do
+    it "includes status, expected, live, and forked in the body" do
       body = JSON.parse(body_of(get("/readyz")))
 
-      expect(body).to eq("status" => "OK", "expected" => 3, "live" => 3)
+      expect(body).to eq("status" => "OK", "expected" => 3, "live" => 3, "forked" => 3)
     end
 
     it "never builds the cluster analyzer in local mode" do
@@ -203,7 +203,23 @@ RSpec.describe Pgbus::Web::HealthApp do
         body = JSON.parse(body_of(get("/readyz")))
 
         expect(status).to eq(503)
-        expect(body).to eq("status" => "DEGRADED", "expected" => 3, "live" => 2)
+        expect(body).to eq("status" => "DEGRADED", "expected" => 3, "live" => 2, "forked" => 2)
+      end
+    end
+
+    # Issue #587: a child that forked but never checked in is in the fork
+    # table (forked) but not live, so the gate stays shut.
+    context "when a forked child has not checked in" do
+      let(:snapshot) do
+        Pgbus::Process::ReadinessSnapshot.new(booted: true, shutting_down: false, expected: 6, live: 5, forked: 6)
+      end
+
+      it "returns 503 DEGRADED with forked above live" do
+        status, = get("/readyz")
+        body = JSON.parse(body_of(get("/readyz")))
+
+        expect(status).to eq(503)
+        expect(body).to eq("status" => "DEGRADED", "expected" => 6, "live" => 5, "forked" => 6)
       end
     end
 
