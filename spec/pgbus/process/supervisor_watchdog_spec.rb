@@ -531,7 +531,8 @@ RSpec.describe Pgbus::Process::Supervisor do
         output = wait_for_log("parked-helper")
 
         expect(output).to include("Thread dump pid=#{pid}")
-        expect(output).to match(/ERROR.*parked-helper.*\n.*in 'Kernel#sleep'/)
+        # Ruby 3.3 prints a frame as "in `sleep'", 3.4+ as "in 'Kernel#sleep'".
+        expect(output).to match(/ERROR.*parked-helper.*\n.*in [`'](Kernel#)?sleep'/)
         expect(Process.waitpid(pid, Process::WNOHANG)).to be_nil
       ensure
         kill_child(pid) if pid
