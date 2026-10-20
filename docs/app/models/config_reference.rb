@@ -135,7 +135,11 @@ module ConfigReference
     "Health & liveness" => [
       { name: "health_port", type: "Integer, nil", default: "nil", desc: "Port for HTTP liveness/readiness probes; nil disables." },
       { name: "health_bind", type: "String", default: '"127.0.0.1"', desc: "Bind address for the health server." },
-      { name: "stall_threshold", type: "Numeric", default: "300", desc: "Seconds without progress before a worker is stalled." },
+      { name: "stall_threshold", type: "Numeric, nil", default: "90",
+        desc: "Seconds a checked-in worker or consumer loop may go without progress before the supervisor kills it. nil disables." },
+      { name: "boot_timeout", type: "Numeric, nil", default: "120",
+        desc: "Seconds a forked child may take to check in (a process row, or a liveness byte) before the supervisor asks it " \
+              "for a thread dump (TTIN), SIGKILLs it and forks it again. nil disables." },
       { name: "read_timeout", type: "Numeric", default: "30", desc: "Read timeout for worker fetches." },
       { name: "drain_timeout", type: "Numeric", default: "30", desc: "Seconds to wait for in-flight jobs to finish during graceful shutdown before abandoning them." },
       { name: "immediate_shutdown_grace", type: "Numeric", default: "2",

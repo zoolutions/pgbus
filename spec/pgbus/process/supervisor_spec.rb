@@ -455,7 +455,9 @@ RSpec.describe Pgbus::Process::Supervisor do
       supervisor.send(:mark_booted)
 
       expect(supervisor.readiness_snapshot.expected).to eq(3)
-      expect(supervisor.readiness_snapshot.live).to eq(3)
+      expect(supervisor.readiness_snapshot.forked).to eq(3)
+      # None has checked in yet (issue #587).
+      expect(supervisor.readiness_snapshot.live).to eq(0)
     end
 
     it "restarts only the crashed fork, in its own slot and process index" do
@@ -1166,8 +1168,9 @@ RSpec.describe Pgbus::Process::Supervisor do
       expect(snapshot.status).to eq("BOOTING")
     end
 
-    it "becomes ready once boot completes with all forked children counted" do
-      supervisor = described_class.new(forks: { 101 => { type: :worker }, 102 => { type: :dispatcher } })
+    it "becomes ready once boot completes with every forked child checked in" do
+      supervisor = described_class.new(forks: { 101 => { type: :worker, checked_in: true },
+                                                102 => { type: :dispatcher, checked_in: true } })
 
       supervisor.send(:mark_booted)
       snapshot = supervisor.readiness_snapshot
@@ -1178,7 +1181,8 @@ RSpec.describe Pgbus::Process::Supervisor do
     end
 
     it "degrades when a child dies and has not been restarted" do
-      supervisor = described_class.new(forks: { 101 => { type: :worker }, 102 => { type: :worker } })
+      supervisor = described_class.new(forks: { 101 => { type: :worker, checked_in: true },
+                                                102 => { type: :worker, checked_in: true } })
       supervisor.send(:mark_booted)
 
       supervisor.forks.delete(102)
@@ -1188,6 +1192,41 @@ RSpec.describe Pgbus::Process::Supervisor do
       expect(snapshot.ready?).to be false
       expect(snapshot.status).to eq("DEGRADED")
       expect(snapshot.live).to eq(1)
+    end
+
+    # Issue #587: a fork wedged before its first liveness signal is in the
+    # fork table but not live, so the container-local gate stays at 503.
+    it "degrades while a forked child has not checked in, and recovers once it has" do
+      supervisor = described_class.new(forks: { 101 => { type: :worker, checked_in: true },
+                                                102 => { type: :dispatcher, checked_in: false } })
+      supervisor.send(:mark_booted)
+      snapshot = supervisor.readiness_snapshot
+
+      expect(snapshot.status).to eq("DEGRADED")
+      expect([snapshot.expected, snapshot.live, snapshot.forked]).to eq([2, 1, 2])
+
+      supervisor.forks[102][:checked_in] = true
+      supervisor.send(:refresh_readiness)
+
+      expect(supervisor.readiness_snapshot.status).to eq("OK")
+    end
+
+    it "starts every kind of fork unchecked-in" do
+      supervisor = described_class.new
+      pids = (7101..7105).to_a
+      allow(supervisor).to receive(:fork).and_return(*pids)
+
+      supervisor.send(:fork_worker, { queues: ["default"] }, slot: 0)
+      supervisor.send(:fork_consumer, { topics: ["orders.#"] }, slot: 0)
+      supervisor.send(:fork_dispatcher)
+      supervisor.send(:fork_scheduler)
+      supervisor.send(:fork_outbox_poller)
+
+      expect(supervisor.forks.values.map { |i| [i[:type], i[:checked_in]] }).to eq(
+        [[:worker, false], [:consumer, false], [:dispatcher, false], [:scheduler, false], [:outbox_poller, false]]
+      )
+    ensure
+      supervisor.forks.each_value { |i| i[:liveness_reader]&.close }
     end
 
     it "flips to DRAINING on graceful_shutdown" do

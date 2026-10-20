@@ -98,7 +98,7 @@ module Pgbus
       def local_readyz
         snapshot = @local_readiness.call
         status = snapshot.ready? ? 200 : 503
-        body = { status: snapshot.status, expected: snapshot.expected, live: snapshot.live }
+        body = { status: snapshot.status, expected: snapshot.expected, live: snapshot.live, forked: snapshot.forked }
         [status, JSON_HEADERS.dup, [body.to_json]]
       rescue StandardError => e
         Pgbus.logger.error { "[Pgbus::Web::HealthApp] local readiness check failed: #{e.class}: #{e.message}" }

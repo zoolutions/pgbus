@@ -7,12 +7,20 @@ module Pgbus
     # server's accept thread — the immutability is what makes the cross-thread
     # handoff safe without a lock (issue #386).
     #
-    # `expected` is the child count forked by boot_processes; `live` is the
-    # current fork-table size. A child sitting in crash-restart backoff keeps
-    # `live < expected`, which is exactly the signal a rolling deploy's health
-    # gate needs to fail on: the replacement container never goes ready, and
-    # the orchestrator keeps the old container running.
-    ReadinessSnapshot = Data.define(:booted, :shutting_down, :expected, :live) do
+    # `expected` is the child count forked by boot_processes; `forked` is the
+    # current fork-table size; `live` counts the forks that have checked in
+    # (a process row on this host, or a liveness byte). A child sitting in
+    # crash-restart backoff, or one that forked and hangs before checking in
+    # (issue #587), keeps `live < expected`, which is exactly the signal a
+    # rolling deploy's health gate needs to fail on: the replacement
+    # container never goes ready, and the orchestrator keeps the old
+    # container running. `forked` defaults to `live` for callers that do not
+    # track check-ins.
+    ReadinessSnapshot = Data.define(:booted, :shutting_down, :expected, :live, :forked) do
+      def initialize(booted:, shutting_down:, expected:, live:, forked: live)
+        super
+      end
+
       def ready?
         booted && !shutting_down && live >= expected
       end

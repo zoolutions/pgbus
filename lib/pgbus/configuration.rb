@@ -54,6 +54,13 @@ module Pgbus
     # wait, so recycling/deploy never wedges on a permanently-stuck job.
     attr_accessor :stall_threshold, :read_timeout, :drain_timeout
 
+    # Boot deadline (default 120s): a forked child that has not checked in
+    # this long after fork (no pgbus_processes row on this host, no liveness
+    # byte) is asked for a thread dump (TTIN), then SIGKILLed and re-forked
+    # by the normal restart path. nil disables. Separate from stall_threshold
+    # because a cold Rails boot can legitimately outlast a loop-liveness window.
+    attr_accessor :boot_timeout
+
     # immediate_shutdown_grace (default 2s): on QUIT, a worker or consumer
     # stops taking work and gives the jobs already running this long to finish
     # before it kills their threads. Killed jobs' ActiveRecord connections are
@@ -312,6 +319,7 @@ module Pgbus
       @max_worker_lifetime = nil
 
       @stall_threshold = 90
+      @boot_timeout = 120
       @read_timeout = 30
       @drain_timeout = 30
       @immediate_shutdown_grace = 2
@@ -917,6 +925,9 @@ module Pgbus
 
       unless stall_threshold.nil? || (stall_threshold.is_a?(Numeric) && stall_threshold.positive?)
         raise Pgbus::ConfigurationError, "stall_threshold must be a positive number or nil to disable"
+      end
+      unless boot_timeout.nil? || (boot_timeout.is_a?(Numeric) && boot_timeout.positive?)
+        raise Pgbus::ConfigurationError, "boot_timeout must be a positive number or nil to disable"
       end
       unless read_timeout.nil? || (read_timeout.is_a?(Numeric) && read_timeout.positive?)
         raise Pgbus::ConfigurationError, "read_timeout must be a positive number or nil to disable"

@@ -9,6 +9,9 @@ module Pgbus
 
       FORK_WAIT = 1 # seconds between fork checks
       WATCHDOG_INTERVAL = 10 # seconds between stall checks
+      # Seconds between asking a child for a thread dump (TTIN) and the
+      # watchdog's SIGKILL, so the dump can reach the log (issue #587).
+      WATCHDOG_DUMP_GRACE = 2
 
       # A child that crashes within this many seconds of forking is treated
       # as crash-looping and restarted with exponential backoff (base
@@ -46,7 +49,8 @@ module Pgbus
         @notify_hub = notify_hub
         @intended_children = 0
         @readiness = Concurrent::AtomicReference.new(
-          ReadinessSnapshot.new(booted: false, shutting_down: shutting_down, expected: 0, live: forks.size)
+          ReadinessSnapshot.new(booted: false, shutting_down: shutting_down, expected: 0,
+                                live: checked_in_count, forked: forks.size)
         )
       end
 
@@ -151,14 +155,20 @@ module Pgbus
       end
 
       # Publish a fresh snapshot; the swapped-in Data is immutable, so the
-      # health server's accept thread always reads a consistent state.
+      # health server's accept thread always reads a consistent state. A
+      # child counts as live only once it has checked in (issue #587): a fork
+      # wedged before its first liveness signal keeps the gate shut.
       def refresh_readiness
         @readiness.set(
           ReadinessSnapshot.new(
             booted: !!@booted, shutting_down: @shutting_down,
-            expected: @expected_children || 0, live: @forks.size
+            expected: @expected_children || 0, live: checked_in_count, forked: @forks.size
           )
         )
+      end
+
+      def checked_in_count
+        @forks.count { |_, info| info[:checked_in] }
       end
 
       # Log a single boot diagnostics banner: the settings that actually
@@ -368,7 +378,7 @@ module Pgbus
         @forks[pid] = {
           type: :worker, config: worker_config, slot: slot, process_index: process_index, spawned_at: monotonic_now,
           liveness_reader: liveness_reader, last_pipe_tick_at: monotonic_now, pipe_seen: false,
-          wake_writer: wake_writer
+          wake_writer: wake_writer, checked_in: false
         }
         Pgbus.logger.info { "[Pgbus] Forked worker pid=#{pid} queues=#{queues.join(",")} mode=#{exec_mode}" }
       rescue Errno::EAGAIN, Errno::ENOMEM => e
@@ -419,7 +429,7 @@ module Pgbus
           return
         end
 
-        @forks[pid] = { type: :dispatcher, spawned_at: monotonic_now }
+        @forks[pid] = { type: :dispatcher, spawned_at: monotonic_now, checked_in: false }
         Pgbus.logger.info { "[Pgbus] Forked dispatcher pid=#{pid}" }
       rescue Errno::EAGAIN, Errno::ENOMEM => e
         ErrorReporter.report(e, { action: "fork_dispatcher" })
@@ -453,7 +463,7 @@ module Pgbus
           return
         end
 
-        @forks[pid] = { type: :scheduler, spawned_at: monotonic_now }
+        @forks[pid] = { type: :scheduler, spawned_at: monotonic_now, checked_in: false }
         Pgbus.logger.info { "[Pgbus] Forked scheduler pid=#{pid}" }
       rescue Errno::EAGAIN, Errno::ENOMEM => e
         ErrorReporter.report(e, { action: "fork_scheduler" })
@@ -573,7 +583,7 @@ module Pgbus
         @forks[pid] = {
           type: :consumer, config: consumer_config, slot: slot, spawned_at: monotonic_now,
           liveness_reader: liveness_reader, last_pipe_tick_at: monotonic_now, pipe_seen: false,
-          wake_writer: wake_writer
+          wake_writer: wake_writer, checked_in: false
         }
         Pgbus.logger.info { "[Pgbus] Forked consumer pid=#{pid} topics=#{topics.join(",")}" }
       rescue Errno::EAGAIN, Errno::ENOMEM => e
@@ -621,7 +631,7 @@ module Pgbus
           return
         end
 
-        @forks[pid] = { type: :outbox_poller, spawned_at: monotonic_now }
+        @forks[pid] = { type: :outbox_poller, spawned_at: monotonic_now, checked_in: false }
         Pgbus.logger.info { "[Pgbus] Forked outbox poller pid=#{pid}" }
       rescue Errno::EAGAIN, Errno::ENOMEM => e
         ErrorReporter.report(e, { action: "fork_outbox_poller" })
@@ -746,55 +756,110 @@ module Pgbus
         end
       end
 
+      # Runs every WATCHDOG_INTERVAL. One process-row read (this host only)
+      # serves three jobs: it checks in forks that registered a row (the only
+      # check-in channel for the pipeless dispatcher, scheduler and outbox
+      # poller, so it runs whatever the thresholds are — /readyz depends on
+      # it); it enforces boot_timeout on forks that have not checked in
+      # (issue #587); and it feeds the loop-tick ages of the stall check.
       def check_stalled_workers
         now = monotonic_now
         return if (now - @last_watchdog_at) < WATCHDOG_INTERVAL
 
         @last_watchdog_at = now
-        threshold = config.stall_threshold
-        return unless threshold&.positive?
+        stall_threshold = positive_limit(config.stall_threshold)
+        boot_timeout = positive_limit(config.boot_timeout)
 
-        # Workers AND consumers both stamp a loop beacon and carry a liveness
-        # pipe (issue #274), so both are watched for a wedged claim/consume loop.
-        watched_pids = @forks.select { |_, info| %i[worker consumer].include?(info[:type]) }.keys
-        return if watched_pids.empty?
+        pids = watchdog_pids(stall_threshold)
+        return if pids.empty?
 
-        db_ages = db_loop_tick_ages(watched_pids)
+        rows = watchdog_rows(pids)
+        mark_checked_in(rows.keys) if rows
 
-        watched_pids.each do |pid|
-          info = @forks[pid]
-          next unless info
-
-          kill_stalled_worker(pid, threshold) if worker_stalled?(info, db_ages[pid], now, threshold)
-        end
+        victims = []
+        victims.concat(boot_timeout_victims(now, boot_timeout)) if boot_timeout && rows
+        victims.concat(stalled_victims(now, stall_threshold, rows || {})) if stall_threshold
+        kill_unresponsive_children(victims.uniq(&:first))
       rescue StandardError => e
         Pgbus.logger.warn { "[Pgbus] Supervisor watchdog check failed: #{e.message}" }
       end
 
-      # Read each watched fork's loop_tick_at from the process table and return
-      # a {pid => wall-clock age in seconds} map. Isolated in its own rescue so a
-      # database outage degrades to the OS-pipe fallback instead of skipping
-      # the whole watchdog — the exact failure this pipe channel exists to fix.
-      def db_loop_tick_ages(worker_pids)
-        ages = {}
-        ProcessEntry.where(kind: %w[worker consumer], pid: worker_pids).to_a.each do |entry|
-          meta = entry.metadata
-          next unless meta.is_a?(Hash)
+      def positive_limit(value)
+        value if value.is_a?(Numeric) && value.positive?
+      end
 
-          loop_tick = meta["loop_tick_at"]
-          ages[entry.pid] = Time.current.to_f - loop_tick.to_f if loop_tick
-        end
-        ages
+      # Forks still waiting to check in, plus every worker/consumer when the
+      # stall check is on. A checked-in dispatcher/scheduler/outbox poller has
+      # no loop beacon, so once it has a row it is never read again.
+      def watchdog_pids(stall_threshold)
+        @forks.select do |_, info|
+          !info[:checked_in] || (stall_threshold && %i[worker consumer].include?(info[:type]))
+        end.keys
+      end
+
+      # {pid => ProcessEntry} for the forks' rows on THIS host — pids repeat
+      # across containers sharing one database, so a sibling's row must never
+      # vouch for a local child. nil when the read fails: the stall check then
+      # falls back to the liveness pipe, and the boot deadline waits for a
+      # pass that can see the rows (a DB blip at boot must not kill every
+      # pipeless child).
+      def watchdog_rows(pids)
+        ProcessEntry.where(hostname: Socket.gethostname, pid: pids).to_a.to_h { |entry| [entry.pid, entry] }
       rescue StandardError => e
         Pgbus.logger.warn { "[Pgbus] Supervisor watchdog DB read failed, using pipe fallback: #{e.message}" }
-        ages
+        nil
+      end
+
+      def mark_checked_in(pids)
+        pids.each do |pid|
+          info = @forks[pid]
+          info[:checked_in] = true if info
+        end
+      end
+
+      # A fork with neither a row nor a liveness byte boot_timeout seconds
+      # after fork is wedged in boot (issue #587). Without this it is never
+      # reaped (it does not exit) and never stalled (no channel ever spoke).
+      def boot_timeout_victims(now, boot_timeout)
+        @forks.filter_map do |pid, info|
+          next if info[:checked_in] || info[:spawned_at].nil?
+
+          waited = now - info[:spawned_at]
+          next unless waited > boot_timeout
+
+          [pid, "#{info[:type]} pid=#{pid} boot timeout (no check-in #{waited.round}s after fork, " \
+                "boot_timeout=#{boot_timeout}s)"]
+        end
+      end
+
+      def stalled_victims(now, threshold, rows)
+        db_ages = loop_tick_ages(rows)
+        @forks.filter_map do |pid, info|
+          next unless %i[worker consumer].include?(info[:type])
+          next unless worker_stalled?(info, db_ages[pid], now, threshold)
+
+          [pid, "#{info[:type]} pid=#{pid} claim loop stalled (no liveness within threshold=#{threshold}s)"]
+        end
+      end
+
+      # {pid => wall-clock age in seconds} of each worker/consumer row's
+      # loop_tick_at.
+      def loop_tick_ages(rows)
+        rows.each_with_object({}) do |(pid, entry), ages|
+          next unless %w[worker consumer].include?(entry.kind)
+
+          meta = entry.metadata
+          next unless meta.is_a?(Hash) && meta["loop_tick_at"]
+
+          ages[pid] = Time.current.to_f - meta["loop_tick_at"].to_f
+        end
       end
 
       # A worker is stalled only when EVERY liveness channel that has spoken
       # agrees it is stale (min-age / fresh-wins): a fresh DB row OR a fresh
       # pipe tick proves the loop is advancing. If no channel has any signal
       # (a slow-booting worker with no DB row and an unarmed pipe), we do not
-      # kill — mirroring the pre-existing "no loop_tick_at → skip" tolerance.
+      # kill — the boot deadline above owns that case.
       def worker_stalled?(info, db_age, now, threshold)
         pipe_age = (now - info[:last_pipe_tick_at] if info[:pipe_seen] && info[:last_pipe_tick_at])
         ages = [db_age, pipe_age].compact
@@ -803,14 +868,33 @@ module Pgbus
         ages.min > threshold
       end
 
-      def kill_stalled_worker(pid, threshold)
-        Pgbus.logger.error do
-          "[Pgbus] Supervisor watchdog: worker pid=#{pid} claim loop stalled " \
-            "(no liveness within threshold=#{threshold}s), sending SIGKILL"
+      # Log each victim at ERROR, ask it for a thread dump (TTIN, trapped in
+      # setup_child_process), give every dump one shared grace, then SIGKILL.
+      # The dump is best effort: a child stuck in a native call holding the
+      # GVL never answers. No waitpid here — reap_children must see the exit
+      # so schedule_restart re-forks the child.
+      def kill_unresponsive_children(victims)
+        return if victims.empty?
+
+        signalled = victims.filter_map do |pid, reason|
+          Pgbus.logger.error { "[Pgbus] Supervisor watchdog: #{reason} — dumping threads (TTIN), then SIGKILL" }
+          signal_child("TTIN", pid) && pid
         end
-        ::Process.kill("KILL", pid)
+        return if signalled.empty?
+
+        dump_grace_sleep
+        signalled.each { |pid| signal_child("KILL", pid) }
+      end
+
+      def signal_child(sig, pid)
+        ::Process.kill(sig, pid)
+        true
       rescue Errno::ESRCH
-        # already gone
+        false # already gone; reap_children handles it
+      end
+
+      def dump_grace_sleep
+        sleep(WATCHDOG_DUMP_GRACE)
       end
 
       # Drain each worker's liveness pipe. Any readable byte means the worker's
@@ -839,10 +923,11 @@ module Pgbus
             next
           end
 
-          if read_any
-            info[:last_pipe_tick_at] = now
-            info[:pipe_seen] = true
-          end
+          next unless read_any
+
+          info[:last_pipe_tick_at] = now
+          info[:pipe_seen] = true
+          info[:checked_in] = true
         end
       end
 
@@ -855,6 +940,8 @@ module Pgbus
       end
 
       def setup_child_process
+        # First, so a hang anywhere in the rest of the boot can be dumped.
+        install_thread_dump_trap
         # Every child type (worker, consumer, dispatcher, scheduler, outbox
         # poller) releases its copies of the parent's per-fork resources —
         # a dispatcher child holding a sibling worker's wake WRITER would
@@ -868,6 +955,26 @@ module Pgbus
         Pgbus.reset_client!
         %w[INT TERM QUIT].each do |sig|
           trap(sig) { @shutting_down = true }
+        end
+      end
+
+      # `kill -TTIN <child pid>` logs every thread's backtrace at ERROR and
+      # leaves the child running; the watchdog sends it before a SIGKILL
+      # (issue #587). Logger takes a lock, which Ruby forbids in trap context,
+      # so the trap snapshots the backtraces and one short-lived thread logs.
+      def install_thread_dump_trap
+        trap("TTIN") do
+          dump = Thread.list.map { |thread| [thread.inspect, thread.backtrace] }
+          Thread.new { log_thread_dump(dump) } # rubocop:disable ThreadSafety/NewThread
+        end
+      end
+
+      def log_thread_dump(dump)
+        Pgbus.logger.error { "[Pgbus] Thread dump pid=#{::Process.pid} (#{dump.size} threads, TTIN)" }
+        dump.each do |label, backtrace|
+          Pgbus.logger.error do
+            "[Pgbus] Thread #{label}\n  #{Array(backtrace).join("\n  ")}"
+          end
         end
       end
 

@@ -173,6 +173,10 @@ RSpec.describe Pgbus::Configuration do
       expect(config.stall_threshold).to eq(90)
     end
 
+    it "has default boot_timeout of 120 seconds" do
+      expect(config.boot_timeout).to eq(120)
+    end
+
     it "has default read_timeout of 30 seconds" do
       expect(config.read_timeout).to eq(30)
     end
@@ -1303,6 +1307,31 @@ RSpec.describe Pgbus::Configuration do
     it "rejects false stall_threshold" do
       config.stall_threshold = false
       expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /stall_threshold/)
+    end
+
+    it "rejects non-numeric boot_timeout" do
+      config.boot_timeout = "120"
+      expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /boot_timeout/)
+    end
+
+    it "rejects zero boot_timeout" do
+      config.boot_timeout = 0
+      expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /boot_timeout/)
+    end
+
+    it "rejects a negative boot_timeout" do
+      config.boot_timeout = -5
+      expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /boot_timeout/)
+    end
+
+    it "accepts nil boot_timeout (disabled)" do
+      config.boot_timeout = nil
+      expect { config.validate! }.not_to raise_error
+    end
+
+    it "accepts a fractional boot_timeout" do
+      config.boot_timeout = 30.5
+      expect { config.validate! }.not_to raise_error
     end
 
     it "rejects non-numeric read_timeout" do
