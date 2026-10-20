@@ -203,10 +203,10 @@ RSpec.describe Pgbus::Process::Supervisor do
         allow(Process).to receive(:kill)
       end
 
-      def set_forks(pid, last_pipe_tick_at:, pipe_seen:)
+      def set_forks(pid, last_pipe_tick_at:, pipe_seen:, spawned_at: nil)
         supervisor.forks = {
           pid => { type: :worker, config: { queues: ["default"] },
-                   liveness_reader: nil,
+                   liveness_reader: nil, spawned_at: spawned_at,
                    last_pipe_tick_at: last_pipe_tick_at,
                    pipe_seen: pipe_seen, checked_in: pipe_seen }
         }
@@ -232,8 +232,9 @@ RSpec.describe Pgbus::Process::Supervisor do
 
       it "does NOT kill a worker whose pipe is unarmed (booting, no byte seen yet)" do
         allow(Pgbus::ProcessEntry).to receive(:where).and_raise(StandardError, "connection lost")
-        # Seeded far in the past but never armed — a slow-booting worker.
-        set_forks(1001, last_pipe_tick_at: now - 999, pipe_seen: false)
+        # Seeded far in the past but never armed — a slow-booting worker,
+        # forked inside the boot window.
+        set_forks(1001, last_pipe_tick_at: now - 999, pipe_seen: false, spawned_at: now - 5)
 
         supervisor.send(:check_stalled_workers)
 
@@ -281,7 +282,8 @@ RSpec.describe Pgbus::Process::Supervisor do
       end
 
       def pending_fork(type, spawned_ago:)
-        info = { type: type, spawned_at: now - spawned_ago, checked_in: false }
+        info = { type: type, spawned_at: now - spawned_ago, spawned_wall_at: Time.current - spawned_ago,
+                 checked_in: false }
         if %i[worker consumer].include?(type)
           info.merge!(config: {}, liveness_reader: nil, last_pipe_tick_at: now - spawned_ago, pipe_seen: false)
         end
@@ -325,11 +327,15 @@ RSpec.describe Pgbus::Process::Supervisor do
         expect(Process).not_to have_received(:kill)
       end
 
+      def row_for(pid, kind, heartbeat_at: Time.current)
+        double("ProcessEntry", kind: kind, pid: pid, metadata: {}, last_heartbeat_at: heartbeat_at)
+      end
+
       it "still marks forks checked in from their process row when both thresholds are nil" do
         config.boot_timeout = nil
         config.stall_threshold = nil
         supervisor.forks = { 4242 => pending_fork(:dispatcher, spawned_ago: 5) }
-        row = double("ProcessEntry", kind: "dispatcher", pid: 4242, metadata: {})
+        row = row_for(4242, "dispatcher")
         allow(Pgbus::ProcessEntry).to receive(:where).and_return(double(to_a: [row]))
 
         supervisor.send(:check_stalled_workers)
@@ -339,13 +345,35 @@ RSpec.describe Pgbus::Process::Supervisor do
 
       it "never kills a fork that checked in with a process row, past the window" do
         supervisor.forks = { 4242 => pending_fork(:dispatcher, spawned_ago: 600) }
-        row = double("ProcessEntry", kind: "dispatcher", pid: 4242, metadata: {})
+        row = row_for(4242, "dispatcher", heartbeat_at: Time.current - 60)
         allow(Pgbus::ProcessEntry).to receive(:where).and_return(double(to_a: [row]))
 
         supervisor.send(:check_stalled_workers)
 
         expect(Process).not_to have_received(:kill)
         expect(supervisor.forks[4242][:checked_in]).to be(true)
+      end
+
+      # A SIGKILLed or OOM-killed predecessor never deletes its row, and after
+      # a container restart in place the same pids come back on the same
+      # hostname. A row whose last beat predates this fork is not this child.
+      it "ignores a row last beaten before the fork, and kills the hung child" do
+        supervisor.forks = { 4242 => pending_fork(:dispatcher, spawned_ago: 600) }
+        stale = row_for(4242, "dispatcher", heartbeat_at: Time.current - 900)
+        allow(Pgbus::ProcessEntry).to receive(:where).and_return(double(to_a: [stale]))
+
+        supervisor.send(:check_stalled_workers)
+
+        expect(supervisor.forks[4242][:checked_in]).to be(false)
+        expect(Process).to have_received(:kill).with("KILL", 4242)
+      end
+
+      it "marks a boot-deadline victim so its restart backs off" do
+        supervisor.forks = { 4242 => pending_fork(:dispatcher, spawned_ago: 600) }
+
+        supervisor.send(:check_stalled_workers)
+
+        expect(supervisor.forks[4242][:boot_timed_out]).to be(true)
       end
 
       it "never kills a worker that checked in over the pipe, past the window" do
@@ -418,9 +446,12 @@ RSpec.describe Pgbus::Process::Supervisor do
         allow(supervisor).to receive(:fork_dispatcher)
 
         supervisor.send(:reap_children)
+        # Past the first crash backoff (1s): a boot-deadline kill backs off.
+        allow(supervisor).to receive(:monotonic_now).and_return(now + 2)
+        supervisor.send(:process_pending_restarts)
 
-        expect(supervisor).to have_received(:fork_dispatcher)
         expect(supervisor.forks).not_to have_key(4242)
+        expect(supervisor).to have_received(:fork_dispatcher)
       end
     end
 

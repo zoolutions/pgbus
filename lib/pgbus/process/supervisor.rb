@@ -337,6 +337,7 @@ module Pgbus
         # :supervisor scope (hub present).
         wake_reader, wake_writer = IO.pipe if @notify_hub
 
+        spawned_wall_at = Time.current
         pid = fork do
           # Child owns the liveness writer + wake reader; close this fork's
           # own copies of the parent-side ends. Sibling pipe ends and the
@@ -377,7 +378,7 @@ module Pgbus
         register_fork_with_hub(pid, wake_writer, queues)
         @forks[pid] = {
           type: :worker, config: worker_config, slot: slot, process_index: process_index, spawned_at: monotonic_now,
-          liveness_reader: liveness_reader, last_pipe_tick_at: monotonic_now, pipe_seen: false,
+          spawned_wall_at: spawned_wall_at, liveness_reader: liveness_reader, last_pipe_tick_at: monotonic_now, pipe_seen: false,
           wake_writer: wake_writer, checked_in: false
         }
         Pgbus.logger.info { "[Pgbus] Forked worker pid=#{pid} queues=#{queues.join(",")} mode=#{exec_mode}" }
@@ -416,6 +417,7 @@ module Pgbus
 
       def fork_dispatcher
         note_intended_child
+        spawned_wall_at = Time.current
         pid = fork do
           restore_signals
           setup_child_process
@@ -429,7 +431,7 @@ module Pgbus
           return
         end
 
-        @forks[pid] = { type: :dispatcher, spawned_at: monotonic_now, checked_in: false }
+        @forks[pid] = { type: :dispatcher, spawned_at: monotonic_now, spawned_wall_at: spawned_wall_at, checked_in: false }
         Pgbus.logger.info { "[Pgbus] Forked dispatcher pid=#{pid}" }
       rescue Errno::EAGAIN, Errno::ENOMEM => e
         ErrorReporter.report(e, { action: "fork_dispatcher" })
@@ -447,6 +449,7 @@ module Pgbus
 
       def fork_scheduler
         note_intended_child
+        spawned_wall_at = Time.current
         pid = fork do
           restore_signals
           setup_child_process
@@ -463,7 +466,7 @@ module Pgbus
           return
         end
 
-        @forks[pid] = { type: :scheduler, spawned_at: monotonic_now, checked_in: false }
+        @forks[pid] = { type: :scheduler, spawned_at: monotonic_now, spawned_wall_at: spawned_wall_at, checked_in: false }
         Pgbus.logger.info { "[Pgbus] Forked scheduler pid=#{pid}" }
       rescue Errno::EAGAIN, Errno::ENOMEM => e
         ErrorReporter.report(e, { action: "fork_scheduler" })
@@ -552,6 +555,7 @@ module Pgbus
         # Wake channel from the NotifyHub (issue #381), as in fork_worker.
         wake_reader, wake_writer = IO.pipe if @notify_hub
 
+        spawned_wall_at = Time.current
         pid = fork do
           # Child owns the liveness writer + wake reader; close this fork's
           # own copies of the parent-side ends (see fork_worker).
@@ -582,7 +586,7 @@ module Pgbus
         register_consumer_with_hub(pid, wake_writer, topics)
         @forks[pid] = {
           type: :consumer, config: consumer_config, slot: slot, spawned_at: monotonic_now,
-          liveness_reader: liveness_reader, last_pipe_tick_at: monotonic_now, pipe_seen: false,
+          spawned_wall_at: spawned_wall_at, liveness_reader: liveness_reader, last_pipe_tick_at: monotonic_now, pipe_seen: false,
           wake_writer: wake_writer, checked_in: false
         }
         Pgbus.logger.info { "[Pgbus] Forked consumer pid=#{pid} topics=#{topics.join(",")}" }
@@ -618,6 +622,7 @@ module Pgbus
 
       def fork_outbox_poller
         note_intended_child
+        spawned_wall_at = Time.current
         pid = fork do
           restore_signals
           setup_child_process
@@ -631,7 +636,7 @@ module Pgbus
           return
         end
 
-        @forks[pid] = { type: :outbox_poller, spawned_at: monotonic_now, checked_in: false }
+        @forks[pid] = { type: :outbox_poller, spawned_at: monotonic_now, spawned_wall_at: spawned_wall_at, checked_in: false }
         Pgbus.logger.info { "[Pgbus] Forked outbox poller pid=#{pid}" }
       rescue Errno::EAGAIN, Errno::ENOMEM => e
         ErrorReporter.report(e, { action: "fork_outbox_poller" })
@@ -720,7 +725,11 @@ module Pgbus
         key = [info[:type], info[:slot]]
         uptime = info[:spawned_at] ? monotonic_now - info[:spawned_at] : nil
 
-        if status&.success? || uptime.nil? || uptime >= RESTART_STABLE_UPTIME
+        # A child killed for its boot deadline never booted, whatever its
+        # uptime: back it off like a crash so a permanently hung boot does not
+        # re-fork every boot_timeout (issue #587).
+        stable = uptime && uptime >= RESTART_STABLE_UPTIME && !info[:boot_timed_out]
+        if status&.success? || uptime.nil? || stable
           @crash_counts.delete(key)
           return restart_child(info)
         end
@@ -799,15 +808,26 @@ module Pgbus
 
       # {pid => ProcessEntry} for the forks' rows on THIS host — pids repeat
       # across containers sharing one database, so a sibling's row must never
-      # vouch for a local child. nil when the read fails: the stall check then
-      # falls back to the liveness pipe, and the boot deadline waits for a
-      # pass that can see the rows (a DB blip at boot must not kill every
+      # vouch for a local child. A row last beaten before the fork belongs to
+      # a dead predecessor with the same pid (a SIGKILLed child never deletes
+      # its row, and a container restarted in place reuses hostname and
+      # pids), so it is dropped too. nil when the read fails: the stall check
+      # then falls back to the liveness pipe, and the boot deadline waits for
+      # a pass that can see the rows (a DB blip at boot must not kill every
       # pipeless child).
       def watchdog_rows(pids)
-        ProcessEntry.where(hostname: Socket.gethostname, pid: pids).to_a.to_h { |entry| [entry.pid, entry] }
+        rows = ProcessEntry.where(hostname: Socket.gethostname, pid: pids).to_a
+        rows.select { |entry| row_of_current_fork?(entry) }.to_h { |entry| [entry.pid, entry] }
       rescue StandardError => e
         Pgbus.logger.warn { "[Pgbus] Supervisor watchdog DB read failed, using pipe fallback: #{e.message}" }
         nil
+      end
+
+      def row_of_current_fork?(entry)
+        spawned_wall_at = @forks.dig(entry.pid, :spawned_wall_at)
+        return true unless spawned_wall_at
+
+        entry.last_heartbeat_at.present? && entry.last_heartbeat_at >= spawned_wall_at
       end
 
       def mark_checked_in(pids)
@@ -827,6 +847,7 @@ module Pgbus
           waited = now - info[:spawned_at]
           next unless waited > boot_timeout
 
+          info[:boot_timed_out] = true
           [pid, "#{info[:type]} pid=#{pid} boot timeout (no check-in #{waited.round}s after fork, " \
                 "boot_timeout=#{boot_timeout}s)"]
         end

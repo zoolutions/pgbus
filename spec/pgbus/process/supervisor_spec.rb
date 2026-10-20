@@ -166,6 +166,25 @@ RSpec.describe Pgbus::Process::Supervisor do
       expect(supervisor).to have_received(:fork).once
     end
 
+    # Issue #587: a child the watchdog killed for missing its boot deadline
+    # never booted, whatever its uptime, so a permanently hung boot backs off
+    # instead of re-forking every boot_timeout.
+    it "backs off a child killed for its boot deadline, whatever its uptime" do
+      base = now
+      supervisor = build_supervisor(3001 => { type: :dispatcher, spawned_at: base - 600, boot_timed_out: true })
+      messages = []
+      allow(Pgbus.logger).to receive(:warn) { |&blk| messages << blk.call }
+      allow(supervisor).to receive(:monotonic_now).and_return(base)
+      killed = instance_double(Process::Status, success?: false, exitstatus: nil, signaled?: true, termsig: 9)
+      allow(Process).to receive(:waitpid2).and_return([3001, killed], nil)
+
+      supervisor.send(:reap_children)
+      supervisor.send(:process_pending_restarts)
+
+      expect(supervisor).not_to have_received(:fork)
+      expect(messages.join("\n")).to include("restarting in 1s")
+    end
+
     it "delays the restart when the child crashed shortly after forking" do
       base = now
       supervisor = build_supervisor(3001 => { type: :worker, config: worker_config, spawned_at: base - 1 })

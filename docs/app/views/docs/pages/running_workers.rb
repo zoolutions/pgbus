@@ -212,10 +212,13 @@ class Views::Docs::Pages::RunningWorkers < DocsUI::Page
 
         - **A child that never checks in.** A fork checks in when it registers its
           `pgbus_processes` row on this host (every kind), or writes its first
-          liveness byte (workers and consumers). One that has done neither
-          `boot_timeout` seconds after the fork (default 120) is hung in boot
-          (an initializer, an eager load, a connection) and is killed. Set
-          `boot_timeout` above your slowest cold boot; `nil` turns it off.
+          liveness byte (workers and consumers). A row older than the fork, left
+          by a killed predecessor with the same pid, does not count. One that has
+          done neither `boot_timeout` seconds after the fork (default 120) is hung
+          in boot (an initializer, an eager load, a connection) and is killed.
+          Its restart always gets the crash-loop backoff (1 second, doubling up
+          to 60), so a boot that hangs every time is not re-forked at full speed.
+          Set `boot_timeout` above your slowest cold boot; `nil` turns it off.
         - **A worker or consumer whose loop stopped.** Once checked in, a worker or
           consumer whose claim loop has not advanced for `stall_threshold`
           seconds (default 90) on both its process row and its liveness pipe is
@@ -252,7 +255,8 @@ class Views::Docs::Pages::RunningWorkers < DocsUI::Page
         `live < expected` and the probe at 503 `DEGRADED`. A dispatcher, scheduler
         or outbox poller checks in through its process row, which the watchdog
         reads every 10 seconds, so `/readyz` can turn 200 up to 10 seconds after
-        the last one registers. See [Rolling restarts](/docs/rolling-restarts).
+        the last one registers, and stays at 503 while the database is
+        unreachable. See [Rolling restarts](/docs/rolling-restarts).
       MD
     end
   end
