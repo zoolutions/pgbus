@@ -827,7 +827,9 @@ module Pgbus
         spawned_wall_at = @forks.dig(entry.pid, :spawned_wall_at)
         return true unless spawned_wall_at
 
-        entry.last_heartbeat_at.present? && entry.last_heartbeat_at >= spawned_wall_at
+        # floor: a table created without sub-second precision stores a row
+        # registered in the fork's own second below the fork's timestamp.
+        entry.last_heartbeat_at.present? && entry.last_heartbeat_at >= spawned_wall_at.floor
       end
 
       def mark_checked_in(pids)

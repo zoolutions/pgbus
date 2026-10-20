@@ -368,6 +368,18 @@ RSpec.describe Pgbus::Process::Supervisor do
         expect(Process).to have_received(:kill).with("KILL", 4242)
       end
 
+      it "checks in a row registered in the fork's own second on a whole-second column" do
+        fork = pending_fork(:dispatcher, spawned_ago: 600)
+        fork[:spawned_wall_at] = Time.at(fork[:spawned_wall_at].to_i + 0.75)
+        supervisor.forks = { 4242 => fork }
+        row = row_for(4242, "dispatcher", heartbeat_at: fork[:spawned_wall_at].floor)
+        allow(Pgbus::ProcessEntry).to receive(:where).and_return(double(to_a: [row]))
+
+        supervisor.send(:check_stalled_workers)
+
+        expect(supervisor.forks[4242][:checked_in]).to be(true)
+      end
+
       it "marks a boot-deadline victim so its restart backs off" do
         supervisor.forks = { 4242 => pending_fork(:dispatcher, spawned_ago: 600) }
 

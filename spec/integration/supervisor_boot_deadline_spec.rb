@@ -13,13 +13,13 @@ RSpec.describe "Supervisor boot deadline (integration)", :integration do
   let(:pid) { rand(4_000_000..4_099_999) }
   let(:now) { Process.clock_gettime(Process::CLOCK_MONOTONIC) }
 
+  # pgbus_processes is emptied before each example by the integration helper.
   around do |example|
     saved = config.boot_timeout
     config.boot_timeout = 120
     example.run
   ensure
     config.boot_timeout = saved
-    Pgbus::ProcessEntry.where(pid: pid).delete_all
   end
 
   before do
