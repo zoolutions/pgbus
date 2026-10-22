@@ -189,6 +189,10 @@ RSpec.describe Pgbus::Configuration do
       expect(config.immediate_shutdown_grace).to eq(2)
     end
 
+    it "has default health_unclaimed_grace of 60 seconds (issue #589)" do
+      expect(config.health_unclaimed_grace).to eq(60)
+    end
+
     it "defaults shutdown_timeout to drain_timeout + 5" do
       expect(config.shutdown_timeout).to eq(35)
     end
@@ -1257,6 +1261,41 @@ RSpec.describe Pgbus::Configuration do
     it "accepts an immediate_shutdown_grace of 0 (kill at once)" do
       config.immediate_shutdown_grace = 0
       expect { config.validate! }.not_to raise_error
+    end
+
+    describe "health_unclaimed_grace (issue #589)" do
+      it "stores an ActiveSupport::Duration as integer seconds" do
+        config.health_unclaimed_grace = 30.seconds
+        expect(config.health_unclaimed_grace).to eq(30)
+        expect(config.health_unclaimed_grace.class).to eq(Integer)
+      end
+
+      it "keeps a Numeric as given" do
+        config.health_unclaimed_grace = 2.5
+        expect(config.health_unclaimed_grace).to eq(2.5)
+      end
+
+      it "accepts 0 (the pre-0.22 rule: any visible unread row counts)" do
+        config.health_unclaimed_grace = 0
+        expect { config.validate! }.not_to raise_error
+      end
+
+      it "rejects a negative grace" do
+        config.health_unclaimed_grace = -1
+        expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /health_unclaimed_grace/)
+      end
+
+      it "rejects nil" do
+        config.health_unclaimed_grace = nil
+        expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /health_unclaimed_grace/)
+      end
+
+      it "rejects a value that is not a finite number" do
+        ["30s", Float::NAN, Float::INFINITY].each do |grace|
+          config.health_unclaimed_grace = grace
+          expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /health_unclaimed_grace/)
+        end
+      end
     end
 
     it "rejects invalid prefetch_limit" do

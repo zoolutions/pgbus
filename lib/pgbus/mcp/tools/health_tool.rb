@@ -13,8 +13,10 @@ module Pgbus
         description <<~DESC
           Top-level pgbus health verdict. Returns OK, DEGRADED, or STALLED with
           the specific reasons. STALLED means the silent-wedge condition:
-          queues have visible backlog while workers are heart-beating but not
-          claiming (or a worker's claim loop has stalled). DEGRADED covers
+          queues hold a visible, never-claimed backlog older than
+          health_unclaimed_grace (default 60s) while workers are heart-beating
+          but not claiming (or a worker's claim loop has stalled); the summary's
+          oldest_unread_claimable_age_sec tells a wedge from a spike. DEGRADED covers
           stale processes, paused queues holding a backlog, dead-letter
           buildup, or a long-running transaction pinning the MVCC horizon. Use
           this first when triaging — it summarizes the whole system in one call
