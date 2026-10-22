@@ -14,6 +14,7 @@ class Views::Docs::Pages::UpgradingPgbus < DocsUI::Page
     v098
     v011x
     v013x
+    v021x
     v100_stub
   end
 
@@ -196,7 +197,7 @@ class Views::Docs::Pages::UpgradingPgbus < DocsUI::Page
   end
 
   def v013x
-    DocsUI::Section("0.16.x → next release", description: "PGMQ 1.13.0, and upgrades now carry upstream's table fixups.") do
+    DocsUI::Section("0.16.x → 0.17.0", description: "PGMQ 1.13.0, and upgrades now carry upstream's table fixups.") do
       md <<~'MD'
         ### PGMQ vendored schema: 1.12.0 → 1.13.0
 
@@ -246,6 +247,77 @@ class Views::Docs::Pages::UpgradingPgbus < DocsUI::Page
         Fixups are idempotent, so an install whose version was never recorded
         gets all of them safely, and re-running a migration cannot corrupt
         anything.
+      MD
+    end
+  end
+
+  def v021x
+    DocsUI::Section("0.21.x → next release", description: "PGMQ 1.13.1, a security release upstream asks everyone to take.") do
+      md <<~'MD'
+        ### PGMQ vendored schema: 1.13.0 → 1.13.1
+
+        Another instance of step 5 in the [standard procedure](#the-standard-upgrade-procedure).
+        Upstream ships two security fixes and one NOTIFY fix:
+
+        - **Every PGMQ function pins `search_path = pg_catalog, pg_temp`** and
+          schema-qualifies its built-ins, so a role that can create objects in
+          a schema on another role's path (`public`, say) can no longer shadow
+          a built-in and run code with that role's privileges.
+        - **`pg_monitor` can no longer read message payloads.** It used to get
+          `SELECT` on every table in the `pgmq` schema. It now gets `SELECT` on
+          `pgmq.meta`, `SELECT (vt, enqueued_at)` on each queue table and
+          `SELECT` on each queue's msg_id sequence: what `pgmq.metrics()`,
+          `pgmq.metrics_all()` and `pgmq.list_queues()` need, nothing else. A
+          monitoring role that read queue or archive tables through
+          `pg_monitor` loses that access.
+        - **Insert notifications fire for a queue whose name is not all
+          lowercase.** The trigger now gets the queue name as an argument; it
+          used to rebuild it from the lowercased table name, which matched no
+          throttle row, so a pgbus queue with an uppercase letter in its name
+          never woke a worker through NOTIFY and fell back to polling.
+
+        No function pgbus calls through `Pgbus::Client` changes shape. Run
+        `rake pgbus:pgmq:status` after updating the gem; it prints
+        `Vendored version:  1.13.1` and `Installed version: 1.13.0`, then
+        `Update available! Run: rails generate pgbus:upgrade_pgmq`. Run:
+      MD
+      DocsUI::Code(<<~SHELL, lexer: :shell)
+        rails generate pgbus:upgrade_pgmq
+        rails db:migrate            # single database
+        rails db:migrate:pgbus      # separate-database install
+      SHELL
+      md <<~'MD'
+        The migration's fixup step does on existing tables what re-creating
+        the functions cannot:
+
+        - removes the default privileges and the whole-table `SELECT` grants
+          `pg_monitor` had in the `pgmq` schema, and grants the metrics
+          columns and sequence on every existing queue;
+        - rebinds a queue's `enqueued_at` (and the archive's `archived_at`, the
+          tables' `created_at`/`bound_at`/`last_notified_at`) default to
+          `pg_catalog.now()` or `pg_catalog.to_timestamp(0)` when it resolved to
+          a function of that name outside `pg_catalog`. A default bound to any
+          other non-catalog function stops the migration with an error naming
+          the column, so you can inspect it. So does a default the migrating
+          role is not allowed to alter: run the migration as the role that
+          owns the `pgmq` tables, or as a superuser.
+
+        The NOTIFY repair the migration already runs re-creates every queue's
+        trigger with the queue name attached.
+
+        A grant the migrating role does not own cannot be revoked. The
+        migration then raises a `WARNING` starting with `pgmq:` instead of
+        failing, and still records 1.13.1, so `pg_monitor` can keep reading
+        payloads on that object. PostgreSQL sends the warning to the client
+        connection: Rails hands it to its logger only when
+        `config.active_record.db_warnings_action` is set (to `:log`, say);
+        otherwise it goes to the migrating process's stderr. Look for one after
+        migrating and run the statement it prints as the object's owner or a
+        superuser.
+
+        An `:extension` install gets the same changes from
+        `ALTER EXTENSION pgmq UPDATE TO '1.13.1'` once the server has 1.13.1
+        packaged, not from this migration.
       MD
     end
   end
