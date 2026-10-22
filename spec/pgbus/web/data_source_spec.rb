@@ -210,6 +210,40 @@ RSpec.describe Pgbus::Web::DataSource do
       expect(result[:oldest_msg_age_sec]).to eq(17_045)
       expect(result[:oldest_claimable_age_sec]).to be_nil
     end
+
+    it "exposes oldest_unread_claimable_age_sec from min(vt) over visible read_ct=0 rows (issue #589)" do
+      captured_sql = nil
+      allow(mock_connection).to receive(:select_one) do |sql, _label|
+        captured_sql = sql
+        {
+          "queue_length" => 3,
+          "queue_visible_length" => 3,
+          "oldest_msg_age_sec" => 80,
+          "newest_msg_age_sec" => 1,
+          "oldest_claimable_age_sec" => 80,
+          "oldest_unread_claimable_age_sec" => 5,
+          "total_messages" => 500
+        }
+      end
+
+      result = data_source.queue_detail("pgbus_critical")
+
+      expect(captured_sql).to include(
+        "EXTRACT(epoch FROM (NOW() - min(vt) FILTER (WHERE vt <= NOW() AND read_ct = 0)))::int " \
+        "AS oldest_unread_claimable_age_sec"
+      )
+      expect(captured_sql).to include("q_summary.oldest_unread_claimable_age_sec")
+      expect(result[:oldest_unread_claimable_age_sec]).to eq(5)
+    end
+
+    it "maps a NULL oldest_unread_claimable_age_sec to nil" do
+      allow(mock_connection).to receive(:select_one)
+        .with(anything, "Pgbus Queue Metrics")
+        .and_return({ "queue_length" => 0, "queue_visible_length" => 0, "total_messages" => 0,
+                      "oldest_unread_claimable_age_sec" => nil })
+
+      expect(data_source.queue_detail("pgbus_critical")[:oldest_unread_claimable_age_sec]).to be_nil
+    end
   end
 
   describe "#summary_stats" do

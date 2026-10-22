@@ -264,6 +264,20 @@ class Views::Docs::Pages::Observability < DocsUI::Page
         pod's event log.
       MD
       md <<~'MD'
+        `STALLED` means one of two things. A worker reports its claim loop is not
+        advancing while a queue holds visible messages; or a queue some capsule or
+        handler drains holds a visible message that was never read (`read_ct = 0`)
+        and has been claimable for at least `config.health_unclaimed_grace` seconds
+        (default `60`) while workers or consumers heart-beat. Below the grace the
+        message is a fresh enqueue, or a delayed job whose wait just expired,
+        waiting for a worker's next poll, and the verdict stays `OK`. The reason
+        names the age (`never claimed, oldest claimable for 74s`) and the verdict
+        `summary` carries `oldest_unread_claimable_age_sec`, the oldest such age
+        over the drained queues (also below the grace), so a wedge reads apart from
+        a spike. `health_unclaimed_grace = 0` restores the old rule: any visible
+        never-read message counts.
+      MD
+      md <<~'MD'
         `Pgbus::Web::HealthApp` is a plain Rack app — mount it wherever your web
         pods already serve HTTP. It needs no auth (it exposes only aggregate
         health, never payloads), but keep it on an internal network:

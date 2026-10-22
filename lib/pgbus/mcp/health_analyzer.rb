@@ -35,8 +35,12 @@ module Pgbus
       # a multi-KB log line (issue #367 minor).
       NAME_LIMIT = 10
 
-      def initialize(data_source)
+      # +grace+ overrides Pgbus.configuration.health_unclaimed_grace (issue #589):
+      # seconds a visible read_ct=0 message must have been claimable before it
+      # counts as "never claimed". nil reads the config when the verdict runs.
+      def initialize(data_source, grace: nil)
         @data_source = data_source
+        @grace = grace
       end
 
       # Returns a machine-readable verdict hash suitable for both interactive
@@ -81,7 +85,9 @@ module Pgbus
           status: status,
           reasons: stalled + degraded,
           checked_at: Time.now.utc.iso8601,
-          summary: build_summary(queues, non_dlq, processes, health)
+          summary: build_summary(queues, non_dlq, processes, health).merge(
+            oldest_unread_claimable_age_sec: oldest_unread_age(drained)
+          )
         }
       end
 
@@ -139,7 +145,8 @@ module Pgbus
                      "while #{active_backlog.size} queue(s) have visible backlog: #{backlog_names(active_backlog)}"
         elsif live_drainers.any? && drained_backlog.any? && any_unread?(drained_backlog)
           unread = drained_backlog.select { |q| unread?(q) }
-          reasons << "#{unread.size} queue(s) have visible messages with read_ct=0 (never claimed) " \
+          reasons << "#{unread.size} queue(s) have visible messages with read_ct=0 " \
+                     "(never claimed#{unread_age_clause(unread)}) " \
                      "while #{live_drainers.size} draining process(es) are alive: #{backlog_names(unread)}"
         end
         reasons
@@ -211,10 +218,39 @@ module Pgbus
       #
       # When metrics don't expose the count (an old hash / a stubbed test) we
       # conservatively treat the queue as unread so we never miss the wedge.
+      #
+      # Issue #589: the oldest such row must also have been claimable for at
+      # least the grace. A fresh enqueue, or a delayed job whose wait just
+      # expired, is visible with read_ct=0 until a worker's next poll, so
+      # without the grace a healthy fleet read STALLED (and /readyz 503) on a
+      # large share of checks. An unknown age (key missing or nil) stays
+      # conservative and counts.
       def unread?(queue)
         return true unless queue.key?(:visible_unread_length)
+        return false unless queue[:visible_unread_length].to_i.positive?
 
-        queue[:visible_unread_length].to_i.positive?
+        age = unread_age(queue)
+        age.nil? || age >= grace
+      end
+
+      def grace
+        @grace || Pgbus.configuration.health_unclaimed_grace
+      end
+
+      def unread_age(queue)
+        queue[:oldest_unread_claimable_age_sec]
+      end
+
+      # Oldest known unread claimable age over +queues+, nil when none is known.
+      def oldest_unread_age(queues)
+        queues.filter_map { |q| unread_age(q) }.max
+      end
+
+      # ", oldest claimable for 74s" so an operator can tell a wedge from a
+      # spike; empty when no flagged queue reports an age.
+      def unread_age_clause(queues)
+        age = oldest_unread_age(queues)
+        age ? ", oldest claimable for #{age}s" : ""
       end
 
       # Join backlog queue names for a reason string, truncated so a flagged

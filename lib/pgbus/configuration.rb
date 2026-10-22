@@ -241,6 +241,14 @@ module Pgbus
     # plain TCPServer bound to `health_bind` (default localhost).
     attr_accessor :health_port, :health_bind
 
+    # Seconds a visible, never-read (read_ct = 0) message must have been
+    # claimable before the health verdict counts it as "never claimed while
+    # draining processes are alive" (issue #589). Below it a worker's next
+    # poll is still coming, so a fresh enqueue or a delayed job whose wait just
+    # expired no longer reads STALLED. 0 restores the pre-0.22 rule (any
+    # visible read_ct = 0 row counts). Default 60.
+    attr_reader :health_unclaimed_grace
+
     # Streams (turbo-rails replacement, SSE-based)
     attr_accessor :streams_enabled, :streams_path, :streams_signed_name_secret,
                   :streams_default_retention, :streams_retention, :streams_heartbeat_interval, :streams_peer_close_interval,
@@ -419,6 +427,7 @@ module Pgbus
       # HTTP health endpoints — nil port disables the standalone server.
       @health_port = nil
       @health_bind = "127.0.0.1"
+      @health_unclaimed_grace = 60
 
       @streams_enabled = true
       @streams_path = nil
@@ -950,6 +959,8 @@ module Pgbus
       end
 
       raise Pgbus::ConfigurationError, "health_bind must be a non-empty String" unless health_bind.is_a?(String) && !health_bind.empty?
+
+      validate_health_unclaimed_grace!
 
       raise Pgbus::ConfigurationError, "statsd_host must be a non-empty String" unless statsd_host.is_a?(String) && !statsd_host.empty?
 
@@ -1539,6 +1550,14 @@ module Pgbus
       @recurring_execution_retention = coerce_duration!(value, :recurring_execution_retention)
     end
 
+    # Not coerce_duration!: 0 is valid here (the pre-0.22 rule), and nil is not
+    # a "disabled" sentinel. A Duration becomes integer seconds; anything else
+    # is kept for validate! to judge.
+    def health_unclaimed_grace=(value)
+      duration = defined?(ActiveSupport::Duration) && value.is_a?(ActiveSupport::Duration)
+      @health_unclaimed_grace = duration ? value.to_i : value
+    end
+
     # recurring_tasks_file (singular) is deprecated in favor of the plural
     # recurring_tasks_files. The engine still writes the singular internally to
     # record which default file was loaded, so it stays a plain accessor; the
@@ -1865,6 +1884,14 @@ module Pgbus
       return if grace.is_a?(Numeric) && grace.real? && grace.finite? && grace >= 0
 
       raise Pgbus::ConfigurationError, "immediate_shutdown_grace must be a finite number >= 0"
+    end
+
+    # A finite real number >= 0; nil is not "off" (0 is).
+    def validate_health_unclaimed_grace!
+      grace = health_unclaimed_grace
+      return if grace.is_a?(Numeric) && grace.real? && grace.finite? && grace >= 0
+
+      raise Pgbus::ConfigurationError, "health_unclaimed_grace must be a finite number of seconds >= 0, got #{grace.inspect}"
     end
 
     def validate_positive_duration!(numeric, name)

@@ -85,6 +85,8 @@ module Pgbus
     def health_bind: () -> String
     def health_bind=: (untyped) -> untyped
     def health_port: () -> untyped
+    def health_unclaimed_grace: () -> untyped
+    def health_unclaimed_grace=: (untyped value) -> untyped
     def health_port=: (untyped) -> untyped
     def idempotency_ttl: () -> Numeric?
     def idempotency_ttl=: (untyped value) -> untyped

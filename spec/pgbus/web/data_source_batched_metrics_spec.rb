@@ -118,6 +118,54 @@ RSpec.describe Pgbus::Web::DataSource do
       expect(result.first[:parked_length]).to eq(2)
     end
 
+    it "selects oldest_unread_claimable_age_sec from min(vt) over visible read_ct=0 rows (issue #589)" do
+      allow(conn).to receive(:select_values)
+        .with(a_string_matching(/pgmq\.meta/))
+        .and_return(%w[pgbus_default])
+
+      allow(conn).to receive(:quote) { |v| "'#{v}'" }
+
+      captured_sql = nil
+      allow(conn).to receive(:select_all) do |sql, _label|
+        captured_sql = sql
+        double(to_a: [{ "queue_name" => "pgbus_default", "queue_length" => "5",
+                        "queue_visible_length" => "3", "newest_msg_age_sec" => "10",
+                        "oldest_msg_age_sec" => "100", "total_messages" => "500",
+                        "max_read_ct" => "2", "visible_unread_length" => "1",
+                        "oldest_claimable_age_sec" => "42", "oldest_unread_claimable_age_sec" => "7" }])
+      end
+
+      result = data_source.queues_with_metrics
+
+      # min(vt), not min(enqueued_at): a delayed job's age starts when its wait
+      # expires. read_ct = 0 in the same aggregate: a retried message on its
+      # backoff must not make a fresh burst look old.
+      expect(captured_sql).to include(
+        "(SELECT EXTRACT(epoch FROM (NOW() - min(vt)))::int FROM pgmq.q_pgbus_default " \
+        "WHERE vt <= NOW() AND read_ct = 0) AS oldest_unread_claimable_age_sec"
+      )
+      expect(result.first[:oldest_unread_claimable_age_sec]).to eq(7)
+      expect(result.first[:oldest_claimable_age_sec]).to eq(42)
+    end
+
+    it "maps a NULL oldest_unread_claimable_age_sec (no visible unread row) to nil" do
+      allow(conn).to receive(:select_values)
+        .with(a_string_matching(/pgmq\.meta/))
+        .and_return(%w[pgbus_default])
+
+      allow(conn).to receive(:quote) { |v| "'#{v}'" }
+
+      allow(conn).to receive(:select_all)
+        .with(anything, "Pgbus Batched Queue Metrics")
+        .and_return(double(to_a: [{ "queue_name" => "pgbus_default", "queue_length" => "1",
+                                    "queue_visible_length" => "1", "newest_msg_age_sec" => "9",
+                                    "oldest_msg_age_sec" => "9", "total_messages" => "1",
+                                    "max_read_ct" => "1", "visible_unread_length" => "0",
+                                    "oldest_claimable_age_sec" => "9", "oldest_unread_claimable_age_sec" => nil }]))
+
+      expect(data_source.queues_with_metrics.first[:oldest_unread_claimable_age_sec]).to be_nil
+    end
+
     it "reports nil claimable age for a queue holding only vt-parked messages" do
       allow(conn).to receive(:select_values)
         .with(a_string_matching(/pgmq\.meta/))
