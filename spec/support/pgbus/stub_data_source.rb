@@ -476,7 +476,7 @@ module Pgbus
       def default_queues
         [
           { name: "pgbus_default", queue_length: 10, queue_visible_length: 8, visible_unread_length: 0,
-            parked_length: 2, oldest_msg_age_sec: 120, oldest_claimable_age_sec: 90,
+            oldest_unread_claimable_age_sec: nil, parked_length: 2, oldest_msg_age_sec: 120, oldest_claimable_age_sec: 90,
             newest_msg_age_sec: 5, total_messages: 500 },
           { name: "pgbus_default_dlq", queue_length: 2, queue_visible_length: 2, parked_length: 0,
             oldest_msg_age_sec: 3600, oldest_claimable_age_sec: 3600,

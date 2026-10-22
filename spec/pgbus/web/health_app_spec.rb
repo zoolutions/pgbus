@@ -115,6 +115,46 @@ RSpec.describe Pgbus::Web::HealthApp do
     end
   end
 
+  # Issue #589: a fresh visible backlog with live workers is a worker's next
+  # poll still coming, not the wedge; /readyz stays 200 until the oldest
+  # never-read message has been claimable for health_unclaimed_grace.
+  describe "GET /readyz with the real analyzer and the unclaimed grace (issue #589)" do
+    def stub_backlog(unread_age:)
+      allow(data_source).to receive_messages(
+        queues_with_metrics: [{ name: "pgbus_default", queue_length: 2, queue_visible_length: 2, paused: false,
+                                visible_unread_length: 2, oldest_unread_claimable_age_sec: unread_age }],
+        processes: [{ kind: "worker", status: "healthy" }],
+        queue_health_stats: {}, stream_queue_names: Set.new, drained_queue_names: nil,
+        unregistered_stream_queue_count: 0
+      )
+    end
+
+    before do
+      allow(Pgbus::MCP::HealthAnalyzer).to receive(:new).and_call_original
+      allow(Pgbus.configuration).to receive(:health_unclaimed_grace).and_return(60)
+    end
+
+    it "answers 200 for a visible backlog claimable for less than the grace" do
+      stub_backlog(unread_age: 1)
+
+      status, = get("/readyz")
+
+      expect(status).to eq(200)
+    end
+
+    it "answers 503 STALLED once the backlog has been claimable for the grace" do
+      stub_backlog(unread_age: 61)
+
+      response = get("/readyz")
+
+      expect(response[0]).to eq(503)
+      expect(JSON.parse(body_of(response))).to include(
+        "status" => "STALLED",
+        "summary" => include("oldest_unread_claimable_age_sec" => 61)
+      )
+    end
+  end
+
   describe "unknown routes and methods" do
     it "returns 404 for an unknown path" do
       status, = get("/nope")

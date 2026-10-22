@@ -1260,7 +1260,7 @@ All tools below are read-only — none mutates state, and there is no raw-SQL pa
 
 | Tool | Purpose |
 |------|---------|
-| `pgbus_health` | One-call verdict: `OK` / `DEGRADED` / `STALLED`. STALLED is the silent-worker-wedge signal (visible backlog while workers heart-beat but don't claim). Suitable for automated alerting. |
+| `pgbus_health` | One-call verdict: `OK` / `DEGRADED` / `STALLED`. STALLED is the silent-worker-wedge signal: a worker reports its claim loop stalled, or a visible backlog older than `health_unclaimed_grace` (default 60s) while workers heart-beat but don't claim. The summary carries `oldest_unread_claimable_age_sec`. Suitable for automated alerting. |
 | `pgbus_queues` | All queues: depth, visible count, oldest-message age, paused state. |
 | `pgbus_queue_detail` | Per-queue metrics + paused state + table health (dead tuples, bloat, vacuum age). |
 | `pgbus_processes` | Every process with kind, pid, heartbeat age, and `healthy`/`stale`/`stalled` status. |
@@ -1348,7 +1348,7 @@ For the **HTTP** transport, point the client at the mounted URL with a streamabl
 
 For orchestrators like Kubernetes, Pgbus exposes two HTTP probes: `/livez` (is the serving process up?) and `/readyz`. Readiness means different things in the two places the probes are served:
 
-- **Mounted in Rails** (`Pgbus::Web::HealthApp`): `/readyz` runs the cluster-wide `OK` / `DEGRADED` / `STALLED` verdict, same as the MCP `pgbus_health` tool — `STALLED` (visible backlog while workers heart-beat but don't claim) fails readiness.
+- **Mounted in Rails** (`Pgbus::Web::HealthApp`): `/readyz` runs the cluster-wide `OK` / `DEGRADED` / `STALLED` verdict, same as the MCP `pgbus_health` tool — `STALLED` (a never-claimed backlog older than `health_unclaimed_grace` while workers heart-beat but don't claim) fails readiness.
 - **Standalone from the supervisor** (`health_port`): `/readyz` is **container-local** — did *this* supervisor finish booting, and are all the children *it* forked alive? That is the signal a rolling deploy's health gate needs; the cluster verdict would let a brand-new container pass on the strength of the *old* container's workers.
 
 | Path | Method | 200 | 503 | Touches DB |
@@ -2560,6 +2560,7 @@ Curated headline options for the README. The full operator reference (with types
 | `statsd_port` | `8125` | StatsD UDP port (used when `metrics_backend = :statsd`) |
 | `health_port` | `nil` | Port for standalone HTTP liveness/readiness probes served by the supervisor; nil disables |
 | `health_bind` | `"127.0.0.1"` | Bind address for the standalone health server |
+| `health_unclaimed_grace` | `60` | Seconds a visible, never-read message must have been claimable before the health verdict reports it as never claimed (`STALLED`); `0` counts any such message |
 | `pgmq_schema_mode` | `:auto` | PGMQ schema install mode (`:auto`, `:extension`, `:embedded`) |
 | `doctor_on_boot` | `nil` | Run doctor inside the booting supervisor: `nil`/`false` = off, `:report` = log and boot, `:strict` = refuse to boot on a fatal check. Also via `--doctor` / `--doctor-strict`. |
 | `eager_validation` | `true` | Run `Configuration#validate!` automatically after the `Pgbus.configure` block yields; an invalid value raises `Pgbus::ConfigurationError` at boot. Set `false` to suppress and validate manually. |

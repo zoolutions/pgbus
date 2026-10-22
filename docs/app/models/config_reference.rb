@@ -135,6 +135,9 @@ module ConfigReference
     "Health & liveness" => [
       { name: "health_port", type: "Integer, nil", default: "nil", desc: "Port for HTTP liveness/readiness probes; nil disables." },
       { name: "health_bind", type: "String", default: '"127.0.0.1"', desc: "Bind address for the health server." },
+      { name: "health_unclaimed_grace", type: "Numeric", default: "60",
+        desc: "Seconds a visible, never-read message must have been claimable before the health verdict (/readyz, " \
+              "pgbus_health) reports it as never claimed while workers are alive (STALLED). 0 counts any such message." },
       { name: "stall_threshold", type: "Numeric, nil", default: "90",
         desc: "Seconds a checked-in worker or consumer loop may go without progress before the supervisor kills it. nil disables." },
       { name: "boot_timeout", type: "Numeric, nil", default: "120",

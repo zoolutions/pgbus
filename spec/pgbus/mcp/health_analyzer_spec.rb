@@ -26,10 +26,15 @@ RSpec.describe Pgbus::MCP::HealthAnalyzer do
   # so the legacy specs keep their meaning — a fully-unclaimed backlog
   # (max_read_ct 0 or absent) reports every visible row as unread; a claimed
   # one (max_read_ct > 0) reports none.
-  def queue(name:, length: 0, visible: 0, paused: false, max_read_ct: nil, visible_unread: nil)
+  #
+  # unread_age sets oldest_unread_claimable_age_sec (issue #589) only when
+  # given, so the legacy specs keep a hash without the key — the conservative
+  # "age unknown, count it" path.
+  def queue(name:, length: 0, visible: 0, paused: false, max_read_ct: nil, visible_unread: nil, unread_age: nil)
     h = { name: name, queue_length: length, queue_visible_length: visible, paused: paused }
     h[:max_read_ct] = max_read_ct unless max_read_ct.nil?
     h[:visible_unread_length] = visible_unread || (max_read_ct.to_i.zero? ? visible : 0)
+    h[:oldest_unread_claimable_age_sec] = unread_age unless unread_age.nil?
     h
   end
 
@@ -467,6 +472,129 @@ RSpec.describe Pgbus::MCP::HealthAnalyzer do
       reason = analyzer.verdict[:reasons].first
       expect(reason).to include("(+15 more)")
       expect(reason.scan(/pgbus_q\d+/).size).to eq(10)
+    end
+  end
+
+  # Issue #589: a visible read_ct=0 message is the wedge only once it has been
+  # claimable for longer than health_unclaimed_grace. Below it, a worker's next
+  # poll is simply still coming, and /readyz must not flap 503.
+  describe "#verdict unclaimed grace (issue #589)" do
+    subject(:analyzer) { described_class.new(data_source, grace: 60) }
+
+    it "is OK when the visible unread rows have been claimable for less than the grace" do
+      stub_data_source(
+        queues: [queue(name: "pgbus_default", length: 2, visible: 2, unread_age: 1)],
+        processes: [worker(status: :healthy)]
+      )
+
+      verdict = analyzer.verdict
+      expect(verdict[:status]).to eq("OK")
+      expect(verdict[:reasons]).to be_empty
+    end
+
+    it "is STALLED once they have been claimable for the grace, and names the age" do
+      stub_data_source(
+        queues: [queue(name: "pgbus_default", length: 2, visible: 2, unread_age: 74)],
+        processes: [worker(status: :healthy)]
+      )
+
+      verdict = analyzer.verdict
+      expect(verdict[:status]).to eq("STALLED")
+      expect(verdict[:reasons].first).to include("never claimed, oldest claimable for 74s")
+    end
+
+    it "counts an age exactly at the grace" do
+      stub_data_source(
+        queues: [queue(name: "pgbus_default", length: 2, visible: 2, unread_age: 60)],
+        processes: [worker(status: :healthy)]
+      )
+
+      expect(analyzer.verdict[:status]).to eq("STALLED")
+    end
+
+    it "flags only the queues past the grace and names the oldest of them" do
+      stub_data_source(
+        queues: [queue(name: "pgbus_fresh", length: 1, visible: 1, unread_age: 2),
+                 queue(name: "pgbus_old", length: 1, visible: 1, unread_age: 90),
+                 queue(name: "pgbus_older", length: 1, visible: 1, unread_age: 300)],
+        processes: [worker(status: :healthy)]
+      )
+
+      reason = analyzer.verdict[:reasons].first
+      expect(reason).to start_with("2 queue(s)")
+      expect(reason).to include("oldest claimable for 300s")
+      expect(reason).to include("pgbus_old, pgbus_older")
+      expect(reason).not_to include("pgbus_fresh")
+    end
+
+    it "keeps the conservative default when the hash has no age (older or stubbed data source)" do
+      stub_data_source(
+        queues: [queue(name: "pgbus_default", length: 3, visible: 3)],
+        processes: [worker(status: :healthy)]
+      )
+
+      verdict = analyzer.verdict
+      expect(verdict[:status]).to eq("STALLED")
+      expect(verdict[:reasons].first).to include("never claimed")
+      expect(verdict[:reasons].first).not_to include("oldest claimable for")
+    end
+
+    it "treats a present-but-nil age like a missing one" do
+      q = queue(name: "pgbus_default", length: 3, visible: 3).merge(oldest_unread_claimable_age_sec: nil)
+      stub_data_source(queues: [q], processes: [worker(status: :healthy)])
+
+      expect(analyzer.verdict[:status]).to eq("STALLED")
+    end
+
+    it "with a grace of 0 reports any visible unread row, as before 0.22" do
+      stub_data_source(
+        queues: [queue(name: "pgbus_default", length: 1, visible: 1, unread_age: 0)],
+        processes: [worker(status: :healthy)]
+      )
+
+      expect(described_class.new(data_source, grace: 0).verdict[:status]).to eq("STALLED")
+    end
+
+    it "leaves the worker-reported :stalled branch alone, whatever the backlog age" do
+      stub_data_source(
+        queues: [queue(name: "pgbus_default", length: 2, visible: 2, unread_age: 1)],
+        processes: [worker(status: :stalled)]
+      )
+
+      verdict = analyzer.verdict
+      expect(verdict[:status]).to eq("STALLED")
+      expect(verdict[:reasons].first).to include("claim loop not advancing")
+    end
+
+    it "reports the oldest unread claimable age over the drained backlog in the summary, below the grace too" do
+      stub_data_source(
+        queues: [queue(name: "pgbus_a", length: 1, visible: 1, unread_age: 4),
+                 queue(name: "pgbus_b", length: 1, visible: 1, unread_age: 12),
+                 queue(name: "pgbus_undrained", length: 1, visible: 1, unread_age: 900)],
+        processes: [worker(status: :healthy)],
+        drained: %w[pgbus_a pgbus_b]
+      )
+
+      expect(analyzer.verdict[:summary][:oldest_unread_claimable_age_sec]).to eq(12)
+    end
+
+    it "reports a nil summary age when no drained queue has a known unread age" do
+      stub_data_source(queues: [queue(name: "pgbus_default")], processes: [worker(status: :healthy)])
+
+      expect(analyzer.verdict[:summary]).to include(oldest_unread_claimable_age_sec: nil)
+    end
+
+    it "reads Pgbus.configuration.health_unclaimed_grace when no grace is given" do
+      original = Pgbus.configuration.health_unclaimed_grace
+      Pgbus.configuration.health_unclaimed_grace = 600
+      stub_data_source(
+        queues: [queue(name: "pgbus_default", length: 2, visible: 2, unread_age: 120)],
+        processes: [worker(status: :healthy)]
+      )
+
+      expect(described_class.new(data_source).verdict[:status]).to eq("OK")
+    ensure
+      Pgbus.configuration.health_unclaimed_grace = original
     end
   end
 end
