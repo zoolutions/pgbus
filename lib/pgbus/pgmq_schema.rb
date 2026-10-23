@@ -16,6 +16,23 @@ module Pgbus
     SCHEMA_DIR = File.expand_path("pgmq_schema", __dir__).freeze
     FIXUPS_DIR = File.join(SCHEMA_DIR, "fixups").freeze
 
+    # Wrapped around the vendored SQL by install_sql; see there.
+    SAVE_SEARCH_PATH_SQL = <<~SQL
+      DO $pgbus_save_path$
+      BEGIN
+        PERFORM pg_catalog.set_config('pgbus.install_saved_search_path', pg_catalog.current_setting('search_path'), true);
+      END
+      $pgbus_save_path$;
+    SQL
+
+    RESTORE_SEARCH_PATH_SQL = <<~SQL
+      DO $pgbus_restore_path$
+      BEGIN
+        PERFORM pg_catalog.set_config('search_path', pg_catalog.current_setting('pgbus.install_saved_search_path'), true);
+      END
+      $pgbus_restore_path$;
+    SQL
+
     class << self
       # Returns the latest vendored PGMQ version string.
       def latest_version
@@ -78,11 +95,21 @@ module Pgbus
       # Strips the extension-only pg_dump config blocks since they're
       # irrelevant when not installed as an extension.
       #
+      # From 1.13.1 upstream pins `search_path = pg_catalog, pg_temp` for the
+      # install with a transaction-local set_config, which outlives the install
+      # inside a migration (or a caller's transaction, in the client's lazy
+      # install): the next unqualified CREATE TABLE would target pg_catalog.
+      # The caller's path is saved before upstream's text and restored after,
+      # both transaction-local, so the install's pinning still applies to its
+      # own statements and nothing after them. Run the result as one string:
+      # a statement-by-statement load would lose the saved path between
+      # statements.
+      #
       # @param version [String] defaults to latest
       # @return [String] SQL
       def install_sql(version = latest_version)
-        sql = sql_for_version(version)
-        strip_extension_only_blocks(sql)
+        sql = strip_extension_only_blocks(sql_for_version(version))
+        "#{SAVE_SEARCH_PATH_SQL}\n#{sql}\n#{RESTORE_SEARCH_PATH_SQL}"
       end
 
       # Returns SQL to create the version tracking table and record an installation.
@@ -231,9 +258,12 @@ module Pgbus
           ""
         )
 
-        # Remove _belongs_to_pgmq function (checks pg_depend on extension)
+        # Remove _belongs_to_pgmq function (checks pg_depend on extension).
+        # From 1.13.1 its terminator carries `SET search_path = ...`; ending
+        # the match at a bare `LANGUAGE plpgsql;` would run on to the next
+        # function without that clause and strip everything in between.
         sql.gsub(
-          /CREATE FUNCTION pgmq\._belongs_to_pgmq.*?LANGUAGE plpgsql;/m,
+          /CREATE FUNCTION pgmq\._belongs_to_pgmq.*?\$\$\s*LANGUAGE plpgsql[^;]*;/m,
           ""
         )
       end
