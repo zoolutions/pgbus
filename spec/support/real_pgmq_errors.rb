@@ -23,6 +23,14 @@ module RealPgmqErrors
     load(Gem.find_files("pgmq/errors.rb").first) unless defined?(PGMQ::Errors::ConnectionError)
     PGMQ::Errors::ConnectionError
   end
+
+  # The genuine PGMQ::Metrics, loaded the same way, so a spec reading its
+  # fields fails when pgmq-ruby lacks one (a double answers anything).
+  def real_pgmq_metrics
+    Object.const_set(:PGMQ, Module.new) unless defined?(::PGMQ)
+    load(Gem.find_files("pgmq/metrics.rb").first) unless defined?(PGMQ::Metrics)
+    PGMQ::Metrics
+  end
 end
 
 RSpec.configure do |config|
