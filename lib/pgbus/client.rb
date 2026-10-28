@@ -356,7 +356,9 @@ module Pgbus
       Instrumentation.instrument("pgbus.client.send_message", queue: target) do
         with_stale_connection_retry do
           ensure_queue(queue_name)
-          synchronized { @pgmq.produce(target, serialize(payload), headers: headers && serialize(headers), delay: delay) }
+          synchronized do
+            @pgmq.produce(target, serialize(payload), headers: headers && serialize(headers), delay: pgmq_delay(delay))
+          end
         end
       end
     end
@@ -381,7 +383,8 @@ module Pgbus
           # shared-AR path @streams_pgmq aliases @pgmq and synchronized still
           # serializes on the mutex.
           synchronized do
-            streams_pool.produce(target, serialize(payload), headers: headers && serialize(headers), delay: delay)
+            streams_pool.produce(target, serialize(payload), headers: headers && serialize(headers),
+                                                             delay: pgmq_delay(delay))
           end
         end
       end
@@ -403,7 +406,7 @@ module Pgbus
       Instrumentation.instrument("pgbus.client.send_batch", queue: target, size: payloads.size) do
         with_stale_connection_retry do
           ensure_queue(queue_name)
-          synchronized { @pgmq.produce_batch(target, serialized, headers: serialized_headers, delay: delay) }
+          synchronized { @pgmq.produce_batch(target, serialized, headers: serialized_headers, delay: pgmq_delay(delay)) }
         end
       end
     end
@@ -1051,7 +1054,7 @@ module Pgbus
             routing_key,
             serialize(payload),
             headers: headers && serialize(headers),
-            delay: delay
+            delay: pgmq_delay(delay)
           )
         end
       end
@@ -2229,6 +2232,14 @@ module Pgbus
       else
         JSON.generate(data)
       end
+    end
+
+    # pgmq-ruby (0.8+) picks the SQL overload with `case delay when Integer /
+    # Numeric`, which an ActiveSupport::Duration matches neither of (it only
+    # overrides is_a?), so it fell to the Time branch and raised NoMethodError
+    # on `to_time` (issue #593). Hand it the seconds, fractional ones kept.
+    def pgmq_delay(delay)
+      defined?(ActiveSupport::Duration) && delay.is_a?(ActiveSupport::Duration) ? delay.value : delay
     end
 
     # Single-pass serialization of payloads and optional headers.

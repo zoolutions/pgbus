@@ -1,6 +1,9 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+# Duration delay examples (5.minutes) must not depend on another spec having
+# loaded ActiveSupport's numeric core_ext first.
+require "active_support/core_ext/numeric/time"
 
 RSpec.describe Pgbus::Client do
   # Stub pgmq-ruby so it never loads the real gem
@@ -745,6 +748,25 @@ RSpec.describe Pgbus::Client do
         delay: 0
       )
     end
+
+    # pgmq-ruby 0.8.0 dispatches on `case delay when Integer/Numeric`, which a
+    # Duration matches neither of (issue #593). `5.minutes == 300` and
+    # Duration#instance_of?(Integer) are both true, so the matcher checks #class.
+    it "hands pgmq a Duration delay as plain seconds" do
+      client.send_message("default", "payload", delay: 5.minutes)
+
+      expect(mock_pgmq).to have_received(:produce).with(
+        "pgbus_test_default", "payload", headers: nil, delay: have_attributes(class: Integer).and(eq(300))
+      )
+    end
+
+    it "keeps a fractional Duration delay fractional" do
+      client.send_message("default", "payload", delay: 1.5.seconds)
+
+      expect(mock_pgmq).to have_received(:produce).with(
+        "pgbus_test_default", "payload", headers: nil, delay: have_attributes(class: Float).and(eq(1.5))
+      )
+    end
   end
 
   describe "#send_batch" do
@@ -779,6 +801,14 @@ RSpec.describe Pgbus::Client do
         %w[p1 p2],
         headers: [nil, '{"h":1}'],
         delay: 0
+      )
+    end
+
+    it "hands pgmq a Duration delay as plain seconds (issue #593)" do
+      client.send_batch("default", ["p1"], delay: 5.minutes)
+
+      expect(mock_pgmq).to have_received(:produce_batch).with(
+        "pgbus_test_default", ["p1"], headers: nil, delay: have_attributes(class: Integer).and(eq(300))
       )
     end
 
@@ -2067,6 +2097,14 @@ RSpec.describe Pgbus::Client do
       )
     end
 
+    it "hands pgmq a Duration delay as plain seconds (issue #593)" do
+      client.send_stream_message("chat_42", "x", delay: 5.minutes)
+
+      expect(streams_pgmq).to have_received(:produce).with(
+        "pgbus_test_chat_42", "x", headers: nil, delay: have_attributes(class: Integer).and(eq(300))
+      )
+    end
+
     context "when priority_levels > 1 is configured (issue #310)" do
       before { config.priority_levels = 3 }
       after { config.priority_levels = nil }
@@ -2322,6 +2360,16 @@ RSpec.describe Pgbus::Client do
         "body",
         headers: '{"trace":"abc"}',
         delay: 3
+      )
+    end
+
+    # produce_topic sends a fractional delay through produce_batch_topic,
+    # whose dispatch a Duration misses (issue #593).
+    it "hands pgmq a fractional Duration delay as plain seconds" do
+      client.publish_to_topic("orders.created", "body", delay: 1.5.seconds)
+
+      expect(mock_pgmq).to have_received(:produce_topic).with(
+        "orders.created", "body", headers: nil, delay: have_attributes(class: Float).and(eq(1.5))
       )
     end
   end

@@ -93,6 +93,32 @@ RSpec.describe "Queue operations (integration)", :integration do
       messages = client.read_batch("delay_test", qty: 1)
       expect(messages || []).to be_empty
     end
+
+    # pgmq-ruby 0.8.0 picks the SQL overload with `case delay when Integer/Numeric`,
+    # which an ActiveSupport::Duration matches neither of (issue #593).
+    def delay_seconds(msg_id)
+      ActiveRecord::Base.connection.select_value(
+        "SELECT EXTRACT(EPOCH FROM vt - enqueued_at) FROM pgmq.q_pgbus_int_delay_test WHERE msg_id = #{msg_id.to_i}"
+      ).to_f
+    end
+
+    it "takes an ActiveSupport::Duration delay on send_message" do
+      msg_id = client.send_message("delay_test", { "delayed" => true }, delay: 5.minutes)
+
+      expect(delay_seconds(msg_id)).to be_within(1).of(300)
+    end
+
+    it "takes an ActiveSupport::Duration delay on send_batch" do
+      msg_ids = client.send_batch("delay_test", [{ "a" => 1 }, { "b" => 2 }], delay: 5.minutes)
+
+      expect(msg_ids.map { |id| delay_seconds(id) }).to all(be_within(1).of(300))
+    end
+
+    it "keeps a fractional Duration fractional" do
+      msg_id = client.send_message("delay_test", { "delayed" => true }, delay: 1.5.seconds)
+
+      expect(delay_seconds(msg_id)).to be_within(0.25).of(1.5)
+    end
   end
 
   describe "message headers" do
