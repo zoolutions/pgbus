@@ -122,7 +122,7 @@ GEM
       fiber-annotation
       fiber-local (~> 1.1)
       json
-    crass (1.0.7)
+    crass (1.0.8)
     diff-lcs (1.6.2)
     drb (2.2.3)
     erb (6.0.7)
@@ -492,7 +492,7 @@ CHECKSUMS
   conformance-kit (0.5.0) sha256=59b00d93aad1839fc248aac064b33762104c56ed1dfed3ba9423a694a302fb9d
   connection_pool (3.0.2) sha256=33fff5ba71a12d2aa26cb72b1db8bba2a1a01823559fb01d29eb74c286e62e0a
   console (1.36.0) sha256=45599ea906cf80a73d8941f03abf873fe66a6a954e0bac5bc1c01e2cdc406f07
-  crass (1.0.7) sha256=94868719948664c89ddcaf0a37c65048413dfcb1c869470a5f7a7ceb5390b295
+  crass (1.0.8) sha256=7a0145c7a2c59f8e7923b3a69ce819c444823a00a5127d805298fea13be24efe
   diff-lcs (1.6.2) sha256=9ae0d2cba7d4df3075fe8cd8602a8604993efc0dfa934cff568969efb1909962
   drb (2.2.3) sha256=0b00d6fdb50995fe4a45dea13663493c841112e4068656854646f418fda13373
   erb (6.0.7) sha256=c5ca6dc25b0ef974a44dc8f59fe847577122483b1968a38dec305c60bf91ee92
