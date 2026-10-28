@@ -119,6 +119,15 @@ RSpec.describe "Queue operations (integration)", :integration do
 
       expect(delay_seconds(msg_id)).to be_within(0.25).of(1.5)
     end
+
+    # produce_topic sends a fractional delay through produce_batch_topic.
+    it "keeps a fractional Duration fractional on publish_to_topic" do
+      client.bind_topic("delay_test.#", "delay_test")
+      client.publish_to_topic("delay_test.created", { "topic" => true }, delay: 1.5.seconds)
+      msg_id = ActiveRecord::Base.connection.select_value("SELECT max(msg_id) FROM pgmq.q_pgbus_int_delay_test")
+
+      expect(delay_seconds(msg_id)).to be_within(0.25).of(1.5)
+    end
   end
 
   describe "message headers" do
