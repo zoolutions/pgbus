@@ -1,0 +1,22 @@
+lib/pgbus/event.rb
+  s_a82d7cd510cca7::t_1c443a89cb68e5 26-35
+spec/pgbus/event_spec.rb
+  s_a82d7cd510cca7::t_c886671b56ee58 49
+  s_a82d7cd510cca7::t_50adec4a246b45 24-48,50-70
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "9a6c2cc8ad61c1648fc5378773e7d4eb7ae2f5fb",
+  "prompts": {},
+  "sessions": {
+    "s_a82d7cd510cca7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7bcbe758-e948-46b3-9523-6b9cc2c2c2d8",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
