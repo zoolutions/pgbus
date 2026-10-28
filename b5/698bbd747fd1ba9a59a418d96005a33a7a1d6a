@@ -1,0 +1,24 @@
+spec/support/real_pgmq_errors.rb
+  s_165df0763d8550::t_206dcc5020d6c7 26-33
+CHANGELOG.md
+  s_165df0763d8550::t_7e281d67330ee1 19
+spec/pgbus/cli_spec.rb
+  s_165df0763d8550::t_cc5e9f0b114f63 342-343
+  s_165df0763d8550::t_b8d96461ebf50c 344-346,359-361
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "b5698bbd747fd1ba9a59a418d96005a33a7a1d6a",
+  "prompts": {},
+  "sessions": {
+    "s_165df0763d8550": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3661b7f8-a7bf-4ab4-999d-82f5a0802564",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
