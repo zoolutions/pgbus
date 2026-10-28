@@ -28,7 +28,7 @@ class Views::Docs::Pages::EventBus < DocsUI::Page
       DocsUI::Code(<<~RUBY)
         Pgbus.publish(
           "orders.created",
-          { order_id: order.id, total: order.total }
+          { order_id: order.id, total: order.total, customer: { id: order.customer_id } }
         )
 
         Pgbus.publish_later(
@@ -60,12 +60,17 @@ class Views::Docs::Pages::EventBus < DocsUI::Page
           idempotent! # deduplicate by (event_id, handler_class)
 
           def handle(event)
-            order_id = event.payload["order_id"]
-            Analytics.track_order(order_id)
+            order_id = event["order_id"]
+            Analytics.track_order(order_id, customer_id: event.dig("customer", "id"))
             InventoryService.reserve(order_id)
           end
         end
       RUBY
+      md <<~'MD'
+        `event["order_id"]` reads a top-level payload key and
+        `event.dig("customer", "id")` a nested one. Symbol keys work too, and both
+        return `nil` for a missing key or a payload that is not a Hash.
+      MD
       DocsUI::Code(<<~RUBY, filename: "config/initializers/pgbus.rb")
         Pgbus::EventBus::Registry.instance.subscribe("orders.created", OrderCreatedHandler)
       RUBY
