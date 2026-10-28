@@ -1,0 +1,55 @@
+docs/app/models/config_reference.rb
+  s_71f74a6ae92f43::t_cb02f4a828c216 138-140
+lib/pgbus/version.rb
+  s_71f74a6ae92f43::t_cb02f4a828c216 4
+spec/pgbus/web/data_source_batched_metrics_spec.rb
+  s_71f74a6ae92f43::t_cb02f4a828c216 121-168
+Gemfile.lock
+  ai_agent 4,537
+spec/pgbus/configuration_spec.rb
+  s_71f74a6ae92f43::t_cb02f4a828c216 192-195,1266-1298
+sig/pgbus/configuration.rbs
+  s_71f74a6ae92f43::t_cb02f4a828c216 88-89
+spec/support/pgbus/stub_data_source.rb
+  s_71f74a6ae92f43::t_cb02f4a828c216 479
+gemfiles/rails_7_1.gemfile.lock
+  ai_agent 4,557
+lib/pgbus/mcp/health_analyzer.rb
+  s_71f74a6ae92f43::t_cb02f4a828c216 38-41,43,88-90,148-149,221-227,230-247,249-253
+lib/pgbus/mcp/tools/health_tool.rb
+  s_71f74a6ae92f43::t_cb02f4a828c216 16-19
+docs/Gemfile.lock
+  ai_agent 4,513
+spec/pgbus/web/data_source_spec.rb
+  s_71f74a6ae92f43::t_cb02f4a828c216 213-246
+README.md
+  s_71f74a6ae92f43::t_cb02f4a828c216 1263,1351,2563
+docs/app/views/docs/pages/observability.rb
+  s_71f74a6ae92f43::t_cb02f4a828c216 267-279
+lib/pgbus/web/data_source.rb
+  s_71f74a6ae92f43::t_cb02f4a828c216 1343-1344,1366-1367,1387,1404,1421-1422
+spec/pgbus/web/health_app_spec.rb
+  s_71f74a6ae92f43::t_cb02f4a828c216 118-157
+lib/pgbus/configuration.rb
+  s_71f74a6ae92f43::t_cb02f4a828c216 244-251,430,963-964,1553-1560,1889-1894
+spec/integration/unread_claimable_age_metrics_spec.rb
+  s_71f74a6ae92f43::t_cb02f4a828c216 1-51
+spec/pgbus/mcp/health_analyzer_spec.rb
+  s_71f74a6ae92f43::t_cb02f4a828c216 29-33,37,477-597
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "f063bb1d649c9bbd017cddccb7d85ce2fbad391a",
+  "prompts": {},
+  "sessions": {
+    "s_71f74a6ae92f43": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "81bd8ff0-0128-4550-9cfe-8ff2d4fd9645",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
