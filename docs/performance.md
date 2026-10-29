@@ -279,7 +279,7 @@ one Postgres.
   (`max_connections` minus the superuser reserve and the client backends
   already connected) is skipped with the reason. Each row prints the peak
   connections it held: 16 for one 12-thread child (the parent's included),
-  59–62 for four. `WP_BENCH_PROCESSES` defaults to `1,2,4`. `8` is opt-in:
+  58–62 for four. `WP_BENCH_PROCESSES` defaults to `1,2,4`. `8` is opt-in:
   8 × 16 + 10 = 138 does not fit a stock `max_connections = 100`. The
   8-process numbers below come from 6-thread workers (8 × 10 + 10 = 90).
 

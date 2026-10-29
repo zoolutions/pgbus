@@ -13,7 +13,7 @@ module FleetProfileHarness
   # this size (stats flushes, its pgbus_processes row; a further checkout waits
   # instead of connecting), so the budget is a bound, not an estimate. Measured
   # peak: 16 connections for one child at pool_size 14 (the parent's
-  # included), 59-62 for four.
+  # included), 58-62 for four.
   AR_PER_PROCESS = 2
   # Room for the parent's own connections and anything else that connects.
   BUDGET_HEADROOM = 10
