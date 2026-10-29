@@ -476,6 +476,36 @@ RSpec.describe Pgbus::Batch do
     end
   end
 
+  describe ".backfill_execution (issue #603)" do
+    before do
+      allow(described_class).to receive(:executions_migrated?).and_return(true)
+      allow(Pgbus::BatchExecution).to receive(:backfill!)
+    end
+
+    it "points a batch member's execution row at its message and physical queue" do
+      payload = { "job_id" => "j-1", Pgbus::Batch::METADATA_KEY => "b-1" }
+
+      described_class.backfill_execution(payload, 42, "pgbus_default_p1")
+
+      expect(Pgbus::BatchExecution).to have_received(:backfill!)
+        .with("j-1", msg_id: 42, queue_name: "pgbus_default_p1")
+    end
+
+    it "never touches pgbus_batch_executions for a job in no batch" do
+      described_class.backfill_execution({ "job_id" => "j-1" }, 42, "pgbus_default")
+
+      expect(Pgbus::BatchExecution).not_to have_received(:backfill!)
+      expect(described_class).not_to have_received(:executions_migrated?)
+    end
+
+    it "is a no-op for a nil payload or a missing msg_id" do
+      described_class.backfill_execution(nil, 42, "pgbus_default")
+      described_class.backfill_execution({ "job_id" => "j-1", Pgbus::Batch::METADATA_KEY => "b-1" }, nil, "pgbus_default")
+
+      expect(Pgbus::BatchExecution).not_to have_received(:backfill!)
+    end
+  end
+
   describe ".job_completed" do
     def build_batch_result(overrides = {})
       attrs = {

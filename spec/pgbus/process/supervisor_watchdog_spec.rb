@@ -498,7 +498,13 @@ RSpec.describe Pgbus::Process::Supervisor do
           ready_r.close
           Pgbus.configuration.logger = Logger.new(log.path)
           supervisor.send(:setup_child_process)
-          Thread.new { sleep }.name = "parked-helper" # rubocop:disable ThreadSafety/NewThread
+          helper = Thread.new { sleep } # rubocop:disable ThreadSafety/NewThread
+          helper.name = "parked-helper"
+          # Report ready only once the helper is parked: a TTIN that lands
+          # before it reaches `sleep` dumps it with no sleep frame yet. A dead
+          # helper (status false/nil) falls through and fails the assertion
+          # instead of hanging the parent on ready_r.read.
+          Thread.pass while helper.status == "run"
           ready_w.write("1")
           loop { sleep 0.05 }
         ensure
