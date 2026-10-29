@@ -230,6 +230,22 @@ module Pgbus
     # See issue #332.
     attr_reader :connection_guc_mode
 
+    # Run Client's read_batch, archive, delete, send and their batch forms as
+    # pgbus-owned static SQL in named prepared statements on the pooled
+    # connection, instead of pgmq's plpgsql functions, whose dynamic EXECUTE
+    # Postgres plans again on every call (issue #605). Default true. A queue
+    # whose table lacks a column the statements use (a pgmq older than the
+    # `headers` column) stays on the pgmq functions by itself.
+    #
+    # Behind a transaction-mode PgBouncer, prepared statements need PgBouncer
+    # >= 1.21 with `max_prepared_statements` set. Without it, a process that
+    # sees its statements disappear switches to sending the same SQL
+    # unprepared and logs a warning once, and connections built from a
+    # database.yml with `prepared_statements: false` send it unprepared from
+    # the start. false uses the pgmq functions everywhere: the full escape
+    # hatch.
+    attr_reader :native_statements
+
     # Zombie message detection — logs a warning when a message is redelivered
     # (read_ct > 1) without any prior failure recorded in pgbus_failed_events.
     attr_accessor :zombie_detection
@@ -422,6 +438,7 @@ module Pgbus
       @connects_to = nil
       @require_primary = false
       @connection_guc_mode = :options
+      @native_statements = true
 
       @mcp_write_tools = false
 
@@ -813,6 +830,12 @@ module Pgbus
       end
 
       @connection_guc_mode = mode
+    end
+
+    def native_statements=(value)
+      raise Pgbus::ConfigurationError, "native_statements must be true or false" unless [true, false].include?(value)
+
+      @native_statements = value
     end
 
     VALID_PGMQ_SCHEMA_MODES = %i[auto extension embedded].freeze

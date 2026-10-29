@@ -39,6 +39,14 @@ RSpec.describe "StreamQueue registry (integration)", :integration do
   describe ".record! schema-cache traffic" do
     it "issues no schema-cache (SCHEMA) queries once the table_exists? memo is warm" do
       expect(Pgbus::StreamQueue.table_exists?).to be(true) # warm the live-probe memo
+      # table_exists? is memoized across examples, so it may not touch the
+      # connection here. A connection another example left disconnected (or a
+      # dead backend) would connect inside record!, and connecting runs AR's
+      # own SCHEMA queries (configure_connection, the type map). Start from a
+      # disconnected pool and connect before subscribing, so the only SCHEMA
+      # queries that can show up are record!'s.
+      Pgbus::StreamQueue.connection_pool.disconnect!
+      Pgbus::StreamQueue.connection.verify!
 
       events = []
       callback = ->(_name, _start, _finish, _id, payload) { events << payload }

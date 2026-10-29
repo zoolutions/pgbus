@@ -16,6 +16,7 @@ class Views::Docs::Pages::PerformanceTuning < DocsUI::Page
     multi_core
     remote_database
     batched_completion
+    native_statements
     streams_master_hub
     streams_pool_autoscaling
     fanout_throughput
@@ -129,6 +130,38 @@ class Views::Docs::Pages::PerformanceTuning < DocsUI::Page
         plain "Try it on your own shape with "
         code { "WP_BENCH_COMPLETION_BATCHING=1 rake bench:fleet" }
         plain " against the same run without it."
+      end
+    end
+  end
+
+  def native_statements
+    DocsUI::Section("Prepared statements and connection poolers",
+                    description: "The hot queue operations are planned once per connection.") do
+      md <<~'MD'
+        pgmq's `read`, `archive`, `delete`, `send` and `send_batch` are plpgsql
+        functions that build their SQL and run it with `EXECUTE`, which Postgres
+        parses and plans again on every call. pgbus runs the same statements as
+        its own SQL in named prepared statements on each pooled connection
+        (`config.native_statements`, on by default), so Postgres plans each
+        one once per connection. Everything a caller sees is unchanged: return
+        values, `read_ct`, `vt`, headers, and the queue's NOTIFY trigger, which
+        fires on the same `INSERT`. A queue whose table lacks a column the
+        statements use (a pgmq extension older than the `headers` column) keeps
+        calling the pgmq functions by itself. The measurements are in
+        `docs/performance.md` → "Native statements".
+      MD
+      DocsUI::Callout(:warning) do
+        plain "Behind a transaction-mode PgBouncer, prepared statements need PgBouncer 1.21 or later with "
+        code { "max_prepared_statements" }
+        plain " set. Without it, the pooler drops them between transactions; a process that sees that "
+        plain "switches to sending the same SQL unprepared and logs a warning once; with "
+        code { "prepared_statements: false" }
+        plain " in database.yml (and no pgbus database_url or connection_params Hash of its own) it sends it "
+        plain "unprepared from the start. "
+        code { "config.native_statements = false" }
+        plain " uses the pgmq functions everywhere. See also "
+        code { "connection_guc_mode" }
+        plain " for the same pooler."
       end
     end
   end

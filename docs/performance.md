@@ -19,6 +19,7 @@ to guess.
 |------|--------------|-------|
 | `Client#send_message` / `#send_batch` | every job enqueue | `client_bench.rb` |
 | `Client#read_batch` | every worker poll cycle | `client_bench.rb` |
+| `Client#archive_message` | every job completion (a native prepared statement, issue #605) | `worker_profile_bench.rb` (`WP_BENCH_ROLE=fleet`) |
 | `Client#read_batch_fair` | every worker poll cycle when `config.fair_share` is set (issue #426) | `fair_read_bench.rb` |
 | `Executor#execute` | every job execution (deserialize + dispatch + archive) | `executor_bench.rb` |
 | JSON serialization | every enqueue/dequeue (payload encoding) | `serialization_bench.rb` |
@@ -386,6 +387,99 @@ What the numbers say:
   table per job, not less Ruby per job.
 - These are no-op jobs. A real job's own queries add to every row, and its
   run time spreads the archive commits out.
+
+### Native statements (issue #605)
+
+pgmq's `read`, `archive`, `delete`, `send` and `send_batch` are plpgsql
+functions that build their statement with `FORMAT(...)` and run it with
+`EXECUTE`. plpgsql never caches a dynamic `EXECUTE`'s plan, so every job paid
+a parse and a plan for its archive, and every read for its CTE. `Client` now
+runs the same statements as its own SQL in named prepared statements on the
+pooled connection (`lib/pgbus/client/native_statements.rb`,
+`config.native_statements`, default on).
+
+Two findings on the way:
+
+- **`LIMIT $1` keeps a prepared read on custom plans for good.** The generic
+  plan assumes the LIMIT fetches a tenth of the table and hash-joins a full
+  scan of it, so Postgres re-plans every read (0.07–0.11 ms of planning per
+  read at four processes, `pg_stat_statements.track_planning`). Reads of up
+  to 64 messages (`LITERAL_READ_LIMIT`; a worker reads at most its free
+  threads plus `read_ahead`, so only `threads + read_ahead` above 64 reaches
+  the `LIMIT $1` statement) run a statement with the LIMIT written in, one per qty,
+  which settles on the cached generic plan after Postgres's five custom
+  plans. Each pooled connection pays those five per qty it sees, so a short
+  bench still shows some read planning; a long-running worker does not.
+  Each prepared statement keeps its plan in the backend for the
+  connection's life: per queue, the seven statements plus one read per qty
+  a worker asks for (at most `threads + read_ahead`).
+- **The fleet cell undercounted planning.** A function's planning of its
+  dynamic `EXECUTE` is inside its execution time, while a top-level
+  statement's planning is `total_plan_time`, recorded only with
+  `track_planning` on. PG ms/job now adds `total_plan_time` (0 when the
+  setting is off). Both trees below ran that harness, with
+  `ALTER DATABASE … SET pg_stat_statements.track_planning = on`.
+
+`WP_BENCH_ROLE=fleet WP_BENCH_PROCESSES=1,4`, 12 threads, 5 000 jobs per
+process, Apple M2 Max (12 cores), PostgreSQL 18.6 on the same machine, Ruby
+3.4.2. `main` and the branch alternated, three rounds each, in one session.
+Other sessions shared the machine and the Postgres: load average 6.3–8.0 on
+12 cores (0.53–0.67×) throughout. Ranges are over the three rounds:
+
+| cell | processes | `main` jobs/s | branch jobs/s | `main` PG ms/job | branch PG ms/job |
+|---|---:|---:|---:|---:|---:|
+| local / YJIT | 1 | 6 345–6 928 | 7 365–7 976 | 0.137–0.159 | 0.036–0.059 |
+| local / YJIT | 4 | 12 892–13 615 | 14 468–16 745 | 0.370–0.441 | 0.206–0.299 |
+| local / no JIT | 1 | 6 079–6 514 | 5 885–6 941 | 0.104–0.138 | 0.026–0.095 |
+| local / no JIT | 4 | 13 145–14 045 | 11 199–14 129 | 0.279–0.372 | 0.172–0.287 |
+
+An earlier three rounds, with the reads still on `LIMIT $1` and load
+0.17–1.03×, agree: PG ms/job 0.107–0.117 → 0.037–0.049 at one process and
+0.274–0.326 → 0.188–0.261 at four. Statements per job do not change
+(1.20–1.26 on both sides): the same statements, cheaper.
+
+The top statements, YJIT, one round (ms per call, execution + planning):
+
+| statement | 1 process `main` | 1 process branch | 4 processes `main` | 4 processes branch |
+|---|---:|---:|---:|---:|
+| archive (one per job) | 0.112 | 0.018 | 0.258 | 0.149 |
+| read (one per 4–5 jobs) | 0.192 | 0.062 | 0.559 | 0.319 |
+| `pgbus_job_stats` insert (batched) | 0.401 | 0.388 | 0.858 | 0.773 |
+
+What the numbers say:
+
+- **Median Postgres time per job falls about 70 % at one process (0.148 →
+  0.045 ms with YJIT, 0.123 → 0.036 without) and 34–42 % at four (0.382 →
+  0.222, 0.344 → 0.228).** At one process the archive and read were mostly planning. At four
+  what remains is what #602 found: one commit per job waiting on the WAL
+  flush (`LWLock:WALWrite` is 38–51 % of the sampled waits on `main` and
+  43–71 % on the branch, whose backends spend less of their time on CPU) and
+  contention on the queue table's hot pages. Native statements take the
+  planning out; they do not take the commit out.
+- **jobs/s moves less than PG ms/job.** With YJIT the branch's range sits
+  wholly above `main`'s in the three rounds above, at one and at four
+  processes; in the earlier rounds the four-process ranges overlap
+  (15 117–15 690 against 15 622–16 255). Medians of the three rounds above:
+  +11 % at one process (6 709 → 7 427) and +20 % at four (13 472 → 16 185).
+  Without a JIT the medians do not move (6 416 → 6 339, 13 347 → 13 147):
+  there Ruby is the larger share of a job. The load on the machine is part of
+  the spread.
+- `config.native_statements = false` restores the function calls exactly.
+
+`rake bench:integration` (one process, one connection, real Postgres), two
+runs per side, alternated, load 0.34–0.40×:
+
+| row | `main` | branch |
+|---|---:|---:|
+| plain enqueue (`send_message`) | 8 109 / 8 531 i/s | 9 607 / 9 864 i/s (**+13–22 %**) |
+| adapter: plain job | 7 369 / 7 564 i/s | 9 018 / 8 535 i/s (**+13–22 %**) |
+| execute: plain job (read + archive) | 1 945 / 1 597 i/s | 2 255 / 2 193 i/s (**+13–41 %**) |
+| send_batch(100) | 1 552 / 1 707 i/s | 1 763 / 2 080 i/s |
+| acquire + release (no queue statement) | 4 561 / 4 624 i/s | 4 288 / 4 379 i/s (inside the noise) |
+
+`rake bench:fair_read`'s `read_batch` row resets the claimed rows after
+every read on a 100 000-message table; its ±18–65 % spread on this machine
+hides any difference either way, so it is left out.
 
 ### Native compilation, Rust, C extensions and Ractors
 

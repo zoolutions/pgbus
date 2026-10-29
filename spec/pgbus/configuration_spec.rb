@@ -1734,6 +1734,22 @@ RSpec.describe Pgbus::Configuration do
       expect { config.connection_guc_mode = :bogus }.to raise_error(Pgbus::ConfigurationError, /connection_guc_mode/)
     end
 
+    it "runs the native statements by default (issue #605)" do
+      expect(config.native_statements).to be(true)
+    end
+
+    it "accepts true and false for native_statements" do
+      config.native_statements = false
+      expect(config.native_statements).to be(false)
+      config.native_statements = true
+      expect(config.native_statements).to be(true)
+    end
+
+    it "rejects a non-boolean native_statements at assignment" do
+      expect { config.native_statements = "yes" }.to raise_error(Pgbus::ConfigurationError, /native_statements/)
+      expect { config.native_statements = nil }.to raise_error(Pgbus::ConfigurationError, /native_statements/)
+    end
+
     it "rejects a non-boolean require_primary" do
       config.require_primary = "yes"
       expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /require_primary/)
