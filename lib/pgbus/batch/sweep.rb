@@ -47,6 +47,8 @@ module Pgbus
 
           dlq = client.dead_letter_physical_name(row.queue_name, prefixed: false)
           return :failed if client.message_with_job_id?(dlq, job_id: row.job_id, prefixed: false) == true
+          # completed_jobs :delete (issue #607) leaves no archive row to find.
+          return :completed if Pgbus.configuration.completed_jobs == :delete
 
           return :completed if client.message_archived?(row.queue_name, msg_id: row.msg_id, prefixed: false) == true
 

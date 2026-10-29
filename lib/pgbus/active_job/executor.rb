@@ -6,13 +6,15 @@ module Pgbus
       attr_reader :client, :config
 
       # completer: the worker's Process::Completer when config.completion_batching
-      # is on (issue #606): archive_from goes through it instead of one
-      # archive_message per job.
+      # is on (issue #606): complete_from goes through it instead of one
+      # archive_message per job. config.completed_jobs (issue #607) is read
+      # once here: :delete finishes a successful job with delete_message.
       def initialize(client: Pgbus.client, config: Pgbus.configuration, stat_buffer: nil, completer: nil)
         @client = client
         @config = config
         @stat_buffer = stat_buffer
         @completer = completer
+        @delete_completed = config.completed_jobs == :delete
       end
 
       # Exceptions we never want to swallow — let the process die/signal propagate.
@@ -119,7 +121,7 @@ module Pgbus
           # heartbeat lapsed and it was redelivered): that worker owns the
           # completion signals, and signalling again here would release the
           # concurrency slot a second time (rails/solid_queue#761).
-          if archive_from(queue_name, msg_id, source_queue: source_queue) == :already_archived
+          if complete_from(queue_name, msg_id, source_queue: source_queue) == :already_archived
             Pgbus.logger.warn do
               "[Pgbus::Executor] already archived elsewhere, skipping signals #{log_tag(message, queue_name)} job_class=#{job_class}"
             end
@@ -149,7 +151,7 @@ module Pgbus
       rescue Exception => e # rubocop:disable Lint/RescueException
         # Widened from StandardError to catch Async::Stop / Async::Cancel
         # (both inherit from Exception, not StandardError) under execution_mode: :async.
-        # Before this, a fiber interruption between perform_now and archive_from
+        # Before this, a fiber interruption between perform_now and complete_from
         # silently lost control flow — no failed event row, no job_failed
         # notification, uniqueness lock held until VT expired. See issue #126.
         handle_failure(message, queue_name, e, payload: payload, source_queue: source_queue)
@@ -425,7 +427,11 @@ module Pgbus
       # that succeeded but failed to archive redelivers after VT expiry and
       # runs twice. If the retry also fails, fall through to the normal
       # failure path (recorded failure + VT-based redelivery).
-      # Returns :archived, :already_archived, or :ambiguous.
+      # Returns :archived, :already_archived, or :ambiguous. Under
+      # config.completed_jobs = :delete it deletes the message instead
+      # (delete_message, or the completer's delete_batch): pgmq.delete is as
+      # idempotent and returns false the same way, so the symbols keep their
+      # names and "archived" means "completed".
       #
       # A `false` reported after our OWN retry is ambiguous, not a duplicate:
       # the first archive may well have committed with only its reply lost to
@@ -434,15 +440,15 @@ module Pgbus
       # batch and uniqueness state on every such blip, whereas a genuine
       # duplicate would additionally require another worker to have taken and
       # finished the same message inside the retry window.
-      def archive_from(queue_name, msg_id, source_queue: nil)
+      def complete_from(queue_name, msg_id, source_queue: nil)
         attempts = 0
         begin
           archived = if @completer
                        @completer.complete(physical_queue(queue_name, source_queue), msg_id) == :archived
                      elsif source_queue
-                       client.archive_message(source_queue, msg_id, prefixed: false)
+                       finish_message(source_queue, msg_id, prefixed: false)
                      else
-                       client.archive_message(queue_name, msg_id)
+                       finish_message(queue_name, msg_id)
                      end
           return :archived unless archived == false
 
@@ -456,6 +462,10 @@ module Pgbus
           end
           retry
         end
+      end
+
+      def finish_message(queue, msg_id, **)
+        @delete_completed ? client.delete_message(queue, msg_id, **) : client.archive_message(queue, msg_id, **)
       end
 
       # A :while_executing lock is bound to THIS message, so an execution

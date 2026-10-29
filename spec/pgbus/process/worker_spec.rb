@@ -356,8 +356,17 @@ RSpec.describe Pgbus::Process::Worker do
     it "builds a completer on the worker's client with the configured batch size and hands it to the executor" do
       worker
 
-      expect(Pgbus::Process::Completer).to have_received(:new).with(client: mock_client, batch_size: 25)
+      expect(Pgbus::Process::Completer).to have_received(:new).with(client: mock_client, batch_size: 25, completed_jobs: :archive)
       expect(Pgbus::ActiveJob::Executor).to have_received(:new).with(stat_buffer: worker.stat_buffer, completer: completer)
+    end
+
+    # Issue #607: one op per worker, from config.completed_jobs.
+    it "builds a deleting completer when completed_jobs is :delete" do
+      batching_config.completed_jobs = :delete
+
+      worker
+
+      expect(Pgbus::Process::Completer).to have_received(:new).with(client: mock_client, batch_size: 25, completed_jobs: :delete)
     end
 
     it "builds none, and passes the executor none, when batching is off" do

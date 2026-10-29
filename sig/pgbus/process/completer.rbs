@@ -13,7 +13,9 @@ module Pgbus
         def value: () -> Symbol
       end
 
-      def initialize: (client: Pgbus::Client, batch_size: Integer) -> void
+      BATCH_OPS: Hash[Symbol, Symbol]
+
+      def initialize: (client: Pgbus::Client, batch_size: Integer, ?completed_jobs: :archive | :delete) -> void
       def complete: (String queue, Integer msg_id) -> (:archived | :already_archived)
       def stop: (?timeout: Numeric?) -> void
       def alive?: () -> bool

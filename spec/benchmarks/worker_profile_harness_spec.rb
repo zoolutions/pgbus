@@ -165,6 +165,19 @@ RSpec.describe WorkerProfileHarness do
     end
   end
 
+  describe ".completed_jobs" do
+    it "is nil (not set) when unset, else the Symbol" do
+      expect(described_class.completed_jobs({})).to be_nil
+      expect(described_class.completed_jobs("WP_BENCH_COMPLETED_JOBS" => "delete")).to eq(:delete)
+      expect(described_class.completed_jobs("WP_BENCH_COMPLETED_JOBS" => "archive")).to eq(:archive)
+    end
+
+    it "rejects anything else" do
+      expect { described_class.completed_jobs("WP_BENCH_COMPLETED_JOBS" => "drop") }
+        .to raise_error(ArgumentError, /WP_BENCH_COMPLETED_JOBS must be archive or delete/)
+    end
+  end
+
   describe ".jit_label" do
     it "reports yjit when YJIT is enabled" do
       stub_const("RubyVM::YJIT", Module.new { def self.enabled? = true })

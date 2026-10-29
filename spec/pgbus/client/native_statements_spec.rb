@@ -564,7 +564,7 @@ RSpec.describe Pgbus::Client::NativeStatements do
 
       executor = Pgbus::ActiveJob::Executor.new(client: client, config: config)
       allow(Pgbus.logger).to receive(:warn)
-      expect { executor.send(:archive_from, "default", 9) }.to raise_error(connection_error)
+      expect { executor.send(:complete_from, "default", 9) }.to raise_error(connection_error)
       expect(Pgbus.logger).to have_received(:warn).with(no_args).once
     end
 

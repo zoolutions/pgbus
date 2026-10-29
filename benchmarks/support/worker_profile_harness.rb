@@ -122,6 +122,17 @@ module WorkerProfileHarness
     raise ArgumentError, "WP_BENCH_COMPLETION_BATCHING must be 0 or 1 (got #{value})"
   end
 
+  # WP_BENCH_COMPLETED_JOBS (issue #607): "archive" or "delete" sets
+  # config.completed_jobs in every cell; unset leaves the setting alone (nil),
+  # so the bench still runs on a branch whose Configuration predates it.
+  def completed_jobs(env = ENV)
+    value = env.fetch("WP_BENCH_COMPLETED_JOBS", nil)
+    return if value.nil?
+    return value.to_sym if %w[archive delete].include?(value)
+
+    raise ArgumentError, "WP_BENCH_COMPLETED_JOBS must be archive or delete (got #{value})"
+  end
+
   def jit_label
     return "yjit" if defined?(RubyVM::YJIT) && RubyVM::YJIT.enabled?
     return "zjit" if defined?(RubyVM::ZJIT) && RubyVM::ZJIT.enabled?

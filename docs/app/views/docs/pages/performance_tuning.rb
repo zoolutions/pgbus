@@ -394,7 +394,7 @@ class Views::Docs::Pages::PerformanceTuning < DocsUI::Page
   end
 
   def archive
-    DocsUI::Section("Archive retention", description: "Archive tables grow unbounded without it.") do
+    DocsUI::Section("Archive retention", description: "Archive tables grow unbounded without it, or skip them with completed_jobs :delete.") do
       md <<~'MD'
         Archived (successfully-processed) messages accumulate in the `a_<queue>`
         tables. The dispatcher compacts them hourly; size the window to your volume:
@@ -410,6 +410,27 @@ class Views::Docs::Pages::PerformanceTuning < DocsUI::Page
         plain "see "
         a(href: "/docs/streams", class: "link") { "Real-time streams" }
         plain "."
+      end
+      md <<~'MD'
+        If nothing reads the completed jobs' archive, skip it. `completed_jobs = :delete`
+        finishes a successful job with `pgmq.delete`, the DELETE alone, instead of the
+        archive's DELETE + INSERT (`delete_batch` instead of `archive_batch` with
+        `completion_batching`). No `a_` rows, no archive index upkeep, nothing for the
+        compaction to trim. It is as reliable: either way the message is gone once the
+        statement commits. You lose the completed-job history in the archive; job stats
+        (`pgbus_job_stats`, the Insights page) still count every success.
+      MD
+      DocsUI::Code(<<~RUBY, filename: "config/initializers/pgbus.rb")
+        Pgbus.configure do |config|
+          config.completed_jobs = :delete # default :archive
+        end
+      RUBY
+      DocsUI::Callout(:note) do
+        plain "ActiveJob only. EventBus handler queues keep archiving, because event replay "
+        plain "reads their archive. Failed jobs stay in their queue for the retry and dead "
+        plain "letters still move to the DLQ, under either setting. The numbers are in "
+        code { "docs/performance.md" }
+        plain " → \"Delete mode\"."
       end
     end
   end
