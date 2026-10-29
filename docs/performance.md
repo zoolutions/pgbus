@@ -273,13 +273,15 @@ one Postgres.
   database's active client backends were waiting on.
 - Each child sets `pool_size = threads + 2` (the job threads, the loop thread,
   the heartbeat ticker). The worker cell leaves it to pgbus, which sizes it ~7
-  under a 12-thread worker because the bench configures no `workers` (#484). N
-  processes need `N × 14` connections, so a row whose `N × pool_size + 10`
-  exceeds the free connections (`max_connections` minus the superuser reserve
-  and the client backends already connected) is skipped with the reason.
-  `WP_BENCH_PROCESSES` defaults to `1,2,4`. `8` is opt-in: 8 × 14 + 10 = 122
-  does not fit a stock `max_connections = 100`. The 8-process numbers below
-  come from 6-thread workers (8 × 8 + 10 = 74).
+  under a 12-thread worker because the bench configures no `workers` (#484).
+  Each child also holds one ActiveRecord connection (stats, its process row),
+  so a row whose `N × (pool_size + 1) + 10` exceeds the free connections
+  (`max_connections` minus the superuser reserve and the client backends
+  already connected) is skipped with the reason. Each row prints the peak
+  connections it held: 16 for one 12-thread child (the parent's included),
+  59–62 for four. `WP_BENCH_PROCESSES` defaults to `1,2,4`. `8` is opt-in:
+  8 × 15 + 10 = 130 does not fit a stock `max_connections = 100`. The
+  8-process numbers below come from 6-thread workers (8 × 9 + 10 = 82).
 
 Measured 2026-10-29 on an Apple M2 Max (12 cores), PostgreSQL 18.6 on the same
 machine (`synchronous_commit = on`), Ruby 3.4.2, `read_ahead` not passed,
@@ -311,17 +313,21 @@ them as the shape of the curve, not as decimals.
 Statements per job stay at 1.19–1.26 in every 12-thread row (one
 `pgmq.archive` per job, one `pgmq.read` per 4–5 jobs, the batched
 `pgbus_job_stats` insert) and 1.37–1.47 with 6 threads (smaller reads). The
-top statement is `pgmq.archive` at 0.06–0.09 ms per call for one process and
-0.18–0.25 ms for four.
+statement with the most total time is `pgmq.archive` in every 12-thread row
+(in some 6-thread rows it is `pgmq.read`). In the local 12-thread rows,
+`pgmq.archive` takes 0.06–0.09 ms per call with one process and 0.18–0.25 ms
+with four.
 
-What the active backends of the bench database were waiting on (local, YJIT,
-12 threads; share of `pg_stat_activity` samples):
+What the active backends of the bench database were waiting on (local, YJIT;
+share of `pg_stat_activity` samples; the five 12-thread rounds, and the two
+6-thread rounds for 8 processes). The output lists the top six wait kinds per
+row, so "≤" bounds a kind that missed the top six in some rounds:
 
-| processes | on CPU | WAL flush (`LWLock:WALWrite` + `IO:WalWrite`) | `LWLock:BufferContent` | `Lock:transactionid` |
-|---:|---:|---:|---:|---:|
-| 1 | 47–62 % | 30–49 % | 0–2 % | 0 % |
-| 4 | 29–41 % | 23–27 % | 9–16 % | ≤ 6 % |
-| 8 (6 threads) | 30–36 % | 20–24 % | 11–15 % | 11–16 % |
+| processes | on CPU | `LWLock:WALWrite` (waiting for a WAL flush) | `IO:WalWrite` (doing it) | `LWLock:BufferContent` | `Lock:transactionid` |
+|---:|---:|---:|---:|---:|---:|
+| 1 | 47–63 % | 11–28 % | 16–21 % | ≤ 2 % | 0 % |
+| 4 | 29–41 % | 19–25 % | ≤ 7 % | 9–16 % | ≤ 6 % |
+| 8 (6 threads) | 30–36 % | 18–20 % | ≤ 4 % | 11–15 % | 11–16 % |
 
 What the numbers say:
 
@@ -329,12 +335,15 @@ What the numbers say:
   the same round's one process, two processes give 1.5–2.2×, four give
   1.8–2.6×, and eight (6-thread workers) run below four. With YJIT the
   fleet's 1-process row sits 6–11 % above the worker cell of the same round
-  (7 116–7 405); without a JIT the two overlap (−9 % to +17 % against
-  5 246–5 741). The one configuration difference is `pool_size`, 14 instead
-  of ~7.
+  (7 116–7 405, rounds 2–5); without a JIT the two overlap (−9 % to +17 %
+  against 5 246–5 741). Round 1's YJIT worker cell hit a load spike (312
+  jobs/s at 7.7 % CPU) and is left out. The one configuration difference is
+  `pool_size`, 14 instead of ~7.
 - **Postgres is what bends, not Ruby.** Statements per job do not change with
   N, but Postgres time per job roughly triples from one process to four
-  (2.4–4.5×), and grows 6–8× by eight (6-thread workers). Each statement takes longer, and the waits say why. Every
+  (2.4–3.8× against the same round's one process) and grows 4.6–7.5× by
+  eight (6-thread workers, against their own one-process row). Each
+  statement takes longer, and the waits say why. Every
   `pgmq.archive` is its own transaction, so every job waits for a WAL flush
   (`synchronous_commit = on`), and concurrent commits queue on `WALWrite`.
   Every reader and archiver works on the same few hot pages of the one queue

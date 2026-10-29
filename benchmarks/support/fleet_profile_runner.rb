@@ -48,6 +48,11 @@ module FleetProfileRunner
       AND pid <> pg_backend_pid()
     GROUP BY 1
   SQL
+  # Every connection the bench database holds (the parent's included), to
+  # check the budget's flat headroom against what the children really open.
+  CONNECTIONS_SQL = <<~SQL
+    SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND backend_type = 'client backend'
+  SQL
   WAIT_SAMPLE_S = 0.01
 
   module_function
@@ -85,7 +90,7 @@ module FleetProfileRunner
       child[:stdin].puts("go")
       child[:stdin].close
     end
-    waits = sample_waits_until_exit(conn, children)
+    waits, peak_connections = sample_until_exit(conn, children)
     results = children.map { |child| collect(child) }
 
     verify!(results, total)
@@ -95,7 +100,9 @@ module FleetProfileRunner
     {
       "jobs" => total, "wall_s" => measured[:wall_s], "jobs_per_s" => measured[:jobs_per_s],
       "start_skew_ms" => measured[:start_skew_ms], "pg_unavailable_reason" => pg_unavailable,
-      "pg_top" => cost.fetch(:top, []), "pg_waits" => waits, "pg_ms_per_job" => cost[:ms_per_job],
+      "pg_top" => cost.fetch(:top, []), "pg_waits" => waits, "peak_connections" => peak_connections,
+      "budgeted_connections" => FleetProfileHarness.budgeted_connections(processes: processes, pool_size: pool),
+      "pg_ms_per_job" => cost[:ms_per_job],
       "pg_statements_per_job" => cost[:statements_per_job], "pg_busy_backends" => cost[:busy_backends]
     }
   end
@@ -109,7 +116,10 @@ module FleetProfileRunner
     worker = Pgbus::Process::Worker.new(**worker_options(QUEUE, threads, read_ahead))
     out.puts(READY)
     out.flush
-    input.gets
+    # EOF (the parent died or aborted) is not a start signal: never drain the
+    # shared queue unsupervised.
+    signal = input.gets
+    raise "drain child #{index}: no start signal (got #{signal.inspect})" unless signal&.chomp == "go"
 
     state = { started_at: realtime, count: 0, polled_at: 0.0, zeros: 0 }
     state[:finished_at] = state[:started_at]
@@ -186,20 +196,23 @@ module FleetProfileRunner
     abort "drain child #{child[:index]} exited before it was ready:\n#{child[:output]}"
   end
 
-  # Polls pg_stat_activity every WAIT_SAMPLE_S until every child has exited.
-  # The children print only READY and their result line, so their stdout pipes
-  # cannot fill while the parent is not reading them.
-  def sample_waits_until_exit(conn, children)
+  # Polls pg_stat_activity every WAIT_SAMPLE_S until every child has exited:
+  # the wait split and the peak connection count. The children print only READY
+  # and their result line, so their stdout pipes cannot fill while the parent
+  # is not reading them.
+  def sample_until_exit(conn, children)
     waits = Hash.new(0)
     samples = 0
+    peak = 0
     pending = children.dup
     until pending.empty?
       conn.select_rows(WAITS_SQL).each { |wait, n| waits[wait] += Integer(n) }
+      peak = [peak, Integer(conn.select_value(CONNECTIONS_SQL))].max
       samples += 1
       pending.reject! { |child| child[:status] = Process.wait2(child[:pid], Process::WNOHANG)&.last }
       sleep(WAIT_SAMPLE_S)
     end
-    FleetProfileHarness.wait_shares(waits, samples: samples)
+    [FleetProfileHarness.wait_shares(waits, samples: samples), peak]
   end
 
   def collect(child)
@@ -230,8 +243,8 @@ module FleetProfileRunner
   # nil when pg_stat_statements is loaded and installed in this database,
   # else why not.
   def pg_stat_unavailable_reason(conn)
-    libs = conn.select_value("SHOW shared_preload_libraries").to_s.split(",").map(&:strip)
-    return "add it to shared_preload_libraries" unless libs.include?("pg_stat_statements")
+    reason = FleetProfileHarness.pg_stat_preload_reason(conn.select_value("SHOW shared_preload_libraries"))
+    return reason if reason
 
     conn.execute("CREATE EXTENSION IF NOT EXISTS pg_stat_statements")
     nil

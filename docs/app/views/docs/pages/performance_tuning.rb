@@ -29,8 +29,8 @@ class Views::Docs::Pages::PerformanceTuning < DocsUI::Page
       md <<~'MD'
         Under the GVL a worker process uses about one core however many threads it
         has, so throughput past one core comes from `processes:`. Each process
-        brings its own connection pool, so budget `processes × (threads + 2)`
-        connections. On one queue and one Postgres the measured fleet scales
+        brings its own pgmq connection pool and ActiveRecord connections, so
+        check `processes ×` both against `max_connections`. On one queue and one Postgres the measured fleet scales
         almost linearly while the database is on another host (each process is
         capped by its reader's round trips), and bends at 2–4 processes when
         Postgres is close: every job's archive is its own commit, and every

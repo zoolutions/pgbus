@@ -26,6 +26,17 @@ RSpec.describe FleetProfileHarness do
     end
   end
 
+  describe ".pg_stat_preload_reason" do
+    it "is nil when pg_stat_statements is among shared_preload_libraries" do
+      expect(described_class.pg_stat_preload_reason("auto_explain, pg_stat_statements")).to be_nil
+    end
+
+    it "says how to enable it when it is not preloaded" do
+      expect(described_class.pg_stat_preload_reason("")).to eq("add it to shared_preload_libraries")
+      expect(described_class.pg_stat_preload_reason("pg_stat_statements_extra")).to eq("add it to shared_preload_libraries")
+    end
+  end
+
   describe ".free_connections" do
     it "is max_connections minus the superuser reserve and the client backends already connected" do
       expect(described_class.free_connections(max_connections: 100, reserved: 3, in_use: 9)).to eq(88)
@@ -33,14 +44,20 @@ RSpec.describe FleetProfileHarness do
   end
 
   describe ".budget_skip_reason" do
-    it "is nil when processes × pool_size plus headroom fits the free connections" do
+    it "is nil when processes × (pool_size + 1) plus headroom fits the free connections" do
       expect(described_class.budget_skip_reason(processes: 4, pool_size: 14, free_connections: 88)).to be_nil
+    end
+
+    # Measured: a drain child holds its pgmq pool plus one ActiveRecord
+    # connection (stats, its process row), so the budget grows with N.
+    it "budgets one ActiveRecord connection per child on top of its pgmq pool" do
+      expect(described_class.budgeted_connections(processes: 4, pool_size: 14)).to eq(70)
     end
 
     it "explains the skip when it does not fit" do
       reason = described_class.budget_skip_reason(processes: 8, pool_size: 14, free_connections: 88)
 
-      expect(reason).to eq("skipped: needs 8 × 14 + 10 = 122 connections, 88 free")
+      expect(reason).to eq("skipped: needs 8 × (14 + 1) + 10 = 130 connections, 88 free")
     end
   end
 
@@ -157,6 +174,16 @@ RSpec.describe FleetProfileHarness do
 
       expect(described_class.statement_lines([cell]))
         .to eq(["fleet / local / none, 4 process(es): 4.9 active backends sampled, CPU 75%, LWLock 25%"])
+    end
+
+    # The budget reserves pool_size per child plus a flat headroom; the peak
+    # shows what the children really opened, so a too-small headroom is visible.
+    it "reports the peak connections the bench database held during the drain" do
+      cell = { "role" => "fleet", "location" => "local", "jit" => "none", "processes" => 4, "pg_top" => [],
+               "peak_connections" => 61, "budgeted_connections" => 66 }
+
+      expect(described_class.statement_lines([cell]))
+        .to eq(["fleet / local / none, 4 process(es): peak 61 connections (budgeted 66)"])
     end
 
     it "lists each cell's top statements with ms per call" do

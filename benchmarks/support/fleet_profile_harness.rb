@@ -9,8 +9,11 @@
 # spec/benchmarks/fleet_profile_harness_spec.rb pins it without a run.
 module FleetProfileHarness
   DEFAULT_PROCESSES = "1,2,4"
-  # Room left for the parent's ActiveRecord pool and the children's AR checkouts
-  # (stats writes) on top of the pgmq pools.
+  # Each drain child holds its pgmq pool plus one ActiveRecord connection (the
+  # stats writes, its pgbus_processes row): measured peak 16 connections for one
+  # child at pool_size 14 (the parent's included), 59-62 for four.
+  AR_PER_PROCESS = 1
+  # Room for the parent's own connections and anything else that connects.
   BUDGET_HEADROOM = 10
   TOP_STATEMENTS = 5
   QUERY_WIDTH = 60
@@ -26,17 +29,26 @@ module FleetProfileHarness
     counts.map { |c| Integer(c, 10) }
   end
 
+  def pg_stat_preload_reason(shared_preload_libraries)
+    return if shared_preload_libraries.to_s.split(",").map(&:strip).include?("pg_stat_statements")
+
+    "add it to shared_preload_libraries"
+  end
+
+  def budgeted_connections(processes:, pool_size:) = (processes * (pool_size + AR_PER_PROCESS)) + BUDGET_HEADROOM
+
   def free_connections(max_connections:, reserved:, in_use:)
     max_connections - reserved - in_use
   end
 
-  # nil when processes pgmq pools of pool_size (plus headroom) fit the free
+  # nil when the children's connections (plus headroom) fit the free
   # connections, else the reason the row is skipped.
   def budget_skip_reason(processes:, pool_size:, free_connections:)
-    needed = (processes * pool_size) + BUDGET_HEADROOM
+    needed = budgeted_connections(processes: processes, pool_size: pool_size)
     return if needed <= free_connections
 
-    "skipped: needs #{processes} × #{pool_size} + #{BUDGET_HEADROOM} = #{needed} connections, #{free_connections} free"
+    "skipped: needs #{processes} × (#{pool_size} + #{AR_PER_PROCESS}) + #{BUDGET_HEADROOM} = #{needed} connections, " \
+      "#{free_connections} free"
   end
 
   # children: each child's {"processed", "started_at", "finished_at"}, CLOCK_REALTIME
@@ -101,13 +113,20 @@ module FleetProfileHarness
 
   def statement_lines(cells)
     cells.reject { |c| c["skip_reason"] }.flat_map do |c|
-      title = "#{label(c)}, #{c["processes"]} process(es):#{wait_note(c["pg_waits"])}"
+      title = "#{label(c)}, #{c["processes"]} process(es):#{connection_note(c)}#{wait_note(c["pg_waits"])}"
       next ["#{title} pg_stat_statements: n/a (#{c["pg_unavailable_reason"]})"] if c["pg_unavailable_reason"]
 
       [title] + c["pg_top"].map do |s|
         "  #{format("%.3f", s["ms_per_call"])} ms/call × #{s["calls"]}  #{short_query(s["query"])}"
       end
     end
+  end
+
+  def connection_note(cell)
+    return "" unless cell["peak_connections"]
+
+    " peak #{cell["peak_connections"]} connections (budgeted #{cell["budgeted_connections"]})" \
+      "#{"," if cell["pg_waits"] && !cell["pg_waits"]["shares"].empty?}"
   end
 
   def wait_note(waits)

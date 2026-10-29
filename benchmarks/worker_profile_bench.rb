@@ -17,11 +17,12 @@
 # per job from pg_stat_statements (scoped to this database; prints n/a when the
 # extension is not in shared_preload_libraries). Each drain child sets
 # pool_size = threads + 2 (job threads, the loop thread, the heartbeat ticker)
-# explicitly, so N processes need N × (threads + 2) connections: a row whose
-# N × pool_size + 10 exceeds the free connections (max_connections minus the
-# superuser reserve and the client backends already connected) is skipped with
-# the reason. WP_BENCH_PROCESSES defaults to 1,2,4; 8 × 14 = 112 does not fit a
-# stock max_connections = 100, so 8 is opt-in. WP_BENCH_JOBS is per process.
+# explicitly, and holds one ActiveRecord connection besides: a row whose
+# N × (pool_size + 1) + 10 exceeds the free connections (max_connections minus
+# the superuser reserve and the client backends already connected) is skipped
+# with the reason, and each row prints the peak connections it really held.
+# WP_BENCH_PROCESSES defaults to 1,2,4; 8 × 15 + 10 = 130 does not fit a stock
+# max_connections = 100, so 8 is opt-in. WP_BENCH_JOBS is per process.
 # No vernier profile for the fleet cell: the worker cell already shows one.
 #
 # Matrix: {worker, consumer, fleet} x {local, proxied} x {YJIT on, YJIT off}. Each cell is its own
@@ -184,8 +185,10 @@ def print_profile_table(cells)
   puts "CPU/wall is process CPU time over wall time across all threads."
 end
 
-# A fleet drain child (issue #602) is checked first: it inherits nothing from a
-# cell's environment, and must never purge the shared queue.
+# A fleet drain child (issue #602) is checked first: Process.spawn merges into
+# the fleet cell's ENV, so a drain child also carries WPROF_CHILD=… and
+# WPROF_CHILD_ROLE=fleet. Checked second, it would run as a fleet cell and
+# spawn drain children of its own, and purge the queue its siblings drain.
 if (index = ENV.fetch("WPROF_DRAIN_CHILD", nil))
   require_relative "support/fleet_profile_runner"
   FleetProfileRunner.run_drain_child(ENV.fetch("WPROF_CHILD_URL"), index: Integer(index), threads: THREADS,
