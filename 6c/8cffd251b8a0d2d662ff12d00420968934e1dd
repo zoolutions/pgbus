@@ -1,0 +1,27 @@
+spec/pgbus/configuration_spec.rb
+  s_6f6be46f1a03ed::t_03931ffa30926a 1695-1710
+spec/pgbus/allocation_budget_spec.rb
+  s_6f6be46f1a03ed::t_55ca35144b9563 83-136
+spec/integration/native_statements_spec.rb
+  s_6f6be46f1a03ed::t_9d64189fc05520 1-244
+lib/pgbus/client/native_statements.rb
+  s_6f6be46f1a03ed::t_34aaf776f23627 1-111,113-126,128,130-132,134,136-138,141,145-146,148-154,158-167,170-307
+spec/pgbus/client/native_statements_spec.rb
+  s_6f6be46f1a03ed::t_a2363509019347 1-368,371-374,376-459
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "6c8cffd251b8a0d2d662ff12d00420968934e1dd",
+  "prompts": {},
+  "sessions": {
+    "s_6f6be46f1a03ed": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c60b8ef6-a2ee-4a53-a9de-07b83ac1c707",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
