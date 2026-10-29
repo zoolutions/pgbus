@@ -654,7 +654,9 @@ RSpec.describe Pgbus::ActiveJob::Executor do
     end
 
     context "with job stat recording" do
-      let(:enqueued_at) { (Time.now.utc - 0.5).iso8601(6) } # 500ms ago
+      # 500ms ago, in the text form PostgreSQL sends a TIMESTAMPTZ (pgmq-ruby
+      # sets no result type map, so the executor gets this String).
+      let(:enqueued_at) { (Time.now.utc - 0.5).strftime("%Y-%m-%d %H:%M:%S.%6N+00") }
       let(:message) { build_message_double(msg_id: 1, message: message_json, read_ct: 1, enqueued_at: enqueued_at) }
 
       it "records a success stat with enqueue latency and retry count" do
@@ -763,6 +765,65 @@ RSpec.describe Pgbus::ActiveJob::Executor do
         expect(Pgbus::JobStat).to have_received(:record!).with(
           hash_including(enqueue_latency_ms: a_value >= 400)
         )
+      end
+
+      # Issue #604: the String PGMQ hands over is read by Time.new, never
+      # Time.parse. A misread offset is off by hours: +02 read as UTC
+      # lands two hours in the future (clamped to 0), +05:30 read as UTC the
+      # same, so the upper bound catches a dropped offset as well.
+      {
+        "PG text, +00" => ["+00:00", "%Y-%m-%d %H:%M:%S.%6N+00"],
+        "PG text, +02" => ["+02:00", "%Y-%m-%d %H:%M:%S.%6N+02"],
+        "PG text, -03" => ["-03:00", "%Y-%m-%d %H:%M:%S.%6N-03"],
+        "PG text, +05:30" => ["+05:30", "%Y-%m-%d %H:%M:%S.%6N+05:30"],
+        "PG text, whole seconds" => ["+00:00", "%Y-%m-%d %H:%M:%S+00"],
+        "ISO 8601 with a T separator" => ["+00:00", "%Y-%m-%dT%H:%M:%S.%6N+00:00"],
+        "ISO 8601 with a T separator, +05:30" => ["+05:30", "%Y-%m-%dT%H:%M:%S.%6N+05:30"],
+        "ISO 8601 with a T separator and Z" => ["+00:00", "%Y-%m-%dT%H:%M:%S.%6NZ"],
+        "PG text with Z" => ["+00:00", "%Y-%m-%d %H:%M:%S.%6NZ"]
+      }.each do |shape, (offset, format)|
+        it "computes latency from a #{shape} enqueued_at without Time.parse" do
+          stamp = (Time.now - 1.5).getlocal(offset).strftime(format)
+          stamped = build_message_double(msg_id: 64, message: message_json, read_ct: 1, enqueued_at: stamp)
+          expect(Time).not_to receive(:parse)
+
+          executor.execute(stamped, queue_name)
+
+          expect(Pgbus::JobStat).to have_received(:record!).with(
+            hash_including(enqueue_latency_ms: a_value_between(900, 60_000))
+          )
+        end
+      end
+
+      # A string without an offset is UTC (TIMESTAMPTZ is UTC inside), not the
+      # host's zone. CI runs in UTC, so the zone is pinned away from it here.
+      it "reads an enqueued_at without an offset as UTC, whatever the host zone" do
+        stamp = (Time.now.utc - 1.5).strftime("%Y-%m-%d %H:%M:%S.%6N")
+        stamped = build_message_double(msg_id: 64, message: message_json, read_ct: 1, enqueued_at: stamp)
+
+        with_zone("Asia/Kolkata") { executor.execute(stamped, queue_name) }
+
+        expect(Pgbus::JobStat).to have_received(:record!).with(
+          hash_including(enqueue_latency_ms: a_value_between(900, 60_000))
+        )
+      end
+
+      def with_zone(zone)
+        previous = ENV.fetch("TZ", nil)
+        ENV["TZ"] = zone
+        yield
+      ensure
+        ENV["TZ"] = previous
+      end
+
+      it "records the stat without latency for a String Time.new cannot read" do
+        %w[not-a-date 2026-13-45T99:99:99Z].each_with_index do |garbage, i|
+          bad = build_message_double(msg_id: 65 + i, message: message_json, read_ct: 1, enqueued_at: garbage)
+
+          executor.execute(bad, queue_name)
+        end
+
+        expect(Pgbus::JobStat).to have_received(:record!).with(hash_including(enqueue_latency_ms: nil)).twice
       end
     end
 
