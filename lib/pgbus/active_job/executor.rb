@@ -296,6 +296,8 @@ module Pgbus
                 when Time then enqueued_at.to_f
                 else enqueued_at_epoch(enqueued_at.to_s)
                 end
+        return unless epoch
+
         [((::Process.clock_gettime(::Process::CLOCK_REALTIME) - epoch) * 1000).round, 0].max
       rescue ArgumentError, TypeError
         nil
@@ -308,7 +310,11 @@ module Pgbus
       # Time.new reads a string without an offset in the host's zone, but
       # TIMESTAMPTZ is UTC inside, so such a string gets a "Z". Checked here
       # rather than with `in: "UTC"`: that keyword costs a Hash per job.
+      # Time.new also takes a bare year ("2026") as a time; a string without a
+      # time of day is not a timestamp, so it has no latency.
       def enqueued_at_epoch(str)
+        return unless str.include?(":")
+
         str = "#{str}Z" unless str.match?(UTC_OFFSET_SUFFIX)
         Time.new(str).to_f
       end

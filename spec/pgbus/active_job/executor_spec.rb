@@ -818,13 +818,13 @@ RSpec.describe Pgbus::ActiveJob::Executor do
       end
 
       it "records the stat without latency for a String Time.new cannot read" do
-        %w[not-a-date 2026-13-45T99:99:99Z].each_with_index do |garbage, i|
+        %w[not-a-date 2026-13-45T99:99:99Z 2026 2026-10-29].each_with_index do |garbage, i|
           bad = build_message_double(msg_id: 65 + i, message: message_json, read_ct: 1, enqueued_at: garbage)
 
           executor.execute(bad, queue_name)
         end
 
-        expect(Pgbus::JobStat).to have_received(:record!).with(hash_including(enqueue_latency_ms: nil)).twice
+        expect(Pgbus::JobStat).to have_received(:record!).with(hash_including(enqueue_latency_ms: nil)).exactly(4).times
       end
     end
 

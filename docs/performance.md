@@ -359,7 +359,11 @@ each entry's `[queue, msg_id]` key once, where `#register`, `#unregister` and
 message used to carry `enqueued_at: nil`, so it never measured the latency
 read. It now carries the String PostgreSQL sends and checks the latency was
 recorded. With that message `main` measures 10 pgbus-owned objects per job and
-fails the `< 10` gate; this branch measures 9.
+fails the `< 10` gate; this branch measures 9. The one object saved is the
+heartbeat key: `Time.parse` and `Time.new` each cost one pgbus-owned object (the
+Time), and `Time.parse`'s ~39 other objects per call land in the standard
+library, which the gate does not count. What keeps `Time.parse` off this path is
+the executor spec's `expect(Time).not_to have_received(:parse)`.
 
 `rake bench:one[executor_bench]` (mocked client), same machine, two runs each,
 interleaved:

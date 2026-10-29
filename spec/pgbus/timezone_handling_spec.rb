@@ -109,8 +109,8 @@ RSpec.describe Pgbus do
 
     it "computes correct latency from a bare timestamp (no timezone offset)" do
       # This is the critical test: a timestamp string WITHOUT timezone info.
-      # When ENV['TZ'] is non-UTC, Time.parse interprets it in system local
-      # time, which can produce latency off by hours.
+      # When ENV['TZ'] is non-UTC, Time.new reads it in system local time,
+      # which would put the latency off by hours; the executor reads it as UTC.
       one_second_ago_utc = (Time.now.utc - 1).strftime("%Y-%m-%d %H:%M:%S.%6N")
       message = build_message_double(msg_id: 2, message: message_json, read_ct: 1, enqueued_at: one_second_ago_utc)
 

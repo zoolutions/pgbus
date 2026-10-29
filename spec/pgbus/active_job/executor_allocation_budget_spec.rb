@@ -55,8 +55,9 @@ RSpec.describe Pgbus::ActiveJob::Executor do
 
   # Rails hidden: with the dummy app loaded the executor wraps perform in
   # Rails.application.executor, whose allocations depend on the app, not pgbus.
-  # Issue #604: 10 on the old Time.parse read, 9 with Time.new and the
-  # heartbeat key built once per entry.
+  # Issue #604: 10 before, 9 since the visibility heartbeat builds its entry
+  # key once. The latency read costs one object either way (the Time); what
+  # keeps Time.parse off this path is executor_spec.rb, not this gate.
   it "allocates fewer than 10 pgbus-owned objects per successful job" do
     hide_const("Rails")
     # Measure the success path: a regression into the failure path must fail
