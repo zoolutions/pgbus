@@ -127,10 +127,17 @@ module FleetProfileHarness
       title = "#{label(c)}, #{c["processes"]} process(es):#{connection_note(c)}#{wait_note(c["pg_waits"])}"
       next ["#{title} pg_stat_statements: n/a (#{c["pg_unavailable_reason"]})"] if c["pg_unavailable_reason"]
 
-      [title] + c["pg_top"].map do |s|
+      [title] + planning_note(c) + c["pg_top"].map do |s|
         "  #{format("%.3f", s["ms_per_call"])} ms/call × #{s["calls"]}  #{short_query(s["query"])}"
       end
     end
+  end
+
+  def planning_note(cell)
+    return [] unless cell["pg_planning_tracked"] == false
+
+    ["  planning not counted: pg_stat_statements.track_planning is off, so PG ms/job leaves out " \
+     "top-level statements' planning"]
   end
 
   def connection_note(cell)

@@ -211,6 +211,19 @@ RSpec.describe FleetProfileHarness do
       )
     end
 
+    # Top-level statements record their planning only with track_planning on;
+    # a plpgsql function's is inside its execution time either way (#605).
+    it "says when planning is not counted" do
+      cell = { "role" => "fleet", "location" => "local", "jit" => "none", "processes" => 1, "pg_top" => [],
+               "pg_planning_tracked" => false }
+
+      expect(described_class.statement_lines([cell])).to eq(
+        ["fleet / local / none, 1 process(es):",
+         "  planning not counted: pg_stat_statements.track_planning is off, so PG ms/job leaves out " \
+         "top-level statements' planning"]
+      )
+    end
+
     it "says why there is nothing when pg_stat_statements is unavailable" do
       cell = { "role" => "fleet", "location" => "local", "jit" => "none", "processes" => 1, "pg_top" => [],
                "pg_unavailable_reason" => "add it to shared_preload_libraries" }

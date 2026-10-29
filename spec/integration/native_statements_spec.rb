@@ -6,7 +6,11 @@ require_relative "../integration_helper"
 # against pgmq's own functions (client.pgmq.*) on the same queue.
 RSpec.describe "Native statements (integration)", :integration do
   let(:config) { Pgbus.configuration }
-  let(:client) { Pgbus.client }
+  # One pooled connection, so every operation and every pg_prepared_statements
+  # read below are on the same session: prepared statements and their plan
+  # counters live per session.
+  let(:single_connection_config) { config.dup.tap { |c| c.pool_size = 1 } }
+  let(:client) { Pgbus::Client.new(single_connection_config) }
   let(:pgmq) { client.pgmq }
   let(:queue) { "native" }
   let(:full) { config.queue_name(queue) }
@@ -28,7 +32,10 @@ RSpec.describe "Native statements (integration)", :integration do
     client.ensure_queue(queue)
   end
 
-  after { Pgbus::Client::NativeStatements.reset! }
+  after do
+    client.close
+    Pgbus::Client::NativeStatements.reset!
+  end
 
   it "detects a queue pgmq created as native-ready" do
     expect(client.native_ready?(full)).to be(true)
@@ -181,11 +188,16 @@ RSpec.describe "Native statements (integration)", :integration do
   end
 
   it "runs unprepared inside an open transaction, leaving the transaction usable" do
-    fresh = Pgbus::Client.new(config)
+    fresh = Pgbus::Client.new(single_connection_config)
     begin
       fresh.ensure_queue(queue)
+      inner = nil
       id = fresh.pgmq.with_connection do |conn|
         conn.transaction do
+          # connection_pool hands a thread the connection it already holds,
+          # so the send below runs on conn, inside its open transaction.
+          fresh.pgmq.with_connection { |c| inner = c }
+          expect(inner).to equal(conn)
           sent = fresh.send_message(queue, { "a" => 1 })
           conn.exec("SELECT 1")
           sent

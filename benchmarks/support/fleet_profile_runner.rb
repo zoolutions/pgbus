@@ -103,6 +103,7 @@ module FleetProfileRunner
       "pg_top" => cost.fetch(:top, []), "pg_waits" => waits, "peak_connections" => peak_connections,
       "budgeted_connections" => FleetProfileHarness.budgeted_connections(processes: processes, pool_size: pool),
       "pg_ms_per_job" => cost[:ms_per_job],
+      "pg_planning_tracked" => pg_unavailable ? nil : planning_tracked?(conn),
       "pg_statements_per_job" => cost[:statements_per_job], "pg_busy_backends" => cost[:busy_backends]
     }
   end
@@ -258,6 +259,11 @@ module FleetProfileRunner
     conn.select_value(
       "SELECT pg_stat_statements_reset(0::oid, (SELECT oid FROM pg_database WHERE datname = current_database()), 0::bigint)"
     )
+  end
+
+  # total_plan_time is 0 unless this is on; the table says so (issue #605).
+  def planning_tracked?(conn)
+    conn.select_value("SHOW pg_stat_statements.track_planning") == "on"
   end
 
   def pg_cost(conn, jobs, wall_s)

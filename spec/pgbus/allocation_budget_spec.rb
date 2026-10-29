@@ -91,7 +91,9 @@ RSpec.describe Pgbus::Client do
         def [](index) = @rows[index]
         def ntuples = @rows.size
       end
-      rows = [{ "msg_id" => "1", "read_ct" => "1", "message" => "{}" }].freeze
+      rows = [{ "msg_id" => "1", "read_ct" => "1", "enqueued_at" => "2026-10-29 10:00:00+00",
+                "last_read_at" => "2026-10-29 10:00:01+00", "vt" => "2026-10-29 10:00:31+00",
+                "message" => "{}", "headers" => nil }].freeze
       conn = Class.new do
         define_method(:transaction_status) { PG::PQTRANS_IDLE }
         define_method(:exec_prepared) { |_name, _params| result.new(rows) }
@@ -112,7 +114,15 @@ RSpec.describe Pgbus::Client do
 
     before do
       require "pg"
-      stub_const("PGMQ::Message", Struct.new(:row))
+      # pgmq-ruby's PGMQ::Message: a Data built from every column of the row.
+      stub_const("PGMQ::Message", Class.new(Data.define(:msg_id, :read_ct, :enqueued_at, :last_read_at, :vt,
+                                                        :message, :headers, :queue_name)) do
+        def self.new(row, **)
+          super(msg_id: row["msg_id"], read_ct: row["read_ct"], enqueued_at: row["enqueued_at"],
+                last_read_at: row["last_read_at"], vt: row["vt"], message: row["message"],
+                headers: row["headers"], queue_name: row["queue_name"])
+        end
+      end)
     end
 
     it "send_message allocates fewer than 50 objects per call" do
