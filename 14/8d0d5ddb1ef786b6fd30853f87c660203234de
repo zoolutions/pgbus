@@ -1,0 +1,19 @@
+spec/integration/native_statements_spec.rb
+  s_6f6be46f1a03ed::t_93c4843333a7b5 115-132
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "148d0d5ddb1ef786b6fd30853f87c660203234de",
+  "prompts": {},
+  "sessions": {
+    "s_6f6be46f1a03ed": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c60b8ef6-a2ee-4a53-a9de-07b83ac1c707",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
