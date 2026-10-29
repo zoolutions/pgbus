@@ -355,10 +355,11 @@ on-CPU time, so it was dropped for `Time.new`. A string without an offset gets a
 PostgreSQL, and it is checked with `match?` rather than `in: "UTC"`, because the
 keyword costs a Hash per call. The second change: `VisibilityHeartbeat` builds
 each entry's `[queue, msg_id]` key once, where `#register`, `#unregister` and
-`#registered?` each used to build their own. That takes pgbus-owned objects per
-job from 9 to 8, and the budget is now `< 9`. With a PostgreSQL-shaped
-`enqueued_at` the count is 10 on `main` and 9 here; the spec's message carries
-`nil`.
+`#registered?` each used to build their own. The allocation budget spec's
+message used to carry `enqueued_at: nil`, so it never measured the latency
+read. It now carries the String PostgreSQL sends and checks the latency was
+recorded. With that message `main` measures 10 pgbus-owned objects per job and
+fails the `< 10` gate; this branch measures 9.
 
 `rake bench:one[executor_bench]` (mocked client), same machine, two runs each,
 interleaved:
@@ -670,7 +671,7 @@ that enforce hard limits:
 | `Client#read_batch` | < 30 objects/call |
 | JSON round-trip | < 20 objects |
 | Retained objects (leak detection) | 0 across 100 cycles |
-| `Executor#execute`, pgbus-owned objects only (`executor_allocation_budget_spec.rb`) | < 9 objects/job (measured 8, issue #604) |
+| `Executor#execute`, pgbus-owned objects only, PostgreSQL-shaped `enqueued_at` (`executor_allocation_budget_spec.rb`) | < 10 objects/job (measured 9; 10 before issue #604) |
 
 These run as part of `bundle exec rspec` on every PR. They are hard gates — a
 regression that exceeds the budget fails the build.
