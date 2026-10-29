@@ -73,7 +73,8 @@ SQL
 # installed schema; the FK needs pgbus_batches, so it is added only when that
 # table exists (as spec/integration_helper.rb does). NOT VALID: a shared
 # database may already hold rows whose batch is gone, and the bench must not
-# abort on them; new rows are still checked.
+# abort on them; new rows are still checked. Skipped when any FK to
+# pgbus_batches is already there (the generator's is auto-named fk_rails_…).
 conn.execute(<<~SQL) unless conn.table_exists?("pgbus_batch_executions")
   CREATE TABLE pgbus_batch_executions (
     id BIGSERIAL PRIMARY KEY,
@@ -95,10 +96,16 @@ SQL
 if conn.table_exists?("pgbus_batches")
   conn.execute(<<~SQL)
     DO $$ BEGIN
-      ALTER TABLE pgbus_batch_executions
-        ADD CONSTRAINT fk_pgbus_batch_executions_batch
-        FOREIGN KEY (batch_id) REFERENCES pgbus_batches (batch_id) ON DELETE CASCADE NOT VALID;
-    EXCEPTION WHEN duplicate_object THEN NULL;
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE contype = 'f'
+          AND conrelid = 'pgbus_batch_executions'::regclass
+          AND confrelid = 'pgbus_batches'::regclass
+      ) THEN
+        ALTER TABLE pgbus_batch_executions
+          ADD CONSTRAINT fk_pgbus_batch_executions_batch
+          FOREIGN KEY (batch_id) REFERENCES pgbus_batches (batch_id) ON DELETE CASCADE NOT VALID;
+      END IF;
     END $$;
   SQL
 end
