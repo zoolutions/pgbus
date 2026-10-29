@@ -175,6 +175,9 @@ jobs:
   test:
     runs-on: ubuntu-26.04
     name: Ruby ${{ matrix.ruby }} (Rails ${{ matrix.rails }})
+    # A leg takes ~3 min; a hung spec otherwise runs to GitHub's 6 h default
+    # with no log until it is cancelled.
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       # Prove the gemspec's `railties >= 7.1, < 9.0` support claim at BOTH
