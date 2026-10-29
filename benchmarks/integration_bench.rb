@@ -106,6 +106,7 @@ if conn.table_exists?("pgbus_batches")
           ADD CONSTRAINT fk_pgbus_batch_executions_batch
           FOREIGN KEY (batch_id) REFERENCES pgbus_batches (batch_id) ON DELETE CASCADE NOT VALID;
       END IF;
+    EXCEPTION WHEN duplicate_object THEN NULL; -- a concurrent bench start added it first
     END $$;
   SQL
 end
