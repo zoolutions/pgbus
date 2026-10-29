@@ -66,6 +66,24 @@ conn.execute(<<~SQL) unless conn.table_exists?("pgbus_semaphores")
   CREATE UNIQUE INDEX idx_pgbus_semaphores_key ON pgbus_semaphores (key);
 SQL
 
+# Every install that ran the batch-executions migration has this table, and
+# its presence is what turns on the adapter's post-send execution backfill
+# (Batch.executions_migrated?) — without it the enqueue numbers skip a path
+# real installs take (issue #603). The FK to pgbus_batches is left out: the
+# bench creates no batches.
+conn.execute(<<~SQL) unless conn.table_exists?("pgbus_batch_executions")
+  CREATE TABLE pgbus_batch_executions (
+    id BIGSERIAL PRIMARY KEY,
+    batch_id VARCHAR NOT NULL,
+    job_id VARCHAR NOT NULL,
+    msg_id BIGINT,
+    queue_name VARCHAR,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE UNIQUE INDEX idx_pgbus_batch_executions_job_id ON pgbus_batch_executions (job_id);
+  CREATE INDEX idx_pgbus_batch_executions_batch_id ON pgbus_batch_executions (batch_id);
+SQL
+
 conn.execute(<<~SQL) unless conn.table_exists?("pgbus_processes")
   CREATE TABLE pgbus_processes (
     id BIGSERIAL PRIMARY KEY,

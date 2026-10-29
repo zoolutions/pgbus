@@ -142,6 +142,24 @@ What the numbers say:
   `jit=yjit|zjit|none`. pgbus never enables a JIT; Rails does through
   `config.yjit`.
 
+**Enqueue path (issue #603):**
+
+- **Dropped the per-enqueue `pgbus_batch_executions` UPDATE for jobs in no
+  batch.** After the PGMQ send, the adapter called `Batch.backfill_execution`
+  for every job, which ran `UPDATE pgbus_batch_executions … WHERE job_id = $1`
+  through ActiveRecord on every install that ran the batch-executions
+  migration: one extra round trip and commit per `perform_later`, N per
+  `perform_all_later` group. Execution rows exist only for payloads tagged
+  `pgbus_batch_id`, so the backfill now returns before touching the database
+  for any other payload. Same-machine `rake bench:integration`, two runs each
+  (main, branch, main, branch; load 0.24–0.34× cores, other worktrees'
+  benches on the same Postgres): "adapter: plain job" 4 579 / 4 563 →
+  7 401 / 7 983 i/s (219 → 125–135 µs); "adapter: until_executed" 2 139 /
+  1 923 → 2 572 / 2 681 i/s (it is not a batch member either); "plain
+  enqueue" (raw `send_message`, the control) 8 534 / 8 370 → 8 256 / 8 609,
+  unchanged. `integration_bench.rb` now bootstraps `pgbus_batch_executions`;
+  without it `executions_migrated?` is false and the bench skips the path.
+
 **Gate verdicts (not done, with the number):**
 
 - *Further executor allocation trims* (guarding instrument payload hashes):

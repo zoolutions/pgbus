@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Fixed
+
+- **A job in no batch no longer pays an extra database round trip at enqueue (issue #603).** After every `perform_later`, and once per job of every `perform_all_later` group, the adapter ran `UPDATE pgbus_batch_executions SET msg_id = …, queue_name = … WHERE job_id = $1` on the ActiveRecord connection, a no-op for a job outside any batch. `Batch.backfill_execution` now returns early for a payload without `pgbus_batch_id`; batch members, including a `retry_on` re-enqueue and a concurrency-parked job promoted later, still get their execution row pointed at the new message. `rake bench:integration` "adapter: plain job" went from about 4 570 to 7 400–8 000 enqueues/s on one local machine (219 → 125–135 µs). The bench now creates `pgbus_batch_executions` so it measures the path installs take. Refs #603.
+
 ## [0.21.4] - 2026-10-28
 
 ### Added
