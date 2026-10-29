@@ -32,10 +32,11 @@ class Views::Docs::Pages::PerformanceTuning < DocsUI::Page
         brings its own pgmq connection pool and its own ActiveRecord
         connections, so add both up for every process and keep the total under
         `max_connections`. On one queue and one Postgres the measured fleet scales
-        almost linearly while the database is on another host (each process is
-        capped by its reader's round trips), and bends at 2–4 processes when
-        Postgres is close: every job's archive is its own commit, and every
-        process works on the same hot pages of the one queue table. The table
+        almost linearly with 1 ms of simulated network latency per round trip
+        (toxiproxy; each process is capped by its reader's round trips), and
+        bends at 2–4 processes with Postgres on the same machine: every job's
+        archive is its own commit, and every process works on the same hot pages
+        of the one queue table. The table
         and the Postgres cost per job are in `docs/performance.md` → "Fleet
         scaling".
       MD
@@ -44,8 +45,9 @@ class Views::Docs::Pages::PerformanceTuning < DocsUI::Page
         code { "rake bench:fleet" }
         plain ": it drains one queue with "
         code { "WP_BENCH_PROCESSES" }
-        plain " (default 1,2,4) worker processes and reports jobs/s and Postgres "
-        plain "milliseconds per job from pg_stat_statements."
+        plain " (default 1,2,4) worker processes and reports jobs/s, and Postgres "
+        plain "milliseconds per job from pg_stat_statements when it is available "
+        plain "(n/a otherwise)."
       end
     end
   end

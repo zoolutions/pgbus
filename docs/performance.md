@@ -274,14 +274,14 @@ one Postgres.
 - Each child sets `pool_size = threads + 2` (the job threads, the loop thread,
   the heartbeat ticker). The worker cell leaves it to pgbus, which sizes it ~7
   under a 12-thread worker because the bench configures no `workers` (#484).
-  Each child also holds one ActiveRecord connection (stats, its process row),
-  so a row whose `N × (pool_size + 1) + 10` exceeds the free connections
+  Each child also caps its ActiveRecord pool at 2 (stats flushes, its process
+  row), so a row whose `N × (pool_size + 2) + 10` exceeds the free connections
   (`max_connections` minus the superuser reserve and the client backends
   already connected) is skipped with the reason. Each row prints the peak
   connections it held: 16 for one 12-thread child (the parent's included),
   59–62 for four. `WP_BENCH_PROCESSES` defaults to `1,2,4`. `8` is opt-in:
-  8 × 15 + 10 = 130 does not fit a stock `max_connections = 100`. The
-  8-process numbers below come from 6-thread workers (8 × 9 + 10 = 82).
+  8 × 16 + 10 = 138 does not fit a stock `max_connections = 100`. The
+  8-process numbers below come from 6-thread workers (8 × 10 + 10 = 90).
 
 Measured 2026-10-29 on an Apple M2 Max (12 cores), PostgreSQL 18.6 on the same
 machine (`synchronous_commit = on`), Ruby 3.4.2, `read_ahead` not passed,
@@ -401,14 +401,16 @@ Ractors and a C extension, evaluated 2026-10-29 for issue #602:
 - **Ractors.** The host's job classes run inside `Rails.application.executor`,
   and ActiveRecord, Zeitwerk and ActiveJob are not Ractor-safe, so
   `perform_now` cannot move into a Ractor. Decoding messages in a Ractor would
-  copy every message across the boundary (`Ractor.make_shareable`) to
-  parallelize less than the ~24 % driver share of on-CPU time (#484).
+  copy every message across the boundary (a non-shareable object sent with
+  `Ractor#send` is deep-copied) to parallelize less than the ~24 % driver share of on-CPU time (#484).
 - **A C extension inside the gem.** The same reasoning as the Rust row: only
   the pgbus-owned share of on-CPU time (35 % in #484) is reachable. That is a
   ≤ 1.5× theoretical bound for one process, and it would make pgbus a compiled
-  gem for every host. The fleet multiplies processes instead, and the fleet
-  table shows the ceiling is in Postgres (WAL flushes and the one queue table),
-  which no extension on the Ruby side removes.
+  gem for every host. The fleet multiplies processes instead. On the measured
+  shape (Postgres on the same machine) the fleet bends on Postgres work per job
+  (WAL flushes and the one queue table) and on cores shared with Postgres; a
+  Ruby-side saving would only hand those cores back, and does nothing for the
+  per-job commit.
 
 ### Workflow steps (issue #540)
 

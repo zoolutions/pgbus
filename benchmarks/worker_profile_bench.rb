@@ -17,11 +17,11 @@
 # per job from pg_stat_statements (scoped to this database; prints n/a when the
 # extension is not in shared_preload_libraries). Each drain child sets
 # pool_size = threads + 2 (job threads, the loop thread, the heartbeat ticker)
-# explicitly, and holds one ActiveRecord connection besides: a row whose
-# N × (pool_size + 1) + 10 exceeds the free connections (max_connections minus
+# explicitly, and caps its ActiveRecord pool at 2: a row whose
+# N × (pool_size + 2) + 10 exceeds the free connections (max_connections minus
 # the superuser reserve and the client backends already connected) is skipped
 # with the reason, and each row prints the peak connections it really held.
-# WP_BENCH_PROCESSES defaults to 1,2,4; 8 × 15 + 10 = 130 does not fit a stock
+# WP_BENCH_PROCESSES defaults to 1,2,4; 8 × 16 + 10 = 138 does not fit a stock
 # max_connections = 100, so 8 is opt-in. WP_BENCH_JOBS is per process.
 # No vernier profile for the fleet cell: the worker cell already shows one.
 #
@@ -65,11 +65,17 @@ ROLE = ENV.fetch("WP_BENCH_ROLE", "both")
 end
 abort "WP_BENCH_READ_AHEAD must be a non-negative integer (got #{READ_AHEAD})" if READ_AHEAD&.negative?
 abort "WP_BENCH_ROLE must be one of #{ROLES.keys.join(", ")} (got #{ROLE})" unless ROLES.key?(ROLE)
-PROCESSES = begin
-  FleetProfileHarness.parse_processes(ENV.fetch("WP_BENCH_PROCESSES", FleetProfileHarness::DEFAULT_PROCESSES))
-rescue ArgumentError => e
-  abort e.message
-end
+# Parsed only when the fleet runs: WP_BENCH_PROCESSES means nothing to the other roles.
+PROCESSES = if ROLES.fetch(ROLE).include?("fleet")
+              begin
+                FleetProfileHarness.parse_processes(ENV.fetch("WP_BENCH_PROCESSES",
+                                                              FleetProfileHarness::DEFAULT_PROCESSES))
+              rescue ArgumentError => e
+                abort e.message
+              end
+            else
+              []
+            end
 
 def runner_for(role)
   if role == "consumer"

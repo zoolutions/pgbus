@@ -109,7 +109,8 @@ module FleetProfileRunner
 
   # Child side (WPROF_DRAIN_CHILD=<index>). Never purges the shared queue.
   def run_drain_child(url, index:, threads:, read_ahead:, input: $stdin, out: $stdout)
-    WorkerProfileRunner.configure!(url, threads: threads, pool_size: pool_size(threads))
+    WorkerProfileRunner.configure!(url, threads: threads, pool_size: pool_size(threads),
+                                        ar_pool: FleetProfileHarness::AR_PER_PROCESS)
     warm_up(index, threads: threads, read_ahead: read_ahead)
 
     Pgbus.stopping = false

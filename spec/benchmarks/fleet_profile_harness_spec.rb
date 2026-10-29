@@ -44,20 +44,26 @@ RSpec.describe FleetProfileHarness do
   end
 
   describe ".budget_skip_reason" do
-    it "is nil when processes × (pool_size + 1) plus headroom fits the free connections" do
+    it "is nil when processes × (pool_size + 2) plus headroom fits the free connections" do
       expect(described_class.budget_skip_reason(processes: 4, pool_size: 14, free_connections: 88)).to be_nil
     end
 
-    # Measured: a drain child holds its pgmq pool plus one ActiveRecord
-    # connection (stats, its process row), so the budget grows with N.
-    it "budgets one ActiveRecord connection per child on top of its pgmq pool" do
-      expect(described_class.budgeted_connections(processes: 4, pool_size: 14)).to eq(70)
+    # A drain child caps its ActiveRecord pool at AR_PER_PROCESS, so the budget
+    # bounds what N children can open.
+    it "budgets each child's capped ActiveRecord pool on top of its pgmq pool" do
+      expect(described_class.budgeted_connections(processes: 4, pool_size: 14)).to eq(74)
+    end
+
+    it "admits a row whose budget exactly fits and skips one a connection short" do
+      expect(described_class.budget_skip_reason(processes: 4, pool_size: 14, free_connections: 74)).to be_nil
+      expect(described_class.budget_skip_reason(processes: 4, pool_size: 14, free_connections: 73))
+        .to eq("skipped: needs 4 × (14 + 2) + 10 = 74 connections, 73 free")
     end
 
     it "explains the skip when it does not fit" do
       reason = described_class.budget_skip_reason(processes: 8, pool_size: 14, free_connections: 88)
 
-      expect(reason).to eq("skipped: needs 8 × (14 + 1) + 10 = 130 connections, 88 free")
+      expect(reason).to eq("skipped: needs 8 × (14 + 2) + 10 = 138 connections, 88 free")
     end
   end
 

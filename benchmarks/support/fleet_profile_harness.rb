@@ -9,10 +9,12 @@
 # spec/benchmarks/fleet_profile_harness_spec.rb pins it without a run.
 module FleetProfileHarness
   DEFAULT_PROCESSES = "1,2,4"
-  # Each drain child holds its pgmq pool plus one ActiveRecord connection (the
-  # stats writes, its pgbus_processes row): measured peak 16 connections for one
-  # child at pool_size 14 (the parent's included), 59-62 for four.
-  AR_PER_PROCESS = 1
+  # Each drain child holds its pgmq pool plus its ActiveRecord pool, capped at
+  # this size (stats flushes, its pgbus_processes row; a further checkout waits
+  # instead of connecting), so the budget is a bound, not an estimate. Measured
+  # peak: 16 connections for one child at pool_size 14 (the parent's
+  # included), 59-62 for four.
+  AR_PER_PROCESS = 2
   # Room for the parent's own connections and anything else that connects.
   BUDGET_HEADROOM = 10
   TOP_STATEMENTS = 5

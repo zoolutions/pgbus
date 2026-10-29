@@ -33,10 +33,11 @@ module WorkerProfileRunner
 
   # The global configuration alone: no table bootstrap, no purge. A fleet drain
   # child (issue #602) configures this way, because reset! would purge the
-  # queue its siblings are draining. A nil pool_size keeps pgbus's default.
-  def configure!(database_url, threads:, pool_size: nil)
+  # queue its siblings are draining. A nil pool_size keeps pgbus's default;
+  # ar_pool caps the ActiveRecord pool (a fleet child budgets it exactly).
+  def configure!(database_url, threads:, pool_size: nil, ar_pool: threads + 8)
     ActiveJob::Base.logger = Logger.new(IO::NULL)
-    ActiveRecord::Base.establish_connection(with_pool(database_url, threads + 8))
+    ActiveRecord::Base.establish_connection(with_pool(database_url, ar_pool))
 
     Pgbus.configure do |c|
       c.database_url = database_url
