@@ -69,8 +69,9 @@ SQL
 # Every install that ran the batch-executions migration has this table, and
 # its presence is what turns on the adapter's post-send execution backfill
 # (Batch.executions_migrated?) — without it the enqueue numbers skip a path
-# real installs take (issue #603). The FK to pgbus_batches is left out: the
-# bench creates no batches.
+# real installs take (issue #603). The orphan index and the FK match the
+# installed schema; the FK needs pgbus_batches, so it is added only when that
+# table exists (as spec/integration_helper.rb does).
 conn.execute(<<~SQL) unless conn.table_exists?("pgbus_batch_executions")
   CREATE TABLE pgbus_batch_executions (
     id BIGSERIAL PRIMARY KEY,
@@ -83,6 +84,22 @@ conn.execute(<<~SQL) unless conn.table_exists?("pgbus_batch_executions")
   CREATE UNIQUE INDEX idx_pgbus_batch_executions_job_id ON pgbus_batch_executions (job_id);
   CREATE INDEX idx_pgbus_batch_executions_batch_id ON pgbus_batch_executions (batch_id);
 SQL
+
+conn.execute(<<~SQL)
+  CREATE INDEX IF NOT EXISTS idx_pgbus_batch_executions_orphans
+    ON pgbus_batch_executions (created_at) WHERE msg_id IS NULL;
+SQL
+
+if conn.table_exists?("pgbus_batches")
+  conn.execute(<<~SQL)
+    DO $$ BEGIN
+      ALTER TABLE pgbus_batch_executions
+        ADD CONSTRAINT fk_pgbus_batch_executions_batch
+        FOREIGN KEY (batch_id) REFERENCES pgbus_batches (batch_id) ON DELETE CASCADE;
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END $$;
+  SQL
+end
 
 conn.execute(<<~SQL) unless conn.table_exists?("pgbus_processes")
   CREATE TABLE pgbus_processes (
