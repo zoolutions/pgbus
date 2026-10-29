@@ -114,6 +114,8 @@ module Pgbus
     def metrics_backend=: (untyped) -> untyped
     def metrics_enabled: () -> bool
     def metrics_enabled=: (untyped) -> untyped
+    def native_statements: () -> bool
+    def native_statements=: (bool value) -> bool
     def notify_presence_change: (untyped stream_name, untyped change) -> untyped
     def outbox_batch_size: () -> Integer
     def outbox_batch_size=: (untyped) -> untyped

@@ -22,6 +22,12 @@ RSpec.describe Pgbus::Client do
       c.instance_variable_set(:@queue_strategy, Pgbus::QueueFactory.for(Pgbus.configuration))
       c.instance_variable_set(:@schema_ensured, true)
       c.instance_variable_set(:@connection_health, Pgbus::Client::ConnectionHealth.new)
+      # The queue's native-statement check already ran and found no native
+      # support (issue #605), so the mocked pgmq-ruby call below is the one
+      # measured, as before.
+      c.instance_variable_set(:@native_statements, Concurrent::Map.new.tap do |m|
+        m[Pgbus.configuration.queue_name("default")] = false
+      end)
       # Model the production read hot path: a dedicated connection on Linux with
       # libpq >= 12, where Client#initialize sets @libpq_read_bounds_effective
       # true so reads skip the Ruby Timeout fallback and go through the cheap
@@ -74,6 +80,60 @@ RSpec.describe Pgbus::Client do
     end
   end
 
+  # The native statements (issue #605) on a prepared connection, under the
+  # same budgets as the pgmq-ruby calls above. Plain objects, not doubles, so
+  # the count is the client's own.
+  describe "the native statements" do
+    let(:native_pgmq) do
+      result = Class.new do
+        def initialize(rows) = (@rows = rows)
+        def map(&) = @rows.map(&)
+        def [](index) = @rows[index]
+        def ntuples = @rows.size
+      end
+      rows = [{ "msg_id" => "1", "read_ct" => "1", "message" => "{}" }].freeze
+      conn = Class.new do
+        define_method(:transaction_status) { PG::PQTRANS_IDLE }
+        define_method(:exec_prepared) { |_name, _params| result.new(rows) }
+      end.new
+      Class.new do
+        define_method(:with_connection) { |&blk| blk.call(conn) }
+      end.new
+    end
+    let(:native_client) do
+      client.tap do |c|
+        c.instance_variable_set(:@pgmq, native_pgmq)
+        full = Pgbus.configuration.queue_name("default")
+        c.instance_variable_set(:@native_statements, Concurrent::Map.new.tap do |m|
+          m[full] = Pgbus::Client::NativeStatements.statements_for("q_#{full}", "a_#{full}")
+        end)
+      end
+    end
+
+    before do
+      require "pg"
+      stub_const("PGMQ::Message", Struct.new(:row))
+    end
+
+    it "send_message allocates fewer than 50 objects per call" do
+      5.times { native_client.send_message("default", small_payload) }
+
+      expect(count_allocations { native_client.send_message("default", small_payload) }).to be < 50
+    end
+
+    it "read_batch allocates fewer than 30 objects per call" do
+      5.times { native_client.read_batch("default", qty: 5) }
+
+      expect(count_allocations { native_client.read_batch("default", qty: 5) }).to be < 30
+    end
+
+    it "archive_message allocates fewer than 30 objects per call" do
+      5.times { native_client.archive_message("default", 1) }
+
+      expect(count_allocations { native_client.archive_message("default", 1) }).to be < 30
+    end
+  end
+
   describe "JSON serialization round-trip" do
     it "allocates fewer than 20 objects for generate + parse" do
       json = JSON.generate(small_payload)
@@ -112,6 +172,9 @@ RSpec.describe Pgbus::Client do
         c.instance_variable_set(:@queues_created, all_queues_created)
         c.instance_variable_set(:@queue_strategy, Pgbus::QueueFactory.for(Pgbus.configuration))
         c.instance_variable_set(:@schema_ensured, true)
+        c.instance_variable_set(:@native_statements, Concurrent::Map.new.tap do |m|
+          m[Pgbus.configuration.queue_name("default")] = false
+        end)
       end
     end
 

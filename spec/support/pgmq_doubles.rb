@@ -44,6 +44,17 @@ module PgmqDoubles
       allow(pgmq).to receive(:delete_batch) { |_queue, ids| ids.map(&:to_s) }
       allow(pgmq).to receive(:archive_batch) { |_queue, ids| ids.map(&:to_s) }
       allow(pgmq).to receive(:transaction).and_yield(pgmq)
+      # Native statement detection (issue #605) finds no queue table here, so
+      # a client over this double stays on the pgmq-ruby calls the examples
+      # assert on. spec/pgbus/client/native_statements_spec.rb runs the native
+      # path.
+      allow(pgmq).to receive(:with_connection).and_yield(build_tableless_connection)
+    end
+  end
+
+  def build_tableless_connection
+    double("PG::Connection (no queue tables)").tap do |conn|
+      allow(conn).to receive(:exec_params).and_return(double("PG::Result", to_a: [], ntuples: 0))
     end
   end
 
