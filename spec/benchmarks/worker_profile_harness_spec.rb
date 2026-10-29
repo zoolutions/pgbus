@@ -141,6 +141,15 @@ RSpec.describe WorkerProfileHarness do
 
       expect(cell.to_h).to include("role" => "consumer", "location" => "local")
     end
+
+    # Issue #602: a fleet row carries its process count and the Postgres cost.
+    it "round-trips the fleet fields through to_h, nil when not set" do
+      cell = described_class::Cell.new(role: "fleet", location: "local", jit: "none", jobs: 10, processes: 2,
+                                       pg_ms_per_job: 0.1, pg_statements_per_job: 1.5, pg_top: [])
+
+      expect(cell.to_h).to include("processes" => 2, "pg_ms_per_job" => 0.1, "pg_statements_per_job" => 1.5,
+                                   "pg_top" => [], "skip_reason" => nil)
+    end
   end
 
   describe ".jit_label" do

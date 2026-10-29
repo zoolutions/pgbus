@@ -24,7 +24,17 @@ module WorkerProfileRunner
 
   module_function
 
-  def setup!(database_url, threads:)
+  def setup!(database_url, threads:, pool_size: nil)
+    configure!(database_url, threads: threads, pool_size: pool_size)
+    bootstrap_tables(ActiveRecord::Base.connection)
+    Pgbus.client.ensure_queue(QUEUE)
+    reset!
+  end
+
+  # The global configuration alone: no table bootstrap, no purge. A fleet drain
+  # child (issue #602) configures this way, because reset! would purge the
+  # queue its siblings are draining. A nil pool_size keeps pgbus's default.
+  def configure!(database_url, threads:, pool_size: nil)
     ActiveJob::Base.logger = Logger.new(IO::NULL)
     ActiveRecord::Base.establish_connection(with_pool(database_url, threads + 8))
 
@@ -36,11 +46,8 @@ module WorkerProfileRunner
       c.pgmq_schema_mode = :embedded
       c.listen_notify = false
       c.stats_enabled = true
+      c.pool_size = pool_size if pool_size
     end
-
-    bootstrap_tables(ActiveRecord::Base.connection)
-    Pgbus.client.ensure_queue(QUEUE)
-    reset!
   end
 
   def reset!
@@ -122,10 +129,10 @@ module WorkerProfileRunner
     }
   end
 
-  def enqueue(jobs)
+  def enqueue(jobs, queue: QUEUE)
     payload = NoopJob.new(1).serialize
     jobs.times.each_slice(ENQUEUE_SLICE) do |slice|
-      Pgbus.client.send_batch(QUEUE, Array.new(slice.size) { payload })
+      Pgbus.client.send_batch(queue, Array.new(slice.size) { payload })
     end
   end
 

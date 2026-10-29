@@ -52,9 +52,12 @@ module WorkerProfileHarness
 
   Frame = Struct.new(:filename, :label, keyword_init: true)
 
+  # The fleet cell (issue #602) also fills processes, start_skew_ms, the pg_*
+  # cost fields and skip_reason; the worker and consumer cells leave them nil.
   Cell = Struct.new(:role, :location, :jit, :jobs, :wall_s, :cpu_s, :gc_s, :jobs_per_s, :pool_shares, :loop_shares,
-                    :cpu_shares,
-                    :profile_path, keyword_init: true) do
+                    :cpu_shares, :profile_path, :processes, :start_skew_ms, :pg_ms_per_job, :pg_statements_per_job,
+                    :pg_busy_backends, :pg_top, :pg_waits, :pg_unavailable_reason, :skip_reason,
+                    keyword_init: true) do
     def to_h = super.transform_keys(&:to_s)
   end
 
