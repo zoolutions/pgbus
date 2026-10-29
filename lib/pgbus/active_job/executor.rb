@@ -447,10 +447,16 @@ module Pgbus
         begin
           archived = if @completer
                        @completer.complete(physical_queue(queue_name, source_queue), msg_id) == :archived
+                     # Spelled out, no `**` forward: on Ruby 3.3 that
+                     # allocates per job even without keywords (#484 budget).
+                     elsif @delete_completed && source_queue
+                       client.delete_message(source_queue, msg_id, prefixed: false)
+                     elsif @delete_completed
+                       client.delete_message(queue_name, msg_id)
                      elsif source_queue
-                       finish_message(source_queue, msg_id, prefixed: false)
+                       client.archive_message(source_queue, msg_id, prefixed: false)
                      else
-                       finish_message(queue_name, msg_id)
+                       client.archive_message(queue_name, msg_id)
                      end
           return :archived unless archived == false
 
@@ -464,10 +470,6 @@ module Pgbus
           end
           retry
         end
-      end
-
-      def finish_message(queue, msg_id, **)
-        @delete_completed ? client.delete_message(queue, msg_id, **) : client.archive_message(queue, msg_id, **)
       end
 
       # A :while_executing lock is bound to THIS message, so an execution
