@@ -13,6 +13,7 @@ class Views::Docs::Pages::PerformanceTuning < DocsUI::Page
     autovacuum
     archive
     job_burst_tuning
+    multi_core
     remote_database
     streams_master_hub
     streams_pool_autoscaling
@@ -21,6 +22,35 @@ class Views::Docs::Pages::PerformanceTuning < DocsUI::Page
   end
 
   private
+
+  def multi_core
+    DocsUI::Section("More cores: run more processes",
+                    description: "One worker process runs about one core of Ruby; processes: N multiplies it.") do
+      md <<~'MD'
+        Under the GVL a worker process uses about one core however many threads it
+        has, so throughput past one core comes from `processes:`. Each process
+        brings its own pgmq connection pool and its own ActiveRecord
+        connections, so add both up for every process and keep the total under
+        `max_connections`. On one queue and one Postgres the measured fleet scales
+        almost linearly with 1 ms of simulated network latency per round trip
+        (toxiproxy; each process is capped by its reader's round trips), and
+        bends at 2–4 processes with Postgres on the same machine: every job's
+        archive is its own commit, and every process works on the same hot pages
+        of the one queue table. The table
+        and the Postgres cost per job are in `docs/performance.md` → "Fleet
+        scaling".
+      MD
+      DocsUI::Callout(:note) do
+        plain "Measure your own topology with "
+        code { "rake bench:fleet" }
+        plain ": it drains one queue with "
+        code { "WP_BENCH_PROCESSES" }
+        plain " (default 1,2,4) worker processes and reports jobs/s, and Postgres "
+        plain "milliseconds per job from pg_stat_statements when it is available "
+        plain "(n/a otherwise)."
+      end
+    end
+  end
 
   def remote_database
     DocsUI::Section("Database on another host: turn on read-ahead",

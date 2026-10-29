@@ -61,9 +61,16 @@ namespace :bench do
     ruby "benchmarks/integration_bench.rb"
   end
 
-  desc "Run worker profiling bench: jobs/s and where a job's time goes (requires PGBUS_DATABASE_URL)"
+  desc "Run worker profiling bench: jobs/s and where a job's time goes; WP_BENCH_ROLE=worker|consumer|both|fleet|all " \
+       "(requires PGBUS_DATABASE_URL)"
   task :worker_profile do
     ruby "benchmarks/worker_profile_bench.rb"
+  end
+
+  desc "Run the fleet cell: jobs/s and Postgres ms/job at WP_BENCH_PROCESSES (default 1,2,4) worker processes " \
+       "on one queue (requires PGBUS_DATABASE_URL)"
+  task :fleet do
+    sh({ "WP_BENCH_ROLE" => "fleet" }, FileUtils::RUBY, "benchmarks/worker_profile_bench.rb")
   end
 
   desc "Run the workflow insights query budget: ~1M step rows (requires PGBUS_DATABASE_URL)"

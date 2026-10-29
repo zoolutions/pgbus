@@ -52,6 +52,7 @@ rake bench:notify_wake      # NOTIFY wake latency + LISTEN census (requires PGBU
 rake bench:notify_chaos     # NotifyHub failure-mode measurements (requires PGBUS_DATABASE_URL)
 rake bench:streams_hub      # streams master-hub hop cost + census (requires PGBUS_DATABASE_URL)
 rake bench:worker_profile   # real Worker: jobs/s + where a job's time goes (requires PGBUS_DATABASE_URL)
+rake bench:fleet            # N worker processes on one queue: jobs/s + Postgres ms/job (requires PGBUS_DATABASE_URL)
 ```
 
 - **Unit benches** (`benchmarks/*_bench.rb`) isolate gem overhead with a mocked
@@ -243,7 +244,130 @@ Known limits, documented rather than solved:
   `Configuration#validate!` warns when `read_ahead > 0` meets a disabled
   heartbeat.
 
-### Native compilation (Spinel, Roundhouse) and Rust
+### Fleet scaling (issue #602)
+
+Multi-core throughput exists only across processes (`processes: N`, #506):
+under the GVL one worker process runs about one core of Ruby (#484). The
+**fleet cell** (`WP_BENCH_ROLE=fleet bundle exec rake bench:worker_profile`, or
+`rake bench:fleet`) measures that shape: N real `Pgbus::Process::Worker`
+subprocesses (12 threads each) drain **one** queue of `5 000 × N` no-op jobs on
+one Postgres.
+
+- Each drain child configures pgbus without purging, warms up on a private
+  queue (500 jobs, so YJIT is warm as in the worker cell), builds its worker and
+  waits at a start barrier. When every child is ready, the parent resets
+  `pg_stat_statements` for the bench database and releases them together.
+  jobs/s = total / (the last job finished in any child − the parent's start
+  signal), all `CLOCK_REALTIME` on one machine. The start-skew column (0.0–0.2
+  ms in every run) shows the barrier held.
+- A child stops once its worker has nothing in flight and the queue reads empty
+  three polls in a row; `Σ processed == total`, no failed job and an empty queue
+  are checked after every row.
+- **PG ms/job** = Σ `total_exec_time` / jobs and **statements/job** = Σ `calls`
+  / jobs, over the top-level `pgmq.*` and `pgbus_*` statements of the bench
+  database only (`pg_stat_statements` is cluster-wide; other databases' stats
+  are neither read nor reset). The children's `pgmq.metrics` polls are
+  excluded. **PG busy backends** = Σ `total_exec_time` / wall: how many
+  backends were executing pgbus statements at any moment, on average. The
+  parent also samples `pg_stat_activity` every 10 ms for what the bench
+  database's active client backends were waiting on.
+- Each child sets `pool_size = threads + 2` (the job threads, the loop thread,
+  the heartbeat ticker). The worker cell leaves it to pgbus, which sizes it ~7
+  under a 12-thread worker because the bench configures no `workers` (#484).
+  Each child also caps its ActiveRecord pool at 2 (stats flushes, its process
+  row), so a row whose `N × (pool_size + 2) + 10` exceeds the free connections
+  (`max_connections` minus the superuser reserve and the client backends
+  already connected) is skipped with the reason. Each row prints the peak
+  connections it held: 16 for one 12-thread child (the parent's included),
+  58–62 for four. `WP_BENCH_PROCESSES` defaults to `1,2,4`. `8` is opt-in:
+  8 × 16 + 10 = 138 does not fit a stock `max_connections = 100`. The
+  8-process numbers below come from 6-thread workers (8 × 10 + 10 = 90).
+
+Measured 2026-10-29 on an Apple M2 Max (12 cores), PostgreSQL 18.6 on the same
+machine (`synchronous_commit = on`), Ruby 3.4.2, `read_ahead` not passed,
+`proxied` = **+1 ms per round trip** through toxiproxy. The machine was shared:
+load average 5–17 on 12 cores, from other sessions' benches and test suites
+against the same Postgres. Local rows are the range of five rounds, proxied
+rows of two, 6-thread rows of two. Ranges are wide because of that load. Read
+them as the shape of the curve, not as decimals.
+
+| cell | processes | jobs/s | jobs/s per process | PG ms/job | PG busy backends |
+|---|---:|---:|---:|---:|---:|
+| local / YJIT | 1 | 7 790–7 986 | 7 790–7 986 | 0.111–0.124 | 0.9–1.0 |
+| local / YJIT | 2 | 11 636–14 079 | 5 818–7 039 | 0.145–0.203 | 1.8–2.4 |
+| local / YJIT | 4 | 14 277–17 879 | 3 569–4 470 | 0.299–0.415 | 5.3–5.9 |
+| local / no JIT | 1 | 5 242–6 143 | 5 242–6 143 | 0.096–0.115 | 0.6–0.7 |
+| local / no JIT | 2 | 9 052–11 336 | 4 526–5 668 | 0.119–0.230 | 1.3–2.1 |
+| local / no JIT | 4 | 12 016–16 149 | 3 004–4 037 | 0.317–0.438 | 5.1–5.4 |
+| proxied / YJIT | 1 | 1 923–2 216 | 1 923–2 216 | 0.308–0.391 | 0.7–0.8 |
+| proxied / YJIT | 2 | 4 701–4 804 | 2 351–2 402 | 0.268–0.279 | 1.3 |
+| proxied / YJIT | 4 | 8 562–8 617 | 2 141–2 154 | 0.358–0.364 | 3.1 |
+| proxied / no JIT | 1 | 1 841–1 883 | 1 841–1 883 | 0.359–0.408 | 0.7–0.8 |
+| proxied / no JIT | 2 | 4 298–4 525 | 2 149–2 263 | 0.255–0.306 | 1.2–1.3 |
+| proxied / no JIT | 4 | 8 290–8 691 | 2 072–2 173 | 0.308–0.344 | 2.7–2.9 |
+| local / YJIT, 6 threads | 4 | 12 907–15 462 | 3 227–3 865 | 0.243–0.310 | 3.8–4.0 |
+| local / YJIT, 6 threads | 8 | 11 411–14 241 | 1 426–1 780 | 0.735–0.923 | 10.5 |
+| local / no JIT, 6 threads | 4 | 12 636–14 087 | 3 159–3 522 | 0.227–0.282 | 3.2–3.6 |
+| local / no JIT, 6 threads | 8 | 11 524–11 646 | 1 441–1 456 | 0.833–0.866 | 9.6–10.1 |
+
+Statements per job stay at 1.19–1.26 in every 12-thread row (one
+`pgmq.archive` per job, one `pgmq.read` per 4–5 jobs, the batched
+`pgbus_job_stats` insert) and 1.37–1.47 with 6 threads (smaller reads). The
+statement with the most total time is `pgmq.archive` in every 12-thread YJIT
+row and most other rows (`pgmq.read` in the rest). In the local 12-thread rows,
+`pgmq.archive` takes 0.06–0.09 ms per call with one process and 0.18–0.25 ms
+with four.
+
+What the active backends of the bench database were waiting on (local, YJIT;
+share of `pg_stat_activity` samples; the five 12-thread rounds, and the two
+6-thread rounds for 8 processes). The output lists the top six wait kinds per
+row, so "≤" bounds a kind that missed the top six in some rounds:
+
+| processes | on CPU | `LWLock:WALWrite` (waiting for a WAL flush) | `IO:WalWrite` (doing it) | `LWLock:BufferContent` | `Lock:transactionid` |
+|---:|---:|---:|---:|---:|---:|
+| 1 | 47–63 % | 11–28 % | 16–21 % | ≤ 2 % | 0 % |
+| 4 | 29–41 % | 19–25 % | ≤ 7 % | 9–16 % | ≤ 6 % |
+| 8 (6 threads) | 30–36 % | 18–20 % | ≤ 4 % | 11–15 % | 11–16 % |
+
+What the numbers say:
+
+- **Locally, scaling bends at 2–4 processes and turns down past 4.** Against
+  the same round's one process, two processes give 1.5–2.2×, four give
+  1.8–2.6×, and eight (6-thread workers) run below four. With YJIT the
+  fleet's 1-process row sits 6–11 % above the worker cell of the same round
+  (7 116–7 405, rounds 2–5); without a JIT the two overlap (−9 % to +17 %
+  against 5 246–5 741). Round 1's YJIT worker cell hit a load spike (312
+  jobs/s at 7.7 % CPU) and is left out. The one configuration difference is
+  `pool_size`, 14 instead of ~7.
+- **Postgres is what bends, not Ruby.** Statements per job do not change with
+  N, but Postgres time per job roughly triples from one process to four
+  (2.4–3.8× against the same round's one process) and grows 4.6–7.5× by
+  eight (6-thread workers, against their own one-process row). Each
+  statement takes longer, and the waits say why. Every
+  `pgmq.archive` is its own transaction, so every job waits for a WAL flush
+  (`synchronous_commit = on`), and concurrent commits queue on `WALWrite`.
+  Every reader and archiver works on the same few hot pages of the one queue
+  table and its indexes (`BufferContent`). At eight processes, row-lock waits
+  on other transactions (`transactionid`) appear too. It is the single queue
+  table and the per-job commit, not Postgres running out of statements.
+- **On this machine Postgres also shares the cores.** At four processes about
+  4 cores run Ruby and 5–6 backends are busy in Postgres, on 12 cores already
+  loaded by other sessions. Part of the bend is CPU contention a dedicated
+  database host would not have. A team with Postgres on its own host should
+  rerun the fleet cell there before reading these rows as its ceiling.
+- **Under latency the fleet scales almost linearly.** Proxied, four processes
+  run 3.9–4.6× one: each process is capped by its single reader's round trips
+  (#484, #486), not by Postgres, and Postgres stays at ~3 busy backends. This
+  is the production shape for a database on another host. `read_ahead` (#486)
+  and `processes:` multiply there.
+- **The baseline the #601 levers are measured against**, local, 12 threads:
+  ~7 800–8 000 jobs/s for one process and 14 300–17 900 for four (YJIT).
+  What raises the ceiling is fewer commits and less contention on the queue
+  table per job, not less Ruby per job.
+- These are no-op jobs. A real job's own queries add to every row, and its
+  run time spreads the archive commits out.
+
+### Native compilation, Rust, C extensions and Ractors
 
 Evaluated 2026-10-05 for issue #484; recorded so the question stays answered.
 
@@ -271,6 +395,22 @@ Evaluated 2026-10-05 for issue #484; recorded so the question stays answered.
 - The table above is the reason none of this is the lever: locally the CPU that
   a compiler could speed up is shared with Rails and the driver, and under real
   network latency the ceiling is a read round trip, which no compiler removes.
+
+Ractors and a C extension, evaluated 2026-10-29 for issue #602:
+
+- **Ractors.** The host's job classes run inside `Rails.application.executor`,
+  and ActiveRecord, Zeitwerk and ActiveJob are not Ractor-safe, so
+  `perform_now` cannot move into a Ractor. Decoding messages in a Ractor would
+  copy every message across the boundary (a non-shareable object sent with
+  `Ractor#send` is deep-copied) to parallelize less than the ~24 % driver share of on-CPU time (#484).
+- **A C extension inside the gem.** The same reasoning as the Rust row: only
+  the pgbus-owned share of on-CPU time (35 % in #484) is reachable. That is a
+  ≤ 1.5× theoretical bound for one process, and it would make pgbus a compiled
+  gem for every host. The fleet multiplies processes instead. On the measured
+  shape (Postgres on the same machine) the fleet bends on Postgres work per job
+  (WAL flushes and the one queue table) and on cores shared with Postgres; a
+  Ruby-side saving would only hand those cores back, and does nothing for the
+  per-job commit.
 
 ### Workflow steps (issue #540)
 
