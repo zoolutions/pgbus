@@ -71,7 +71,9 @@ SQL
 # (Batch.executions_migrated?) — without it the enqueue numbers skip a path
 # real installs take (issue #603). The orphan index and the FK match the
 # installed schema; the FK needs pgbus_batches, so it is added only when that
-# table exists (as spec/integration_helper.rb does).
+# table exists (as spec/integration_helper.rb does). NOT VALID: a shared
+# database may already hold rows whose batch is gone, and the bench must not
+# abort on them; new rows are still checked.
 conn.execute(<<~SQL) unless conn.table_exists?("pgbus_batch_executions")
   CREATE TABLE pgbus_batch_executions (
     id BIGSERIAL PRIMARY KEY,
@@ -95,7 +97,7 @@ if conn.table_exists?("pgbus_batches")
     DO $$ BEGIN
       ALTER TABLE pgbus_batch_executions
         ADD CONSTRAINT fk_pgbus_batch_executions_batch
-        FOREIGN KEY (batch_id) REFERENCES pgbus_batches (batch_id) ON DELETE CASCADE;
+        FOREIGN KEY (batch_id) REFERENCES pgbus_batches (batch_id) ON DELETE CASCADE NOT VALID;
     EXCEPTION WHEN duplicate_object THEN NULL;
     END $$;
   SQL
