@@ -48,6 +48,15 @@ main_only:
   - name: Pgbus::Client.@pgmq_require_mutex
     reason: >-
       serializes the one-time require of the pgmq gem, which happens on the main Ractor when the first client is built
+  - name: Pgbus::Client::NativeStatements.@lost_in_a_row
+    reason: >-
+      counts native statements found missing from their connection in a row (a Concurrent::AtomicFixnum built at load); updated by Client calls on pooled connections, which live on the main Ractor
+  - name: Pgbus::Client::NativeStatements.@prepared_on
+    reason: >-
+      the backend pid + statement names this process has prepared (a Concurrent::Map built at load); written by Client calls on pooled connections, which live on the main Ractor
+  - name: Pgbus::Client::NativeStatements.@unprepared
+    reason: >-
+      the process-wide switch to unprepared native SQL behind a pooler that drops prepared statements (a Concurrent::AtomicBoolean built at load); read by Client calls on the main Ractor
   - name: Pgbus::CurrentAttributes.@missing_warned
     reason: >-
       the warn-once set for missing CurrentAttributes classes (a Concurrent::Map built at load); used while jobs serialize on the main Ractor

@@ -348,13 +348,16 @@ RSpec.describe Pgbus::Client::NativeStatements do
     it "is used, with one info log, for a queue whose table lacks a column" do
       allow(raw_conn).to receive(:exec_params).with(described_class::COLUMNS_SQL, anything)
                                               .and_return(pg_result(all_columns.reject { |r| r["column_name"] == "headers" }))
-      allow(Pgbus.logger).to receive(:info)
+      logged = []
+      allow(Pgbus.logger).to receive(:info) { |&blk| logged << blk.call }
 
       2.times { client.archive_message("default", 1) }
 
       expect(mock_pgmq).to have_received(:archive).twice
       expect(raw_conn).not_to have_received(:exec_prepared)
-      expect(Pgbus.logger).to have_received(:info).once
+      expect(logged).to eq(["[Pgbus::Client] Queue #{queue} uses the pgmq functions, not native statements: " \
+                            "pgmq.q_#{queue}.headers, pgmq.a_#{queue}.headers missing " \
+                            "(a pgmq install older than the headers column?)"])
       expect(raw_conn).to have_received(:exec_params).with(described_class::COLUMNS_SQL, anything).once
     end
 
