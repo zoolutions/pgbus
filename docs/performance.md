@@ -404,7 +404,9 @@ Two findings on the way:
   plan assumes the LIMIT fetches a tenth of the table and hash-joins a full
   scan of it, so Postgres re-plans every read (0.07–0.11 ms of planning per
   read at four processes, `pg_stat_statements.track_planning`). Reads of up
-  to 64 messages run a statement with the LIMIT written in, one per qty,
+  to 64 messages (`LITERAL_READ_LIMIT`; a worker reads at most its free
+  threads plus `read_ahead`, so only `threads + read_ahead` above 64 reaches
+  the `LIMIT $1` statement) run a statement with the LIMIT written in, one per qty,
   which settles on the cached generic plan after Postgres's five custom
   plans. Each pooled connection pays those five per qty it sees, so a short
   bench still shows some read planning; a long-running worker does not.
