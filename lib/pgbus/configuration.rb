@@ -36,8 +36,9 @@ module Pgbus
     # crash leaves its jobs completed but unsignalled (uniqueness lock, batch,
     # concurrency slot) until the reapers and sweeps heal them. Worker shutdown
     # waits for a flush in flight at most immediate_shutdown_grace (QUIT) or
-    # 5 s (TERM); a flush wedged past that is abandoned, and its jobs fail
-    # (Completer::Stopped) and re-run after visibility_timeout.
+    # the rest of the 5 s pool residual (TERM); a flush wedged past that is
+    # abandoned, and its jobs fail (Completer::Stopped) and re-run after
+    # visibility_timeout, or stay unsignalled if it had committed.
     attr_accessor :completion_batching, :completion_batch_size
     # visibility_heartbeat / visibility_heartbeat_interval: while a job runs,
     # its message's visibility timeout is re-armed every interval seconds

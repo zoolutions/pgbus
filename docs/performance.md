@@ -671,11 +671,14 @@ What the numbers say:
   (uniqueness lock, batch counter, concurrency slot) until the uniqueness reaper,
   the stalled-batch sweep and the semaphore expiry heal them. Both windows grow
   from one job to one flush. `Worker#immediate_shutdown` stops the completer
-  before it kills the pool, so a QUIT does not open the second window. Shutdown
-  waits for a flush in flight at most `immediate_shutdown_grace` (QUIT) or 5 s
-  (TERM, `POOL_TERMINATION_WAIT`); a flush wedged on a hung Postgres past that is
-  killed, and its jobs fail with `Completer::Stopped` and re-run after
-  `visibility_timeout`.
+  before it kills the pool, so a flush that answers in time resolves every
+  waiter. Shutdown waits for a flush in flight at most `immediate_shutdown_grace`
+  (QUIT) or what the pool wait left of its 5 s residual (TERM,
+  `POOL_TERMINATION_WAIT`, so shutdown stays inside the supervisor's default
+  `drain_timeout + 5`). A flush wedged past that is killed, and its jobs fail
+  with `Completer::Stopped` and re-run after `visibility_timeout`; if Postgres had
+  committed it and only the reply stalled, they are left completed but
+  unsignalled, the crash's second window.
 
 ### Fair share reads (issue #426)
 

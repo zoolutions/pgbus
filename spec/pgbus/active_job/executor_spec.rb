@@ -491,6 +491,21 @@ RSpec.describe Pgbus::ActiveJob::Executor do
         expect(Pgbus::Concurrency::Semaphore).to have_received(:signal).with("TestJob-42", client: mock_client)
       end
 
+      it "falls through to the failure path, without signals, when the retry also fails" do
+        allow(completer).to receive(:complete).and_raise(PGMQ::Errors::ConnectionError, "socket gone")
+
+        expect(executor.execute(message, queue_name)).to eq(:failed)
+        expect(completer).to have_received(:complete).twice
+        expect(Pgbus::Concurrency::Semaphore).not_to have_received(:signal)
+      end
+
+      it "does not retry an error from the completer that is not a connection error" do
+        allow(completer).to receive(:complete).and_raise(StandardError, "boom")
+
+        expect(executor.execute(message, queue_name)).to eq(:failed)
+        expect(completer).to have_received(:complete).once
+      end
+
       it "fails the job when the completer stopped before serving it" do
         allow(completer).to receive(:complete).and_raise(Pgbus::Process::Completer::Stopped, "stopped")
 

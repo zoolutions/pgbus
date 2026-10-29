@@ -375,11 +375,22 @@ RSpec.describe Pgbus::Process::Worker do
 
     # Bounded like the pool wait before it (#386): a flush wedged on a hung
     # Postgres must not hold the worker past the supervisor's deadline.
-    it "stops the completer on shutdown, after the pool terminated, within POOL_TERMINATION_WAIT" do
+    it "stops the completer on shutdown, after the pool terminated, within the pool's residual budget" do
       worker.send(:shutdown)
 
       expect(pool).to have_received(:wait_for_termination).ordered
-      expect(completer).to have_received(:stop).with(timeout: described_class::POOL_TERMINATION_WAIT).ordered
+      expect(completer).to have_received(:stop)
+        .with(timeout: a_value_between(0, described_class::POOL_TERMINATION_WAIT)).ordered
+    end
+
+    it "gives the completer only what the pool wait left of the residual budget" do
+      now = 100.0
+      allow(worker).to receive(:monotonic_now) { now }
+      allow(pool).to receive(:wait_for_termination) { now += 4.0 }
+
+      worker.send(:shutdown)
+
+      expect(completer).to have_received(:stop).with(timeout: described_class::POOL_TERMINATION_WAIT - 4.0)
     end
 
     # A job thread killed while it waits on a flush would run its ensure with

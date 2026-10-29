@@ -116,12 +116,14 @@ class Views::Docs::Pages::PerformanceTuning < DocsUI::Page
         code { "visibility_timeout" }
         plain ", and a flush that committed just before the crash leaves its jobs "
         plain "completed but unsignalled (uniqueness lock, batch counter, concurrency "
-        plain "slot) until pgbus's reapers and sweeps heal them. A QUIT does not open "
-        plain "that second window: the worker stops the completer before it kills "
-        plain "the running jobs. Shutdown waits for a flush at most "
+        plain "slot) until pgbus's reapers and sweeps heal them. On a QUIT the worker "
+        plain "stops the completer before it kills the running jobs, so a flush that "
+        plain "answers in time resolves every waiter. Shutdown waits for a flush at most "
         code { "immediate_shutdown_grace" }
-        plain " (QUIT) or 5 seconds (TERM); a flush still wedged on Postgres after "
-        plain "that is abandoned, and its jobs run again."
+        plain " (QUIT) or what is left of the 5-second residual (TERM). A flush still "
+        plain "wedged after that is abandoned and its jobs run again; if Postgres had "
+        plain "committed it and only the reply stalled, those jobs are left completed "
+        plain "but unsignalled, as after a crash."
       end
       DocsUI::Callout(:note) do
         plain "Try it on your own shape with "

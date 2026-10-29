@@ -49,7 +49,9 @@ RSpec.describe Pgbus::Process::Completer do
     Array.new(count) { |i| background(i, &block) }
   end
 
-  after { completer.stop }
+  # Bounded: a failing gated example must not leave the flusher parked on
+  # its latch and hang the suite in this join.
+  after { completer.stop(timeout: 1) }
 
   it "archives a lone id at once with one archive_batch and reports :archived" do
     archive_all

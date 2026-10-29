@@ -943,11 +943,13 @@ module Pgbus
         # config.drain_timeout for in-flight jobs. A job still running here has
         # proven it won't finish; waiting another full window would push the
         # worker past the supervisor's shutdown_timeout deadline (issue #386).
+        residual_deadline = monotonic_now + POOL_TERMINATION_WAIT
         @pool.wait_for_termination(POOL_TERMINATION_WAIT)
         # After the pool: every waiter is a job thread, so the drain already
-        # flushed theirs; this flushes any left and joins the flusher, bounded
-        # like the pool wait above.
-        @completer&.stop(timeout: POOL_TERMINATION_WAIT)
+        # flushed theirs; this flushes any left and joins the flusher. It shares
+        # the pool's residual budget rather than adding its own, so shutdown
+        # stays inside the supervisor's drain_timeout + 5 default deadline.
+        @completer&.stop(timeout: [residual_deadline - monotonic_now, 0].max)
         VisibilityHeartbeat.stop
         @stat_buffer&.stop
         @queue_lock&.unlock_all
