@@ -313,8 +313,8 @@ them as the shape of the curve, not as decimals.
 Statements per job stay at 1.19–1.26 in every 12-thread row (one
 `pgmq.archive` per job, one `pgmq.read` per 4–5 jobs, the batched
 `pgbus_job_stats` insert) and 1.37–1.47 with 6 threads (smaller reads). The
-statement with the most total time is `pgmq.archive` in every YJIT row and
-most no-JIT rows (`pgmq.read` in the others). In the local 12-thread rows,
+statement with the most total time is `pgmq.archive` in every 12-thread YJIT
+row and most other rows (`pgmq.read` in the rest). In the local 12-thread rows,
 `pgmq.archive` takes 0.06–0.09 ms per call with one process and 0.18–0.25 ms
 with four.
 
