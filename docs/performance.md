@@ -544,7 +544,8 @@ running and Postgres had no other active client backend. Load was 0.4–0.6× th
 | local / YJIT | 6 831–7 283 | 6 631–7 297 | 34.0–36.5 % | 25.6–27.4 % |
 | local / no JIT | 5 702–5 758 | 6 003–6 061 (**+5 %**) | 33.0–35.6 % | 27.4–28.6 % |
 
-pgbus's share of on-CPU time fell by about 8 points in both cells. Without a
+pgbus's share of on-CPU time fell by about 9 points with YJIT and about 6
+points without it. Without a
 JIT that shows up as jobs/s, outside the run-to-run spread. With YJIT the
 jobs/s change is inside the noise: the loop thread spends 54–76 % of its time
 waiting on Postgres in those runs, and that wait sets the rate. Two more runs
