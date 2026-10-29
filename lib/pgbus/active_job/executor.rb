@@ -15,6 +15,7 @@ module Pgbus
         @stat_buffer = stat_buffer
         @completer = completer
         @delete_completed = config.completed_jobs == :delete
+        @completed_word = @delete_completed ? "deleted" : "archived"
       end
 
       # Exceptions we never want to swallow — let the process die/signal propagate.
@@ -123,12 +124,13 @@ module Pgbus
           # concurrency slot a second time (rails/solid_queue#761).
           if complete_from(queue_name, msg_id, source_queue: source_queue) == :already_archived
             Pgbus.logger.warn do
-              "[Pgbus::Executor] already archived elsewhere, skipping signals #{log_tag(message, queue_name)} job_class=#{job_class}"
+              "[Pgbus::Executor] already #{@completed_word} elsewhere, skipping signals " \
+                "#{log_tag(message, queue_name)} job_class=#{job_class}"
             end
             release_duplicate_execution_lock(uniqueness_key, uniqueness_strategy, queue_name, msg_id)
             return :duplicate
           end
-          Pgbus.logger.debug { "[Pgbus::Executor] archived #{log_tag(message, queue_name)} job_class=#{job_class}" }
+          Pgbus.logger.debug { "[Pgbus::Executor] #{@completed_word} #{log_tag(message, queue_name)} job_class=#{job_class}" }
           job_succeeded = true
           release_uniqueness_lock(uniqueness_key, queue_name, message)
           # Only FailedEventRecorder.record! writes this table, and only after a
@@ -458,7 +460,7 @@ module Pgbus
           raise unless attempts == 1 && connection_error?(e)
 
           Pgbus.logger.warn do
-            "[Pgbus::Executor] Archive failed on connection error, retrying once: #{e.message}"
+            "[Pgbus::Executor] #{@delete_completed ? "Delete" : "Archive"} failed on connection error, retrying once: #{e.message}"
           end
           retry
         end

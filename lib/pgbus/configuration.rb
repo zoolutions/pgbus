@@ -49,6 +49,8 @@ module Pgbus
     # commits. Through the completer (completion_batching) it is delete_batch.
     # ActiveJob only: EventBus handler queues keep archiving (event replay
     # reads their archive), and failures and dead letters are unchanged.
+    # Batch::Sweep then cannot tell a deleted batch job from one whose message
+    # vanished another way (a purged queue): both count as completed, silently.
     attr_reader :completed_jobs
     # visibility_heartbeat / visibility_heartbeat_interval: while a job runs,
     # its message's visibility timeout is re-armed every interval seconds

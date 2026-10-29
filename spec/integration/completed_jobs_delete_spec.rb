@@ -2,6 +2,7 @@
 
 require_relative "../integration_helper"
 require "active_job"
+require "active_job/queue_adapters/pgbus_adapter"
 
 # Issue #607: with config.completed_jobs = :delete a successful job's message
 # is removed with pgmq.delete (delete_batch through the completer) instead of
@@ -84,10 +85,10 @@ RSpec.describe "completed_jobs: :delete (integration)", :integration do
       )
     SQL
     conn.execute("DELETE FROM pgbus_job_stats WHERE queue_name = '#{queue}'")
-    %i[@table_exists @latency_columns].each do |ivar|
-      Pgbus::JobStat.remove_instance_variable(ivar) if Pgbus::JobStat.instance_variable_defined?(ivar)
-    end
+    # The table now exists with the latency column, whatever an earlier
+    # example memoised.
     Pgbus::JobStat.reset_column_information
+    allow(Pgbus::JobStat).to receive_messages(table_exists?: true, latency_columns?: true)
   end
 
   it "drains 200 jobs with delete_message: no queue rows, no archive rows, every success recorded" do
@@ -138,6 +139,33 @@ RSpec.describe "completed_jobs: :delete (integration)", :integration do
     expect(sql("SELECT read_ct FROM pgmq.q_#{physical} WHERE msg_id = #{msg_id}").to_i).to eq(1)
     expect(sql("SELECT vt > now() FROM pgmq.q_#{physical} WHERE msg_id = #{msg_id}")).to be(true)
     expect(count("a_#{physical}")).to eq(0)
+  end
+
+  # A worker that deleted a batch job's message and died before its batch
+  # signal: the stall sweep finishes the batch from the queue and DLQ probes
+  # alone, never asking an archive :delete does not write.
+  it "lets Batch::Sweep count a batch job whose message was deleted before its signal" do
+    job_queue = queue
+    batch_job = Class.new(ActiveJob::Base) do
+      self.queue_adapter = :pgbus
+      queue_as(job_queue)
+      def self.name = "CompletedJobsDeleteSpec::BatchJob"
+      def perform(*) = nil
+    end
+    stub_const("CompletedJobsDeleteSpec::BatchJob", batch_job)
+    batch = Pgbus::Batch.new
+    batch.enqueue { batch_job.perform_later }
+    message = client.read_batch(queue, qty: 1, vt: 30).first
+    expect(client.delete_message(queue, message.msg_id.to_i)).to be(true)
+    allow(client).to receive(:message_archived?).and_call_original
+    allow(Pgbus.logger).to receive(:warn).and_call_original
+
+    Pgbus::Batch::Sweep.run(stalled_for: 0, client: client)
+
+    expect(Pgbus::BatchEntry.find_by(batch_id: batch.batch_id).completed_jobs).to eq(1)
+    expect(Pgbus::BatchExecution.where(batch_id: batch.batch_id).count).to eq(0)
+    expect(client).not_to have_received(:message_archived?)
+    expect(Pgbus.logger).not_to have_received(:warn)
   end
 
   it "still moves a job past max_retries to the dead letter queue" do

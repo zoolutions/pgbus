@@ -357,7 +357,8 @@ RSpec.describe Pgbus::Process::Worker do
       worker
 
       expect(Pgbus::Process::Completer).to have_received(:new).with(client: mock_client, batch_size: 25, completed_jobs: :archive)
-      expect(Pgbus::ActiveJob::Executor).to have_received(:new).with(stat_buffer: worker.stat_buffer, completer: completer)
+      expect(Pgbus::ActiveJob::Executor).to have_received(:new)
+        .with(config: batching_config, stat_buffer: worker.stat_buffer, completer: completer)
     end
 
     # Issue #607: one op per worker, from config.completed_jobs.
@@ -373,7 +374,8 @@ RSpec.describe Pgbus::Process::Worker do
       described_class.new(queues: %w[default], threads: 5)
 
       expect(Pgbus::Process::Completer).not_to have_received(:new)
-      expect(Pgbus::ActiveJob::Executor).to have_received(:new).with(stat_buffer: anything, completer: nil)
+      expect(Pgbus::ActiveJob::Executor).to have_received(:new).with(config: Pgbus.configuration, stat_buffer: anything,
+                                                                     completer: nil)
     end
 
     it "refuses the async execution mode" do

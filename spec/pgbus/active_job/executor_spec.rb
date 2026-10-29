@@ -565,6 +565,29 @@ RSpec.describe Pgbus::ActiveJob::Executor do
         expect(Pgbus::Concurrency::Semaphore).to have_received(:signal).with("TestJob-42", client: mock_client)
       end
 
+      it "says deleted, not archived, in its logs" do
+        log = StringIO.new
+        previous_logger = Pgbus.configuration.logger
+        Pgbus.configuration.logger = Logger.new(log, level: Logger::DEBUG)
+        calls = 0
+        allow(mock_client).to receive(:delete_message) do
+          calls += 1
+          raise PGMQ::Errors::ConnectionError, "socket gone" if calls == 1
+
+          calls == 2
+        end
+
+        executor.execute(message, queue_name)
+        executor.execute(message, queue_name)
+
+        expect(log.string).to include("Delete failed on connection error, retrying once: socket gone")
+        expect(log.string).to include("[Pgbus::Executor] deleted msg_id=9")
+        expect(log.string).to include("already deleted elsewhere, skipping signals msg_id=9")
+        expect(log.string).not_to include("archived")
+      ensure
+        Pgbus.configuration.logger = previous_logger
+      end
+
       it "leaves a failed job in its queue: no delete, no archive" do
         allow(job_double).to receive(:perform_now).and_raise(StandardError, "boom")
 
