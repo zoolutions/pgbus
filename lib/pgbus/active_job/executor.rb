@@ -5,10 +5,14 @@ module Pgbus
     class Executor
       attr_reader :client, :config
 
-      def initialize(client: Pgbus.client, config: Pgbus.configuration, stat_buffer: nil)
+      # completer: the worker's Process::Completer when config.completion_batching
+      # is on (issue #606): archive_from goes through it instead of one
+      # archive_message per job.
+      def initialize(client: Pgbus.client, config: Pgbus.configuration, stat_buffer: nil, completer: nil)
         @client = client
         @config = config
         @stat_buffer = stat_buffer
+        @completer = completer
       end
 
       # Exceptions we never want to swallow — let the process die/signal propagate.
@@ -194,7 +198,8 @@ module Pgbus
       # The table the message was read from: the _pN sub-queue under priority
       # routing, else the logical queue's own. Each table numbers its messages
       # from its own sequence, so a failed-event row is keyed on it (issue
-      # #583). Built only on the failure and redelivery paths.
+      # #583). Built only on the failure and redelivery paths, and for the
+      # completer (issue #606), which groups by physical queue.
       def physical_queue(queue_name, source_queue)
         source_queue || config.queue_name(queue_name)
       end
@@ -432,7 +437,9 @@ module Pgbus
       def archive_from(queue_name, msg_id, source_queue: nil)
         attempts = 0
         begin
-          archived = if source_queue
+          archived = if @completer
+                       @completer.complete(physical_queue(queue_name, source_queue), msg_id) == :archived
+                     elsif source_queue
                        client.archive_message(source_queue, msg_id, prefixed: false)
                      else
                        client.archive_message(queue_name, msg_id)
