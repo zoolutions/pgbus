@@ -373,11 +373,13 @@ RSpec.describe Pgbus::Process::Worker do
       end.to raise_error(Pgbus::ConfigurationError, /completion_batching.*:async/)
     end
 
-    it "stops the completer on shutdown, after the pool terminated" do
+    # Bounded like the pool wait before it (#386): a flush wedged on a hung
+    # Postgres must not hold the worker past the supervisor's deadline.
+    it "stops the completer on shutdown, after the pool terminated, within POOL_TERMINATION_WAIT" do
       worker.send(:shutdown)
 
       expect(pool).to have_received(:wait_for_termination).ordered
-      expect(completer).to have_received(:stop).ordered
+      expect(completer).to have_received(:stop).with(timeout: described_class::POOL_TERMINATION_WAIT).ordered
     end
 
     # A job thread killed while it waits on a flush would run its ensure with
@@ -388,7 +390,7 @@ RSpec.describe Pgbus::Process::Worker do
 
       worker.immediate_shutdown
 
-      expect(completer).to have_received(:stop).ordered
+      expect(completer).to have_received(:stop).with(timeout: batching_config.immediate_shutdown_grace).ordered
       expect(Pgbus::ExecutionPools).to have_received(:terminate).ordered
     end
   end

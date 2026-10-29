@@ -652,15 +652,16 @@ What the numbers say:
 - **Under latency without `read_ahead` it is inside the run-to-run spread** at
   1, 2 and 4 processes, while Postgres time per job halves: it frees database
   capacity, not worker throughput.
-- **With `read_ahead` across a network it costs 10–30 %** (locally it is +4 % to
-  +14 %). The plan predicted
+- **With `read_ahead` across a network it costs 10–30 %** round by round
+  (locally it is +4 % to +14 %). The plan predicted
   the pool checkout wait (8–12 % here, 14–15 % in "Read-ahead") would fall: it
   falls to 0 %, but the wait moves onto the completer and shows up as pool idle
   (83–85 %). Read-ahead keeps every thread fed, so job threads are what limits
   the rate there, and each one now waits for a flush that is a full round trip
   and runs one at a time. Leave batching off for that shape.
-- **When to turn it on:** several processes (`processes: N`, N ≥ 2) on one
-  Postgres where the fleet cell's waits show `LWLock:WALWrite` on top. Leave it
+- **When to turn it on:** several processes (`processes: N`) on one Postgres
+  where the fleet cell's waits show `LWLock:WALWrite` on top. Here that was four
+  processes; two gained nothing (local / no JIT 10 497–10 702 → 9 928–10 161). Leave it
   off for a single process and with `read_ahead` on a remote database. Measure
   your own shape with `WP_BENCH_COMPLETION_BATCHING=1`.
 - **Reliability.** A hard crash (SIGKILL, OOM) loses the archives of the jobs
@@ -670,7 +671,11 @@ What the numbers say:
   (uniqueness lock, batch counter, concurrency slot) until the uniqueness reaper,
   the stalled-batch sweep and the semaphore expiry heal them. Both windows grow
   from one job to one flush. `Worker#immediate_shutdown` stops the completer
-  before it kills the pool, so a QUIT does not open the second window.
+  before it kills the pool, so a QUIT does not open the second window. Shutdown
+  waits for a flush in flight at most `immediate_shutdown_grace` (QUIT) or 5 s
+  (TERM, `POOL_TERMINATION_WAIT`); a flush wedged on a hung Postgres past that is
+  killed, and its jobs fail with `Completer::Stopped` and re-run after
+  `visibility_timeout`.
 
 ### Fair share reads (issue #426)
 

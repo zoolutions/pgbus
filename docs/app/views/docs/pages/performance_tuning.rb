@@ -100,9 +100,10 @@ class Views::Docs::Pages::PerformanceTuning < DocsUI::Page
       RUBY
       md <<~'MD'
         Measured with four processes on a local Postgres: about 5 jobs per
-        statement, Postgres time per job down 4–5×, jobs/s up 17–35 %. Turn it on
-        for `processes: N` (N ≥ 2) on one Postgres when the fleet bench's waits
-        show `LWLock:WALWrite` on top. Leave it off for a single process, where
+        statement, Postgres time per job down 4–5×, jobs/s up 17–35 %; two
+        processes gained nothing. Turn it on for several processes on one
+        Postgres when the fleet bench's waits show `LWLock:WALWrite` on top.
+        Leave it off for a single process, where
         it gains nothing and measured up to a third slower, and with `read_ahead`
         on a remote database, where each job thread waits a full round trip for
         its flush (10–30 % slower). The numbers are in `docs/performance.md` →
@@ -117,7 +118,10 @@ class Views::Docs::Pages::PerformanceTuning < DocsUI::Page
         plain "completed but unsignalled (uniqueness lock, batch counter, concurrency "
         plain "slot) until pgbus's reapers and sweeps heal them. A QUIT does not open "
         plain "that second window: the worker stops the completer before it kills "
-        plain "the running jobs."
+        plain "the running jobs. Shutdown waits for a flush at most "
+        code { "immediate_shutdown_grace" }
+        plain " (QUIT) or 5 seconds (TERM); a flush still wedged on Postgres after "
+        plain "that is abandoned, and its jobs run again."
       end
       DocsUI::Callout(:note) do
         plain "Try it on your own shape with "

@@ -114,6 +114,31 @@ RSpec.describe "Completion batching (integration)", :integration do
     completer&.stop
   end
 
+  # Worker#shutdown and #immediate_shutdown bound Completer#stop: a flush
+  # wedged on Postgres is killed mid-query on a real pooled connection, its
+  # waiter raises Stopped, and the client still archives afterwards.
+  it "abandons a wedged flush past stop's budget and leaves the client usable" do
+    ids = client.send_batch(queue, Array.new(2) { noop_job.new.serialize }).map(&:to_i)
+    # The pool the client's own calls check out from: a real query in flight.
+    pgmq = client.instance_variable_get(:@pgmq)
+    wedged = client.dup
+    wedged.define_singleton_method(:archive_batch) do |*|
+      pgmq.with_connection { |conn| conn.exec("SELECT pg_sleep(1)") }
+    end
+    completer = Pgbus::Process::Completer.new(client: wedged, batch_size: 100)
+    waiter = Thread.new { completer.complete(physical, ids.first) } # rubocop:disable ThreadSafety/NewThread -- joined below
+    waiter.report_on_exception = false
+    expect(wait_until { completer.flushing? }).to be(true)
+
+    completer.stop(timeout: 0.1)
+
+    expect { waiter.value }.to raise_error(Pgbus::Process::Completer::Stopped)
+    expect(completer).not_to be_alive
+    # connection_pool hands out the last connection checked in first, so this
+    # runs on the one the kill interrupted mid-query.
+    expect(client.archive_batch(physical, [ids.last], prefixed: false)).to eq([ids.last.to_s])
+  end
+
   describe "a worker killed with jobs waiting on a flush" do
     def connection_url(pool:)
       parsed = URI.parse(PGBUS_DATABASE_URL)

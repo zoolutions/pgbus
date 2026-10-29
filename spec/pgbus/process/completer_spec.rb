@@ -34,6 +34,16 @@ RSpec.describe Pgbus::Process::Completer do
     end
   end
 
+  # A protocol regression must fail the example, not hang the suite.
+  def wait_for(seconds = 5)
+    deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + seconds
+    until yield
+      raise "condition not met within #{seconds}s" if Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
+
+      sleep 0.01
+    end
+  end
+
   # Runs the block on count threads and returns them.
   def in_threads(count, &block)
     Array.new(count) { |i| background(i, &block) }
@@ -57,9 +67,9 @@ RSpec.describe Pgbus::Process::Completer do
     end
 
     lone = background { completer.complete("pgbus_default", 1) }
-    sleep 0.01 until calls.size == 1
+    wait_for { calls.size == 1 }
     others = in_threads(5) { |i| completer.complete("pgbus_default", 10 + i) }
-    sleep 0.01 until completer.pending_count == 5
+    wait_for { completer.pending_count == 5 }
     gate << :go
 
     expect(([lone] + others).map(&:value)).to all(eq(:archived))
@@ -76,9 +86,9 @@ RSpec.describe Pgbus::Process::Completer do
     end
 
     holder = background { completer.complete("q", 0) }
-    sleep 0.01 until completer.flushing?
+    wait_for { completer.flushing? }
     waiters = [1, 2, 3].to_h { |id| [id, background { completer.complete("q", id) }] }
-    sleep 0.01 until completer.pending_count == 3
+    wait_for { completer.pending_count == 3 }
     gate << :go
 
     expect(holder.value).to eq(:archived)
@@ -96,9 +106,9 @@ RSpec.describe Pgbus::Process::Completer do
     end
 
     holder = background { completer.complete("q", 0) }
-    sleep 0.01 until completer.flushing?
+    wait_for { completer.flushing? }
     twins = in_threads(2) { completer.complete("q", 5) }
-    sleep 0.01 until completer.pending_count == 2
+    wait_for { completer.pending_count == 2 }
     gate << :go
 
     holder.join
@@ -116,10 +126,10 @@ RSpec.describe Pgbus::Process::Completer do
     end
 
     holder = background { completer.complete("good", 0) }
-    sleep 0.01 until completer.flushing?
+    wait_for { completer.flushing? }
     bad = in_threads(2) { |i| completer.complete("bad", i + 1) }
     good = background { completer.complete("good", 9) }
-    sleep 0.01 until completer.pending_count == 3
+    wait_for { completer.pending_count == 3 }
     gate << :go
 
     expect(holder.value).to eq(:archived)
@@ -136,10 +146,10 @@ RSpec.describe Pgbus::Process::Completer do
     end
 
     holder = background { completer.complete("a", 0) }
-    sleep 0.01 until calls.size == 1
+    wait_for { calls.size == 1 }
     waiters = [background { completer.complete("a", 1) }, background { completer.complete("b", 2) },
                background { completer.complete("b", 3) }]
-    sleep 0.01 until completer.pending_count == 3
+    wait_for { completer.pending_count == 3 }
     gate << :go
 
     [holder, *waiters].each(&:join)
@@ -159,9 +169,9 @@ RSpec.describe Pgbus::Process::Completer do
       end
 
       holder = background { completer.complete("q", 0) }
-      sleep 0.01 until calls.size == 1
+      wait_for { calls.size == 1 }
       waiters = in_threads(5) { |i| completer.complete("q", i + 1) }
-      sleep 0.01 until completer.pending_count == 5
+      wait_for { completer.pending_count == 5 }
       gate << :go
 
       expect(waiters.map(&:value)).to all(eq(:archived))
@@ -181,9 +191,9 @@ RSpec.describe Pgbus::Process::Completer do
       end
 
       holder = background { completer.complete("q", 0) }
-      sleep 0.01 until calls.size == 1
+      wait_for { calls.size == 1 }
       late = background { completer.complete("q", 4) }
-      sleep 0.01 until completer.pending_count == 1
+      wait_for { completer.pending_count == 1 }
       stopper = background { completer.stop }
       gate << :go
 
@@ -219,7 +229,7 @@ RSpec.describe Pgbus::Process::Completer do
       end
 
       waiter = background { completer.complete("q", 1) }
-      sleep 0.01 until completer.flushing?
+      wait_for { completer.flushing? }
       completer.stop(timeout: 0.05)
 
       expect { waiter.value }.to raise_error(described_class::Stopped)

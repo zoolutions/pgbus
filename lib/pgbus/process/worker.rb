@@ -251,8 +251,10 @@ module Pgbus
         # Before the pool: a job thread killed while it waits on a flush would
         # skip its signals while the flush still commits (archived, never
         # signalled). Stopping first resolves every waiter; a job that finishes
-        # inside the grace then archives on its own thread.
-        @completer&.stop
+        # inside the grace then archives on its own thread. Bounded by the same
+        # grace: a flush wedged on a hung Postgres is abandoned, and its jobs
+        # fail with Completer::Stopped and re-run after visibility_timeout.
+        @completer&.stop(timeout: config.immediate_shutdown_grace)
         ExecutionPools.terminate(@pool, grace: config.immediate_shutdown_grace)
       end
 
@@ -943,8 +945,9 @@ module Pgbus
         # worker past the supervisor's shutdown_timeout deadline (issue #386).
         @pool.wait_for_termination(POOL_TERMINATION_WAIT)
         # After the pool: every waiter is a job thread, so the drain already
-        # flushed theirs; this flushes any left and joins the flusher.
-        @completer&.stop
+        # flushed theirs; this flushes any left and joins the flusher, bounded
+        # like the pool wait above.
+        @completer&.stop(timeout: POOL_TERMINATION_WAIT)
         VisibilityHeartbeat.stop
         @stat_buffer&.stop
         @queue_lock&.unlock_all
