@@ -410,6 +410,9 @@ Two findings on the way:
   which settles on the cached generic plan after Postgres's five custom
   plans. Each pooled connection pays those five per qty it sees, so a short
   bench still shows some read planning; a long-running worker does not.
+  Each prepared statement keeps its plan in the backend for the
+  connection's life: per queue, the seven statements plus one read per qty
+  a worker asks for (at most `threads + read_ahead`).
 - **The fleet cell undercounted planning.** A function's planning of its
   dynamic `EXECUTE` is inside its execution time, while a top-level
   statement's planning is `total_plan_time`, recorded only with

@@ -101,7 +101,9 @@ class Views::Docs::Pages::PerformanceTuning < DocsUI::Page
         plain "Behind a transaction-mode PgBouncer, prepared statements need PgBouncer 1.21 or later with "
         code { "max_prepared_statements" }
         plain " set. Without it, the pooler drops them between transactions; a process that sees that "
-        plain "switches to sending the same SQL unprepared and logs a warning once. "
+        plain "switches to sending the same SQL unprepared and logs a warning once; with "
+        code { "prepared_statements: false" }
+        plain " in database.yml (and no pgbus database_url of its own) it sends it unprepared from the start. "
         code { "config.native_statements = false" }
         plain " uses the pgmq functions everywhere. See also "
         code { "connection_guc_mode" }

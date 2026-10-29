@@ -28,9 +28,14 @@ module Pgbus
     # once and raises PGMQ::Errors::ConnectionError, exactly as on the function
     # path.
     #
-    # Inside an open transaction (the shared-AR path, an enqueue inside the
-    # app's transaction) a failed exec_prepared would abort the caller's
-    # transaction, so there the same SQL runs through exec_params.
+    # Inside a transaction the server has begun (the shared-AR path, an
+    # enqueue inside the app's transaction once Rails has sent its BEGIN) a
+    # failed exec_prepared would abort the caller's transaction, so there the
+    # same SQL runs through exec_params.
+    #
+    # Connections built from ActiveRecord's config whose database.yml sets
+    # `prepared_statements: false` (what a transaction-mode PgBouncer asks
+    # of Rails) send the same SQL through exec_params from the start.
     #
     # A transaction-mode pooler without prepared-statement support (PgBouncer
     # before 1.21, or 1.21+ without max_prepared_statements) drops prepared
@@ -54,6 +59,12 @@ module Pgbus
       # runs the `LIMIT $1` statement.
       LITERAL_READ_LIMIT = 64
 
+      # Entries kept in @prepared_on before it is cleared. Every reconnect
+      # brings a new backend pid, so a long-lived process would otherwise grow
+      # it for good. Clearing only forgets history: a statement then missing
+      # reads as a first prepare, which can delay the switch, never cause it.
+      PREPARED_ON_LIMIT = 10_000
+
       Statement = Data.define(:name, :sql)
 
       # Process-wide, built at load: the pooler is a property of the process's
@@ -76,7 +87,12 @@ module Pgbus
         end
 
         def note_prepared(backend_pid, name)
+          @prepared_on.clear if @prepared_on.size >= PREPARED_ON_LIMIT
           @prepared_on["#{backend_pid}:#{name}"] = true
+        end
+
+        def prepared_count
+          @prepared_on.size
         end
 
         # A statement this session needed to prepare. Counts toward the switch
@@ -203,6 +219,27 @@ module Pgbus
         value
       end
 
+      # Whether the connections come from ActiveRecord's config with
+      # `prepared_statements: false`. Read once, in Client#initialize. A
+      # database_url or connection_params of pgbus's own is its own route.
+      def ar_disables_prepared_statements?
+        return false if config.database_url || config.connection_params
+        return false unless defined?(::ActiveRecord::Base)
+
+        base = config.connects_to ? Pgbus::BusRecord : ::ActiveRecord::Base
+        return false unless [false, "false"].include?(base.connection_db_config.configuration_hash[:prepared_statements])
+
+        Pgbus.logger.info do
+          "[Pgbus::Client] Native statements run unprepared: database.yml sets prepared_statements: false"
+        end
+        true
+      rescue StandardError
+        # The same connection_db_config call already failed in
+        # Configuration#extract_ar_connection_hash, which logged it and fell
+        # back to the shared connection; there is no setting to read.
+        false
+      end
+
       def native_statements_for(full_name)
         return unless config.native_statements
 
@@ -294,7 +331,9 @@ module Pgbus
       end
 
       def exec_native(conn, statement, params)
-        return conn.exec_params(statement.sql, params) if NativeStatements.unprepared? || inside_caller_transaction?(conn)
+        if @native_unprepared || NativeStatements.unprepared? || inside_caller_transaction?(conn)
+          return conn.exec_params(statement.sql, params)
+        end
 
         begin
           result = conn.exec_prepared(statement.name, params)

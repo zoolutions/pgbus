@@ -224,8 +224,10 @@ module Pgbus
     # Behind a transaction-mode PgBouncer, prepared statements need PgBouncer
     # >= 1.21 with `max_prepared_statements` set. Without it, a process that
     # sees its statements disappear switches to sending the same SQL
-    # unprepared and logs a warning once. false uses the pgmq functions
-    # everywhere: the full escape hatch.
+    # unprepared and logs a warning once, and connections built from a
+    # database.yml with `prepared_statements: false` send it unprepared from
+    # the start. false uses the pgmq functions everywhere: the full escape
+    # hatch.
     attr_reader :native_statements
 
     # Zombie message detection — logs a warning when a message is redelivered

@@ -173,6 +173,7 @@ module Pgbus
       @stream_indexes_created = Concurrent::Map.new
       # Per physical queue: its native statements, or false (issue #605).
       @native_statements = Concurrent::Map.new
+      @native_unprepared = config.native_statements && ar_disables_prepared_statements?
       # Guards the one-time build of the publisher autoscale trigger (issue #323).
       # NOT @pgmq_mutex — that is nil on the dedicated path (the only path the
       # trigger exists on), so it wouldn't serialize concurrent first-publishers.

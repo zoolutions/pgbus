@@ -260,12 +260,91 @@ RSpec.describe Pgbus::Client::NativeStatements do
       expect(described_class).to be_unprepared
     end
 
+    it "forgets the recorded statements past #{described_class::PREPARED_ON_LIMIT}, so reconnects cannot grow it for good" do
+      stub_const("#{described_class}::PREPARED_ON_LIMIT", 2)
+      described_class.note_prepared(1, "a")
+      described_class.note_prepared(2, "a")
+      described_class.note_prepared(3, "a")
+
+      # Pid 1's entry is gone: losing its statement now reads as a first prepare.
+      3.times { described_class.note_missing(1, "a") }
+      expect(described_class).not_to be_unprepared
+      expect(described_class.prepared_count).to eq(1)
+    end
+
     it "sends every later statement unprepared" do
       described_class.unprepare!("test")
       allow(raw_conn).to receive(:exec_params).with(statements[:archive].sql, [3]).and_return(pg_result([{ "msg_id" => "3" }]))
 
       expect(client.archive_message("default", 3)).to be(true)
       expect(raw_conn).not_to have_received(:exec_prepared)
+    end
+  end
+
+  # database.yml's `prepared_statements: false` is the operator saying the
+  # route cannot hold prepared statements (a transaction-mode PgBouncer);
+  # pgbus's connections extracted from that config take the same route.
+  describe "with ActiveRecord's prepared_statements: false" do
+    let(:config) do
+      Pgbus::Configuration.new.tap do |c|
+        c.queue_prefix = "pgbus_test"
+        c.visibility_timeout = 45
+      end
+    end
+    let(:ar_config) { { host: "localhost", database: "app", prepared_statements: false } }
+
+    before do
+      stub_const("ActiveRecord::Base", Class.new) unless defined?(ActiveRecord::Base)
+      allow(ActiveRecord::Base).to receive(:connection_db_config).and_return(double(configuration_hash: ar_config))
+      allow(Pgbus.logger).to receive(:info)
+    end
+
+    it "sends the native SQL unprepared" do
+      allow(raw_conn).to receive(:exec_params).with(statements[:delete].sql, [4]).and_return(pg_result([{ "msg_id" => "4" }]))
+
+      expect(client.delete_message("default", 4)).to be(true)
+      expect(raw_conn).not_to have_received(:exec_prepared)
+      expect(raw_conn).not_to have_received(:prepare)
+      expect(Pgbus.logger).to have_received(:info).once
+    end
+
+    it "reads the database.yml string form too" do
+      ar_config[:prepared_statements] = "false"
+      allow(raw_conn).to receive(:exec_params).with(statements[:delete].sql, [4]).and_return(pg_result([]))
+
+      client.delete_message("default", 4)
+
+      expect(raw_conn).not_to have_received(:exec_prepared)
+    end
+
+    it "prepares when ActiveRecord leaves prepared statements on" do
+      ar_config.delete(:prepared_statements)
+      allow(raw_conn).to receive(:exec_prepared).with(statements[:delete].name, [4]).and_return(pg_result([]))
+
+      client.delete_message("default", 4)
+
+      expect(raw_conn).to have_received(:exec_prepared)
+    end
+
+    it "prepares when ActiveRecord's config cannot be read" do
+      allow(ActiveRecord::Base).to receive(:connection_db_config).and_raise(StandardError, "no connection")
+      allow(Pgbus.logger).to receive(:warn)
+      allow(raw_conn).to receive(:exec_prepared).with(statements[:delete].name, [4]).and_return(pg_result([]))
+
+      client.delete_message("default", 4)
+
+      # The connection config's own fallback logged the failure.
+      expect(raw_conn).to have_received(:exec_prepared)
+      expect(client).to be_shared_connection
+    end
+
+    it "prepares when pgbus has its own database_url, whatever ActiveRecord says" do
+      config.database_url = "postgres://localhost/pgbus_test"
+      allow(raw_conn).to receive(:exec_prepared).with(statements[:delete].name, [4]).and_return(pg_result([]))
+
+      client.delete_message("default", 4)
+
+      expect(raw_conn).to have_received(:exec_prepared)
     end
   end
 
