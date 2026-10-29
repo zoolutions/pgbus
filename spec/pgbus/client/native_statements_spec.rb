@@ -79,6 +79,13 @@ RSpec.describe Pgbus::Client::NativeStatements do
       )
     end
 
+    it "writes the LIMIT into the reads of up to #{described_class::LITERAL_READ_LIMIT}, so they get a generic plan" do
+      expect(statements[:reads][5].sql).to eq(statements[:read].sql.sub("LIMIT $1::integer", "LIMIT 5").sub("$2", "$1"))
+      expect(statements[:reads].size).to eq(described_class::LITERAL_READ_LIMIT + 1)
+      expect(statements[:reads].first).to be_nil
+      expect(statements[:reads]).to be_frozen
+    end
+
     it "builds pgmq.archive's move into the archive table, single and batch" do
       move = "RETURNING msg_id, vt, read_ct, enqueued_at, last_read_at, message, headers) " \
              'INSERT INTO pgmq."a_pgbus_test_default" (msg_id, vt, read_ct, enqueued_at, last_read_at, message, headers) ' \
@@ -110,11 +117,12 @@ RSpec.describe Pgbus::Client::NativeStatements do
     end
 
     it "names each statement pgbus_<op>_<12 hex>, inside Postgres's 63-byte identifier limit" do
-      statements.each do |op, statement|
+      named = statements.except(:reads).to_a + statements[:reads].compact.map { |r| [:read, r] }
+      named.each do |op, statement|
         expect(statement.name).to match(/\Apgbus_#{op}_\h{12}\z/)
         expect(statement.name.bytesize).to be <= 63
       end
-      expect(statements.values.map(&:name).uniq.size).to eq(7)
+      expect(named.map { |_, st| st.name }.uniq.size).to eq(7 + described_class::LITERAL_READ_LIMIT)
     end
 
     it "names another queue's statements differently" do
@@ -129,9 +137,11 @@ RSpec.describe Pgbus::Client::NativeStatements do
   end
 
   describe "#read_batch" do
-    before { allow(raw_conn).to receive(:exec_prepared).with(statements[:read].name, [5, 45]).and_return(pg_result([read_row])) }
+    let(:read5) { statements[:reads][5] }
 
-    it "runs the prepared read with [qty, vt] and returns Messages with String fields" do
+    before { allow(raw_conn).to receive(:exec_prepared).with(read5.name, [45]).and_return(pg_result([read_row])) }
+
+    it "runs the literal-LIMIT read with [vt] and returns Messages with String fields" do
       messages = client.read_batch("default", qty: 5)
 
       expect(messages.map(&:class)).to eq([message_class])
@@ -140,9 +150,16 @@ RSpec.describe Pgbus::Client::NativeStatements do
     end
 
     it "honours an explicit vt" do
-      allow(raw_conn).to receive(:exec_prepared).with(statements[:read].name, [2, 10]).and_return(pg_result([]))
+      allow(raw_conn).to receive(:exec_prepared).with(statements[:reads][2].name, [10]).and_return(pg_result([]))
 
       expect(client.read_batch("default", qty: 2, vt: 10)).to eq([])
+    end
+
+    it "runs the LIMIT $1 read with [qty, vt] above #{described_class::LITERAL_READ_LIMIT}" do
+      qty = described_class::LITERAL_READ_LIMIT + 1
+      allow(raw_conn).to receive(:exec_prepared).with(statements[:read].name, [qty, 45]).and_return(pg_result([read_row]))
+
+      expect(client.read_batch("default", qty: qty).size).to eq(1)
     end
 
     it "checks the queue's columns once per process" do
@@ -153,7 +170,7 @@ RSpec.describe Pgbus::Client::NativeStatements do
 
     it "prepares on first use, then runs it again" do
       calls = 0
-      allow(raw_conn).to receive(:exec_prepared).with(statements[:read].name, [5, 45]) do
+      allow(raw_conn).to receive(:exec_prepared).with(read5.name, [45]) do
         calls += 1
         raise pg_error(PG::InvalidSqlStatementName) if calls == 1
 
@@ -161,12 +178,12 @@ RSpec.describe Pgbus::Client::NativeStatements do
       end
 
       expect(client.read_batch("default", qty: 5).size).to eq(1)
-      expect(raw_conn).to have_received(:prepare).with(statements[:read].name, statements[:read].sql).once
+      expect(raw_conn).to have_received(:prepare).with(read5.name, read5.sql).once
     end
 
     it "runs the statement when another call prepared it in between" do
       calls = 0
-      allow(raw_conn).to receive(:exec_prepared).with(statements[:read].name, [5, 45]) do
+      allow(raw_conn).to receive(:exec_prepared).with(read5.name, [45]) do
         calls += 1
         raise pg_error(PG::InvalidSqlStatementName) if calls == 1
 
@@ -179,7 +196,7 @@ RSpec.describe Pgbus::Client::NativeStatements do
 
     it "sends the SQL unprepared inside an open transaction, so a missing statement cannot abort it" do
       allow(raw_conn).to receive(:transaction_status).and_return(PG::PQTRANS_INTRANS)
-      allow(raw_conn).to receive(:exec_params).with(statements[:read].sql, [5, 45]).and_return(pg_result([read_row]))
+      allow(raw_conn).to receive(:exec_params).with(read5.sql, [45]).and_return(pg_result([read_row]))
 
       expect(client.read_batch("default", qty: 5).size).to eq(1)
       expect(raw_conn).not_to have_received(:exec_prepared)
@@ -446,7 +463,7 @@ RSpec.describe Pgbus::Client::NativeStatements do
     end
 
     it "counts toward guarded_read's breaker like a function-path failure" do
-      allow(raw_conn).to receive(:exec_prepared).with(statements[:read].name, anything).and_raise(dropped)
+      allow(raw_conn).to receive(:exec_prepared).with(statements[:reads][1].name, anything).and_raise(dropped)
 
       Pgbus::Client::ConnectionHealth::OPEN_THRESHOLD.times do
         expect { client.read_batch("default", qty: 1) }.to raise_error(connection_error)

@@ -29,13 +29,13 @@ module FleetProfileRunner
   EMPTY_POLLS = 3
 
   STATEMENTS_SQL = <<~SQL
-    SELECT query, calls, total_exec_time
+    SELECT query, calls, total_exec_time, total_plan_time
     FROM pg_stat_statements
     WHERE dbid = (SELECT oid FROM pg_database WHERE datname = current_database())
       AND toplevel
       AND (query ILIKE '%pgmq.%' OR query ILIKE '%pgbus_%')
       AND query NOT ILIKE '%pgmq.metrics%'
-    ORDER BY total_exec_time DESC
+    ORDER BY total_exec_time + total_plan_time DESC
   SQL
 
   # What this database's active client backends (autovacuum excluded) are doing, sampled by the parent

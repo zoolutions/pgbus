@@ -112,6 +112,24 @@ RSpec.describe "Native statements (integration)", :integration do
       expect(pgmq.read_batch(full, vt: 0, qty: 1).map(&:read_ct)).to eq(["3"])
     end
 
+    # With LIMIT $1 the generic plan hash-joins a full scan, so Postgres would
+    # plan every read afresh; the literal-LIMIT read settles on the generic plan.
+    it "runs a read on its cached generic plan once Postgres has seen it a few times" do
+      10.times { client.read_batch(queue, qty: 3) }
+
+      plans = pgmq.with_connection do |conn|
+        conn.exec("SELECT generic_plans FROM pg_prepared_statements WHERE name LIKE 'pgbus_read_%'").map { |r| r["generic_plans"].to_i }
+      end
+      expect(plans.sum).to be_positive
+    end
+
+    it "reads more than the literal-LIMIT reads cover through LIMIT $1" do
+      qty = Pgbus::Client::NativeStatements::LITERAL_READ_LIMIT + 1
+      ids = Array.new(2) { client.send_message(queue, { "a" => 1 }) }
+
+      expect(client.read_batch(queue, qty: qty).map(&:msg_id)).to eq(ids)
+    end
+
     it "reads oldest first, up to qty" do
       ids = Array.new(3) { |i| client.send_message(queue, { "i" => i }) }
 

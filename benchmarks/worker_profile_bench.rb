@@ -164,13 +164,14 @@ def print_fleet_table(cells)
        "pool_size #{THREADS + 2})"
   puts FleetProfileHarness.fleet_table(cells)
   puts
-  puts "Top statements by total execution time (pg_stat_statements, this database, top-level):"
+  puts "Top statements by total execution + planning time (pg_stat_statements, this database, top-level):"
   puts FleetProfileHarness.statement_lines(cells)
   puts
   puts "jobs/s = total jobs / (last job finished in any child - the parent's start signal); every child"
-  puts "warmed up on its own queue and waited at a start barrier. PG ms/job = Σ total_exec_time / jobs and"
-  puts "statements/job = Σ calls / jobs over pgmq.* and pgbus_* statements (pgmq.metrics polls excluded);"
-  puts "PG busy backends = Σ total_exec_time / wall, the average number of backends executing them."
+  puts "warmed up on its own queue and waited at a start barrier. PG ms/job = Σ (total_exec_time +"
+  puts "total_plan_time) / jobs and statements/job = Σ calls / jobs over pgmq.* and pgbus_* statements"
+  puts "(pgmq.metrics polls excluded); planning is recorded only with pg_stat_statements.track_planning on."
+  puts "PG busy backends = Σ that time / wall, the average number of backends executing them."
 end
 
 def print_table(cells)

@@ -47,6 +47,13 @@ module Pgbus
       # before the process stops preparing.
       LOST_STATEMENT_LIMIT = 3
 
+      # Reads of up to this many messages run a statement with the LIMIT
+      # written in: with `LIMIT $1` the generic plan assumes a tenth of the
+      # table and hash-joins a full scan, so Postgres plans a custom plan on
+      # every call; a literal LIMIT gets the cached generic plan. A larger qty
+      # runs the `LIMIT $1` statement.
+      LITERAL_READ_LIMIT = 64
+
       Statement = Data.define(:name, :sql)
 
       # Process-wide, built at load: the pooler is a property of the process's
@@ -108,13 +115,30 @@ module Pgbus
         # pgbus_<op>_<12 hex of SHA-256(sql)>: 63 bytes is the identifier limit,
         # and hashing the SQL (which names the table) means two pgbus versions
         # behind one pooler never run each other's text under one name.
+        #
+        # :reads holds the literal-LIMIT reads, indexed by qty (1 to
+        # LITERAL_READ_LIMIT); their one parameter is the visibility timeout.
         def statements_for(queue_table, archive_table)
-          sql_for("pgmq.#{quote_ident(queue_table)}", "pgmq.#{quote_ident(archive_table)}").to_h do |op, sql|
-            [op, Statement.new(name: "pgbus_#{op}_#{Digest::SHA256.hexdigest(sql)[0, 12]}", sql: sql.freeze)]
-          end.freeze
+          queue = "pgmq.#{quote_ident(queue_table)}"
+          statements = sql_for(queue, "pgmq.#{quote_ident(archive_table)}").to_h { |op, sql| [op, statement(op, sql)] }
+          reads = (1..LITERAL_READ_LIMIT).map { |qty| statement(:read, read_sql(queue, qty.to_s, "$1")) }
+          statements.merge(reads: [nil, *reads].freeze).freeze
         end
 
         private
+
+        def statement(kind, sql)
+          Statement.new(name: "pgbus_#{kind}_#{Digest::SHA256.hexdigest(sql)[0, 12]}", sql: sql.freeze)
+        end
+
+        def read_sql(queue, limit, vt)
+          "WITH cte AS (SELECT msg_id FROM #{queue} WHERE vt <= clock_timestamp() " \
+            "ORDER BY msg_id ASC LIMIT #{limit} FOR UPDATE SKIP LOCKED) " \
+            "UPDATE #{queue} m SET last_read_at = clock_timestamp(), " \
+            "vt = clock_timestamp() + make_interval(secs => #{vt}::integer), read_ct = read_ct + 1 " \
+            "FROM cte WHERE m.msg_id = cte.msg_id " \
+            "RETURNING m.msg_id, m.read_ct, m.enqueued_at, m.last_read_at, m.vt, m.message, m.headers"
+        end
 
         def quote_ident(name)
           %("#{name.gsub('"', '""')}")
@@ -130,12 +154,7 @@ module Pgbus
                            "SELECT msg_id, vt, read_ct, enqueued_at, last_read_at, message, headers FROM archived " \
                            "RETURNING msg_id"
           {
-            read: "WITH cte AS (SELECT msg_id FROM #{queue} WHERE vt <= clock_timestamp() " \
-                  "ORDER BY msg_id ASC LIMIT $1::integer FOR UPDATE SKIP LOCKED) " \
-                  "UPDATE #{queue} m SET last_read_at = clock_timestamp(), " \
-                  "vt = clock_timestamp() + make_interval(secs => $2::integer), read_ct = read_ct + 1 " \
-                  "FROM cte WHERE m.msg_id = cte.msg_id " \
-                  "RETURNING m.msg_id, m.read_ct, m.enqueued_at, m.last_read_at, m.vt, m.message, m.headers",
+            read: read_sql(queue, "$1::integer", "$2"),
             archive: "WITH archived AS (DELETE FROM #{queue} WHERE msg_id = $1::bigint #{archived}) #{archive_insert}",
             archive_batch: "WITH archived AS (DELETE FROM #{queue} WHERE msg_id = ANY($1::bigint[]) #{archived}) " \
                            "#{archive_insert}",
@@ -237,7 +256,9 @@ module Pgbus
         statements = native_statements_for(name)
         return @pgmq.read_batch(name, vt: vt, qty: qty) unless statements
 
-        run_native(statements[:read], [qty, vt]).map { |row| PGMQ::Message.new(row) }
+        literal = qty.is_a?(Integer) && qty.positive? && statements[:reads][qty]
+        result = literal ? run_native(literal, [vt]) : run_native(statements[:read], [qty, vt])
+        result.map { |row| PGMQ::Message.new(row) }
       end
 
       def exec_archive(name, msg_id)

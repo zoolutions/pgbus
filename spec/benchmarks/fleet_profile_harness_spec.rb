@@ -114,6 +114,16 @@ RSpec.describe FleetProfileHarness do
       expect(top.size).to eq(3)
     end
 
+    # A top-level statement's planning is in total_plan_time (track_planning
+    # on); a plpgsql function's is inside its execution time (issue #605).
+    it "counts planning time with execution time" do
+      planned = [{ "query" => "UPDATE pgmq.q_x", "calls" => 10, "total_exec_time" => 3.0, "total_plan_time" => 1.0 }]
+      summary = described_class.summarize_statements(planned, jobs: 10, wall_s: 1.0)
+
+      expect(summary[:ms_per_job]).to be_within(1e-9).of(0.4)
+      expect(summary[:top].first["ms_per_call"]).to be_within(1e-9).of(0.4)
+    end
+
     it "keeps at most five top statements" do
       many = Array.new(8) { |i| { "query" => "q#{i}", "calls" => 1, "total_exec_time" => 8.0 - i } }
 

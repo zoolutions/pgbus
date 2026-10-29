@@ -64,18 +64,27 @@ module FleetProfileHarness
       start_skew_ms: (starts.max - starts.min) * 1000 }
   end
 
-  # rows: pg_stat_statements rows ({"query", "calls", "total_exec_time" in ms}).
-  # busy_backends is Σ execution time over the wall: how many backends were
+  # rows: pg_stat_statements rows ({"query", "calls", "total_exec_time", and
+  # "total_plan_time" in ms}). A statement's time is execution plus planning:
+  # a plpgsql function plans its dynamic EXECUTE inside its own execution
+  # time, while a top-level statement's planning is total_plan_time, recorded
+  # only with pg_stat_statements.track_planning on (0 otherwise). Without it,
+  # pgbus's own SQL (issue #605) would look cheaper by its planning.
+  # busy_backends is Σ that time over the wall: how many backends were
   # executing pgbus statements at any moment, on average.
   def summarize_statements(rows, jobs:, wall_s:)
-    total_ms = rows.sum { |r| r.fetch("total_exec_time").to_f }
+    total_ms = rows.sum { |r| statement_ms(r) }
     calls = rows.sum { |r| r.fetch("calls").to_i }
-    top = rows.max_by(TOP_STATEMENTS) { |r| r.fetch("total_exec_time").to_f }.map do |r|
+    top = rows.max_by(TOP_STATEMENTS) { |r| statement_ms(r) }.map do |r|
       { "query" => r.fetch("query"), "calls" => r.fetch("calls").to_i,
-        "ms_per_call" => r.fetch("total_exec_time").to_f / [r.fetch("calls").to_i, 1].max }
+        "ms_per_call" => statement_ms(r) / [r.fetch("calls").to_i, 1].max }
     end
     { available: true, ms_per_job: total_ms / jobs, statements_per_job: calls.to_f / jobs,
       busy_backends: total_ms / 1000 / wall_s, top: top }
+  end
+
+  def statement_ms(row)
+    row.fetch("total_exec_time").to_f + row.fetch("total_plan_time", 0).to_f
   end
 
   # waits: wait kind (wait_event_type:wait_event) => count of active backends of this database seen
