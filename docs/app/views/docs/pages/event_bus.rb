@@ -68,9 +68,24 @@ class Views::Docs::Pages::EventBus < DocsUI::Page
       RUBY
       md <<~'MD'
         `event["order_id"]` reads a top-level payload key and
-        `event.dig("customer", "id")` a nested one. Symbol keys work too, and both
-        return `nil` for a missing key or a payload that is not a Hash.
+        `event.dig("customer", "id")` a nested one. A handler receives the payload
+        decoded from JSON, so its keys are Strings: both read a Symbol key as its
+        String, and return `nil` for a missing key or a payload that is not a Hash.
       MD
+      DocsUI::Callout(:warning) do
+        plain "Under "
+        code { "Pgbus::Testing.inline!" }
+        plain " (and "
+        code { "perform_published_events" }
+        plain ") the handler gets the Hash passed to publish as is, not decoded from JSON. "
+        plain "Publish String keys in those specs ("
+        code { "payload.deep_stringify_keys" }
+        plain "), or "
+        code { "event[\"order_id\"]" }
+        plain " and "
+        code { "event[:order_id]" }
+        plain " both read nil."
+      end
       DocsUI::Code(<<~RUBY, filename: "config/initializers/pgbus.rb")
         Pgbus::EventBus::Registry.instance.subscribe("orders.created", OrderCreatedHandler)
       RUBY
@@ -124,8 +139,9 @@ class Views::Docs::Pages::EventBus < DocsUI::Page
       DocsUI::Code(<<~RUBY, filename: "config/initializers/pgbus.rb")
         Pgbus.configure do |config|
           # Receives the Pgbus::Event (routing_key, payload as passed to publish, headers).
+          # The payload is your Hash before JSON, so read it with the keys you publish with.
           # Return a key (String/Symbol/Integer), [key, weight], or nil to leave the event unkeyed.
-          config.event_fair_share = ->(event) { Current.tenant&.id || event.payload["tenant_id"] }
+          config.event_fair_share = ->(event) { Current.tenant&.id || event.payload[:tenant_id] }
         end
       RUBY
       md <<~'MD'
