@@ -1,0 +1,20 @@
+spec/integration/completion_batching_spec.rb
+  s_6f6be46f1a03ed::t_26309940d6e97a 137-138
+  s_6f6be46f1a03ed::t_744347c7a6d0b3 117-130,132-136,139-141
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "b3df46732180103d0a2f22416f6b7e91afd0416f",
+  "prompts": {},
+  "sessions": {
+    "s_6f6be46f1a03ed": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c60b8ef6-a2ee-4a53-a9de-07b83ac1c707",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
