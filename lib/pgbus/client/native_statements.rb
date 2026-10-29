@@ -76,8 +76,10 @@ module Pgbus
       # under us (a pooler moved the session); one missing on a new backend
       # (a fresh connection, a reconnect) is only a first prepare.
       @prepared_on = Concurrent::Map.new
+      # Whether the database.yml prepared_statements: false notice was logged.
+      @ar_unprepared_logged = Concurrent::AtomicBoolean.new(false)
 
-      # rubocop:disable ThreadSafety/ClassInstanceVariable -- the three are
+      # rubocop:disable ThreadSafety/ClassInstanceVariable -- the four are
       # Concurrent primitives built once at load and never reassigned; every
       # read and write below goes through their atomic operations.
       class << self
@@ -104,6 +106,15 @@ module Pgbus
             @lost_in_a_row.increment >= LOST_STATEMENT_LIMIT
         end
 
+        # Logs, once per process, that database.yml turned preparing off.
+        def note_ar_unprepared
+          return unless @ar_unprepared_logged.make_true
+
+          Pgbus.logger.info do
+            "[Pgbus::Client] Native statements run unprepared: database.yml sets prepared_statements: false"
+          end
+        end
+
         def note_executed
           @lost_in_a_row.value = 0 unless @lost_in_a_row.value.zero?
         end
@@ -124,6 +135,7 @@ module Pgbus
           @lost_in_a_row.value = 0
           @unprepared.make_false
           @prepared_on.clear
+          @ar_unprepared_logged.make_false
         end
         # rubocop:enable ThreadSafety/ClassInstanceVariable
 
@@ -220,23 +232,24 @@ module Pgbus
       end
 
       # Whether the connections come from ActiveRecord's config with
-      # `prepared_statements: false`. Read once, in Client#initialize. A
-      # database_url or connection_params of pgbus's own is its own route.
+      # `prepared_statements: false`: the hash pgbus extracts from it, or a
+      # connection_params Proc handing out ActiveRecord's own connection. A
+      # database_url or a connection_params Hash is pgbus's own route. Read
+      # once, in Client#initialize.
       def ar_disables_prepared_statements?
-        return false if config.database_url || config.connection_params
+        return false if config.database_url || config.connection_params.is_a?(Hash)
         return false unless defined?(::ActiveRecord::Base)
 
         base = config.connects_to ? Pgbus::BusRecord : ::ActiveRecord::Base
         return false unless [false, "false"].include?(base.connection_db_config.configuration_hash[:prepared_statements])
 
-        Pgbus.logger.info do
-          "[Pgbus::Client] Native statements run unprepared: database.yml sets prepared_statements: false"
-        end
+        NativeStatements.note_ar_unprepared
         true
       rescue StandardError
-        # The same connection_db_config call already failed in
-        # Configuration#extract_ar_connection_hash, which logged it and fell
-        # back to the shared connection; there is no setting to read.
+        # Client#initialize reads config.connection_options first, whose
+        # Configuration#extract_ar_connection_hash makes this same
+        # connection_db_config call, logs its failure and falls back to the
+        # shared connection; there is no setting to read.
         false
       end
 

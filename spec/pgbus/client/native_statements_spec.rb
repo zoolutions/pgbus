@@ -308,6 +308,30 @@ RSpec.describe Pgbus::Client::NativeStatements do
       expect(Pgbus.logger).to have_received(:info).once
     end
 
+    it "logs it once per process, not once per client" do
+      2.times { Pgbus::Client.new(config, schema_ensured: true) }
+
+      expect(Pgbus.logger).to have_received(:info).once
+    end
+
+    it "honours it for a connection_params Proc handing out ActiveRecord's connection" do
+      config.connection_params = -> { raw_conn }
+      allow(raw_conn).to receive(:exec_params).with(statements[:delete].sql, [4]).and_return(pg_result([]))
+
+      client.delete_message("default", 4)
+
+      expect(raw_conn).not_to have_received(:exec_prepared)
+    end
+
+    it "prepares for a connection_params Hash of pgbus's own" do
+      config.connection_params = { host: "localhost", dbname: "pgbus" }
+      allow(raw_conn).to receive(:exec_prepared).with(statements[:delete].name, [4]).and_return(pg_result([]))
+
+      client.delete_message("default", 4)
+
+      expect(raw_conn).to have_received(:exec_prepared)
+    end
+
     it "reads the database.yml string form too" do
       ar_config[:prepared_statements] = "false"
       allow(raw_conn).to receive(:exec_params).with(statements[:delete].sql, [4]).and_return(pg_result([]))
