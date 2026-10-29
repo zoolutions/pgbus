@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Changed
+
+- **The executor reads a message's `enqueued_at` with `Time.new`, not `Time.parse` (issue #604).** pgmq-ruby hands `enqueued_at` over as PostgreSQL's TIMESTAMPTZ text (`2026-10-29 10:11:12.123456+00`); with stats on (the default) every job parsed it for `enqueue_latency_ms` through `Time.parse`, ~7 µs, the largest single pgbus frame in the worker profile (~11 % of on-CPU time). Core Ruby's `Time.new(String)` reads it in C at ~0.3 µs; `pg`'s `TimestampWithTimeZone` decoder, the first candidate, took ~3 µs and still showed at ~5 % in the profile. Every offset shape PostgreSQL sends (`+00`, `-03`, `+05:30`) reads as before, so do ISO 8601 strings with a `T` or `Z`; a string without an offset is still UTC, and text `Time.new` cannot read still records the stat without latency. `VisibilityHeartbeat` builds each in-flight message's key once instead of on register, unregister and every beat check: pgbus-owned objects per job 9 → 8, and the executor allocation budget is lowered to `< 9`. The executor micro-bench with stats on went ~40k → ~60k jobs/s; the real-worker numbers are in `docs/performance.md`. Refs #604.
+
 ## [0.21.4] - 2026-10-28
 
 ### Added

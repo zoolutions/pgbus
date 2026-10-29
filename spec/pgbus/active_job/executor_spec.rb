@@ -785,13 +785,14 @@ RSpec.describe Pgbus::ActiveJob::Executor do
         it "computes latency from a #{shape} enqueued_at without Time.parse" do
           stamp = (Time.now - 1.5).getlocal(offset).strftime(format)
           stamped = build_message_double(msg_id: 64, message: message_json, read_ct: 1, enqueued_at: stamp)
-          expect(Time).not_to receive(:parse)
+          allow(Time).to receive(:parse).and_call_original
 
           executor.execute(stamped, queue_name)
 
           expect(Pgbus::JobStat).to have_received(:record!).with(
             hash_including(enqueue_latency_ms: a_value_between(900, 60_000))
           )
+          expect(Time).not_to have_received(:parse)
         end
       end
 
