@@ -98,7 +98,7 @@ class Views::Docs::Pages::QuickStart < DocsUI::Page
           idempotent! # deduplicate by (event_id, handler_class)
 
           def handle(event)
-            order_id = event.payload["order_id"]
+            order_id = event["order_id"]
             Analytics.track_order(order_id)
           end
         end

@@ -68,8 +68,9 @@ class Views::Docs::Pages::EventBus < DocsUI::Page
       RUBY
       md <<~'MD'
         `event["order_id"]` reads a top-level payload key and
-        `event.dig("customer", "id")` a nested one. Symbol keys work too, and both
-        return `nil` for a missing key or a payload that is not a Hash.
+        `event.dig("customer", "id")` a nested one. A handler receives the payload
+        decoded from JSON, so its keys are Strings: both read a Symbol key as its
+        String, and return `nil` for a missing key or a payload that is not a Hash.
       MD
       DocsUI::Code(<<~RUBY, filename: "config/initializers/pgbus.rb")
         Pgbus::EventBus::Registry.instance.subscribe("orders.created", OrderCreatedHandler)

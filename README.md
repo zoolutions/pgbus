@@ -206,7 +206,7 @@ class OrderCreatedHandler < Pgbus::EventBus::Handler
   idempotent!  # Deduplicate by (event_id, handler_class)
 
   def handle(event)
-    order_id = event.payload["order_id"]
+    order_id = event["order_id"]
     Analytics.track_order(order_id)
     InventoryService.reserve(order_id)
   end
