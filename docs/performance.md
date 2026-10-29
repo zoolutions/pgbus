@@ -774,6 +774,70 @@ What the numbers say:
   committed it and only the reply stalled, they are left completed but
   unsignalled, the crash's second window.
 
+### Delete mode (issue #607)
+
+`config.completed_jobs = :delete` (opt-in, default `:archive`) finishes a
+successful job with `pgmq.delete` (pgbus's native `DELETE … RETURNING msg_id`)
+instead of the archive's `DELETE … RETURNING` + `INSERT INTO a_<queue>`; with
+`completion_batching` the completer flushes with `delete_batch`. No `a_` rows,
+no `archived_at` index upkeep, nothing for the hourly compaction to trim, and
+no completed-job history in the archive. ActiveJob only; failures and dead
+letters are unchanged.
+
+`WP_BENCH_COMPLETED_JOBS=archive|delete` sets it in every cell of
+`rake bench:worker_profile` (fleet drain children included). Measured
+2026-10-30 on the machine of "Fleet scaling" (Apple M2 Max, 12 cores,
+PostgreSQL 18.6 on the same machine, Ruby 3.4.2, 12 threads, local only),
+`WP_BENCH_ROLE=fleet`, 5 000 jobs per process, `read_ahead` not passed. Four
+variants interleaved per round (archive, delete, batched archive, batched
+delete); three rounds at load 0.6–1.1× the 12 cores. Two more rounds ran under
+an unrelated load spike (2.7–4.4×) and are left out; their medians point the
+same way. Medians, with the three-round range:
+
+| cell | processes | jobs/s archive → delete | PG ms/job archive → delete | statements/job |
+|---|---:|---|---|---|
+| local / YJIT | 1 | 7 037 (5 792–7 487) → 7 986 (7 219–8 259) | 0.058 → 0.022 | 1.19–1.24 → 1.21–1.24 |
+| local / YJIT | 2 | 10 430 (9 245–10 714) → 14 067 (5 085–14 107) | 0.122 → 0.034 | 1.19–1.20 → 1.21–1.23 |
+| local / YJIT | 4 | 15 056 (9 519–15 819) → 13 127 (6 970–17 645) | 0.207 → 0.264 | 1.19–1.22 → 1.18–1.21 |
+| local / no JIT | 1 | 5 929 (5 811–5 999) → 6 620 (6 120–6 712) | 0.027 → 0.019 | 1.25 → 1.21–1.26 |
+| local / no JIT | 2 | 10 787 (10 126–10 904) → 10 586 (8 201–11 400) | 0.039 → 0.030 | 1.24 → 1.19–1.24 |
+| local / no JIT | 4 | 14 547 (14 195–15 551) → 16 281 (15 880–16 704) | 0.153 → 0.102 | 1.22–1.23 |
+
+With `completion_batching` (`WP_BENCH_COMPLETION_BATCHING=1`), batched archive →
+batched delete:
+
+| cell | processes | jobs/s | PG ms/job | peak connections |
+|---|---:|---|---|---|
+| local / YJIT | 1 | 6 548 (6 276–7 546) → 6 686 (4 445–7 843) | 0.026 → 0.027 | 6 → 6–7 |
+| local / YJIT | 2 | 11 976 (11 885–12 383) → 14 180 (6 395–14 292) | 0.025 → 0.019 | 10 → 10–12 |
+| local / YJIT | 4 | 19 830 (18 775–19 948) → **22 000 (20 768–22 375)** | 0.036 → 0.032 | 18–20 → 19–20 |
+| local / no JIT | 1 | 5 107 (4 539–5 243) → 4 951 (4 856–5 566) | 0.043 → 0.033 | 6 → 6–7 |
+| local / no JIT | 2 | 10 461 (7 822–10 809) → 11 750 (6 273–11 964) | 0.026 → 0.016 | 10–11 → 10–12 |
+| local / no JIT | 4 | 16 620 (15 456–16 920) → **18 770 (11 502–20 006)** | 0.047 → 0.031 | 18–20 → 18–22 |
+
+What the numbers say:
+
+- **Statements per job do not change**: one `pgmq.delete` replaces one
+  `pgmq.archive`. What changes is what each one costs. By median ms per call,
+  the delete takes about half the archive's time unbatched (0.008 against
+  0.015 ms at one process, 0.053 against 0.101 at four without a JIT, 0.097
+  against 0.130 with YJIT), and `delete_batch` about a third to a half of
+  `archive_batch` (0.026 against 0.061 ms, 0.030 against 0.056 at four
+  processes): no INSERT into `a_`, no `a_` index entries, less WAL.
+- **Unbatched, the gain is mostly Postgres time.** Jobs/s rises 10–35 % in
+  four of six rows by median, but the ranges overlap and two rows (YJIT at four
+  processes, no JIT at two) are inside the noise or below it, with one bad run
+  each. Postgres time per job falls in five of six rows.
+- **Batched delete at four processes is the fastest shape measured**: +11–13 %
+  jobs/s over batched archive by median, on top of what batching already gave
+  ("Batched completion" above). Each `delete_batch` replaces an `archive_batch`
+  that inserts the same ~5 rows into `a_`.
+- **When to turn it on:** when nothing reads the archive of your job queues
+  (the dashboard does not; `pgbus_job_stats` and Insights count successes either
+  way). It never costs throughput in these runs beyond the run-to-run spread,
+  and it ends `a_` table growth for job queues. Keep `:archive` when you query
+  `a_` tables for audit or debugging.
+
 ### Fair share reads (issue #426)
 
 `Client#read_batch_fair` replaces `pgmq.read` on the worker when
