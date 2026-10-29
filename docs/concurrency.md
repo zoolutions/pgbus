@@ -26,6 +26,7 @@ stops the thread.
 | Worker, consumer | the claim loop (main thread) | `Worker#run` / `Consumer#run`; TERM drains, QUIT stops |
 | | execution pool: N pool threads (`:threads`) or one Async reactor thread (`:async`) | `ExecutionPools::ThreadPool` / `AsyncPool`; `shutdown` + `wait_for_termination`, `kill` as the last resort |
 | | `pgbus-visibility-heartbeat` | `VisibilityHeartbeat`, started by the first tracked job; `Worker#shutdown` calls `stop` |
+| | `pgbus-completer` (worker, `completion_batching` only) | `Process::Completer`, one per worker; `Worker#shutdown` calls `stop` after the pool terminated, `Worker#immediate_shutdown` before it kills the pool. `stop` flushes what is pending and joins; job threads wait on a per-job `Waiter` (Mutex + ConditionVariable) |
 | | notify listener (fork scope) or wake pipe watcher (supervisor scope) | `Process::NotifyListener` / `Process::WakePipe`; `stop` joins it |
 | | process heartbeat (`Concurrent::TimerTask`) | `Process::Heartbeat`; `stop` shuts the timer down (a beat in flight finishes on its own) |
 | Supervisor | the notify hub's one listener (supervisor scope: one LISTEN connection per host, forks are woken over pipes) | `Process::NotifyHub`; `stop` joins it |

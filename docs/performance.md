@@ -572,6 +572,106 @@ inclusive is the job running inside it). `Concurrency.extract_key` and
 below 1 %. All three stay, per #484's finding that trims below 1 % do not
 show up in throughput.
 
+### Batched completion (issue #606)
+
+`config.completion_batching = true` (opt-in, default off) gives each worker a
+`Process::Completer`: the jobs that finish close together are archived with one
+`pgmq.archive(queue, bigint[])` per physical queue instead of one
+`pgmq.archive` each. There is no timer. An idle completer archives a lone job at
+once; whatever finishes while a flush is in flight goes in the next one, so a
+batch is "what finished during the previous round trip".
+`completion_batch_size` (default 100) only caps the ids per statement. The job
+thread waits for its own result, so the duplicate guard and the post-archive
+signals run on it as before. Threads only.
+
+`WP_BENCH_COMPLETION_BATCHING=1` runs every cell of `rake bench:worker_profile`
+with it on (fleet drain children included). Measured 2026-10-29 on the machine
+of "Fleet scaling" (Apple M2 Max, 12 cores, PostgreSQL 18.6 on the same machine,
+Ruby 3.4.2, 12 threads, `proxied` = +1 ms per round trip through toxiproxy),
+off and on interleaved. The fleet rows are two rounds; the 1-process rows add
+three more (five in all). Load during the fleet rounds was 0.39–0.61× the 12
+cores; #605's session shared the machine and the Postgres.
+
+Fleet cell (`WP_BENCH_ROLE=fleet`, 5 000 jobs per process, `read_ahead` not
+passed), off → on:
+
+| cell | processes | jobs/s | PG ms/job | statements/job | peak connections |
+|---|---:|---|---|---|---|
+| local / YJIT | 1 | 6 839–7 895 → 5 974–7 480 | 0.107–0.124 → 0.048–0.062 | 1.23–1.24 → 0.38–0.41 | 16 → 6 |
+| local / YJIT | 2 | 10 739–12 140 → 11 898–12 391 | 0.137–0.152 → 0.051–0.056 | 1.23 → 0.40–0.41 | 30 → 10 |
+| local / YJIT | 4 | 14 196–15 598 → **18 572–19 161** | 0.288–0.343 → **0.065–0.071** | 1.21–1.22 → 0.38 | 59 → 19 |
+| local / no JIT | 1 | 6 000–6 415 → **4 258–6 085** | 0.102–0.136 → 0.047–0.086 | 1.22–1.26 → 0.37–0.39 | 16 → 6 |
+| local / no JIT | 2 | 10 497–10 702 → 9 928–10 161 | 0.126–0.128 → 0.051–0.066 | 1.25 → 0.37–0.39 | 32 → 10 |
+| local / no JIT | 4 | 14 279–14 330 → **16 780–17 090** | 0.258–0.277 → **0.060–0.064** | 1.23 → 0.38–0.39 | 62 → 18 |
+| proxied / YJIT | 1 | 1 596–2 000 → 1 522–1 769 | 0.240–0.507 → 0.121–0.211 | 1.22–1.23 → 0.39–0.41 | 16 → 7 |
+| proxied / YJIT | 2 | 3 855–4 042 → 3 851–3 932 | 0.274–0.314 → 0.127–0.164 | 1.23 → 0.37–0.40 | 32 → 10 |
+| proxied / YJIT | 4 | 6 539–8 775 → 7 956–8 762 | 0.199–0.277 → 0.099–0.110 | 1.22 → 0.39–0.40 | 60 → 21 |
+| proxied / no JIT | 1 | 1 539–2 201 → 1 387–1 914 | 0.213–0.454 → 0.100–0.214 | 1.22–1.23 → 0.39–0.45 | 16 → 7 |
+| proxied / no JIT | 2 | 3 928–4 396 → 3 645–4 352 | 0.254–0.266 → 0.090–0.170 | 1.23 → 0.39–0.40 | 31 → 11 |
+| proxied / no JIT | 4 | 8 330–8 913 → 8 651–8 981 | 0.191–0.192 → 0.090–0.096 | 1.23 → 0.40–0.42 | 58 → 19 |
+
+Peak connections are round 2's (the bench database's client backends, the
+parent's included). Every on row averages 4.9–5.5 ids per `archive_batch`, close
+to the jobs one `pgmq.read` claims, at 0.09–0.17 ms per call locally. At four
+local processes (YJIT, round 2) the backends sampled busy fell from 12.9 to 3.6,
+and their top wait from `LWLock:WALWrite` 54 % to 37 % (on CPU 19 % → 39 %).
+
+Worker cell (`WP_BENCH_ROLE=worker`, one process, pool sized by pgbus defaults,
+~7 for 12 threads), two rounds each, load 0.38–1.54× (round 2's off run ended
+in a spike from another session):
+
+| cell | jobs/s | pool DB wait | pool checkout wait | pool idle |
+|---|---|---|---|---|
+| local / YJIT | 6 350–6 724 → 6 478–6 771 | 12.0–13.9 % → 0.3–0.4 % | 0.4–0.6 % → 0.0 % | 69 % → 86 % |
+| local / no JIT | 4 919–5 975 → 5 188–5 591 | 8.9–9.3 % → 0.4 % | 0.3 % → 0.0 % | 65 % → 82–83 % |
+| proxied / YJIT | 1 395–1 577 → 1 394–1 701 | 27.3–30.7 % → 0.4–0.5 % | 1.5–4.5 % → 0.0 % | 60–63 % → 90 % |
+| proxied / no JIT | 1 337–1 697 → 1 341–1 688 | 25.3–27.7 % → 0.4–0.5 % | 1.5–2.4 % → 0.0 % | 63–64 % → 87–91 % |
+| proxied / YJIT, `read_ahead` 12 | 2 340–2 524 → **1 877–2 108** | 32.8–34.4 % → 0.6–0.7 % | 8.6–11.9 % → 0.0 % | 42–44 % → 83–85 % |
+| proxied / no JIT, `read_ahead` 12 | 2 469–2 608 → **1 717–2 072** | 31.2–32.0 % → 0.6–0.7 % | 7.3–8.8 % → 0.0 % | 40–41 % → 83 % |
+| local / YJIT, `read_ahead` 12 | 7 024–7 176 → 7 333–7 674 | 14.9–15.3 % → 0.4 % | 4.6 % → 0.0 % | 50 % → 80–83 % |
+| local / no JIT, `read_ahead` 12 | 5 993–6 138 → 6 394–6 834 | 11.2–11.9 % → 0.4 % | 3.2 % → 0.0 % | 48–49 % → 76–79 % |
+
+The `read_ahead` 12 rounds ran at 0.61–1.24× load (round 1 started at 1.24×).
+
+What the numbers say:
+
+- **Statements per job fall from ~1.23 to ~0.4 in every row**: one
+  `archive_batch` per ~5 jobs replaces one `pgmq.archive` per job. What is left is
+  the `pgmq.read` (one per ~5 jobs) and the batched `pgbus_job_stats` insert.
+- **With several processes on one local Postgres it is the lever "Fleet
+  scaling" asked for.** Postgres time per job falls 4–5× at four processes
+  (0.26–0.34 → 0.06–0.07 ms), the busy backends from 3.7–4.9 to 1.0–1.3, and jobs/s rises
+  17–35 % over the same round's off row. Fewer commits per job is what moves it:
+  the WAL flush queue was the bend.
+- **One process on a local Postgres gains nothing and can lose up to a third.**
+  Round by round, the no-JIT 1-process rows run +1 % to −33 % against the same
+  round's off row (4 258–6 085 against 6 000–6 415 in five rounds), the YJIT rows
+  +2 % to −19 %. Locally Postgres is not one process's bottleneck, so there is
+  nothing to save, and every completion now costs two thread wakeups under the
+  GVL (the job thread hands its id to the completer, the completer wakes it back).
+- **Under latency without `read_ahead` it is inside the run-to-run spread** at
+  1, 2 and 4 processes, while Postgres time per job halves: it frees database
+  capacity, not worker throughput.
+- **With `read_ahead` across a network it costs 10–30 %** (locally it is +4 % to
+  +14 %). The plan predicted
+  the pool checkout wait (8–12 % here, 14–15 % in "Read-ahead") would fall: it
+  falls to 0 %, but the wait moves onto the completer and shows up as pool idle
+  (83–85 %). Read-ahead keeps every thread fed, so job threads are what limits
+  the rate there, and each one now waits for a flush that is a full round trip
+  and runs one at a time. Leave batching off for that shape.
+- **When to turn it on:** several processes (`processes: N`, N ≥ 2) on one
+  Postgres where the fleet cell's waits show `LWLock:WALWrite` on top. Leave it
+  off for a single process and with `read_ahead` on a remote database. Measure
+  your own shape with `WP_BENCH_COMPLETION_BATCHING=1`.
+- **Reliability.** A hard crash (SIGKILL, OOM) loses the archives of the jobs
+  waiting in the current flush; they re-run after `visibility_timeout`, as a job
+  killed between `perform` and its archive does without batching. A flush that
+  committed just before the crash leaves its jobs completed but unsignalled
+  (uniqueness lock, batch counter, concurrency slot) until the uniqueness reaper,
+  the stalled-batch sweep and the semaphore expiry heal them. Both windows grow
+  from one job to one flush. `Worker#immediate_shutdown` stops the completer
+  before it kills the pool, so a QUIT does not open the second window.
+
 ### Fair share reads (issue #426)
 
 `Client#read_batch_fair` replaces `pgmq.read` on the worker when

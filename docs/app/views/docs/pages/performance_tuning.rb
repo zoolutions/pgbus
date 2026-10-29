@@ -15,6 +15,7 @@ class Views::Docs::Pages::PerformanceTuning < DocsUI::Page
     job_burst_tuning
     multi_core
     remote_database
+    batched_completion
     streams_master_hub
     streams_pool_autoscaling
     fanout_throughput
@@ -76,6 +77,52 @@ class Views::Docs::Pages::PerformanceTuning < DocsUI::Page
         code { "WP_BENCH_READ_AHEAD" }
         plain " to the value to try). It drives a real worker and a real event "
         plain "consumer and reports jobs/s plus where each thread's time goes."
+      end
+    end
+  end
+
+  def batched_completion
+    DocsUI::Section("Several processes on one Postgres: batch the archives",
+                    description: "One archive_batch per flush instead of one pgmq.archive per job. Opt-in, threads only.") do
+      md <<~'MD'
+        Every successful job archives its message, and each archive is its own
+        commit. With several worker processes on one Postgres those commits queue
+        on the WAL flush, and that is where the fleet bends. `completion_batching`
+        gives each worker one completer that archives the jobs finishing close
+        together with one `archive_batch`. There is no timer: a lone job is
+        archived at once, and whatever finishes during a flush goes in the next.
+        `completion_batch_size` (default 100) caps the ids per statement.
+      MD
+      DocsUI::Code(<<~RUBY, filename: "config/initializers/pgbus.rb")
+        Pgbus.configure do |config|
+          config.completion_batching = true # threads only; rejected with execution_mode :async
+        end
+      RUBY
+      md <<~'MD'
+        Measured with four processes on a local Postgres: about 5 jobs per
+        statement, Postgres time per job down 4–5×, jobs/s up 17–35 %. Turn it on
+        for `processes: N` (N ≥ 2) on one Postgres when the fleet bench's waits
+        show `LWLock:WALWrite` on top. Leave it off for a single process, where
+        it gains nothing and measured up to a third slower, and with `read_ahead`
+        on a remote database, where each job thread waits a full round trip for
+        its flush (10–30 % slower). The numbers are in `docs/performance.md` →
+        "Batched completion".
+      MD
+      DocsUI::Callout(:warning) do
+        plain "It widens the at-least-once window from one job to one flush. On a "
+        plain "hard crash (SIGKILL, OOM) the jobs waiting in the current flush run "
+        plain "again after "
+        code { "visibility_timeout" }
+        plain ", and a flush that committed just before the crash leaves its jobs "
+        plain "completed but unsignalled (uniqueness lock, batch counter, concurrency "
+        plain "slot) until pgbus's reapers and sweeps heal them. A QUIT does not open "
+        plain "that second window: the worker stops the completer before it kills "
+        plain "the running jobs."
+      end
+      DocsUI::Callout(:note) do
+        plain "Try it on your own shape with "
+        code { "WP_BENCH_COMPLETION_BATCHING=1 rake bench:fleet" }
+        plain " against the same run without it."
       end
     end
   end
