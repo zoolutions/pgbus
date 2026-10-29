@@ -505,7 +505,11 @@ RSpec.describe Pgbus::Process::Supervisor do
             sleep
           end
           helper.name = "parked-helper"
-          Thread.pass until helper.status == "sleep"
+          # Report ready only once the helper is parked: a TTIN that lands
+          # before it reaches `sleep` dumps it with no sleep frame yet. A dead
+          # helper (status false/nil) falls through and fails the assertion
+          # instead of hanging the parent on ready_r.read.
+          Thread.pass while helper.status == "run"
           ready_w.write("1")
           loop { sleep 0.05 }
         ensure

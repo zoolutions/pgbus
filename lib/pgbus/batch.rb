@@ -425,8 +425,11 @@ module Pgbus
     end
 
     def self.backfill_execution(payload, msg_id, queue_name)
-      return unless executions_migrated?
       return unless payload && msg_id
+      # Only batch members have an execution row: without this, every plain
+      # enqueue paid a no-op UPDATE round trip after the send (issue #603).
+      return unless payload[METADATA_KEY]
+      return unless executions_migrated?
 
       job_id = payload["job_id"]
       return unless job_id
