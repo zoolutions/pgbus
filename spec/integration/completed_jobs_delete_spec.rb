@@ -160,7 +160,9 @@ RSpec.describe "completed_jobs: :delete (integration)", :integration do
     allow(client).to receive(:message_archived?).and_call_original
     allow(Pgbus.logger).to receive(:warn).and_call_original
 
-    Pgbus::Batch::Sweep.run(stalled_for: 0, client: client)
+    # A cutoff a second ahead, so the row just inserted is stale without a
+    # same-microsecond tie against created_at.
+    Pgbus::Batch::Sweep.run(stalled_for: -1, client: client)
 
     expect(Pgbus::BatchEntry.find_by(batch_id: batch.batch_id).completed_jobs).to eq(1)
     expect(Pgbus::BatchExecution.where(batch_id: batch.batch_id).count).to eq(0)
