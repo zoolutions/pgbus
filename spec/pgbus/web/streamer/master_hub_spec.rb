@@ -81,6 +81,8 @@ RSpec.describe Pgbus::Web::Streamer::MasterHub do
       raise "no #{types - seen.keys} frame within #{timeout}s" if Time.now > deadline
 
       frame = read_frame(sock, timeout: timeout)
+      raise "hub closed the socket before #{types - seen.keys}" unless frame
+
       seen[frame["t"]] = frame unless frame["t"] == "status"
     end
     seen
