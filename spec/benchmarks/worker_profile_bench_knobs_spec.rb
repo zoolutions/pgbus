@@ -11,7 +11,8 @@ RSpec.describe "benchmarks/worker_profile_bench.rb knobs" do # rubocop:disable R
 
   def run_bench(env)
     clean = %w[PGBUS_DATABASE_URL PGBUS_BENCH_PROXY_URL WP_BENCH_ROLE WP_BENCH_PROCESSES WP_BENCH_JOBS
-               WP_BENCH_PROFILE_JOBS WP_BENCH_THREADS WP_BENCH_READ_AHEAD WPROF_CHILD WPROF_DRAIN_CHILD].to_h { |k| [k, nil] }
+               WP_BENCH_PROFILE_JOBS WP_BENCH_THREADS WP_BENCH_READ_AHEAD WP_BENCH_COMPLETION_BATCHING
+               WPROF_CHILD WPROF_DRAIN_CHILD].to_h { |k| [k, nil] }
     out, status = Open3.capture2e(clean.merge(env), RbConfig.ruby, script)
     [out, status]
   end
@@ -40,6 +41,19 @@ RSpec.describe "benchmarks/worker_profile_bench.rb knobs" do # rubocop:disable R
 
   it "ignores WP_BENCH_PROCESSES for the roles without the fleet" do
     out, = run_bench("WP_BENCH_ROLE" => "both", "WP_BENCH_PROCESSES" => "0")
+
+    expect(out).to include("PGBUS_DATABASE_URL not set")
+  end
+
+  it "rejects a WP_BENCH_COMPLETION_BATCHING other than 0 or 1 before it asks for a database" do
+    out, status = run_bench("WP_BENCH_COMPLETION_BATCHING" => "yes")
+
+    expect(status).not_to be_success
+    expect(out).to include("WP_BENCH_COMPLETION_BATCHING must be 0 or 1 (got yes)")
+  end
+
+  it "accepts WP_BENCH_COMPLETION_BATCHING=1, then asks for a database" do
+    out, = run_bench("WP_BENCH_COMPLETION_BATCHING" => "1")
 
     expect(out).to include("PGBUS_DATABASE_URL not set")
   end

@@ -152,6 +152,19 @@ RSpec.describe WorkerProfileHarness do
     end
   end
 
+  describe ".completion_batching?" do
+    it "is on for 1 and off when unset or 0" do
+      expect(described_class.completion_batching?("WP_BENCH_COMPLETION_BATCHING" => "1")).to be(true)
+      expect(described_class.completion_batching?("WP_BENCH_COMPLETION_BATCHING" => "0")).to be(false)
+      expect(described_class.completion_batching?({})).to be(false)
+    end
+
+    it "rejects anything else" do
+      expect { described_class.completion_batching?("WP_BENCH_COMPLETION_BATCHING" => "yes") }
+        .to raise_error(ArgumentError, /WP_BENCH_COMPLETION_BATCHING must be 0 or 1/)
+    end
+  end
+
   describe ".jit_label" do
     it "reports yjit when YJIT is enabled" do
       stub_const("RubyVM::YJIT", Module.new { def self.enabled? = true })

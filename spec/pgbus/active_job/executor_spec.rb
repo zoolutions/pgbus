@@ -425,6 +425,96 @@ RSpec.describe Pgbus::ActiveJob::Executor do
       end
     end
 
+    # Issue #606: with completion_batching the archive goes through the
+    # worker's Completer; every result the executor acts on stays the same.
+    context "with a completer (completion_batching)" do
+      subject(:executor) { described_class.new(client: mock_client, config: config, completer: completer) }
+
+      let(:completer) { instance_double(Pgbus::Process::Completer) }
+      let(:message) { build_message_double(msg_id: 9, message: message_json, read_ct: 1) }
+
+      before do
+        real_pgmq_connection_error
+        allow(Pgbus::Concurrency).to receive(:extract_key).and_return("TestJob-42")
+        allow(Pgbus::Concurrency::Semaphore).to receive(:signal)
+      end
+
+      it "archives through the completer under the physical queue name, not with archive_message" do
+        allow(completer).to receive(:complete).and_return(:archived)
+
+        expect(executor.execute(message, queue_name)).to eq(:success)
+
+        expect(completer).to have_received(:complete).with(config.queue_name(queue_name), 9)
+        expect(mock_client).not_to have_received(:archive_message)
+        expect(Pgbus::Concurrency::Semaphore).to have_received(:signal).with("TestJob-42", client: mock_client)
+      end
+
+      it "hands the completer the priority sub-queue a message was read from" do
+        allow(completer).to receive(:complete).and_return(:archived)
+
+        executor.execute(message, queue_name, source_queue: "pgbus_default_p0")
+
+        expect(completer).to have_received(:complete).with("pgbus_default_p0", 9)
+      end
+
+      it "takes the duplicate path, without signals, when the completer reports :already_archived" do
+        allow(completer).to receive(:complete).and_return(:already_archived)
+
+        expect(executor.execute(message, queue_name)).to eq(:duplicate)
+
+        expect(Pgbus::Concurrency::Semaphore).not_to have_received(:signal)
+      end
+
+      it "retries a connection error from the completer once" do
+        calls = 0
+        allow(completer).to receive(:complete) do
+          calls += 1
+          raise PGMQ::Errors::ConnectionError, "socket gone" if calls == 1
+
+          :archived
+        end
+
+        expect(executor.execute(message, queue_name)).to eq(:success)
+        expect(completer).to have_received(:complete).twice
+      end
+
+      it "claims an :already_archived that follows its own retry (ambiguous) and signals" do
+        calls = 0
+        allow(completer).to receive(:complete) do
+          calls += 1
+          raise PGMQ::Errors::ConnectionError, "socket gone" if calls == 1
+
+          :already_archived
+        end
+
+        expect(executor.execute(message, queue_name)).to eq(:success)
+        expect(Pgbus::Concurrency::Semaphore).to have_received(:signal).with("TestJob-42", client: mock_client)
+      end
+
+      it "falls through to the failure path, without signals, when the retry also fails" do
+        allow(completer).to receive(:complete).and_raise(PGMQ::Errors::ConnectionError, "socket gone")
+
+        expect(executor.execute(message, queue_name)).to eq(:failed)
+        expect(completer).to have_received(:complete).twice
+        expect(Pgbus::Concurrency::Semaphore).not_to have_received(:signal)
+      end
+
+      it "does not retry an error from the completer that is not a connection error" do
+        allow(completer).to receive(:complete).and_raise(StandardError, "boom")
+
+        expect(executor.execute(message, queue_name)).to eq(:failed)
+        expect(completer).to have_received(:complete).once
+      end
+
+      it "fails the job when the completer stopped before serving it" do
+        allow(completer).to receive(:complete).and_raise(Pgbus::Process::Completer::Stopped, "stopped")
+
+        expect(executor.execute(message, queue_name)).to eq(:failed)
+        expect(completer).to have_received(:complete).once
+        expect(Pgbus::Concurrency::Semaphore).not_to have_received(:signal)
+      end
+    end
+
     # Regression: issue #126. Under `execution_mode: :async` the reactor or a
     # nested Async/Sync block can raise Async::Stop / Async::Cancel, both of
     # which inherit from Exception (NOT StandardError). A `rescue StandardError`

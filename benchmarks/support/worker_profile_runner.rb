@@ -48,6 +48,9 @@ module WorkerProfileRunner
       c.listen_notify = false
       c.stats_enabled = true
       c.pool_size = pool_size if pool_size
+      # Issue #606: set only when asked, so the bench still runs on a branch
+      # whose Configuration predates the setting.
+      c.completion_batching = true if WorkerProfileHarness.completion_batching?
     end
   end
 

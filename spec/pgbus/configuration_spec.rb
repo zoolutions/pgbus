@@ -233,6 +233,48 @@ RSpec.describe Pgbus::Configuration do
     end
   end
 
+  # Issue #606: batched completion. Opt-in, threads only.
+  describe "#completion_batching" do
+    it "is off by default, with 100 ids per statement" do
+      expect(config.completion_batching).to be(false)
+      expect(config.completion_batch_size).to eq(100)
+    end
+
+    it "accepts true with the default threads execution mode" do
+      config.completion_batching = true
+      expect { config.validate! }.not_to raise_error
+    end
+
+    it "rejects a value that is not true or false" do
+      config.completion_batching = "yes"
+      expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /completion_batching must be true or false/)
+    end
+
+    it "rejects a completion_batch_size that is not a positive Integer" do
+      [0, -1, 2.5, "10"].each do |value|
+        config.completion_batch_size = value
+        expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /completion_batch_size/)
+      end
+    end
+
+    it "rejects batching under a global async execution mode" do
+      config.completion_batching = true
+      config.execution_mode = :async
+      expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /completion_batching.*:async/)
+    end
+
+    it "rejects batching when a capsule runs async, from a String as YAML gives it" do
+      config.completion_batching = true
+      config.workers = [{ queues: %w[default], threads: 2 }, { queues: %w[io], threads: 20, execution_mode: "async" }]
+      expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /completion_batching.*:async/)
+    end
+
+    it "allows an async capsule while batching is off" do
+      config.workers = [{ queues: %w[io], threads: 20, execution_mode: :async }]
+      expect { config.validate! }.not_to raise_error
+    end
+  end
+
   # Issue #486: read-ahead claims beyond the free threads. Off by default.
   describe "#read_ahead" do
     it "defaults to 0 (off)" do

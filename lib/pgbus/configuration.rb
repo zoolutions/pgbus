@@ -24,6 +24,22 @@ module Pgbus
     # one. 0 (default) is off. Overridable per capsule / event_consumers entry
     # (`read_ahead:`); prefetch_limit still caps everything claimed.
     attr_reader :read_ahead
+    # completion_batching (issue #606, opt-in, default false): a worker archives
+    # the jobs that finish close together with one archive_batch per flush
+    # instead of one pgmq.archive per job (Process::Completer). No timer: a lone
+    # job is archived at once, and whatever finishes during a flush goes in the
+    # next. completion_batch_size (default 100) caps the ids per statement.
+    # Threads only: validate! rejects it next to execution_mode :async, global
+    # or per capsule. The crash window widens from one job to one flush: on a
+    # hard crash (SIGKILL, OOM) the jobs waiting in the current flush re-run
+    # after visibility_timeout, and a flush that committed just before the
+    # crash leaves its jobs completed but unsignalled (uniqueness lock, batch,
+    # concurrency slot) until the reapers and sweeps heal them. Worker shutdown
+    # waits for a flush in flight at most immediate_shutdown_grace (QUIT) or
+    # the rest of the 5 s pool residual (TERM); a flush wedged past that is
+    # abandoned, and its jobs fail (Completer::Stopped) and re-run after
+    # visibility_timeout, or stay unsignalled if it had committed.
+    attr_accessor :completion_batching, :completion_batch_size
     # visibility_heartbeat / visibility_heartbeat_interval: while a job runs,
     # its message's visibility timeout is re-armed every interval seconds
     # (default: a third of visibility_timeout), so a job that outlives the
@@ -336,6 +352,8 @@ module Pgbus
 
       @prefetch_limit = nil
       @read_ahead = 0
+      @completion_batching = false
+      @completion_batch_size = 100
       @execution_mode = :threads
 
       @max_jobs_per_worker = nil
@@ -1009,6 +1027,7 @@ module Pgbus
       end
 
       validate_read_ahead!
+      validate_completion_batching!
       validate_capsule_processes!
 
       if priority_levels && !(priority_levels.is_a?(Integer) && priority_levels >= 1 && priority_levels <= 10)
@@ -1778,6 +1797,27 @@ module Pgbus
     end
 
     private
+
+    # The completer's job threads block on their flush, which would stall an
+    # Async reactor, so batching is threads-only (issue #606). Every capsule
+    # resolves its mode through execution_mode_for, as the supervisor does.
+    def validate_completion_batching!
+      unless [true, false].include?(completion_batching)
+        raise Pgbus::ConfigurationError, "completion_batching must be true or false (got #{completion_batching.inspect})"
+      end
+      unless completion_batch_size.is_a?(Integer) && completion_batch_size.positive?
+        raise Pgbus::ConfigurationError,
+              "completion_batch_size must be a positive Integer (got #{completion_batch_size.inspect})"
+      end
+      return unless completion_batching
+
+      modes = [ExecutionPools.normalize_mode(execution_mode)] + Array(workers).map { |w| execution_mode_for(w) }
+      return unless modes.include?(:async)
+
+      raise Pgbus::ConfigurationError,
+            "completion_batching supports execution_mode :threads only; turn it off for a global or capsule " \
+            "execution_mode :async"
+    end
 
     # Shared resolver for a dedicated connection (streamer LISTEN / worker
     # NotifyListener) that can override the base `connection_options` to bypass a

@@ -112,6 +112,16 @@ module WorkerProfileHarness
     totals.transform_values { |v| v / sum }
   end
 
+  # WP_BENCH_COMPLETION_BATCHING (issue #606): "1" runs every cell with
+  # config.completion_batching on; unset or "0" leaves it off.
+  def completion_batching?(env = ENV)
+    value = env.fetch("WP_BENCH_COMPLETION_BATCHING", nil)
+    return false if value.nil? || value == "0"
+    return true if value == "1"
+
+    raise ArgumentError, "WP_BENCH_COMPLETION_BATCHING must be 0 or 1 (got #{value})"
+  end
+
   def jit_label
     return "yjit" if defined?(RubyVM::YJIT) && RubyVM::YJIT.enabled?
     return "zjit" if defined?(RubyVM::ZJIT) && RubyVM::ZJIT.enabled?

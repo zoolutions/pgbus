@@ -30,6 +30,10 @@ module Pgbus
     def capsule_named: (untyped name) -> untyped
     def circuit_breaker_enabled: () -> bool
     def circuit_breaker_enabled=: (untyped) -> untyped
+    def completion_batch_size: () -> Integer
+    def completion_batch_size=: (untyped) -> untyped
+    def completion_batching: () -> bool
+    def completion_batching=: (untyped) -> untyped
     def connection_guc_mode: () -> Symbol
     def connection_guc_mode=: (untyped mode) -> untyped
     def connection_options: () -> untyped
