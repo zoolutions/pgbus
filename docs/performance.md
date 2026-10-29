@@ -159,6 +159,8 @@ What the numbers say:
   enqueue" (raw `send_message`, the control) 8 534 / 8 370 → 8 256 / 8 609,
   unchanged. `integration_bench.rb` now bootstraps `pgbus_batch_executions`;
   without it `executions_migrated?` is false and the bench skips the path.
+  main's bench file has no such bootstrap, so its "before" runs used the
+  table the branch run had already created in the same database.
 
 **Gate verdicts (not done, with the number):**
 
