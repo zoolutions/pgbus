@@ -1,0 +1,23 @@
+docs/performance.md
+  s_6f6be46f1a03ed::t_1679def59b0ca6 777-820,827-832,835-840
+  s_6f6be46f1a03ed::t_a4cb3f6e326c30 821-826,833-834
+CHANGELOG.md
+  s_6f6be46f1a03ed::t_a4cb3f6e326c30 5
+  s_6f6be46f1a03ed::t_64c8eea81f41c6 6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "dc240652b8a3002c947ae672b9df92a616021e7b",
+  "prompts": {},
+  "sessions": {
+    "s_6f6be46f1a03ed": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c60b8ef6-a2ee-4a53-a9de-07b83ac1c707",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
