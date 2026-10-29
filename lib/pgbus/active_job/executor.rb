@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require "time"
-
 module Pgbus
   module ActiveJob
     class Executor
@@ -282,33 +280,43 @@ module Pgbus
         Pgbus.logger.debug { "[Pgbus] Stat recording failed: #{e.message}" }
       end
 
+      # pgmq-ruby sets no result type map, so enqueued_at is the TIMESTAMPTZ
+      # text PostgreSQL sends ("2026-10-29 10:11:12.123456+00", any offset).
+      # Time.new reads it in C at ~0.3 µs; Time.parse took ~7 µs a job and
+      # pg's TimestampWithTimeZone decoder ~3 µs (issue #604). Unreadable text
+      # raises ArgumentError: the stat is recorded without latency.
       def compute_enqueue_latency(message)
         return unless message
 
         enqueued_at = message.enqueued_at
         return unless enqueued_at
 
-        # Fast path: numeric epoch (float seconds) avoids Time.parse entirely.
-        # PGMQ returns enqueued_at as a Time or string depending on the driver.
-        case enqueued_at
-        when Numeric
-          [((Time.now.to_f - enqueued_at) * 1000).round, 0].max
-        when Time
-          [((Time.now.utc - enqueued_at.utc) * 1000).round, 0].max
-        else
-          parse_enqueue_latency_from_string(enqueued_at.to_s)
-        end
+        epoch = case enqueued_at
+                when Numeric then enqueued_at
+                when Time then enqueued_at.to_f
+                else enqueued_at_epoch(enqueued_at.to_s)
+                end
+        return unless epoch
+
+        [((::Process.clock_gettime(::Process::CLOCK_REALTIME) - epoch) * 1000).round, 0].max
       rescue ArgumentError, TypeError
         nil
       end
 
-      def parse_enqueue_latency_from_string(str)
-        # PGMQ enqueued_at is TIMESTAMPTZ (always UTC internally).
-        # If the string lacks an explicit offset, assume UTC to avoid
-        # misinterpretation when the system timezone is non-UTC.
-        str = "#{str} UTC" unless str.match?(/[+-]\d{2}:?\d{2}\s*$|Z\s*$/i)
-        enqueued_at = Time.parse(str)
-        [((Time.now.utc - enqueued_at) * 1000).round, 0].max
+      # A trailing "+00", "-03", "+05:30", "+0530" or "Z".
+      UTC_OFFSET_SUFFIX = /(?:[+-]\d\d(?::?\d\d)?|Z)\z/
+      private_constant :UTC_OFFSET_SUFFIX
+
+      # Time.new reads a string without an offset in the host's zone, but
+      # TIMESTAMPTZ is UTC inside, so such a string gets a "Z". Checked here
+      # rather than with `in: "UTC"`: that keyword costs a Hash per job.
+      # Time.new also takes a bare year ("2026") as a time; a string without a
+      # time of day is not a timestamp, so it has no latency.
+      def enqueued_at_epoch(str)
+        return unless str.include?(":")
+
+        str = "#{str}Z" unless str.match?(UTC_OFFSET_SUFFIX)
+        Time.new(str).to_f
       end
 
       def handle_failure(message, queue_name, error, payload: nil, source_queue: nil)

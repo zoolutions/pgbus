@@ -33,8 +33,13 @@ module Pgbus
     # the whole table is bounded by the execution pool's capacity plus the
     # read-ahead buffer (threads + read_ahead per process, issue #486) — a
     # handful of entries per process, not one per enqueued job.
+    #
+    # `key` is the entry's @entries key, [queue_name, msg_id], built once with
+    # the entry (#track, #hold): #register, #unregister and #registered? each
+    # used to build their own (issue #604). A tenth member stays in the
+    # 160-byte slot.
     Entry = Struct.new(:client, :queue_name, :prefixed, :msg_id, :job_class, :extended_at, :extensions,
-                       :concurrency, :on_beat, keyword_init: true)
+                       :concurrency, :on_beat, :key, keyword_init: true)
 
     # Per-job opt-out, included on ActiveJob::Base by the engine:
     #
@@ -81,9 +86,10 @@ module Pgbus
                 concurrency: nil, on_beat: nil)
         return yield unless config.visibility_heartbeat
 
-        entry = Entry.new(client: client, queue_name: queue_name, prefixed: prefixed, msg_id: msg_id.to_i,
+        msg_id = msg_id.to_i
+        entry = Entry.new(client: client, queue_name: queue_name, prefixed: prefixed, msg_id: msg_id,
                           job_class: job_class, extended_at: monotonic_now, extensions: 0,
-                          concurrency: concurrency, on_beat: on_beat)
+                          concurrency: concurrency, on_beat: on_beat, key: [queue_name, msg_id].freeze)
         register(entry, config)
         begin
           yield
@@ -100,8 +106,10 @@ module Pgbus
       def hold(client:, queue_name:, msg_id:, prefixed: true, job_class: nil, config: Pgbus.configuration)
         return unless config.visibility_heartbeat
 
-        entry = Entry.new(client: client, queue_name: queue_name, prefixed: prefixed, msg_id: msg_id.to_i,
-                          job_class: job_class, extended_at: monotonic_now, extensions: 0)
+        msg_id = msg_id.to_i
+        entry = Entry.new(client: client, queue_name: queue_name, prefixed: prefixed, msg_id: msg_id,
+                          job_class: job_class, extended_at: monotonic_now, extensions: 0,
+                          key: [queue_name, msg_id].freeze)
         register(entry, config)
         entry
       end
@@ -159,7 +167,7 @@ module Pgbus
             @running = false
             @thread = nil
           end
-          @entries[key_for(entry)] = entry
+          @entries[entry.key] = entry
           # Start the ticker once per process.
           unless @running && @thread&.alive?
             @running = true
@@ -173,7 +181,7 @@ module Pgbus
       # job's entry (issue #486).
       def unregister(entry)
         synchronize do
-          key = key_for(entry)
+          key = entry.key
           @entries.delete(key) if @entries[key].equal?(entry)
         end
       end
@@ -265,11 +273,7 @@ module Pgbus
       end
 
       def registered?(entry)
-        synchronize { @entries[key_for(entry)].equal?(entry) }
-      end
-
-      def key_for(entry)
-        [entry.queue_name, entry.msg_id]
+        synchronize { @entries[entry.key].equal?(entry) }
       end
 
       # A literal block, not `(&)`: ThreadSafety/ClassInstanceVariable accepts

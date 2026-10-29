@@ -494,6 +494,84 @@ raised inside `record_stat`'s rescue. Both benches now build a real
 `PGMQ::Message` (`BenchStubs.build_message`) and abort unless the job returns
 `:success` (`BenchStubs.expect_success!`).
 
+### Executor enqueued_at decode (issue #604)
+
+With stats on (the default) every job computes `enqueue_latency_ms` from the
+message's `enqueued_at`, which pgmq-ruby hands over as PostgreSQL's TIMESTAMPTZ
+text (`2026-10-29 10:11:12.123456+00`: it sets no result type map). The
+executor parsed it with `Time.parse`. It now reads it with core Ruby's
+`Time.new(String)`, which does the work in C. One call each, same machine
+(Ruby 3.4.2 + YJIT):
+
+| reader | per call |
+|---|---:|
+| `Time.parse` (before) | 6.9 µs |
+| `PG::TextDecoder::TimestampWithTimeZone#decode` | 2.9 µs |
+| `Time.new(str)` (after) | 0.26 µs |
+
+The pg decoder was the plan. Profiled in the real worker it still took 4.9 % of
+on-CPU time, so it was dropped for `Time.new`. A string without an offset gets a
+`Z` before `Time.new`. That case only arises for input that does not come from
+PostgreSQL, and it is checked with `match?` rather than `in: "UTC"`, because the
+keyword costs a Hash per call. The second change: `VisibilityHeartbeat` builds
+each entry's `[queue, msg_id]` key once, where `#register`, `#unregister` and
+`#registered?` each used to build their own. The allocation budget spec's
+message used to carry `enqueued_at: nil`, so it never measured the latency
+read. It now carries the String PostgreSQL sends and checks the latency was
+recorded. With that message `main` measures 10 pgbus-owned objects per job and
+fails the `< 10` gate; this branch measures 9. The one object saved is the
+heartbeat key: `Time.parse` and `Time.new` each cost one pgbus-owned object (the
+Time), and `Time.parse`'s ~39 other objects per call land in the standard
+library, which the gate does not count. What keeps `Time.parse` off this path is
+the executor spec's `expect(Time).not_to have_received(:parse)`.
+
+`rake bench:one[executor_bench]` (mocked client), same machine, two runs each,
+interleaved:
+
+| | `main` | this branch |
+|---|---:|---:|
+| execute | 63.2k / 61.3k i/s | 65.8k / 66.4k i/s (inside the noise) |
+| execute + stat recording | 39.9k / 40.5k i/s | 60.1k / 59.4k i/s (**+48 %**) |
+| objects per job (stats off) | 69 | 68 |
+
+`rake bench:worker_profile`, local worker cells (`WP_BENCH_ROLE=worker`,
+`WP_BENCH_PROFILE_JOBS=10000`). Each run started once no other bench process was
+running and Postgres had no other active client backend. Load was 0.4–0.6× the
+12 cores. Three clean runs per side, interleaved:
+
+| cell | `main` jobs/s | branch jobs/s | `main` pgbus on-CPU | branch pgbus on-CPU |
+|---|---:|---:|---:|---:|
+| local / YJIT | 6 831–7 283 | 6 631–7 297 | 34.0–36.5 % | 25.6–27.4 % |
+| local / no JIT | 5 702–5 758 | 6 003–6 061 (**+5 %**) | 33.0–35.6 % | 27.4–28.6 % |
+
+pgbus's share of on-CPU time fell by about 9 points with YJIT and about 6
+points without it. Without a
+JIT that shows up as jobs/s, outside the run-to-run spread. With YJIT the
+jobs/s change is inside the noise: the loop thread spends 54–76 % of its time
+waiting on Postgres in those runs, and that wait sets the rate. Two more runs
+landed in slow windows, one per side (`main` 5 251, branch 5 226 jobs/s with
+YJIT, loop DB wait 73–75 %). They are left out of the table, as is one branch
+run taken while another worktree's bench was hitting the same Postgres.
+
+pgbus frames at 2 % or more of on-CPU time, from the 10 000-job profiles
+(`main` / branch ranges; "self" counts stdlib frames under a pgbus caller as
+that caller's, as the harness does):
+
+| frame | `main` | branch | verdict |
+|---|---:|---:|---|
+| `Executor#parse_enqueue_latency_from_string` (`Time.parse`) | 12.0–14.1 % | gone | replaced; `compute_enqueue_latency` is now 1.3–1.8 % inclusive |
+| `ExecutionPools::ThreadPool#post` | 3.6–4.2 % | 4.1–6.2 % | concurrent-ruby's `Thread::Queue#push` waking a pool thread. Counted as pgbus because the harness's patterns do not name `concurrent-ruby`. Not removable |
+| `Executor#execute` (self) | 3.0–3.7 % | 3.7–4.7 % | mostly `JSON.parse` of the payload. Needed |
+| `VisibilityHeartbeat.unregister` | 1.7–2.3 % | 1.2–1.5 % | the key built per call is gone. What remains is the `Hash#delete` under the mutex, which is the heartbeat's job |
+| `Client#with_read_timeout` | 1.1–1.6 % | 1.5–2.2 % | Ruby's `Timeout` fallback. It runs only where libpq cannot bound the socket (this macOS machine). On Linux the read takes the libpq path. Kept |
+
+The plan's other candidates do not make the 2 % line. The
+`Instrumentation.instrument` wrapper's own time is ≤ 0.35 % (its 51–60 %
+inclusive is the job running inside it). `Concurrency.extract_key` and
+`Uniqueness.extract_key` are ≤ 0.2 % each. The read wrappers' own time is
+below 1 %. All three stay, per #484's finding that trims below 1 % do not
+show up in throughput.
+
 ### Fair share reads (issue #426)
 
 `Client#read_batch_fair` replaces `pgmq.read` on the worker when
@@ -758,7 +836,7 @@ that enforce hard limits:
 | `Client#read_batch` | < 30 objects/call |
 | JSON round-trip | < 20 objects |
 | Retained objects (leak detection) | 0 across 100 cycles |
-| `Executor#execute`, pgbus-owned objects only (`executor_allocation_budget_spec.rb`) | < 10 objects/job (measured 8) |
+| `Executor#execute`, pgbus-owned objects only, PostgreSQL-shaped `enqueued_at` (`executor_allocation_budget_spec.rb`) | < 10 objects/job (measured 9; 10 before issue #604) |
 
 These run as part of `bundle exec rspec` on every PR. They are hard gates — a
 regression that exceeds the budget fails the build.

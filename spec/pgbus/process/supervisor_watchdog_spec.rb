@@ -491,14 +491,19 @@ RSpec.describe Pgbus::Process::Supervisor do
       after { log.close! }
 
       # Fork a child that runs the real child setup, parks a named thread in
-      # sleep, and reports ready. Never returns in the child.
-      def fork_parked_child
+      # sleep, and reports ready. Never returns in the child. Ready waits for
+      # the helper to be inside sleep: a TTIN that lands while it is still
+      # starting dumps an empty backtrace for it (seen on CI, Ruby 4.0).
+      def fork_parked_child(before_sleep: -> {})
         ready_r, ready_w = IO.pipe
         pid = fork do
           ready_r.close
           Pgbus.configuration.logger = Logger.new(log.path)
           supervisor.send(:setup_child_process)
-          helper = Thread.new { sleep } # rubocop:disable ThreadSafety/NewThread
+          helper = Thread.new do # rubocop:disable ThreadSafety/NewThread
+            before_sleep.call
+            sleep
+          end
           helper.name = "parked-helper"
           # Report ready only once the helper is parked: a TTIN that lands
           # before it reaches `sleep` dumps it with no sleep frame yet. A dead
@@ -540,6 +545,19 @@ RSpec.describe Pgbus::Process::Supervisor do
         # Ruby 3.3 prints a frame as "in `sleep'", 3.4+ as "in 'Kernel#sleep'".
         expect(output).to match(/ERROR.*parked-helper.*\n.*in [`'](Kernel#)?sleep'/)
         expect(Process.waitpid(pid, Process::WNOHANG)).to be_nil
+      ensure
+        kill_child(pid) if pid
+      end
+
+      # The race CI hit: a helper still busy before its sleep. The child reports
+      # ready only once the helper is parked, so its frame is in the dump.
+      it "reports ready only once the helper thread is inside sleep" do
+        pid = fork_parked_child(before_sleep: -> { 10_000_000.times { Math.sqrt(2) } })
+
+        Process.kill("TTIN", pid)
+        output = wait_for_log("parked-helper")
+
+        expect(output).to match(/ERROR.*parked-helper.*\n.*in [`'](Kernel#)?sleep'/)
       ensure
         kill_child(pid) if pid
       end
