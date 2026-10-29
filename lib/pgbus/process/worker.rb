@@ -62,6 +62,12 @@ module Pgbus
                 "fair_share and group_mode are mutually exclusive — this worker has group_mode " \
                 "#{(@group_mode || config.group_mode).inspect} while config.fair_share is set"
         end
+        # The completer blocks a job thread on its flush, which would stall an
+        # Async reactor (issue #606); the mode can arrive here without validate!.
+        if config.completion_batching && @execution_mode == :async
+          raise Pgbus::ConfigurationError,
+                "completion_batching supports execution_mode :threads only; this worker runs :async"
+        end
         @single_active_consumer = single_active_consumer
         @consumer_priority = consumer_priority
         @lifecycle = Lifecycle.new
@@ -94,7 +100,10 @@ module Pgbus
           else
             stat_buffer
           end
-        @executor = Pgbus::ActiveJob::Executor.new(stat_buffer: @stat_buffer)
+        # One per worker when config.completion_batching (issue #606): archives
+        # the jobs that finish close together in one archive_batch.
+        @completer = (Completer.new(client: Pgbus.client, batch_size: config.completion_batch_size) if config.completion_batching)
+        @executor = Pgbus::ActiveJob::Executor.new(stat_buffer: @stat_buffer, completer: @completer)
         @wake_signal = wake_signal || WakeSignal.new
         @pool = ExecutionPools.build(
           mode: @execution_mode,
@@ -239,6 +248,11 @@ module Pgbus
         Pgbus.stopping = true
         @lifecycle.transition_to!(:stopped)
         @wake_signal.notify!
+        # Before the pool: a job thread killed while it waits on a flush would
+        # skip its signals while the flush still commits (archived, never
+        # signalled). Stopping first resolves every waiter; a job that finishes
+        # inside the grace then archives on its own thread.
+        @completer&.stop
         ExecutionPools.terminate(@pool, grace: config.immediate_shutdown_grace)
       end
 
@@ -928,6 +942,9 @@ module Pgbus
         # proven it won't finish; waiting another full window would push the
         # worker past the supervisor's shutdown_timeout deadline (issue #386).
         @pool.wait_for_termination(POOL_TERMINATION_WAIT)
+        # After the pool: every waiter is a job thread, so the drain already
+        # flushed theirs; this flushes any left and joins the flusher.
+        @completer&.stop
         VisibilityHeartbeat.stop
         @stat_buffer&.stop
         @queue_lock&.unlock_all

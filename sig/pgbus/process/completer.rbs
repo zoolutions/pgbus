@@ -1,0 +1,24 @@
+module Pgbus
+  module Process
+    # Batched completion (issue #606): one per worker when
+    # config.completion_batching is on.
+    class Completer
+      class Stopped < Pgbus::Error
+      end
+
+      class Waiter
+        def initialize: () -> void
+        def resolve: (Symbol value) -> void
+        def fail: (Exception error) -> void
+        def value: () -> Symbol
+      end
+
+      def initialize: (client: Pgbus::Client, batch_size: Integer) -> void
+      def complete: (String queue, Integer msg_id) -> (:archived | :already_archived)
+      def stop: (?timeout: Numeric?) -> void
+      def alive?: () -> bool
+      def pending_count: () -> Integer
+      def flushing?: () -> bool
+    end
+  end
+end
