@@ -72,9 +72,10 @@ RSpec.describe "completed_jobs: :delete (integration)", :integration do
     expect(finished).to be(true)
     worker
   ensure
-    # A failed expectation above must not leave the worker's pool draining
-    # the queue under the next example.
-    worker.immediate_shutdown if runner&.alive?
+    # A failed expectation above, or a run that raised, must not leave the
+    # worker's pool draining the queue under the next example. Status false is
+    # a run that returned: its shutdown already ran.
+    worker&.immediate_shutdown unless runner&.status == false
     runner&.kill
   end
 
