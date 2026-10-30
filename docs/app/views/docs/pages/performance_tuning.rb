@@ -418,8 +418,9 @@ class Views::Docs::Pages::PerformanceTuning < DocsUI::Page
         `completion_batching`). Newly completed jobs add no `a_` rows and no archive
         index entries; rows archived before the switch stay until `archive_retention`
         compacts them. The message is gone once the statement commits either way. You
-        lose the completed-job history in the archive; with `stats_enabled` (the default)
-        job stats (`pgbus_job_stats`, the Insights page) still count every success. One thing the archive did tell apart:
+        lose the completed-job history in the archive; with job stats on (`stats_enabled`
+        and the `pgbus_job_stats` table migrated), the Insights page still counts every
+        success. One thing the archive did tell apart:
         `Batch::Sweep` counts a stale batch job whose message is in neither the queue nor
         the DLQ as completed, so a purged queue's batch jobs count as completed too.
       MD
