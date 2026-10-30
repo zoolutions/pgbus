@@ -13,6 +13,10 @@ client, while the integration benchmarks (when available) measure the full
 stack. Measure before you optimize; the harness below exists so you never have
 to guess.
 
+**Checklist:** every knob that moves jobs/s, in order, with the number below that
+measured it and what it costs, is the docs site's
+[throughput checklist](https://pgbus.zoolutions.llc/docs/performance-tuning#throughput-checklist).
+
 ## The hot paths
 
 | Path | When it runs | Bench |
@@ -482,6 +486,10 @@ every read on a 100 000-message table; its ±18–65 % spread on this machine
 hides any difference either way, so it is left out.
 
 ### Native compilation, Rust, C extensions and Ractors
+
+In one line: none is a throughput lever. The worker runs the host's Rails app
+(nothing standalone to compile, no Ractor-safe ActiveRecord to move), and what
+bends is Postgres work per job locally and one read round trip under latency.
 
 Evaluated 2026-10-05 for issue #484; recorded so the question stays answered.
 

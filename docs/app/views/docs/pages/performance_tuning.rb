@@ -7,9 +7,10 @@ class Views::Docs::Pages::PerformanceTuning < DocsUI::Page
   title "Performance & tuning"
   eyebrow "Operations"
 
-  def lead = "Tune autovacuum for the high-churn queue tables, size archive retention, and watch the health metrics."
+  def lead = "Start with the throughput checklist, then tune autovacuum for the high-churn queue tables, size archive retention, and watch the health metrics."
 
   def content
+    throughput_checklist
     autovacuum
     archive
     job_burst_tuning
@@ -24,6 +25,129 @@ class Views::Docs::Pages::PerformanceTuning < DocsUI::Page
   end
 
   private
+
+  PERFORMANCE_MD = "https://github.com/zoolutions/pgbus/blob/main/docs/performance.md"
+
+  def throughput_checklist
+    DocsUI::Section("Throughput checklist",
+                    description: "Every knob that moves jobs/s, with its measured effect and what it costs.") do
+      md <<~'MD'
+        More processes first, then fewer and cheaper Postgres statements per job,
+        then the knobs for a database on another host, then Ruby CPU, then the
+        Postgres side. Each item gives the setting and its default, what it measured in
+        `docs/performance.md`, and what it costs. Those are no-op jobs on one
+        12-core M-series laptop with Postgres on the same machine; "proxied" adds
+        1 ms per round trip through toxiproxy, the shape of a database on another
+        host. A real job's own work dilutes every number, so measure your own shape
+        with `rake bench:fleet` and `rake bench:worker_profile` before and after.
+        The keys are in the [configuration reference](/docs/configuration-reference#workers).
+      MD
+      md <<~'MD'
+        1. **More processes.** `processes:` per capsule (default 1).
+           *Measured:* locally (YJIT, 12 threads) 7 790–7 986 jobs/s for one process
+           and 14 277–17 879 for four; two give 1.5–2.2× and four 1.8–2.6× the same
+           round's one, and eight (6-thread workers) run below four. Proxied, four
+           run 3.9–4.6× one.
+           *Costs:* every process brings its own pgmq pool, ActiveRecord connections
+           and memory (peak connections 16 for one 12-thread process, 58–62 for four);
+           locally Postgres is what bends.
+           [More cores](#more-cores-run-more-processes) ·
+           [Threads vs processes](/docs/running-workers#threads-vs-processes).
+        2. **Prepared statements.** `native_statements` (default `true`): leave it on.
+           *Measured:* median Postgres time per job falls about 70 % at one process
+           and 34–42 % at four; median jobs/s +11 % (one process) and +20 % (four)
+           with YJIT, unchanged without a JIT.
+           *Costs:* behind a transaction-mode PgBouncer it needs PgBouncer 1.21+ with
+           `max_prepared_statements`. Turning it off also gives up the check that a
+           re-run archive or delete which finds its ids gone may have committed: the
+           function path keeps pgmq-ruby's plain reconnect retry.
+           [Prepared statements](#prepared-statements-and-connection-poolers).
+        3. **Batched completion.** `completion_batching` (default `false`;
+           `completion_batch_size` 100), threads only.
+           *Measured:* at four local processes jobs/s +17–35 %, Postgres time per job
+           0.26–0.34 → 0.06–0.07 ms, statements per job ~1.23 → ~0.4; two processes
+           gained nothing. One process: up to a third slower. With `read_ahead`
+           across a network: 10–30 % slower.
+           *Costs:* a hard crash re-runs the jobs of the current flush, not one job.
+           Turn it on for several processes on one Postgres when the fleet bench's
+           waits show `LWLock:WALWrite` on top.
+           [Batch the archives](#several-processes-on-one-postgres-batch-the-archives).
+        4. **Delete instead of archive.** `completed_jobs = :delete` (default `:archive`).
+           *Measured:* batched delete at four local processes is the fastest shape
+           measured, +11–13 % jobs/s over batched archive by median (19 830 → 22 000
+           with YJIT). Unbatched, Postgres time per job falls in five of six rows
+           (0.058 → 0.022 ms at one YJIT process) and jobs/s rises 10–35 % in four
+           of six rows by median, with overlapping ranges.
+           *Costs:* no completed-job history in the `a_` tables (with job stats on,
+           Insights still counts every success). `Batch::Sweep` counts a stale batch
+           job whose message is in neither the queue nor the DLQ as completed, so a
+           purged queue's batch jobs count as completed too. ActiveJob only.
+           [Archive retention](#archive-retention).
+        5. **Read-ahead, for a database on another host.** `read_ahead = threads`
+           (default 0), per capsule and per event consumer too.
+           *Measured:* proxied, 1.4–1.9× jobs/s for workers and event consumers;
+           locally within noise.
+           *Costs:* buffered messages count as in flight against `prefetch_limit`;
+           on drain, recycle or shutdown they go back with `read_ct` already
+           counted; the hold needs `visibility_heartbeat` (default `true`).
+           [Read-ahead](#database-on-another-host-turn-on-read-ahead).
+        6. **The pool, sized with read-ahead.** `pool_size` (default `nil`: sized
+           from the thread counts).
+           *Measured:* with `read_ahead` 12, job threads spent 14–15 % of their time
+           waiting to check out a pgmq connection from the default pool (~7 for 12
+           threads), up from 2–3 %.
+           *Costs:* connections. Budget `resolved_pool_size + streams_pool_size` per
+           process against `max_connections`.
+           [Job bursts](#job-bursts-raise-threads-and-the-pool-together).
+        7. **LISTEN/NOTIFY.** `listen_notify` (default `true`): keep it on; polling
+           every `polling_interval` is the fallback.
+           *Measured:* not as a throughput lever; a wake-up's p50 latency is
+           1.66ms through the supervisor's shared listener.
+           *Costs:* one direct LISTEN connection per host under the default
+           `worker_notify_scope: :supervisor`.
+        8. **YJIT.** `RUBY_YJIT_ENABLE=1` or Rails' `config.yjit`; pgbus never turns
+           a JIT on, and `pgbus doctor` reports which one runs.
+           *Measured:* ~14–20 % locally (one fleet process: 7 790–7 986 jobs/s with
+           YJIT, 5 242–6 143 without); nothing measurable proxied.
+           *Costs:* the memory of YJIT's compiled code (not measured here).
+        9. **ActiveJob's per-job log lines.** At `info`, ActiveJob formats and writes
+           `Performing …` and `Performed …` for every job. Give ActiveJob its own
+           logger at `warn` (below). Not `ActiveJob::Base.logger.level = :warn`:
+           that logger is `Rails.logger`, and the line silences the whole app.
+           *Measured:* not measured in `docs/performance.md`.
+           *Costs:* no per-job lines in the log; a failing job still logs at `error`.
+        10. **Job stats.** `stats_enabled` (default `true`): keep it on.
+            *Measured:* in the mocked executor bench, execute 65.8k / 66.4k i/s and
+            execute + stat recording 60.1k / 59.4k i/s (39.9k / 40.5k before #604).
+            *Costs:* turning it off empties Insights, which under `completed_jobs =
+            :delete` is the only record of a success.
+        11. **Already in the default path, no knob:** the enqueue no longer runs a
+            `pgbus_batch_executions` UPDATE for a job in no batch ("adapter: plain
+            job" 4 579 / 4 563 → 7 401 / 7 983 i/s), and the executor reads
+            `enqueued_at` with `Time.new` (+5 % jobs/s without a JIT). Upgrade to get them.
+        12. **The Postgres side.** Fillfactor (`rails generate pgbus:tune_fillfactor`),
+            [autovacuum](#autovacuum-tuning) (`rails generate pgbus:tune_autovacuum`),
+            `archive_retention` (default `7.days`) and the `max_connections` budget.
+            *Measured:* not measured as throughput levers; they keep the queue
+            tables from bloating as volume grows.
+      MD
+      DocsUI::Code(<<~RUBY, filename: "config/environments/production.rb")
+        config.active_job.logger = ActiveSupport::Logger.new($stdout, level: :warn)
+      RUBY
+      md <<~MD
+        Not levers ([why, in `docs/performance.md`](#{PERFORMANCE_MD}#native-compilation-rust-c-extensions-and-ractors)):
+
+        - **Ractors:** the host's job classes, ActiveRecord, Zeitwerk and ActiveJob
+          are not Ractor-safe, so `perform_now` cannot move into one.
+        - **A C or Rust extension:** it reaches only pgbus's own share of on-CPU
+          time (35 % in #484), a ≤ 1.5× bound for one process, and makes pgbus a
+          compiled gem for every host.
+        - **Spinel or Roundhouse:** Spinel runs no RubyGems or C extensions (so no
+          `pg`), and Roundhouse turns the whole app into a non-Ruby program pgbus is
+          not part of.
+      MD
+    end
+  end
 
   def multi_core
     DocsUI::Section("More cores: run more processes",
