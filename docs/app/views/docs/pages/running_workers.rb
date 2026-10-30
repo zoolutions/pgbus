@@ -199,6 +199,8 @@ class Views::Docs::Pages::RunningWorkers < DocsUI::Page
         single-queue capsule the extra forks are hot standbys.
 
         When to reach for which, with worked examples: [Sizing capsules](/docs/sizing-capsules).
+        What more processes measured, next to every other throughput knob, is in the
+        [throughput checklist](/docs/performance-tuning#throughput-checklist).
       MD
     end
   end
@@ -413,6 +415,8 @@ class Views::Docs::Pages::RunningWorkers < DocsUI::Page
         `read_ct` already counted. They also count as in flight, so `prefetch_limit`
         still caps the total. The hold needs `visibility_heartbeat` (on by default);
         with it off, a message buffered past `visibility_timeout` can run twice.
+        What read-ahead measured, next to every other throughput knob, is in the
+        [throughput checklist](/docs/performance-tuning#throughput-checklist).
       MD
     end
   end

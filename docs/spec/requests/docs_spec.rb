@@ -28,6 +28,14 @@ RSpec.describe "Docs pages", type: :request do
     expect(response).to have_http_status(:not_found)
   end
 
+  it "opens the performance page with the throughput checklist" do
+    get "/docs/performance-tuning"
+    expect(response.body).to include('id="throughput-checklist"')
+
+    get "/docs/running-workers"
+    expect(response.body.scan("/docs/performance-tuning#throughput-checklist").size).to eq(2)
+  end
+
   it "renders the landing page" do
     get "/"
     expect(response).to have_http_status(:ok)
