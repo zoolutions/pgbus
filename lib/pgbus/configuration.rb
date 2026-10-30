@@ -40,6 +40,18 @@ module Pgbus
     # abandoned, and its jobs fail (Completer::Stopped) and re-run after
     # visibility_timeout, or stay unsignalled if it had committed.
     attr_accessor :completion_batching, :completion_batch_size
+    # completed_jobs (issue #607): how a successful job's message leaves its
+    # queue. :archive (default) is pgmq.archive, DELETE + INSERT into the
+    # queue's a_ table, which archive_retention compacts. :delete is
+    # pgmq.delete, the DELETE alone: no a_ rows, no a_ index upkeep, nothing for
+    # the compaction to trim, and no completed-job history in the archive.
+    # Equally reliable: either way the message is gone once the statement
+    # commits. Through the completer (completion_batching) it is delete_batch.
+    # ActiveJob only: EventBus handler queues keep archiving (event replay
+    # reads their archive), and failures and dead letters are unchanged.
+    # Batch::Sweep then cannot tell a deleted batch job from one whose message
+    # vanished another way (a purged queue): both count as completed, silently.
+    attr_reader :completed_jobs
     # visibility_heartbeat / visibility_heartbeat_interval: while a job runs,
     # its message's visibility timeout is re-armed every interval seconds
     # (default: a third of visibility_timeout), so a job that outlives the
@@ -354,6 +366,7 @@ module Pgbus
       @read_ahead = 0
       @completion_batching = false
       @completion_batch_size = 100
+      @completed_jobs = :archive
       @execution_mode = :threads
 
       @max_jobs_per_worker = nil
@@ -830,6 +843,17 @@ module Pgbus
       end
 
       @connection_guc_mode = mode
+    end
+
+    VALID_COMPLETED_JOBS = %i[archive delete].freeze
+
+    def completed_jobs=(value)
+      mode = value.to_sym if value.is_a?(String) || value.is_a?(Symbol)
+      unless VALID_COMPLETED_JOBS.include?(mode)
+        raise Pgbus::ConfigurationError, "completed_jobs must be :archive or :delete (got #{value.inspect})"
+      end
+
+      @completed_jobs = mode
     end
 
     def native_statements=(value)

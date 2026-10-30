@@ -145,6 +145,42 @@ RSpec.describe Pgbus::Batch::Sweep do
 
       expect(Pgbus::Batch).to have_received(:job_discarded).with("b1", job_id: "j1")
     end
+
+    # Issue #607: under completed_jobs :delete a finished job leaves no
+    # archive row, so a message in neither queue nor DLQ is a completion, not
+    # an anomaly worth a warning per row.
+    context "with completed_jobs: :delete" do
+      before do
+        Pgbus.configuration.completed_jobs = :delete
+        allow(client).to receive(:message_in_queue?).with("pgbus_test_default_p1", msg_id: 42, prefixed: false)
+                                                    .and_return(false)
+        allow(client).to receive(:message_archived?)
+        allow(Pgbus.logger).to receive(:warn)
+      end
+
+      after { Pgbus.configuration.completed_jobs = :archive }
+
+      it "resolves the row as completed without probing the archive or warning" do
+        allow(client).to receive(:message_with_job_id?).with("pgbus_test_default_dlq", job_id: "j1", prefixed: false)
+                                                       .and_return(false)
+
+        described_class.send(:sweep_stale_executions, batch_size: 50, client: client, stalled_for: 300)
+
+        expect(Pgbus::Batch).to have_received(:job_completed).with("b1", job_id: "j1")
+        expect(client).not_to have_received(:message_archived?)
+        expect(Pgbus.logger).not_to have_received(:warn)
+      end
+
+      it "still resolves the row as failed when the DLQ holds its job" do
+        allow(client).to receive(:message_with_job_id?).with("pgbus_test_default_dlq", job_id: "j1", prefixed: false)
+                                                       .and_return(true)
+
+        described_class.send(:sweep_stale_executions, batch_size: 50, client: client, stalled_for: 300)
+
+        expect(Pgbus::Batch).to have_received(:job_discarded).with("b1", job_id: "j1")
+        expect(Pgbus::Batch).not_to have_received(:job_completed)
+      end
+    end
   end
 
   describe ".finish_stalled_processing" do

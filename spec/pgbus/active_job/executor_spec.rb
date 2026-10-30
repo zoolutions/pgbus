@@ -371,7 +371,7 @@ RSpec.describe Pgbus::ActiveJob::Executor do
       let(:message) { build_message_double(msg_id: 9, message: message_json, read_ct: 1) }
 
       # Load the genuine PGMQ::Errors::ConnectionError so this proves the
-      # executor's archive-retry rescue (archive_from → connection_error?) matches
+      # executor's archive-retry rescue (complete_from → connection_error?) matches
       # the real pgmq-ruby hierarchy — not a fake StandardError subclass.
       before { real_pgmq_connection_error }
 
@@ -515,11 +515,93 @@ RSpec.describe Pgbus::ActiveJob::Executor do
       end
     end
 
+    # Issue #607: config.completed_jobs = :delete finishes a successful job
+    # with pgmq.delete instead of the archive; every result the executor acts
+    # on stays the same.
+    context "with completed_jobs: :delete" do
+      let(:config) do
+        Pgbus::Configuration.new.tap { |c| c.completed_jobs = :delete }
+      end
+      let(:message) { build_message_double(msg_id: 9, message: message_json, read_ct: 1) }
+
+      before do
+        real_pgmq_connection_error
+        allow(Pgbus::Concurrency).to receive(:extract_key).and_return("TestJob-42")
+        allow(Pgbus::Concurrency::Semaphore).to receive(:signal)
+      end
+
+      it "deletes the message instead of archiving it, then signals" do
+        expect(executor.execute(message, queue_name)).to eq(:success)
+
+        expect(mock_client).to have_received(:delete_message).with(queue_name, 9)
+        expect(mock_client).not_to have_received(:archive_message)
+        expect(Pgbus::Concurrency::Semaphore).to have_received(:signal).with("TestJob-42", client: mock_client)
+      end
+
+      it "deletes from the priority sub-queue a message was read from" do
+        executor.execute(message, queue_name, source_queue: "pgbus_default_p0")
+
+        expect(mock_client).to have_received(:delete_message).with("pgbus_default_p0", 9, prefixed: false)
+      end
+
+      it "takes the duplicate path, without signals, when the message was already gone" do
+        allow(mock_client).to receive(:delete_message).and_return(false)
+
+        expect(executor.execute(message, queue_name)).to eq(:duplicate)
+        expect(Pgbus::Concurrency::Semaphore).not_to have_received(:signal)
+      end
+
+      it "retries a connection error once and claims a false that follows its own retry" do
+        calls = 0
+        allow(mock_client).to receive(:delete_message) do
+          calls += 1
+          raise PGMQ::Errors::ConnectionError, "socket gone" if calls == 1
+
+          false
+        end
+
+        expect(executor.execute(message, queue_name)).to eq(:success)
+        expect(mock_client).to have_received(:delete_message).twice
+        expect(Pgbus::Concurrency::Semaphore).to have_received(:signal).with("TestJob-42", client: mock_client)
+      end
+
+      it "says deleted, not archived, in its logs" do
+        log = StringIO.new
+        previous_logger = Pgbus.configuration.logger
+        Pgbus.configuration.logger = Logger.new(log, level: Logger::DEBUG)
+        calls = 0
+        allow(mock_client).to receive(:delete_message) do
+          calls += 1
+          raise PGMQ::Errors::ConnectionError, "socket gone" if calls == 1
+
+          calls == 2
+        end
+
+        executor.execute(message, queue_name)
+        executor.execute(message, queue_name)
+
+        expect(log.string).to include("Delete failed on connection error, retrying once: socket gone")
+        expect(log.string).to include("[Pgbus::Executor] deleted msg_id=9")
+        expect(log.string).to include("already deleted elsewhere, skipping signals msg_id=9")
+        expect(log.string).not_to include("archived")
+      ensure
+        Pgbus.configuration.logger = previous_logger
+      end
+
+      it "leaves a failed job in its queue: no delete, no archive" do
+        allow(job_double).to receive(:perform_now).and_raise(StandardError, "boom")
+
+        expect(executor.execute(message, queue_name)).to eq(:failed)
+        expect(mock_client).not_to have_received(:delete_message)
+        expect(mock_client).not_to have_received(:archive_message)
+      end
+    end
+
     # Regression: issue #126. Under `execution_mode: :async` the reactor or a
     # nested Async/Sync block can raise Async::Stop / Async::Cancel, both of
     # which inherit from Exception (NOT StandardError). A `rescue StandardError`
     # misses them entirely — control flow is lost between perform_now and
-    # archive_from, the pgbus_failed_events row is never written, and the
+    # complete_from, the pgbus_failed_events row is never written, and the
     # uniqueness lock stays held until VT expiry finally allows a clean retry.
     # The executor must treat any Exception as a visible failure: record it,
     # instrument it, and return :failed so telemetry exists.
@@ -713,7 +795,7 @@ RSpec.describe Pgbus::ActiveJob::Executor do
         expect(Pgbus::FailedEventRecorder).not_to have_received(:clear!)
       end
 
-      # archive_from retries once on a connection error. If our first archive
+      # complete_from retries once on a connection error. If our first archive
       # actually committed and only the reply was lost, the retry reports
       # "already archived" — that is OUR archive, not another worker's, and
       # treating it as a duplicate would strand the slot until expiry.
@@ -958,7 +1040,7 @@ RSpec.describe Pgbus::ActiveJob::Executor do
           expect_released_once(message)
         end
 
-        it "does not release the lock if archive_from fails (retry path)" do
+        it "does not release the lock if complete_from fails (retry path)" do
           # If archive fails, job_succeeded stays false, the ensure block
           # skips release — so the next retry still sees the lock and
           # enforces at-most-once semantics.

@@ -44,7 +44,9 @@
 # (a non-negative Integer passed as read_ahead: to the Worker/Consumer; unset
 # means the keyword is not passed at all), WP_BENCH_COMPLETION_BATCHING (1 runs
 # every cell, fleet drain children included, with config.completion_batching
-# on, issue #606; unset or 0 leaves it off).
+# on, issue #606; unset or 0 leaves it off), WP_BENCH_COMPLETED_JOBS (archive
+# or delete sets config.completed_jobs in every cell, issue #607; unset leaves
+# the default).
 # Raw vernier profiles land in tmp/benchmarks/ (open in profiler.firefox.com).
 # Requires PGBUS_DATABASE_URL. Run-and-report, never a CI gate.
 
@@ -69,6 +71,7 @@ end
 abort "WP_BENCH_READ_AHEAD must be a non-negative integer (got #{READ_AHEAD})" if READ_AHEAD&.negative?
 begin
   COMPLETION_BATCHING = WorkerProfileHarness.completion_batching?
+  COMPLETED_JOBS = WorkerProfileHarness.completed_jobs
 rescue ArgumentError => e
   abort e.message
 end
@@ -234,6 +237,7 @@ puts "Pgbus worker profile (real Worker / Consumer, real PostgreSQL)"
 puts "  Ruby #{RUBY_VERSION}, #{THREADS} threads, #{JOBS} timed jobs, roles: #{ROLES.fetch(ROLE).join(", ")}"
 puts "  read_ahead: #{READ_AHEAD.nil? ? "not passed" : READ_AHEAD}"
 puts "  completion_batching: #{COMPLETION_BATCHING ? "on" : "off"}"
+puts "  completed_jobs (workers; consumers always archive): #{COMPLETED_JOBS || "default"}"
 puts "  proxied cells: #{proxy_url ? "on" : "off (set PGBUS_BENCH_PROXY_URL)"}"
 puts "  fleet processes: #{PROCESSES.join(", ")}" if ROLES.fetch(ROLE).include?("fleet")
 puts "=" * 70

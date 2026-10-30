@@ -14,6 +14,10 @@ module Pgbus
     # The job thread waits for its own result (`complete` blocks), so the
     # executor's post-archive sequence runs on it as before. Threads only: a
     # blocking wait would stall an Async reactor (Configuration#validate!).
+    #
+    # completed_jobs: :delete (the config setting, issue #607) flushes with
+    # `delete_batch` instead; the results keep their names, so :archived
+    # means "completed" and :already_archived "already gone".
     class Completer
       # Raised on a waiting job thread whose flush can no longer happen: the
       # flusher was stopped past its join budget, or died.
@@ -56,7 +60,12 @@ module Pgbus
         end
       end
 
-      def initialize(client:, batch_size:)
+      BATCH_OPS = { archive: :archive_batch, delete: :delete_batch }.freeze
+
+      def initialize(client:, batch_size:, completed_jobs: :archive)
+        @batch_op = BATCH_OPS.fetch(completed_jobs) do
+          raise ArgumentError, "completed_jobs must be :archive or :delete (got #{completed_jobs.inspect})"
+        end
         @client = client
         @batch_size = batch_size
         @mutex = Mutex.new
@@ -84,8 +93,8 @@ module Pgbus
         end
         return waiter.value if waiter
 
-        # Stopped: archive on the caller's thread, with the same results.
-        @client.archive_batch(queue, [msg_id], prefixed: false).empty? ? :already_archived : :archived
+        # Stopped: complete on the caller's thread, with the same results.
+        @client.public_send(@batch_op, queue, [msg_id], prefixed: false).empty? ? :already_archived : :archived
       end
 
       # Flushes whatever is pending, then joins the flusher. Past timeout the
@@ -148,7 +157,7 @@ module Pgbus
       # is absent. A duplicated id (the same message held by two threads after
       # a redelivery) is archived once, so only its first waiter gets :archived.
       def flush_slice(queue, slice)
-        archived = @client.archive_batch(queue, slice.map(&:first).uniq, prefixed: false).to_set(&:to_i)
+        archived = @client.public_send(@batch_op, queue, slice.map(&:first).uniq, prefixed: false).to_set(&:to_i)
         slice.each { |msg_id, waiter| waiter.resolve(archived.delete?(msg_id) ? :archived : :already_archived) }
       rescue Exception => e # rubocop:disable Lint/RescueException -- delivered to the waiters, never swallowed
         log_flush_failure(queue, slice, e) unless e.is_a?(StandardError)
@@ -157,7 +166,7 @@ module Pgbus
 
       def log_flush_failure(queue, slice, error)
         Pgbus.logger.error do
-          "[Pgbus::Completer] archive_batch on #{queue} (#{slice.size} ids) raised #{error.class}: #{error.message}"
+          "[Pgbus::Completer] #{@batch_op} on #{queue} (#{slice.size} ids) raised #{error.class}: #{error.message}"
         end
       end
 

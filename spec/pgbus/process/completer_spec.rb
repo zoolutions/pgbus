@@ -238,6 +238,60 @@ RSpec.describe Pgbus::Process::Completer do
     end
   end
 
+  # Issue #607: config.completed_jobs = :delete. The same contract, with
+  # delete_batch (which also returns the ids it removed) in place of
+  # archive_batch; "archived" in the results means "completed".
+  context "with completed_jobs: :delete" do
+    subject(:completer) { described_class.new(client: client, batch_size: batch_size, completed_jobs: :delete) }
+
+    def delete_all(missing: [])
+      allow(client).to receive(:delete_batch) do |queue, ids, prefixed:|
+        raise ArgumentError, "expected prefixed: false" unless prefixed == false
+
+        calls << [queue, ids]
+        (ids - missing).map(&:to_s)
+      end
+    end
+
+    it "deletes with delete_batch, never archive_batch" do
+      delete_all
+      allow(client).to receive(:archive_batch)
+
+      expect(completer.complete("pgbus_default", 7)).to eq(:archived)
+      expect(recorded_calls).to eq([["pgbus_default", [7]]])
+      expect(client).not_to have_received(:archive_batch)
+    end
+
+    it "reports :already_archived for an id delete_batch did not remove" do
+      delete_all(missing: [8])
+
+      expect(completer.complete("q", 8)).to eq(:already_archived)
+    end
+
+    it "deletes on the caller's thread after the completer stopped" do
+      delete_all(missing: [4])
+      completer.stop
+
+      expect(completer.complete("q", 3)).to eq(:archived)
+      expect(completer.complete("q", 4)).to eq(:already_archived)
+      expect(recorded_calls).to eq([["q", [3]], ["q", [4]]])
+    end
+
+    it "names delete_batch when a flush raises something that is not a StandardError" do
+      allow(client).to receive(:delete_batch).and_raise(NotImplementedError, "not a StandardError")
+      logged = []
+      allow(Pgbus.logger).to receive(:error) { |&block| logged << block.call }
+
+      expect { completer.complete("q", 1) }.to raise_error(NotImplementedError)
+      expect(logged).to contain_exactly(a_string_including("delete_batch on q"))
+    end
+  end
+
+  it "rejects a completed_jobs other than :archive or :delete" do
+    expect { described_class.new(client: client, batch_size: 1, completed_jobs: :purge) }
+      .to raise_error(ArgumentError, /completed_jobs must be :archive or :delete/)
+  end
+
   it "keeps serving after a flush raised something that is not a StandardError" do
     calls_made = 0
     allow(client).to receive(:archive_batch) do |_queue, ids, prefixed:| # rubocop:disable Lint/UnusedBlockArgument

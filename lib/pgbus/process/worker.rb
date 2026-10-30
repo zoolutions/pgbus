@@ -101,9 +101,15 @@ module Pgbus
             stat_buffer
           end
         # One per worker when config.completion_batching (issue #606): archives
-        # the jobs that finish close together in one archive_batch.
-        @completer = (Completer.new(client: Pgbus.client, batch_size: config.completion_batch_size) if config.completion_batching)
-        @executor = Pgbus::ActiveJob::Executor.new(stat_buffer: @stat_buffer, completer: @completer)
+        # the jobs that finish close together in one archive_batch, or deletes
+        # them with delete_batch under config.completed_jobs = :delete (#607).
+        @completer = if config.completion_batching
+                       Completer.new(client: Pgbus.client, batch_size: config.completion_batch_size,
+                                     completed_jobs: config.completed_jobs)
+                     end
+        # The worker's config, so the executor and the completer read one
+        # completed_jobs (issue #607).
+        @executor = Pgbus::ActiveJob::Executor.new(config: config, stat_buffer: @stat_buffer, completer: @completer)
         @wake_signal = wake_signal || WakeSignal.new
         @pool = ExecutionPools.build(
           mode: @execution_mode,

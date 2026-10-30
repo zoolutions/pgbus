@@ -30,6 +30,8 @@ module Pgbus
     def capsule_named: (untyped name) -> untyped
     def circuit_breaker_enabled: () -> bool
     def circuit_breaker_enabled=: (untyped) -> untyped
+    def completed_jobs: () -> (:archive | :delete)
+    def completed_jobs=: (untyped value) -> (:archive | :delete)
     def completion_batch_size: () -> Integer
     def completion_batch_size=: (untyped) -> untyped
     def completion_batching: () -> bool

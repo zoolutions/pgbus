@@ -2186,6 +2186,10 @@ module Pgbus
     end
 
     def stale_connection_error?(error)
+      # A completion whose re-run came back short may have committed: never
+      # re-run it again (NativeStatements#run_native).
+      return false if NativeStatements.completion_lost?(error)
+
       # Substring match against any stale-connection pattern. Deliberately a
       # single Regexp rather than `STALE_CONNECTION_PATTERNS.any? { |p| msg.include?(p) }`:
       # Style/ArrayIntersect misfires on that shape and "corrects" it to

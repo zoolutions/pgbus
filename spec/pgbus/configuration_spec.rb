@@ -275,6 +275,31 @@ RSpec.describe Pgbus::Configuration do
     end
   end
 
+  # Issue #607: how a successful job's message leaves its queue.
+  describe "#completed_jobs" do
+    it "archives by default" do
+      expect(config.completed_jobs).to eq(:archive)
+    end
+
+    it "accepts :delete, and the String a YAML file gives" do
+      config.completed_jobs = :delete
+      expect(config.completed_jobs).to eq(:delete)
+
+      config.completed_jobs = "archive"
+      expect(config.completed_jobs).to eq(:archive)
+
+      config.completed_jobs = "delete"
+      expect(config.completed_jobs).to eq(:delete)
+    end
+
+    it "rejects anything else" do
+      [:drop, "purge", nil, true].each do |value|
+        expect { config.completed_jobs = value }
+          .to raise_error(Pgbus::ConfigurationError, /completed_jobs must be :archive or :delete/)
+      end
+    end
+  end
+
   # Issue #486: read-ahead claims beyond the free threads. Off by default.
   describe "#read_ahead" do
     it "defaults to 0 (off)" do

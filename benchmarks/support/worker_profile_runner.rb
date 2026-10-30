@@ -51,6 +51,9 @@ module WorkerProfileRunner
       # Issue #606: set only when asked, so the bench still runs on a branch
       # whose Configuration predates the setting.
       c.completion_batching = true if WorkerProfileHarness.completion_batching?
+      # Issue #607, likewise.
+      completed_jobs = WorkerProfileHarness.completed_jobs
+      c.completed_jobs = completed_jobs if completed_jobs
     end
   end
 
