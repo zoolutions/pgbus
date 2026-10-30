@@ -580,6 +580,37 @@ RSpec.describe Pgbus::Client::NativeStatements do
       end
     end
 
+    # The raise carries the original error's text; one that matches the
+    # client's stale-connection patterns must not be re-run by
+    # with_stale_connection_retry, whose fresh attempt would read short again
+    # without raising.
+    it "is not re-run by the stale-connection retry when the lost connection's text is a stale pattern" do
+      stale = PG::UnableToSend.new("no connection to the server")
+      calls = 0
+      allow(raw_conn).to receive(:exec_prepared).with(statements[:delete].name, [9]) do
+        calls += 1
+        raise stale if calls == 1
+
+        pg_result([])
+      end
+
+      expect { client.delete_message("default", 9) }.to raise_error(connection_error, /it may have committed/)
+      expect(calls).to eq(2)
+      expect(described_class.completion_lost?(PGMQ::Errors::ConnectionError.new("boom"))).to be(false)
+    end
+
+    it "counts each id once when a batch names an id twice" do
+      calls = 0
+      allow(raw_conn).to receive(:exec_prepared).with(statements[:delete_batch].name, anything) do
+        calls += 1
+        raise dropped if calls == 1
+
+        pg_result([{ "msg_id" => "9" }])
+      end
+
+      expect(client.delete_batch("default", [9, 9])).to eq(%w[9])
+    end
+
     it "lets the executor claim a delete whose reply was lost (ambiguous), not skip it as a duplicate" do
       config.completed_jobs = :delete
       calls = 0

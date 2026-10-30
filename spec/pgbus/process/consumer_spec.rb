@@ -124,6 +124,24 @@ RSpec.describe Pgbus::Process::Consumer do
       expect(mock_client).to have_received(:archive_message).with("q_orders", 7)
     end
 
+    # Issue #607 review: an archive whose reply was lost and whose re-run
+    # found the message gone raises; the handler ran and the message is gone,
+    # so it is handled, not a failure to retry or record.
+    it "counts the message handled when its archive reply was lost after a commit" do
+      real_pgmq_connection_error
+      lost = PGMQ::Errors::ConnectionError.new("#{Pgbus::Client::NativeStatements::COMPLETION_NOT_RESENT}: socket gone")
+      allow(mock_client).to receive(:archive_message).and_raise(lost)
+      allow(Pgbus::FailedEventRecorder).to receive(:record!)
+      breaker = consumer.instance_variable_get(:@circuit_breaker)
+      allow(breaker).to receive_messages(record_failure: nil, record_success: nil)
+
+      consumer.send(:handle_message, message, "q_orders")
+
+      expect(Pgbus::FailedEventRecorder).not_to have_received(:record!)
+      expect(breaker).not_to have_received(:record_failure)
+      expect(breaker).to have_received(:record_success).with("q_orders")
+    end
+
     it "rescues errors gracefully and logs them" do
       allow(registry).to receive(:handlers_for).and_raise(StandardError.new("boom"))
 

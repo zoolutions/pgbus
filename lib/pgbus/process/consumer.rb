@@ -264,7 +264,7 @@ module Pgbus
           dispatch(handlers, message, queue_name)
         end
 
-        Pgbus.client.archive_message(queue_name, message.msg_id.to_i)
+        archive_handled(queue_name, message)
         # A redelivery that succeeds leaves no stale failure behind. First
         # deliveries never had one: no query on the hot path (#484's gate).
         if message.read_ct.to_i > 1
@@ -367,6 +367,20 @@ module Pgbus
       # as retrying with its error. No ErrorReporter call: Handler#process!
       # already instruments pgbus.event_failed, which feeds the reporters.
       # A handler queue has no priority sub-queues: its one table is the source.
+      # The handlers ran. An archive whose reply was lost after it may have
+      # committed, and whose re-run found the message gone (issue #607
+      # review), leaves nothing to retry: the message is handled.
+      def archive_handled(queue_name, message)
+        Pgbus.client.archive_message(queue_name, message.msg_id.to_i)
+      rescue PGMQ::Errors::ConnectionError => e
+        raise unless Client::NativeStatements.completion_lost?(e)
+
+        Pgbus.logger.warn do
+          "[Pgbus] Consumer archive of #{message.msg_id} on #{queue_name} lost its reply and the message is gone: " \
+            "counted as handled (#{e.message})"
+        end
+      end
+
       def record_failed_event(message, queue_name, error)
         FailedEventRecorder.record!(
           queue_name: queue_name, msg_id: message.msg_id.to_i, source_queue: config.queue_name(queue_name),
