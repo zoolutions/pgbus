@@ -372,7 +372,7 @@ module Pgbus
       # review), leaves nothing to retry: the message is handled.
       def archive_handled(queue_name, message)
         Pgbus.client.archive_message(queue_name, message.msg_id.to_i)
-      rescue PGMQ::Errors::ConnectionError => e
+      rescue StandardError => e # pgmq loads lazily: completion_lost? checks the class
         raise unless Client::NativeStatements.completion_lost?(e)
 
         Pgbus.logger.warn do

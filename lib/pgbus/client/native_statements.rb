@@ -93,7 +93,8 @@ module Pgbus
         # The error run_native raises for a completion whose re-run came back
         # short (the client's stale retry and the consumer key on it).
         def completion_lost?(error)
-          error.is_a?(PGMQ::Errors::ConnectionError) && error.message.start_with?(COMPLETION_NOT_RESENT)
+          defined?(PGMQ::Errors::ConnectionError) && error.is_a?(PGMQ::Errors::ConnectionError) &&
+            error.message.start_with?(COMPLETION_NOT_RESENT)
         end
 
         # True once the process has given up on prepared statements.
