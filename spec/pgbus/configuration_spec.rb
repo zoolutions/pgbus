@@ -287,6 +287,9 @@ RSpec.describe Pgbus::Configuration do
 
       config.completed_jobs = "archive"
       expect(config.completed_jobs).to eq(:archive)
+
+      config.completed_jobs = "delete"
+      expect(config.completed_jobs).to eq(:delete)
     end
 
     it "rejects anything else" do

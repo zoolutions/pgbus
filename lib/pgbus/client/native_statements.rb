@@ -52,6 +52,12 @@ module Pgbus
       # before the process stops preparing.
       LOST_STATEMENT_LIMIT = 3
 
+      # Raised when an archive or delete re-run after a lost connection comes
+      # back short (run_native). Matches none of the client's stale-connection
+      # patterns, so with_stale_connection_retry does not re-run it again.
+      COMPLETION_NOT_RESENT = "Database connection lost while an archive or delete ran, " \
+                              "and the re-run found ids gone: it may have committed"
+
       # Reads of up to this many messages run a statement with the LIMIT
       # written in: with `LIMIT $1` the generic plan assumes a tenth of the
       # table and hash-joins a full scan, so Postgres plans a custom plan on
@@ -315,32 +321,52 @@ module Pgbus
         statements = native_statements_for(name)
         return @pgmq.archive(name, msg_id) unless statements
 
-        run_native(statements[:archive], [msg_id]).ntuples.positive?
+        run_native(statements[:archive], [msg_id], rows: 1).ntuples.positive?
       end
 
       def exec_archive_batch(name, msg_ids)
         statements = msg_ids.any? && native_statements_for(name)
         return @pgmq.archive_batch(name, msg_ids) unless statements
 
-        run_native(statements[:archive_batch], [PG::TextEncoder::Array.new.encode(msg_ids)]).map { |row| row["msg_id"] }
+        run_native(statements[:archive_batch], [PG::TextEncoder::Array.new.encode(msg_ids)], rows: msg_ids.size).map { |row| row["msg_id"] }
       end
 
       def exec_delete(name, msg_id)
         statements = native_statements_for(name)
         return @pgmq.delete(name, msg_id) unless statements
 
-        run_native(statements[:delete], [msg_id]).ntuples.positive?
+        run_native(statements[:delete], [msg_id], rows: 1).ntuples.positive?
       end
 
       def exec_delete_batch(name, msg_ids)
         statements = msg_ids.any? && native_statements_for(name)
         return @pgmq.delete_batch(name, msg_ids) unless statements
 
-        run_native(statements[:delete_batch], [PG::TextEncoder::Array.new.encode(msg_ids)]).map { |row| row["msg_id"] }
+        run_native(statements[:delete_batch], [PG::TextEncoder::Array.new.encode(msg_ids)], rows: msg_ids.size).map { |row| row["msg_id"] }
       end
 
-      def run_native(statement, params)
-        @pgmq.with_connection { |conn| exec_native(conn, statement, params) }
+      # rows: the rows an archive or delete returns when every id was still
+      # there. pgmq-ruby's with_connection re-runs its block after a lost
+      # connection ("server closed the connection"). Usually the socket died
+      # idle in the pool and nothing ran, but it can follow a commit whose
+      # reply was lost: the re-run then finds those ids gone, and the executor
+      # would take its own completed job for a duplicate and skip its signals.
+      # So a re-run that comes back short raises instead; the executor's
+      # retry-once then reads the gone message as :ambiguous and claims it.
+      # A re-run that finds every id is certain: the first run never committed.
+      def run_native(statement, params, rows: nil)
+        attempt = 0
+        lost = nil
+        @pgmq.with_connection do |conn|
+          attempt += 1
+          result = exec_native(conn, statement, params)
+          raise PGMQ::Errors::ConnectionError, "#{COMPLETION_NOT_RESENT}: #{lost}" if rows && attempt > 1 && result.ntuples < rows
+
+          result
+        rescue PG::Error => e
+          lost = e.message
+          raise
+        end
       end
 
       def exec_native(conn, statement, params)

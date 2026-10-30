@@ -779,10 +779,11 @@ What the numbers say:
 `config.completed_jobs = :delete` (opt-in, default `:archive`) finishes a
 successful job with `pgmq.delete` (pgbus's native `DELETE … RETURNING msg_id`)
 instead of the archive's `DELETE … RETURNING` + `INSERT INTO a_<queue>`; with
-`completion_batching` the completer flushes with `delete_batch`. No `a_` rows,
-no `archived_at` index upkeep, nothing for the hourly compaction to trim, and
-no completed-job history in the archive. ActiveJob only; failures and dead
-letters are unchanged.
+`completion_batching` the completer flushes with `delete_batch`. Newly completed
+jobs add no `a_` rows and no `archived_at` index entries, and leave no
+completed-job history in the archive; rows archived before the switch stay until
+the hourly compaction trims them. ActiveJob only; failures and dead letters are
+unchanged.
 
 `WP_BENCH_COMPLETED_JOBS=archive|delete` sets it in every cell of
 `rake bench:worker_profile` (fleet drain children included). Measured
@@ -801,7 +802,7 @@ same way. Medians, with the three-round range:
 | local / YJIT | 4 | 15 056 (9 519–15 819) → 13 127 (6 970–17 645) | 0.207 → 0.264 | 1.19–1.22 → 1.18–1.21 |
 | local / no JIT | 1 | 5 929 (5 811–5 999) → 6 620 (6 120–6 712) | 0.027 → 0.019 | 1.25 → 1.21–1.26 |
 | local / no JIT | 2 | 10 787 (10 126–10 904) → 10 586 (8 201–11 400) | 0.039 → 0.030 | 1.24 → 1.19–1.24 |
-| local / no JIT | 4 | 14 547 (14 195–15 551) → 16 281 (15 880–16 704) | 0.153 → 0.102 | 1.22–1.23 |
+| local / no JIT | 4 | 14 547 (14 195–15 551) → 16 281 (15 880–16 704) | 0.153 → 0.102 | 1.22–1.23 → 1.22–1.23 |
 
 With `completion_batching` (`WP_BENCH_COMPLETION_BATCHING=1`), batched archive →
 batched delete:

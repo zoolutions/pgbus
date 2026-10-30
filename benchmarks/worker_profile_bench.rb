@@ -237,7 +237,7 @@ puts "Pgbus worker profile (real Worker / Consumer, real PostgreSQL)"
 puts "  Ruby #{RUBY_VERSION}, #{THREADS} threads, #{JOBS} timed jobs, roles: #{ROLES.fetch(ROLE).join(", ")}"
 puts "  read_ahead: #{READ_AHEAD.nil? ? "not passed" : READ_AHEAD}"
 puts "  completion_batching: #{COMPLETION_BATCHING ? "on" : "off"}"
-puts "  completed_jobs: #{COMPLETED_JOBS || "default"}"
+puts "  completed_jobs (workers; consumers always archive): #{COMPLETED_JOBS || "default"}"
 puts "  proxied cells: #{proxy_url ? "on" : "off (set PGBUS_BENCH_PROXY_URL)"}"
 puts "  fleet processes: #{PROCESSES.join(", ")}" if ROLES.fetch(ROLE).include?("fleet")
 puts "=" * 70

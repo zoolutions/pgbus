@@ -415,10 +415,13 @@ class Views::Docs::Pages::PerformanceTuning < DocsUI::Page
         If nothing reads the completed jobs' archive, skip it. `completed_jobs = :delete`
         finishes a successful job with `pgmq.delete`, the DELETE alone, instead of the
         archive's DELETE + INSERT (`delete_batch` instead of `archive_batch` with
-        `completion_batching`). No `a_` rows, no archive index upkeep, nothing for the
-        compaction to trim. It is as reliable: either way the message is gone once the
-        statement commits. You lose the completed-job history in the archive; job stats
-        (`pgbus_job_stats`, the Insights page) still count every success.
+        `completion_batching`). Newly completed jobs add no `a_` rows and no archive
+        index entries; rows archived before the switch stay until `archive_retention`
+        compacts them. The message is gone once the statement commits either way. You
+        lose the completed-job history in the archive; job stats (`pgbus_job_stats`, the
+        Insights page) still count every success. One thing the archive did tell apart:
+        `Batch::Sweep` counts a stale batch job whose message is in neither the queue nor
+        the DLQ as completed, so a purged queue's batch jobs count as completed too.
       MD
       DocsUI::Code(<<~RUBY, filename: "config/initializers/pgbus.rb")
         Pgbus.configure do |config|

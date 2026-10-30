@@ -530,17 +530,70 @@ RSpec.describe Pgbus::Client::NativeStatements do
       allow(client).to receive(:sleep)
     end
 
-    it "retries a dropped connection once inside pgmq-ruby, as the function path does" do
+    it "retries a dropped connection once inside pgmq-ruby for a read, as the function path does" do
       calls = 0
-      allow(raw_conn).to receive(:exec_prepared).with(statements[:archive].name, [9]) do
+      allow(raw_conn).to receive(:exec_prepared).with(statements[:reads][1].name, anything) do
         calls += 1
         raise dropped if calls == 1
 
-        pg_result([{ "msg_id" => "9" }])
+        pg_result([read_row])
       end
 
-      expect(client.archive_message("default", 9)).to be(true)
+      expect(client.read_batch("default", qty: 1).map(&:msg_id)).to eq(["7"])
       expect(calls).to eq(2)
+    end
+
+    # A lost reply can follow a commit: re-run, the archive or delete finds
+    # the ids gone and would report them so, and the executor would skip its
+    # own job's signals as a duplicate (issue #607 review).
+    {
+      archive_message: [:archive, [9], [{ "msg_id" => "9" }]],
+      delete_message: [:delete, [9], [{ "msg_id" => "9" }]],
+      archive_batch: [:archive_batch, [[9, 10]], [{ "msg_id" => "9" }, { "msg_id" => "10" }]],
+      delete_batch: [:delete_batch, [[9, 10]], [{ "msg_id" => "9" }, { "msg_id" => "10" }]]
+    }.each do |method, (op, args, all_rows)|
+      it "raises ConnectionError when #{op}, re-run after a dropped connection, finds ids gone" do
+        calls = 0
+        allow(raw_conn).to receive(:exec_prepared).with(statements[op].name, anything) do
+          calls += 1
+          raise dropped if calls == 1 # committed, reply lost
+
+          pg_result(all_rows.take(all_rows.size - 1))
+        end
+
+        expect { client.public_send(method, "default", *args) }
+          .to raise_error(connection_error, /it may have committed: server closed the connection/)
+        expect(calls).to eq(2)
+      end
+
+      it "returns #{op}'s re-run when it finds every id: the first run never committed" do
+        calls = 0
+        allow(raw_conn).to receive(:exec_prepared).with(statements[op].name, anything) do
+          calls += 1
+          raise dropped if calls == 1 # the socket died idle in the pool
+
+          pg_result(all_rows)
+        end
+
+        expect { client.public_send(method, "default", *args) }.not_to raise_error
+        expect(calls).to eq(2)
+      end
+    end
+
+    it "lets the executor claim a delete whose reply was lost (ambiguous), not skip it as a duplicate" do
+      config.completed_jobs = :delete
+      calls = 0
+      allow(raw_conn).to receive(:exec_prepared).with(statements[:delete].name, [9]) do
+        calls += 1
+        raise dropped if calls == 1 # committed, reply lost
+
+        pg_result([]) # pgmq-ruby's re-run, then the executor's own retry, find it gone
+      end
+      executor = Pgbus::ActiveJob::Executor.new(client: client, config: config)
+      allow(Pgbus.logger).to receive(:warn)
+
+      expect(executor.send(:complete_from, "default", 9)).to eq(:ambiguous)
+      expect(calls).to eq(3)
     end
 
     it "raises PGMQ::Errors::ConnectionError, which with_stale_connection_retry retries" do
