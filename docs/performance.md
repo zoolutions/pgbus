@@ -834,8 +834,8 @@ What the numbers say:
   ("Batched completion" above). Each `delete_batch` replaces an `archive_batch`
   that inserts the same ~5 rows into `a_`.
 - **When to turn it on:** when nothing reads the archive of your job queues
-  (the dashboard does not; `pgbus_job_stats` and Insights count successes either
-  way). It never costs throughput in these runs beyond the run-to-run spread,
+  (the dashboard does not; with `stats_enabled`, `pgbus_job_stats` and Insights
+  count successes either way). It never costs throughput in these runs beyond the run-to-run spread,
   and it ends `a_` table growth for job queues. Keep `:archive` when you query
   `a_` tables for audit or debugging.
 
