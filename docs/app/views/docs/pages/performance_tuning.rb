@@ -40,7 +40,8 @@ class Views::Docs::Pages::PerformanceTuning < DocsUI::Page
         1 ms per round trip through toxiproxy, the shape of a database on another
         host. A real job's own work dilutes every number, so measure your own shape
         with `rake bench:fleet` and `rake bench:worker_profile` before and after.
-        Every key is in the [configuration reference](/docs/configuration-reference).
+        Every pgbus option it names is in the [configuration reference](/docs/configuration-reference);
+        `RUBY_YJIT_ENABLE`, `config.yjit` and `config.active_job.logger` belong to Ruby and Rails.
       MD
       md <<~'MD'
         1. **More processes.** `processes:` per capsule (default 1).

@@ -488,8 +488,10 @@ hides any difference either way, so it is left out.
 ### Native compilation, Rust, C extensions and Ractors
 
 In one line: none is a throughput lever. The worker runs the host's Rails app
-(nothing standalone to compile, no Ractor-safe ActiveRecord to move), and what
-bends is Postgres work per job locally and one read round trip under latency.
+(nothing standalone to compile, no Ractor-safe ActiveRecord to move). One local
+worker is CPU-bound under the GVL, but on CPU it shares with Rails and the driver;
+several local processes bend on Postgres work per job; under latency the ceiling
+is one read round trip.
 
 Evaluated 2026-10-05 for issue #484; recorded so the question stays answered.
 
