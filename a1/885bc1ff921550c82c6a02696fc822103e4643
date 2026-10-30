@@ -1,0 +1,23 @@
+lib/pgbus/client/native_statements.rb
+  s_6f6be46f1a03ed::t_c61c4e0fb2eb59 96-97
+spec/integration/completed_jobs_delete_spec.rb
+  s_6f6be46f1a03ed::t_c61c4e0fb2eb59 75-77
+lib/pgbus/process/consumer.rb
+  s_6f6be46f1a03ed::t_c61c4e0fb2eb59 375
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "a1885bc1ff921550c82c6a02696fc822103e4643",
+  "prompts": {},
+  "sessions": {
+    "s_6f6be46f1a03ed": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c60b8ef6-a2ee-4a53-a9de-07b83ac1c707",
+        "model": "unknown"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
