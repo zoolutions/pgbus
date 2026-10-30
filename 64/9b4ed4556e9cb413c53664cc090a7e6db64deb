@@ -1,0 +1,21 @@
+docs/app/views/docs/pages/performance_tuning.rb
+  s_6f6be46f1a03ed::t_a749030fc3e668 116
+  s_6f6be46f1a03ed::t_e0e0aabe60ee03 115,117-118
+  s_6f6be46f1a03ed::t_20a580196f3f85 43,108-111,120-122
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "649b4ed4556e9cb413c53664cc090a7e6db64deb",
+  "prompts": {},
+  "sessions": {
+    "s_6f6be46f1a03ed": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c60b8ef6-a2ee-4a53-a9de-07b83ac1c707",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
