@@ -494,8 +494,8 @@ RSpec.describe Pgbus::Client::NativeStatements do
         client.send_batch("default", [{ "a" => 1 }], delay: delay)
       end
 
-      expect(mock_pgmq).to have_received(:produce).twice
-      expect(mock_pgmq).to have_received(:produce_batch).twice
+      expect(mock_pgmq).to have_received(:produce).with(queue, '{"a":1}', headers: nil, delay: 1.5).twice
+      expect(mock_pgmq).to have_received(:produce_batch).with(queue, ['{"a":1}'], headers: nil, delay: 1.5).twice
       expect(raw_conn).not_to have_received(:exec_prepared)
     end
 
