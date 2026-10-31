@@ -33,6 +33,7 @@ module Pgbus
     def message_with_job_id?: (untyped queue_name, job_id: untyped, ?prefixed: untyped) -> bool?
     def metrics: (?untyped queue_name) -> untyped
     def move_to_dead_letter: (untyped queue_name, untyped message, ?headers: untyped) -> untyped
+    def native_ready?: (String full_name) -> bool
     def notify_enabled?: (untyped queue_name) -> bool
     def notify_stream: (untyped stream_name, untyped payload) -> untyped
     def oldest_claimable_ages: (?untyped queue_name) -> untyped

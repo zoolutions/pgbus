@@ -17,6 +17,7 @@ module Pgbus
     include NotifyLockRetry
     include EnsureStreamQueue
     include NotifyStream
+    include NativeStatements
 
     attr_reader :pgmq, :config, :connection_health
 
@@ -170,6 +171,9 @@ module Pgbus
 
       @queues_created = Concurrent::Map.new
       @stream_indexes_created = Concurrent::Map.new
+      # Per physical queue: its native statements, or false (issue #605).
+      @native_statements = Concurrent::Map.new
+      @native_unprepared = config.native_statements && ar_disables_prepared_statements?
       # Guards the one-time build of the publisher autoscale trigger (issue #323).
       # NOT @pgmq_mutex — that is nil on the dedicated path (the only path the
       # trigger exists on), so it wouldn't serialize concurrent first-publishers.
@@ -356,9 +360,7 @@ module Pgbus
       Instrumentation.instrument("pgbus.client.send_message", queue: target) do
         with_stale_connection_retry do
           ensure_queue(queue_name)
-          synchronized do
-            @pgmq.produce(target, serialize(payload), headers: headers && serialize(headers), delay: pgmq_delay(delay))
-          end
+          synchronized { exec_produce(target, serialize(payload), headers: headers && serialize(headers), delay: delay) }
         end
       end
     end
@@ -383,8 +385,7 @@ module Pgbus
           # shared-AR path @streams_pgmq aliases @pgmq and synchronized still
           # serializes on the mutex.
           synchronized do
-            streams_pool.produce(target, serialize(payload), headers: headers && serialize(headers),
-                                                             delay: pgmq_delay(delay))
+            streams_pool.produce(target, serialize(payload), headers: headers && serialize(headers), delay: delay)
           end
         end
       end
@@ -406,7 +407,7 @@ module Pgbus
       Instrumentation.instrument("pgbus.client.send_batch", queue: target, size: payloads.size) do
         with_stale_connection_retry do
           ensure_queue(queue_name)
-          synchronized { @pgmq.produce_batch(target, serialized, headers: serialized_headers, delay: pgmq_delay(delay)) }
+          synchronized { exec_produce_batch(target, serialized, headers: serialized_headers, delay: delay) }
         end
       end
     end
@@ -427,7 +428,7 @@ module Pgbus
       guarded_read do
         Instrumentation.instrument("pgbus.client.read_batch", queue: full_name, qty: qty) do
           with_stale_connection_retry do
-            synchronized { with_read_timeout { @pgmq.read_batch(full_name, vt: vt || config.visibility_timeout, qty: qty) } }
+            synchronized { with_read_timeout { exec_read_batch(full_name, vt: vt || config.visibility_timeout, qty: qty) } }
           end
         end
       end
@@ -553,7 +554,7 @@ module Pgbus
     def delete_message(queue_name, msg_id, prefixed: true)
       name = prefixed ? config.queue_name(queue_name) : queue_name
       with_stale_connection_retry do
-        synchronized { @pgmq.delete(name, msg_id) }
+        synchronized { exec_delete(name, msg_id) }
       end
     end
 
@@ -562,7 +563,7 @@ module Pgbus
     def archive_message(queue_name, msg_id, prefixed: true)
       name = prefixed ? config.queue_name(queue_name) : queue_name
       with_stale_connection_retry do
-        synchronized { @pgmq.archive(name, msg_id) }
+        synchronized { exec_archive(name, msg_id) }
       end
     end
 
@@ -570,7 +571,7 @@ module Pgbus
     def archive_batch(queue_name, msg_ids, prefixed: true)
       name = prefixed ? config.queue_name(queue_name) : queue_name
       with_stale_connection_retry do
-        synchronized { @pgmq.archive_batch(name, msg_ids) }
+        synchronized { exec_archive_batch(name, msg_ids) }
       end
     end
 
@@ -578,7 +579,7 @@ module Pgbus
     def delete_batch(queue_name, msg_ids, prefixed: true)
       name = prefixed ? config.queue_name(queue_name) : queue_name
       with_stale_connection_retry do
-        synchronized { @pgmq.delete_batch(name, msg_ids) }
+        synchronized { exec_delete_batch(name, msg_ids) }
       end
     end
 
@@ -1054,7 +1055,7 @@ module Pgbus
             routing_key,
             serialize(payload),
             headers: headers && serialize(headers),
-            delay: pgmq_delay(delay)
+            delay: delay
           )
         end
       end
@@ -2185,6 +2186,10 @@ module Pgbus
     end
 
     def stale_connection_error?(error)
+      # A completion whose re-run came back short may have committed: never
+      # re-run it again (NativeStatements#run_native).
+      return false if NativeStatements.completion_lost?(error)
+
       # Substring match against any stale-connection pattern. Deliberately a
       # single Regexp rather than `STALE_CONNECTION_PATTERNS.any? { |p| msg.include?(p) }`:
       # Style/ArrayIntersect misfires on that shape and "corrects" it to
@@ -2232,14 +2237,6 @@ module Pgbus
       else
         JSON.generate(data)
       end
-    end
-
-    # pgmq-ruby (0.8+) picks the SQL overload with `case delay when Integer /
-    # Numeric`, which an ActiveSupport::Duration matches neither of (it only
-    # overrides is_a?), so it fell to the Time branch and raised NoMethodError
-    # on `to_time` (issue #593). Hand it the seconds, fractional ones kept.
-    def pgmq_delay(delay)
-      defined?(ActiveSupport::Duration) && delay.is_a?(ActiveSupport::Duration) ? delay.value : delay
     end
 
     # Single-pass serialization of payloads and optional headers.

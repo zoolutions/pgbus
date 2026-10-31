@@ -233,6 +233,73 @@ RSpec.describe Pgbus::Configuration do
     end
   end
 
+  # Issue #606: batched completion. Opt-in, threads only.
+  describe "#completion_batching" do
+    it "is off by default, with 100 ids per statement" do
+      expect(config.completion_batching).to be(false)
+      expect(config.completion_batch_size).to eq(100)
+    end
+
+    it "accepts true with the default threads execution mode" do
+      config.completion_batching = true
+      expect { config.validate! }.not_to raise_error
+    end
+
+    it "rejects a value that is not true or false" do
+      config.completion_batching = "yes"
+      expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /completion_batching must be true or false/)
+    end
+
+    it "rejects a completion_batch_size that is not a positive Integer" do
+      [0, -1, 2.5, "10"].each do |value|
+        config.completion_batch_size = value
+        expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /completion_batch_size/)
+      end
+    end
+
+    it "rejects batching under a global async execution mode" do
+      config.completion_batching = true
+      config.execution_mode = :async
+      expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /completion_batching.*:async/)
+    end
+
+    it "rejects batching when a capsule runs async, from a String as YAML gives it" do
+      config.completion_batching = true
+      config.workers = [{ queues: %w[default], threads: 2 }, { queues: %w[io], threads: 20, execution_mode: "async" }]
+      expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /completion_batching.*:async/)
+    end
+
+    it "allows an async capsule while batching is off" do
+      config.workers = [{ queues: %w[io], threads: 20, execution_mode: :async }]
+      expect { config.validate! }.not_to raise_error
+    end
+  end
+
+  # Issue #607: how a successful job's message leaves its queue.
+  describe "#completed_jobs" do
+    it "archives by default" do
+      expect(config.completed_jobs).to eq(:archive)
+    end
+
+    it "accepts :delete, and the String a YAML file gives" do
+      config.completed_jobs = :delete
+      expect(config.completed_jobs).to eq(:delete)
+
+      config.completed_jobs = "archive"
+      expect(config.completed_jobs).to eq(:archive)
+
+      config.completed_jobs = "delete"
+      expect(config.completed_jobs).to eq(:delete)
+    end
+
+    it "rejects anything else" do
+      [:drop, "purge", nil, true].each do |value|
+        expect { config.completed_jobs = value }
+          .to raise_error(Pgbus::ConfigurationError, /completed_jobs must be :archive or :delete/)
+      end
+    end
+  end
+
   # Issue #486: read-ahead claims beyond the free threads. Off by default.
   describe "#read_ahead" do
     it "defaults to 0 (off)" do
@@ -1690,6 +1757,22 @@ RSpec.describe Pgbus::Configuration do
 
     it "rejects an invalid connection_guc_mode at assignment" do
       expect { config.connection_guc_mode = :bogus }.to raise_error(Pgbus::ConfigurationError, /connection_guc_mode/)
+    end
+
+    it "runs the native statements by default (issue #605)" do
+      expect(config.native_statements).to be(true)
+    end
+
+    it "accepts true and false for native_statements" do
+      config.native_statements = false
+      expect(config.native_statements).to be(false)
+      config.native_statements = true
+      expect(config.native_statements).to be(true)
+    end
+
+    it "rejects a non-boolean native_statements at assignment" do
+      expect { config.native_statements = "yes" }.to raise_error(Pgbus::ConfigurationError, /native_statements/)
+      expect { config.native_statements = nil }.to raise_error(Pgbus::ConfigurationError, /native_statements/)
     end
 
     it "rejects a non-boolean require_primary" do

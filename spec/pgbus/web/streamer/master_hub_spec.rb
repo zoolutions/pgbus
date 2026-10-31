@@ -71,6 +71,23 @@ RSpec.describe Pgbus::Web::Streamer::MasterHub do
     raise "no #{type} frame within #{timeout}s"
   end
 
+  # Collects the latest non-status frame of each type until every one of
+  # +types+ arrived. Status rebroadcasts keep the socket readable, so
+  # read_frame's own timeout never fires: the deadline bounds the loop.
+  def read_frames_of_types(sock, types, timeout: 2)
+    seen = {}
+    deadline = Time.now + timeout
+    until (types - seen.keys).empty?
+      raise "no #{types - seen.keys} frame within #{timeout}s" if Time.now > deadline
+
+      frame = read_frame(sock, timeout: timeout)
+      raise "hub closed the socket before #{types - seen.keys}" unless frame
+
+      seen[frame["t"]] = frame unless frame["t"] == "status"
+    end
+    seen
+  end
+
   def wake(queue, payload = nil)
     captured[:dispatch_queue] << Pgbus::Web::Streamer::Listener::WakeMessage.new(
       queue_name: queue, payload: payload
@@ -92,25 +109,26 @@ RSpec.describe Pgbus::Web::Streamer::MasterHub do
       # A wake that fires between LISTEN-active and sub-registration would be
       # lost. Pin the ordering: block ensure_listening, inject a wake while
       # blocked, then release — the worker must still receive that wake.
+      # +reached+ (not a fixed sleep, which lost the race on a loaded runner)
+      # says the sub got to ensure_listening, so it is registered.
+      reached = Queue.new
       gate = Queue.new
       allow(fake_listener).to receive(:ensure_listening) do |_q|
-        gate.pop
+        reached << true
+        gate.pop(timeout: 5)
         :done
       end
       hub.start
       worker = connect_worker
       send_frame(worker, { "t" => "sub", "q" => "pgbus_test_chat" })
-      sleep 0.1 # let the sub reach the blocked ensure_listening
+      raise "sub never reached ensure_listening" unless reached.pop(timeout: 2)
+
       wake("pgbus_test_chat", nil)
       gate << :go
 
       # The wake delivered while LISTEN was still in flight precedes the ack
-      # in the outbox FIFO — collect both (status rebroadcasts interleave).
-      seen = {}
-      until seen.key?("ack") && seen.key?("wake")
-        frame = read_frame(worker)
-        seen[frame["t"]] = frame unless frame["t"] == "status"
-      end
+      # in the outbox FIFO — collect both.
+      seen = read_frames_of_types(worker, %w[ack wake])
       expect(seen["ack"]).to include("q" => "pgbus_test_chat")
       expect(seen["wake"]).to include("q" => "pgbus_test_chat")
       worker.close

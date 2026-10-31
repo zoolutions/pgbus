@@ -66,6 +66,51 @@ conn.execute(<<~SQL) unless conn.table_exists?("pgbus_semaphores")
   CREATE UNIQUE INDEX idx_pgbus_semaphores_key ON pgbus_semaphores (key);
 SQL
 
+# Every install that ran the batch-executions migration has this table, and
+# its presence is what turns on the adapter's post-send execution backfill
+# (Batch.executions_migrated?) — without it the enqueue numbers skip a path
+# real installs take (issue #603). The orphan index and the FK match the
+# installed schema; the FK needs pgbus_batches, so it is added only when that
+# table exists (as spec/integration_helper.rb does). NOT VALID: a shared
+# database may already hold rows whose batch is gone, and the bench must not
+# abort on them; new rows are still checked. Skipped when any FK to
+# pgbus_batches is already there (the generator's is auto-named fk_rails_…).
+conn.execute(<<~SQL) unless conn.table_exists?("pgbus_batch_executions")
+  CREATE TABLE pgbus_batch_executions (
+    id BIGSERIAL PRIMARY KEY,
+    batch_id VARCHAR NOT NULL,
+    job_id VARCHAR NOT NULL,
+    msg_id BIGINT,
+    queue_name VARCHAR,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE UNIQUE INDEX idx_pgbus_batch_executions_job_id ON pgbus_batch_executions (job_id);
+  CREATE INDEX idx_pgbus_batch_executions_batch_id ON pgbus_batch_executions (batch_id);
+SQL
+
+conn.execute(<<~SQL)
+  CREATE INDEX IF NOT EXISTS idx_pgbus_batch_executions_orphans
+    ON pgbus_batch_executions (created_at) WHERE msg_id IS NULL;
+SQL
+
+if conn.table_exists?("pgbus_batches")
+  conn.execute(<<~SQL)
+    DO $$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE contype = 'f'
+          AND conrelid = 'pgbus_batch_executions'::regclass
+          AND confrelid = 'pgbus_batches'::regclass
+      ) THEN
+        ALTER TABLE pgbus_batch_executions
+          ADD CONSTRAINT fk_pgbus_batch_executions_batch
+          FOREIGN KEY (batch_id) REFERENCES pgbus_batches (batch_id) ON DELETE CASCADE NOT VALID;
+      END IF;
+    EXCEPTION WHEN duplicate_object THEN NULL; -- a concurrent bench start added it first
+    END $$;
+  SQL
+end
+
 conn.execute(<<~SQL) unless conn.table_exists?("pgbus_processes")
   CREATE TABLE pgbus_processes (
     id BIGSERIAL PRIMARY KEY,

@@ -22,11 +22,14 @@ RSpec.describe Pgbus::ActiveJob::Executor do
   # Own config + an info-level logger: other specs leave the global logger at
   # debug, which would build every debug line and measure the wrong thing.
   let(:config) { Pgbus::Configuration.new.tap { |c| c.stats_enabled = true } }
-  let(:executor) { described_class.new(client: client, config: config, stat_buffer: []) }
-  # msg_id / read_ct are Strings, as pgmq-ruby returns them from PG.
+  let(:stat_buffer) { [] }
+  let(:executor) { described_class.new(client: client, config: config, stat_buffer: stat_buffer) }
+  # msg_id / read_ct / enqueued_at are Strings, as pgmq-ruby returns them from
+  # PG, so the gate covers the enqueue-latency read every job does (#604).
   let(:message) do
     Struct.new(:msg_id, :message, :read_ct, :headers, :enqueued_at)
-          .new("1", JSON.generate(job_class.new(42).serialize), "1", nil, nil)
+          .new("1", JSON.generate(job_class.new(42).serialize), "1", nil,
+               Time.now.utc.strftime("%Y-%m-%d %H:%M:%S.%6N+00"))
   end
 
   around do |example|
@@ -52,11 +55,15 @@ RSpec.describe Pgbus::ActiveJob::Executor do
 
   # Rails hidden: with the dummy app loaded the executor wraps perform in
   # Rails.application.executor, whose allocations depend on the app, not pgbus.
+  # Issue #604: 10 before, 9 since the visibility heartbeat builds its entry
+  # key once. The latency read costs one object either way (the Time); what
+  # keeps Time.parse off this path is executor_spec.rb, not this gate.
   it "allocates fewer than 10 pgbus-owned objects per successful job" do
     hide_const("Rails")
     # Measure the success path: a regression into the failure path must fail
-    # here, not be measured silently.
+    # here, not be measured silently. Likewise the latency read.
     expect(executor.execute(message, "default")).to eq(:success)
+    expect(stat_buffer.last[:enqueue_latency_ms]).to be_an(Integer)
     4.times { executor.execute(message, "default") }
 
     per_job = pgbus_allocations { 10.times { executor.execute(message, "default") } } / 10.0

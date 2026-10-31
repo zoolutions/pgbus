@@ -117,6 +117,11 @@ RSpec.describe "Batch + limits_concurrency :block (integration)", :integration d
 
     # First child done, second promoted and now visible — but not yet run.
     expect(parked_count).to eq(0)
+    # The promotion backfilled the parked child's execution row with its new
+    # message (issue #603: the backfill gate keys on the parked payload's tag).
+    promoted = Pgbus::BatchExecution.where(batch_id: batch.batch_id).sole
+    expect(promoted.msg_id).not_to be_nil
+    expect(promoted.queue_name).to eq(client.target_queue(work_queue, nil))
     expect(Pgbus::BatchEntry.find_by(batch_id: batch.batch_id).status).to eq("processing")
     expect(client.read_message(callback_queue, vt: 0)).to be_nil
   end

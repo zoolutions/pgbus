@@ -24,6 +24,34 @@ module Pgbus
     # one. 0 (default) is off. Overridable per capsule / event_consumers entry
     # (`read_ahead:`); prefetch_limit still caps everything claimed.
     attr_reader :read_ahead
+    # completion_batching (issue #606, opt-in, default false): a worker archives
+    # the jobs that finish close together with one archive_batch per flush
+    # instead of one pgmq.archive per job (Process::Completer). No timer: a lone
+    # job is archived at once, and whatever finishes during a flush goes in the
+    # next. completion_batch_size (default 100) caps the ids per statement.
+    # Threads only: validate! rejects it next to execution_mode :async, global
+    # or per capsule. The crash window widens from one job to one flush: on a
+    # hard crash (SIGKILL, OOM) the jobs waiting in the current flush re-run
+    # after visibility_timeout, and a flush that committed just before the
+    # crash leaves its jobs completed but unsignalled (uniqueness lock, batch,
+    # concurrency slot) until the reapers and sweeps heal them. Worker shutdown
+    # waits for a flush in flight at most immediate_shutdown_grace (QUIT) or
+    # the rest of the 5 s pool residual (TERM); a flush wedged past that is
+    # abandoned, and its jobs fail (Completer::Stopped) and re-run after
+    # visibility_timeout, or stay unsignalled if it had committed.
+    attr_accessor :completion_batching, :completion_batch_size
+    # completed_jobs (issue #607): how a successful job's message leaves its
+    # queue. :archive (default) is pgmq.archive, DELETE + INSERT into the
+    # queue's a_ table, which archive_retention compacts. :delete is
+    # pgmq.delete, the DELETE alone: no a_ rows, no a_ index upkeep, nothing for
+    # the compaction to trim, and no completed-job history in the archive.
+    # Equally reliable: either way the message is gone once the statement
+    # commits. Through the completer (completion_batching) it is delete_batch.
+    # ActiveJob only: EventBus handler queues keep archiving (event replay
+    # reads their archive), and failures and dead letters are unchanged.
+    # Batch::Sweep then cannot tell a deleted batch job from one whose message
+    # vanished another way (a purged queue): both count as completed, silently.
+    attr_reader :completed_jobs
     # visibility_heartbeat / visibility_heartbeat_interval: while a job runs,
     # its message's visibility timeout is re-armed every interval seconds
     # (default: a third of visibility_timeout), so a job that outlives the
@@ -214,6 +242,22 @@ module Pgbus
     # See issue #332.
     attr_reader :connection_guc_mode
 
+    # Run Client's read_batch, archive, delete, send and their batch forms as
+    # pgbus-owned static SQL in named prepared statements on the pooled
+    # connection, instead of pgmq's plpgsql functions, whose dynamic EXECUTE
+    # Postgres plans again on every call (issue #605). Default true. A queue
+    # whose table lacks a column the statements use (a pgmq older than the
+    # `headers` column) stays on the pgmq functions by itself.
+    #
+    # Behind a transaction-mode PgBouncer, prepared statements need PgBouncer
+    # >= 1.21 with `max_prepared_statements` set. Without it, a process that
+    # sees its statements disappear switches to sending the same SQL
+    # unprepared and logs a warning once, and connections built from a
+    # database.yml with `prepared_statements: false` send it unprepared from
+    # the start. false uses the pgmq functions everywhere: the full escape
+    # hatch.
+    attr_reader :native_statements
+
     # Zombie message detection — logs a warning when a message is redelivered
     # (read_ct > 1) without any prior failure recorded in pgbus_failed_events.
     attr_accessor :zombie_detection
@@ -320,6 +364,9 @@ module Pgbus
 
       @prefetch_limit = nil
       @read_ahead = 0
+      @completion_batching = false
+      @completion_batch_size = 100
+      @completed_jobs = :archive
       @execution_mode = :threads
 
       @max_jobs_per_worker = nil
@@ -404,6 +451,7 @@ module Pgbus
       @connects_to = nil
       @require_primary = false
       @connection_guc_mode = :options
+      @native_statements = true
 
       @mcp_write_tools = false
 
@@ -797,6 +845,23 @@ module Pgbus
       @connection_guc_mode = mode
     end
 
+    VALID_COMPLETED_JOBS = %i[archive delete].freeze
+
+    def completed_jobs=(value)
+      mode = value.to_sym if value.is_a?(String) || value.is_a?(Symbol)
+      unless VALID_COMPLETED_JOBS.include?(mode)
+        raise Pgbus::ConfigurationError, "completed_jobs must be :archive or :delete (got #{value.inspect})"
+      end
+
+      @completed_jobs = mode
+    end
+
+    def native_statements=(value)
+      raise Pgbus::ConfigurationError, "native_statements must be true or false" unless [true, false].include?(value)
+
+      @native_statements = value
+    end
+
     VALID_PGMQ_SCHEMA_MODES = %i[auto extension embedded].freeze
 
     def pgmq_schema_mode=(mode)
@@ -986,6 +1051,7 @@ module Pgbus
       end
 
       validate_read_ahead!
+      validate_completion_batching!
       validate_capsule_processes!
 
       if priority_levels && !(priority_levels.is_a?(Integer) && priority_levels >= 1 && priority_levels <= 10)
@@ -1755,6 +1821,27 @@ module Pgbus
     end
 
     private
+
+    # The completer's job threads block on their flush, which would stall an
+    # Async reactor, so batching is threads-only (issue #606). Every capsule
+    # resolves its mode through execution_mode_for, as the supervisor does.
+    def validate_completion_batching!
+      unless [true, false].include?(completion_batching)
+        raise Pgbus::ConfigurationError, "completion_batching must be true or false (got #{completion_batching.inspect})"
+      end
+      unless completion_batch_size.is_a?(Integer) && completion_batch_size.positive?
+        raise Pgbus::ConfigurationError,
+              "completion_batch_size must be a positive Integer (got #{completion_batch_size.inspect})"
+      end
+      return unless completion_batching
+
+      modes = [ExecutionPools.normalize_mode(execution_mode)] + Array(workers).map { |w| execution_mode_for(w) }
+      return unless modes.include?(:async)
+
+      raise Pgbus::ConfigurationError,
+            "completion_batching supports execution_mode :threads only; turn it off for a global or capsule " \
+            "execution_mode :async"
+    end
 
     # Shared resolver for a dedicated connection (streamer LISTEN / worker
     # NotifyListener) that can override the base `connection_options` to bypass a

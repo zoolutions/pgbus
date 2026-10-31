@@ -31,6 +31,21 @@ module RealPgmqErrors
     load(Gem.find_files("pgmq/metrics.rb").first) unless defined?(PGMQ::Metrics)
     PGMQ::Metrics
   end
+
+  # The genuine PGMQ::Connection, loaded the same way. Since pgmq-ruby 0.8 its
+  # body builds a Contracts::Connection, which on a bare ::PGMQ does not exist;
+  # the contract only checks constructor arguments, so a stand-in does here.
+  def real_pgmq_connection_class
+    real_pgmq_connection_error
+    return PGMQ::Connection if defined?(PGMQ::Connection)
+
+    unless defined?(PGMQ::Contracts::Connection)
+      contracts = defined?(PGMQ::Contracts) ? PGMQ::Contracts : PGMQ.const_set(:Contracts, Module.new)
+      contracts.const_set(:Connection, Class.new { def validate!(*) = true })
+    end
+    load(Gem.find_files("pgmq/connection.rb").first)
+    PGMQ::Connection
+  end
 end
 
 RSpec.configure do |config|

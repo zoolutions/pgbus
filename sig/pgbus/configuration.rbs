@@ -30,6 +30,12 @@ module Pgbus
     def capsule_named: (untyped name) -> untyped
     def circuit_breaker_enabled: () -> bool
     def circuit_breaker_enabled=: (untyped) -> untyped
+    def completed_jobs: () -> (:archive | :delete)
+    def completed_jobs=: (untyped value) -> (:archive | :delete)
+    def completion_batch_size: () -> Integer
+    def completion_batch_size=: (untyped) -> untyped
+    def completion_batching: () -> bool
+    def completion_batching=: (untyped) -> untyped
     def connection_guc_mode: () -> Symbol
     def connection_guc_mode=: (untyped mode) -> untyped
     def connection_options: () -> untyped
@@ -114,6 +120,8 @@ module Pgbus
     def metrics_backend=: (untyped) -> untyped
     def metrics_enabled: () -> bool
     def metrics_enabled=: (untyped) -> untyped
+    def native_statements: () -> bool
+    def native_statements=: (bool value) -> bool
     def notify_presence_change: (untyped stream_name, untyped change) -> untyped
     def outbox_batch_size: () -> Integer
     def outbox_batch_size=: (untyped) -> untyped

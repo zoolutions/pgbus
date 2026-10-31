@@ -141,6 +141,41 @@ RSpec.describe WorkerProfileHarness do
 
       expect(cell.to_h).to include("role" => "consumer", "location" => "local")
     end
+
+    # Issue #602: a fleet row carries its process count and the Postgres cost.
+    it "round-trips the fleet fields through to_h, nil when not set" do
+      cell = described_class::Cell.new(role: "fleet", location: "local", jit: "none", jobs: 10, processes: 2,
+                                       pg_ms_per_job: 0.1, pg_statements_per_job: 1.5, pg_top: [])
+
+      expect(cell.to_h).to include("processes" => 2, "pg_ms_per_job" => 0.1, "pg_statements_per_job" => 1.5,
+                                   "pg_top" => [], "skip_reason" => nil)
+    end
+  end
+
+  describe ".completion_batching?" do
+    it "is on for 1 and off when unset or 0" do
+      expect(described_class.completion_batching?("WP_BENCH_COMPLETION_BATCHING" => "1")).to be(true)
+      expect(described_class.completion_batching?("WP_BENCH_COMPLETION_BATCHING" => "0")).to be(false)
+      expect(described_class.completion_batching?({})).to be(false)
+    end
+
+    it "rejects anything else" do
+      expect { described_class.completion_batching?("WP_BENCH_COMPLETION_BATCHING" => "yes") }
+        .to raise_error(ArgumentError, /WP_BENCH_COMPLETION_BATCHING must be 0 or 1/)
+    end
+  end
+
+  describe ".completed_jobs" do
+    it "is nil (not set) when unset, else the Symbol" do
+      expect(described_class.completed_jobs({})).to be_nil
+      expect(described_class.completed_jobs("WP_BENCH_COMPLETED_JOBS" => "delete")).to eq(:delete)
+      expect(described_class.completed_jobs("WP_BENCH_COMPLETED_JOBS" => "archive")).to eq(:archive)
+    end
+
+    it "rejects anything else" do
+      expect { described_class.completed_jobs("WP_BENCH_COMPLETED_JOBS" => "drop") }
+        .to raise_error(ArgumentError, /WP_BENCH_COMPLETED_JOBS must be archive or delete/)
+    end
   end
 
   describe ".jit_label" do

@@ -94,11 +94,12 @@ RSpec.describe "Queue operations (integration)", :integration do
       expect(messages || []).to be_empty
     end
 
-    # pgmq-ruby 0.8.0 picks the SQL overload with `case delay when Integer/Numeric`,
-    # which an ActiveSupport::Duration matches neither of (issue #593).
-    def delay_seconds(msg_id)
+    # Each producer path against real PGMQ (issue #593): pgmq-ruby 0.8.0 raised
+    # on an ActiveSupport::Duration (fixed in 0.8.1), and the native send binds
+    # the delay as an integer, so a fractional one must not reach it.
+    def delay_seconds(msg_id, table: "q_pgbus_int_delay_test")
       ActiveRecord::Base.connection.select_value(
-        "SELECT EXTRACT(EPOCH FROM vt - enqueued_at) FROM pgmq.q_pgbus_int_delay_test WHERE msg_id = #{msg_id.to_i}"
+        "SELECT EXTRACT(EPOCH FROM vt - enqueued_at) FROM pgmq.#{table} WHERE msg_id = #{msg_id.to_i}"
       ).to_f
     end
 
@@ -118,6 +119,32 @@ RSpec.describe "Queue operations (integration)", :integration do
       msg_id = client.send_message("delay_test", { "delayed" => true }, delay: 1.5.seconds)
 
       expect(delay_seconds(msg_id)).to be_within(0.25).of(1.5)
+    end
+
+    it "keeps a plain Float delay fractional" do
+      msg_id = client.send_message("delay_test", { "delayed" => true }, delay: 1.5)
+
+      expect(delay_seconds(msg_id)).to be_within(0.25).of(1.5)
+    end
+
+    it "keeps a fractional delay fractional on send_batch" do
+      msg_ids = client.send_batch("delay_test", [{ "a" => 1 }, { "b" => 2 }], delay: 1.5.seconds)
+
+      expect(msg_ids.map { |id| delay_seconds(id) }).to all(be_within(0.25).of(1.5))
+    end
+
+    it "takes an ActiveSupport::Duration delay on send_stream_message" do
+      msg_id = client.send_stream_message("delay_stream", { "s" => 1 }, delay: 5.minutes)
+
+      expect(delay_seconds(msg_id, table: "q_pgbus_int_delay_stream")).to be_within(1).of(300)
+    end
+
+    it "takes an ActiveSupport::Duration delay on publish_to_topic" do
+      client.bind_topic("delay_test.#", "delay_test")
+      client.publish_to_topic("delay_test.created", { "topic" => true }, delay: 5.minutes)
+      msg_id = ActiveRecord::Base.connection.select_value("SELECT max(msg_id) FROM pgmq.q_pgbus_int_delay_test")
+
+      expect(delay_seconds(msg_id)).to be_within(1).of(300)
     end
 
     # produce_topic sends a fractional delay through produce_batch_topic.

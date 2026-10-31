@@ -1,16 +1,21 @@
 # frozen_string_literal: true
 
-require "time"
-
 module Pgbus
   module ActiveJob
     class Executor
       attr_reader :client, :config
 
-      def initialize(client: Pgbus.client, config: Pgbus.configuration, stat_buffer: nil)
+      # completer: the worker's Process::Completer when config.completion_batching
+      # is on (issue #606): complete_from goes through it instead of one
+      # archive_message per job. config.completed_jobs (issue #607) is read
+      # once here: :delete finishes a successful job with delete_message.
+      def initialize(client: Pgbus.client, config: Pgbus.configuration, stat_buffer: nil, completer: nil)
         @client = client
         @config = config
         @stat_buffer = stat_buffer
+        @completer = completer
+        @delete_completed = config.completed_jobs == :delete
+        @completed_word = @delete_completed ? "deleted" : "archived"
       end
 
       # Exceptions we never want to swallow — let the process die/signal propagate.
@@ -117,14 +122,15 @@ module Pgbus
           # heartbeat lapsed and it was redelivered): that worker owns the
           # completion signals, and signalling again here would release the
           # concurrency slot a second time (rails/solid_queue#761).
-          if archive_from(queue_name, msg_id, source_queue: source_queue) == :already_archived
+          if complete_from(queue_name, msg_id, source_queue: source_queue) == :already_archived
             Pgbus.logger.warn do
-              "[Pgbus::Executor] already archived elsewhere, skipping signals #{log_tag(message, queue_name)} job_class=#{job_class}"
+              "[Pgbus::Executor] already #{@completed_word} elsewhere, skipping signals " \
+                "#{log_tag(message, queue_name)} job_class=#{job_class}"
             end
             release_duplicate_execution_lock(uniqueness_key, uniqueness_strategy, queue_name, msg_id)
             return :duplicate
           end
-          Pgbus.logger.debug { "[Pgbus::Executor] archived #{log_tag(message, queue_name)} job_class=#{job_class}" }
+          Pgbus.logger.debug { "[Pgbus::Executor] #{@completed_word} #{log_tag(message, queue_name)} job_class=#{job_class}" }
           job_succeeded = true
           release_uniqueness_lock(uniqueness_key, queue_name, message)
           # Only FailedEventRecorder.record! writes this table, and only after a
@@ -147,7 +153,7 @@ module Pgbus
       rescue Exception => e # rubocop:disable Lint/RescueException
         # Widened from StandardError to catch Async::Stop / Async::Cancel
         # (both inherit from Exception, not StandardError) under execution_mode: :async.
-        # Before this, a fiber interruption between perform_now and archive_from
+        # Before this, a fiber interruption between perform_now and complete_from
         # silently lost control flow — no failed event row, no job_failed
         # notification, uniqueness lock held until VT expired. See issue #126.
         handle_failure(message, queue_name, e, payload: payload, source_queue: source_queue)
@@ -196,7 +202,8 @@ module Pgbus
       # The table the message was read from: the _pN sub-queue under priority
       # routing, else the logical queue's own. Each table numbers its messages
       # from its own sequence, so a failed-event row is keyed on it (issue
-      # #583). Built only on the failure and redelivery paths.
+      # #583). Built only on the failure and redelivery paths, and for the
+      # completer (issue #606), which groups by physical queue.
       def physical_queue(queue_name, source_queue)
         source_queue || config.queue_name(queue_name)
       end
@@ -282,33 +289,43 @@ module Pgbus
         Pgbus.logger.debug { "[Pgbus] Stat recording failed: #{e.message}" }
       end
 
+      # pgmq-ruby sets no result type map, so enqueued_at is the TIMESTAMPTZ
+      # text PostgreSQL sends ("2026-10-29 10:11:12.123456+00", any offset).
+      # Time.new reads it in C at ~0.3 µs; Time.parse took ~7 µs a job and
+      # pg's TimestampWithTimeZone decoder ~3 µs (issue #604). Unreadable text
+      # raises ArgumentError: the stat is recorded without latency.
       def compute_enqueue_latency(message)
         return unless message
 
         enqueued_at = message.enqueued_at
         return unless enqueued_at
 
-        # Fast path: numeric epoch (float seconds) avoids Time.parse entirely.
-        # PGMQ returns enqueued_at as a Time or string depending on the driver.
-        case enqueued_at
-        when Numeric
-          [((Time.now.to_f - enqueued_at) * 1000).round, 0].max
-        when Time
-          [((Time.now.utc - enqueued_at.utc) * 1000).round, 0].max
-        else
-          parse_enqueue_latency_from_string(enqueued_at.to_s)
-        end
+        epoch = case enqueued_at
+                when Numeric then enqueued_at
+                when Time then enqueued_at.to_f
+                else enqueued_at_epoch(enqueued_at.to_s)
+                end
+        return unless epoch
+
+        [((::Process.clock_gettime(::Process::CLOCK_REALTIME) - epoch) * 1000).round, 0].max
       rescue ArgumentError, TypeError
         nil
       end
 
-      def parse_enqueue_latency_from_string(str)
-        # PGMQ enqueued_at is TIMESTAMPTZ (always UTC internally).
-        # If the string lacks an explicit offset, assume UTC to avoid
-        # misinterpretation when the system timezone is non-UTC.
-        str = "#{str} UTC" unless str.match?(/[+-]\d{2}:?\d{2}\s*$|Z\s*$/i)
-        enqueued_at = Time.parse(str)
-        [((Time.now.utc - enqueued_at) * 1000).round, 0].max
+      # A trailing "+00", "-03", "+05:30", "+0530" or "Z".
+      UTC_OFFSET_SUFFIX = /(?:[+-]\d\d(?::?\d\d)?|Z)\z/
+      private_constant :UTC_OFFSET_SUFFIX
+
+      # Time.new reads a string without an offset in the host's zone, but
+      # TIMESTAMPTZ is UTC inside, so such a string gets a "Z". Checked here
+      # rather than with `in: "UTC"`: that keyword costs a Hash per job.
+      # Time.new also takes a bare year ("2026") as a time; a string without a
+      # time of day is not a timestamp, so it has no latency.
+      def enqueued_at_epoch(str)
+        return unless str.include?(":")
+
+        str = "#{str}Z" unless str.match?(UTC_OFFSET_SUFFIX)
+        Time.new(str).to_f
       end
 
       def handle_failure(message, queue_name, error, payload: nil, source_queue: nil)
@@ -412,7 +429,11 @@ module Pgbus
       # that succeeded but failed to archive redelivers after VT expiry and
       # runs twice. If the retry also fails, fall through to the normal
       # failure path (recorded failure + VT-based redelivery).
-      # Returns :archived, :already_archived, or :ambiguous.
+      # Returns :archived, :already_archived, or :ambiguous. Under
+      # config.completed_jobs = :delete it deletes the message instead
+      # (delete_message, or the completer's delete_batch): pgmq.delete is as
+      # idempotent and returns false the same way, so the symbols keep their
+      # names and "archived" means "completed".
       #
       # A `false` reported after our OWN retry is ambiguous, not a duplicate:
       # the first archive may well have committed with only its reply lost to
@@ -421,10 +442,18 @@ module Pgbus
       # batch and uniqueness state on every such blip, whereas a genuine
       # duplicate would additionally require another worker to have taken and
       # finished the same message inside the retry window.
-      def archive_from(queue_name, msg_id, source_queue: nil)
+      def complete_from(queue_name, msg_id, source_queue: nil)
         attempts = 0
         begin
-          archived = if source_queue
+          archived = if @completer
+                       @completer.complete(physical_queue(queue_name, source_queue), msg_id) == :archived
+                     # Spelled out, no `**` forward: on Ruby 3.3 that
+                     # allocates per job even without keywords (#484 budget).
+                     elsif @delete_completed && source_queue
+                       client.delete_message(source_queue, msg_id, prefixed: false)
+                     elsif @delete_completed
+                       client.delete_message(queue_name, msg_id)
+                     elsif source_queue
                        client.archive_message(source_queue, msg_id, prefixed: false)
                      else
                        client.archive_message(queue_name, msg_id)
@@ -437,7 +466,7 @@ module Pgbus
           raise unless attempts == 1 && connection_error?(e)
 
           Pgbus.logger.warn do
-            "[Pgbus::Executor] Archive failed on connection error, retrying once: #{e.message}"
+            "[Pgbus::Executor] #{@delete_completed ? "Delete" : "Archive"} failed on connection error, retrying once: #{e.message}"
           end
           retry
         end

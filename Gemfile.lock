@@ -1,11 +1,11 @@
 PATH
   remote: .
   specs:
-    pgbus (0.21.4)
+    pgbus (0.22.0)
       concurrent-ruby (~> 1.2)
       fugit (~> 1.11, >= 1.11.1)
       globalid (~> 1.0)
-      pgmq-ruby (~> 0.8.0)
+      pgmq-ruby (~> 0.8.1)
       railties (>= 7.1, < 9.0)
       zeitwerk (~> 2.6)
 
@@ -238,7 +238,7 @@ GEM
     pg (1.7.0-x86_64-darwin)
     pg (1.7.0-x86_64-linux)
     pg (1.7.0-x86_64-linux-musl)
-    pgmq-ruby (0.8.0)
+    pgmq-ruby (0.8.1)
       connection_pool (>= 2.4, < 4)
       pg (~> 1.5)
       zeitwerk (~> 2.6)
@@ -534,8 +534,8 @@ CHECKSUMS
   pg (1.7.0-x86_64-darwin) sha256=7b726ba6eab8b143fb803d3b4173b0a3e4b0b032025032212f90d436785022db
   pg (1.7.0-x86_64-linux) sha256=d0a24f448b3c874c8b2658d4efbbbefce7315c228ede84f6f6f42089d1d704b6
   pg (1.7.0-x86_64-linux-musl) sha256=0c9bc93b6e0aca2a5b07daef00b7ec4f9882bfe21ef3872b4371f8ecffe1f1e1
-  pgbus (0.21.4)
-  pgmq-ruby (0.8.0) sha256=73833daff4bedb05ede464f5cbc0c60405ed781dc3ee0c6e4022655e50d1f6cb
+  pgbus (0.22.0)
+  pgmq-ruby (0.8.1) sha256=3a764e4985c13ae37acc5003b77d9dd33102ce99664b07c6e8ee07ab6ade08bd
   phlex (2.4.1) sha256=e596717fbfe38b5271840266758779ebe75092e02629f0c170287e6290a70b12
   phlex-rails (2.4.0) sha256=2bcddbd488681acb25753bab1887d3ac150e644244ff8ba307f2171a4d0195f5
   playwright-ruby-client (1.64.0) sha256=a30df6435a26a09dccb664260e1aaed49de2c2d97a67c7ee7b03ab84755af755

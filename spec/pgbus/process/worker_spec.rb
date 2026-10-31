@@ -334,6 +334,89 @@ RSpec.describe Pgbus::Process::Worker do
     end
   end
 
+  # Issue #606: completion_batching gives the worker one Completer, handed to
+  # its executor and stopped with the worker.
+  describe "with completion_batching" do
+    let(:completer) { instance_double(Pgbus::Process::Completer, stop: nil) }
+    let(:batching_config) do
+      Pgbus::Configuration.new.tap do |c|
+        c.completion_batching = true
+        c.completion_batch_size = 25
+      end
+    end
+    let(:worker) { described_class.new(queues: %w[default], threads: 5, config: batching_config) }
+
+    before do
+      allow(Pgbus::Process::Completer).to receive(:new).and_return(completer)
+      allow(Pgbus::VisibilityHeartbeat).to receive(:stop)
+    end
+
+    after { Pgbus.stopping = false }
+
+    it "builds a completer on the worker's client with the configured batch size and hands it to the executor" do
+      worker
+
+      expect(Pgbus::Process::Completer).to have_received(:new).with(client: mock_client, batch_size: 25, completed_jobs: :archive)
+      expect(Pgbus::ActiveJob::Executor).to have_received(:new)
+        .with(config: batching_config, stat_buffer: worker.stat_buffer, completer: completer)
+    end
+
+    # Issue #607: one op per worker, from config.completed_jobs.
+    it "builds a deleting completer when completed_jobs is :delete" do
+      batching_config.completed_jobs = :delete
+
+      worker
+
+      expect(Pgbus::Process::Completer).to have_received(:new).with(client: mock_client, batch_size: 25, completed_jobs: :delete)
+    end
+
+    it "builds none, and passes the executor none, when batching is off" do
+      described_class.new(queues: %w[default], threads: 5)
+
+      expect(Pgbus::Process::Completer).not_to have_received(:new)
+      expect(Pgbus::ActiveJob::Executor).to have_received(:new).with(config: Pgbus.configuration, stat_buffer: anything,
+                                                                     completer: nil)
+    end
+
+    it "refuses the async execution mode" do
+      expect do
+        described_class.new(queues: %w[default], threads: 5, config: batching_config, execution_mode: :async)
+      end.to raise_error(Pgbus::ConfigurationError, /completion_batching.*:async/)
+    end
+
+    # Bounded like the pool wait before it (#386): a flush wedged on a hung
+    # Postgres must not hold the worker past the supervisor's deadline.
+    it "stops the completer on shutdown, after the pool terminated, within the pool's residual budget" do
+      worker.send(:shutdown)
+
+      expect(pool).to have_received(:wait_for_termination).ordered
+      expect(completer).to have_received(:stop)
+        .with(timeout: a_value_between(0, described_class::POOL_TERMINATION_WAIT)).ordered
+    end
+
+    it "gives the completer only what the pool wait left of the residual budget" do
+      now = 100.0
+      allow(worker).to receive(:monotonic_now) { now }
+      allow(pool).to receive(:wait_for_termination) { now += 4.0 }
+
+      worker.send(:shutdown)
+
+      expect(completer).to have_received(:stop).with(timeout: described_class::POOL_TERMINATION_WAIT - 4.0)
+    end
+
+    # A job thread killed while it waits on a flush would run its ensure with
+    # job_succeeded false while the flush may still commit: archived, never
+    # signalled. Stopping the completer first resolves every waiter.
+    it "stops the completer before the pool is terminated on immediate_shutdown" do
+      allow(Pgbus::ExecutionPools).to receive(:terminate)
+
+      worker.immediate_shutdown
+
+      expect(completer).to have_received(:stop).with(timeout: batching_config.immediate_shutdown_grace).ordered
+      expect(Pgbus::ExecutionPools).to have_received(:terminate).ordered
+    end
+  end
+
   # The drain loop must wait for ALL in-flight jobs, not exit as soon as one
   # pool slot frees up. pool.idle? is true with 4 of 5 slots busy — using it
   # as the drain condition abandoned in-flight jobs to the 30s shutdown
