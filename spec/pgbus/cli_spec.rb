@@ -339,12 +339,11 @@ RSpec.describe Pgbus::CLI do
 
   describe ".list_queues" do
     it "prints formatted table with queue metrics including the claimable age" do
-      metric = double("metric",
-                      queue_name: "pgbus_test_default",
-                      queue_length: 10,
-                      queue_visible_length: 8,
-                      oldest_msg_age_sec: 42,
-                      total_messages: 100)
+      # A real PGMQ::Metrics, not a double: before pgmq-ruby 0.8.0 it had no
+      # queue_visible_length and `pgbus queues` raised NoMethodError (issue #593).
+      metric = real_pgmq_metrics.new({ "queue_name" => "pgbus_test_default", "queue_length" => "10",
+                                       "queue_visible_length" => "8", "oldest_msg_age_sec" => "42",
+                                       "total_messages" => "100" })
       allow(mock_client).to receive_messages(metrics: [metric],
                                              oldest_claimable_ages: { "pgbus_test_default" => 12 })
 
@@ -357,12 +356,9 @@ RSpec.describe Pgbus::CLI do
     end
 
     it "prints a dash for a queue holding only vt-parked messages" do
-      metric = double("metric",
-                      queue_name: "pgbus_test_webhooks",
-                      queue_length: 1,
-                      queue_visible_length: 0,
-                      oldest_msg_age_sec: 17_045,
-                      total_messages: 500)
+      metric = real_pgmq_metrics.new({ "queue_name" => "pgbus_test_webhooks", "queue_length" => "1",
+                                       "queue_visible_length" => "0", "oldest_msg_age_sec" => "17045",
+                                       "total_messages" => "500" })
       allow(mock_client).to receive_messages(metrics: [metric],
                                              oldest_claimable_ages: { "pgbus_test_webhooks" => nil })
 

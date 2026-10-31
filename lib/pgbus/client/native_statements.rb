@@ -299,8 +299,11 @@ module Pgbus
       # call otherwise. Return values match pgmq-ruby's: Messages with String
       # fields, String ids, true/false for one archive/delete.
 
+      # The send statements bind the delay as $3::integer. is_a?(Integer) also
+      # takes a whole-second ActiveSupport::Duration, which binds as its seconds;
+      # a fractional delay or a Time goes through pgmq-ruby.
       def exec_produce(name, message, headers:, delay:)
-        statements = delay.is_a?(Numeric) && native_statements_for(name)
+        statements = delay.is_a?(Integer) && native_statements_for(name)
         return @pgmq.produce(name, message, headers: headers, delay: delay) unless statements
 
         run_native(statements[:send], [message, headers, delay])[0]["msg_id"]
@@ -308,7 +311,7 @@ module Pgbus
 
       def exec_produce_batch(name, messages, headers:, delay:)
         statements = messages.any? && (headers.nil? || headers.length == messages.length) &&
-                     delay.is_a?(Numeric) && native_statements_for(name)
+                     delay.is_a?(Integer) && native_statements_for(name)
         return @pgmq.produce_batch(name, messages, headers: headers, delay: delay) unless statements
 
         encoder = PG::TextEncoder::Array.new

@@ -38,6 +38,9 @@ module BenchStubs
       # of client_bench aborts on `undefined method 'run_guarded' for nil`.
       client.instance_variable_set(:@connection_health, Pgbus::Client::ConnectionHealth.new)
       client.instance_variable_set(:@libpq_read_bounds_effective, true)
+      # The mock answers pgmq-ruby calls, not SQL: false is what a queue without
+      # the native columns caches, so this times the function path.
+      client.instance_variable_set(:@native_statements, Concurrent::Map.new.tap { |m| m["pgbus_bench_default"] = false })
     end
   end
 

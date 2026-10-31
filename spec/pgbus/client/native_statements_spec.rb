@@ -3,6 +3,9 @@
 require "spec_helper"
 require "pg"
 require "connection_pool"
+# Duration delay examples (5.minutes) must not depend on another spec having
+# loaded ActiveSupport's numeric core_ext first.
+require "active_support/core_ext/numeric/time"
 
 RSpec.describe Pgbus::Client::NativeStatements do
   subject(:client) do
@@ -410,6 +413,16 @@ RSpec.describe Pgbus::Client::NativeStatements do
       expect(client.send_message("default", { "a" => 1 }, headers: { "h" => 2 }, delay: 5)).to eq("11")
     end
 
+    it "keeps a whole-second Duration delay native" do
+      allow(raw_conn).to receive(:exec_prepared).with(statements[:send].name, ['{"a":1}', nil, 300])
+                                                .and_return(pg_result([{ "msg_id" => "13" }]))
+      allow(raw_conn).to receive(:exec_prepared).with(statements[:send_batch].name, ['{"{\"a\":1}"}', nil, 300])
+                                                .and_return(pg_result([{ "msg_id" => "14" }]))
+
+      expect(client.send_message("default", { "a" => 1 }, delay: 5.minutes)).to eq("13")
+      expect(client.send_batch("default", [{ "a" => 1 }], delay: 5.minutes)).to eq(%w[14])
+    end
+
     it "send_message passes NULL headers when there are none" do
       allow(raw_conn).to receive(:exec_prepared).with(statements[:send].name, ['{"a":1}', nil, 0])
                                                 .and_return(pg_result([{ "msg_id" => "12" }]))
@@ -473,6 +486,19 @@ RSpec.describe Pgbus::Client::NativeStatements do
       expect(raw_conn).to have_received(:exec_params).with(described_class::COLUMNS_SQL, anything).twice
     end
 
+    # The native send binds the delay as $3::integer, so Postgres would reject
+    # 1.5; pgmq-ruby sends it through the timestamptz overload (issue #593).
+    it "is used for a fractional delay, plain or a Duration" do
+      [1.5, 1.5.seconds].each do |delay|
+        client.send_message("default", { "a" => 1 }, delay: delay)
+        client.send_batch("default", [{ "a" => 1 }], delay: delay)
+      end
+
+      expect(mock_pgmq).to have_received(:produce).with(queue, '{"a":1}', headers: nil, delay: 1.5).twice
+      expect(mock_pgmq).to have_received(:produce_batch).with(queue, ['{"a":1}'], headers: nil, delay: 1.5).twice
+      expect(raw_conn).not_to have_received(:exec_prepared)
+    end
+
     it "is used for a Time delay, an empty batch and a headers/payload length mismatch" do
       at = Time.now + 60
       client.send_message("default", { "a" => 1 }, delay: at)
@@ -515,11 +541,14 @@ RSpec.describe Pgbus::Client::NativeStatements do
   # PGMQ::Errors::ConnectionError — the class every guard keys on. These
   # examples run pgmq-ruby's real PGMQ::Connection over the stubbed raw_conn.
   describe "error classes" do
-    let(:connection_error) { real_pgmq_connection_error }
-    let(:real_connection) do
-      load(Gem.find_files("pgmq/connection.rb").first) unless defined?(PGMQ::Connection)
-      PGMQ::Connection.new(-> { raw_conn }, pool_size: 1, pool_timeout: 1)
+    # Outside the examples: the outer before stubs PGMQ::Client and PGMQ::Message,
+    # and Zeitwerk skips a constant that is already defined.
+    before(:all) do # rubocop:disable RSpec/BeforeAfterAll
+      real_pgmq_connection_class
     end
+
+    let(:connection_error) { real_pgmq_connection_error }
+    let(:real_connection) { PGMQ::Connection.new(-> { raw_conn }, pool_size: 1, pool_timeout: 1) }
     let(:dropped) { PG::ConnectionBad.new("server closed the connection unexpectedly") }
 
     before do
