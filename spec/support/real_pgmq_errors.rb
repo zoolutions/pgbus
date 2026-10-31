@@ -32,18 +32,12 @@ module RealPgmqErrors
     PGMQ::Metrics
   end
 
-  # The genuine PGMQ::Connection, loaded the same way. Since pgmq-ruby 0.8 its
-  # body builds a Contracts::Connection, which on a bare ::PGMQ does not exist;
-  # the contract only checks constructor arguments, so a stand-in does here.
+  # The genuine PGMQ::Connection. Since pgmq-ruby 0.8 its class body needs the
+  # gem's Contracts, so it can't be loaded file by file: this requires the gem,
+  # whose Zeitwerk setup reopens a bare ::PGMQ.
   def real_pgmq_connection_class
     real_pgmq_connection_error
-    return PGMQ::Connection if defined?(PGMQ::Connection)
-
-    unless defined?(PGMQ::Contracts::Connection)
-      contracts = defined?(PGMQ::Contracts) ? PGMQ::Contracts : PGMQ.const_set(:Contracts, Module.new)
-      contracts.const_set(:Connection, Class.new { def validate!(*) = true })
-    end
-    load(Gem.find_files("pgmq/connection.rb").first)
+    require "pgmq"
     PGMQ::Connection
   end
 end

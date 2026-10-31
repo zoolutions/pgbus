@@ -541,10 +541,14 @@ RSpec.describe Pgbus::Client::NativeStatements do
   # PGMQ::Errors::ConnectionError — the class every guard keys on. These
   # examples run pgmq-ruby's real PGMQ::Connection over the stubbed raw_conn.
   describe "error classes" do
-    let(:connection_error) { real_pgmq_connection_error }
-    let(:real_connection) do
-      real_pgmq_connection_class.new(-> { raw_conn }, pool_size: 1, pool_timeout: 1)
+    # Outside the examples: the outer before stubs PGMQ::Client and PGMQ::Message,
+    # and Zeitwerk skips a constant that is already defined.
+    before(:all) do # rubocop:disable RSpec/BeforeAfterAll
+      real_pgmq_connection_class
     end
+
+    let(:connection_error) { real_pgmq_connection_error }
+    let(:real_connection) { PGMQ::Connection.new(-> { raw_conn }, pool_size: 1, pool_timeout: 1) }
     let(:dropped) { PG::ConnectionBad.new("server closed the connection unexpectedly") }
 
     before do
