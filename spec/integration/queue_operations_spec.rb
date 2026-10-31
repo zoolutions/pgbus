@@ -112,6 +112,7 @@ RSpec.describe "Queue operations (integration)", :integration do
     it "takes an ActiveSupport::Duration delay on send_batch" do
       msg_ids = client.send_batch("delay_test", [{ "a" => 1 }, { "b" => 2 }], delay: 5.minutes)
 
+      expect(msg_ids.size).to eq(2)
       expect(msg_ids.map { |id| delay_seconds(id) }).to all(be_within(1).of(300))
     end
 
@@ -130,6 +131,7 @@ RSpec.describe "Queue operations (integration)", :integration do
     it "keeps a fractional delay fractional on send_batch" do
       msg_ids = client.send_batch("delay_test", [{ "a" => 1 }, { "b" => 2 }], delay: 1.5.seconds)
 
+      expect(msg_ids.size).to eq(2)
       expect(msg_ids.map { |id| delay_seconds(id) }).to all(be_within(0.25).of(1.5))
     end
 
@@ -137,6 +139,12 @@ RSpec.describe "Queue operations (integration)", :integration do
       msg_id = client.send_stream_message("delay_stream", { "s" => 1 }, delay: 5.minutes)
 
       expect(delay_seconds(msg_id, table: "q_pgbus_int_delay_stream")).to be_within(1).of(300)
+    end
+
+    it "keeps a fractional Duration fractional on send_stream_message" do
+      msg_id = client.send_stream_message("delay_stream", { "s" => 1 }, delay: 1.5.seconds)
+
+      expect(delay_seconds(msg_id, table: "q_pgbus_int_delay_stream")).to be_within(0.25).of(1.5)
     end
 
     it "takes an ActiveSupport::Duration delay on publish_to_topic" do
