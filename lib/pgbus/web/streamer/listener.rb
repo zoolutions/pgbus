@@ -103,7 +103,10 @@ module Pgbus
           @running = false
           @thread = nil
           @health_check_due_at = nil
-          @wake_reader, @wake_writer = IO.pipe
+          # The wake pipe is created by #start, so a listener that never
+          # starts holds no descriptors.
+          @wake_reader = nil
+          @wake_writer = nil
         end
 
         # Count of durable wakes dropped due to the dispatch-queue cap. Read by
@@ -114,7 +117,7 @@ module Pgbus
         def start
           return if @running
 
-          @wake_reader, @wake_writer = IO.pipe if @wake_reader.closed? || @wake_writer.closed?
+          @wake_reader, @wake_writer = IO.pipe if @wake_reader.nil? || @wake_reader.closed? || @wake_writer.closed?
           @running = true
           # The LISTEN thread, owned by this object: Instance#start starts it
           # once (under Streamer's @current_mutex); #stop clears @running,
@@ -279,8 +282,10 @@ module Pgbus
           end
         end
 
+        # Before #start there is no pipe: the command waits in the queue and
+        # the thread drains it on its first pass.
         def wake
-          @wake_writer.write_nonblock(".", exception: false)
+          @wake_writer&.write_nonblock(".", exception: false)
         rescue IOError
           # Closed by #stop: nothing is left to wake.
           nil
@@ -400,10 +405,15 @@ module Pgbus
           @dispatch_queue << WakeMessage.new(queue_name: queue_name, payload: payload)
         end
 
+        # The next keepalive is due one cycle after this one ENDS: scheduled
+        # from its start, a keepalive slower than a cycle would leave every
+        # pass overdue and the loop running SELECT 1 back to back without ever
+        # selecting on the socket or the pipe.
         def run_health_check
-          schedule_health_check
           @conn.exec("SELECT 1")
           run_maintenance
+        ensure
+          schedule_health_check
         end
 
         # Periodic maintenance on the idle LISTEN connection, throttled to

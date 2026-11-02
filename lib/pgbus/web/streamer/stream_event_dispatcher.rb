@@ -377,16 +377,22 @@ module Pgbus
           # #630). remove_listening is issued in exactly one place,
           # cleanup_stream_if_unused, and only when the registry holds no
           # connection on the stream. So a registered connection, dead or
-          # alive, proves the last ensure_listening for this stream was acked
-          # after the last remove_listening, and the listener runs commands
-          # in order: the LISTEN is active. A listener reconnect re-LISTENs
-          # its whole set; a hub failover replays FailoverListener's
-          # subscriptions, which the first-connect / last-disconnect calls
-          # keep exact. An empty stream always takes the slow path: that
-          # covers a connect that died mid-replay and unlistened without ever
-          # registering. @full_to_logical is set here and deleted only by
-          # that same cleanup, so it is present whenever the stream is not
-          # empty.
+          # alive, proves the stream's last ensure_listening returned after
+          # its last remove_listening was issued. The listener runs commands
+          # in order, and a LISTEN that raised is re-LISTENed by the reconnect
+          # that follows, so the LISTEN is active. The one exception is a
+          # first connect whose ack timed out (a stuck or reconnecting
+          # listener): its LISTEN is still queued, ahead of any later
+          # UNLISTEN, and runs when the listener recovers; until then the
+          # fast-path connects share the window that first connect already
+          # had, and a durable stream's next wake re-reads from the min
+          # cursor. A listener reconnect re-LISTENs its whole set; a hub
+          # failover replays FailoverListener's subscriptions, which the
+          # first-connect / last-disconnect calls keep exact. An empty stream
+          # always takes the slow path: that covers a connect that died
+          # mid-replay and unlistened without ever registering.
+          # @full_to_logical is set here and deleted only by that same
+          # cleanup, so it is present whenever the stream is not empty.
           full_name = notify_queue_name_for(stream)
           if @registry.empty?(stream)
             @full_to_logical[full_name] = stream

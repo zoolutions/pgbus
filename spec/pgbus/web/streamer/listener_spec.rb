@@ -66,6 +66,7 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
         @exec_after_close << sql if @close_count.positive?
         @executed << sql
         @exec_gate.pop if sql == @gated_sql
+        sleep @slow_exec[1] if @slow_exec && sql == @slow_exec[0]
         if sql.start_with?("LISTEN") && @raise_on_next_listen
           @raise_on_next_listen = false
           raise PG::Error, "listen failed mid-rebuild"
@@ -132,6 +133,9 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
 
       # IO.select on a closed IO raises IOError, as on a socket closed under it.
       def break_socket! = @socket_io.close
+
+      # Every exec of `sql` takes `seconds`.
+      def slow_exec!(sql, seconds) = (@slow_exec = [sql, seconds])
 
       # Park the next exec of `sql` until release_exec!.
       def gate_exec!(sql) = (@gated_sql = sql)
@@ -262,7 +266,7 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
   describe "wake pipe (issue #630)" do
     subject(:listener) { build_listener(health_check_ms: 5_000) }
 
-    it "acks a LISTEN queued while the thread is parked in select within 50 ms" do
+    it "acks a LISTEN queued while the thread is parked in select within a thread hop" do
       listener.start
       wait_until { listener.instance_variable_get(:@thread)&.status == "sleep" }
 
@@ -271,10 +275,12 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
       elapsed = monotonic - started
 
       expect(fake_pg.executed).to include(%(LISTEN "pgmq.q_chat.INSERT"))
-      expect(elapsed).to be < 0.05
+      # Typically well under a millisecond; the bound leaves room for a busy
+      # CI runner and is still a tenth of the 5 s select only the pipe can cut.
+      expect(elapsed).to be < 0.5
     end
 
-    it "runs an UNLISTEN within 50 ms" do
+    it "runs an UNLISTEN within a thread hop" do
       listener.start
       listener.ensure_listening("chat")
 
@@ -282,7 +288,7 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
       listener.remove_listening("chat")
       wait_until(timeout: 1) { fake_pg.executed.include?(%(UNLISTEN "pgmq.q_chat.INSERT")) }
 
-      expect(monotonic - started).to be < 0.05
+      expect(monotonic - started).to be < 0.5
       expect(listener.listening_to).to be_empty
     end
 
@@ -297,6 +303,14 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
 
       expect(monotonic - started).to be < 1.0
       expect(thread).not_to be_alive
+    end
+
+    it "creates no pipe until started, so a listener that never starts holds no descriptors" do
+      expect(listener.instance_variable_get(:@wake_reader)).to be_nil
+
+      listener.stop
+
+      expect(listener.instance_variable_get(:@wake_reader)).to be_nil
     end
 
     it "closes both pipe ends after a clean stop" do
@@ -508,6 +522,24 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
       expect(fake_pg.executed.count("SELECT 1")).to be >= 2
     ensure
       busy&.stop
+    end
+  end
+
+  describe "a keepalive slower than a cycle" do
+    it "still selects on the socket between keepalives" do
+      fake_pg.slow_exec!("SELECT 1", 0.03)
+      slow = build_listener(health_check_ms: 20)
+      slow.start
+      wait_until { fake_pg.executed.include?("SELECT 1") }
+
+      fake_pg.push_notify("pgmq.q_chat.INSERT")
+
+      # The next keepalive is scheduled from the end of this one: were it
+      # scheduled from the start, every pass would find it overdue and run
+      # SELECT 1 again without ever reading the socket.
+      expect(dispatch_queue.pop(timeout: 2)&.queue_name).to eq("chat")
+    ensure
+      slow&.stop
     end
   end
 
