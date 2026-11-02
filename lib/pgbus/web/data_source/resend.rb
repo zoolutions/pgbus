@@ -31,8 +31,9 @@ module Pgbus
         # enqueued_at] of the message the payload was read from, as the
         # dashboard's discards name it (#lock_holder). +drop_source+ removes
         # the source once the copy is parked (a sent copy's source is the
-        # block's to remove).
-        def resend_job(payload, lock_queue:, holder:, drop_source:, &)
+        # block's to remove). +headers+ (a Hash) are the ones the block
+        # sends; a parked copy carries them to its promotion.
+        def resend_job(payload, lock_queue:, holder:, drop_source:, headers: nil, &)
           key = resend_lock_key(payload)
           stamp = key && take_resend_lock(key, lock_queue, holder)
           if key && !stamp
@@ -40,12 +41,14 @@ module Pgbus
             return false
           end
 
-          # Only an error raised by the produce itself can hide a sent copy:
-          # one from the slot upsert, the park or the source's removal proves
-          # nothing went out, however database-shaped it is.
-          sending = [false]
+          # Only an error raised by the produce (:produce), or by the park's
+          # commit (:park: the COMMIT may have landed with its reply lost),
+          # can hide a live copy: one from the slot upsert, the park's insert
+          # or the source's removal proves nothing went out, however
+          # database-shaped it is.
+          sending = [nil]
           begin
-            outcome = resend_holding_slot(payload, lock_queue, drop_source, sending, &)
+            outcome = resend_holding_slot(payload, lock_queue, drop_source, sending, headers, &)
           rescue StandardError => e
             give_back_resend_lock(key, stamp, e, sending: sending.first) if key
             raise
@@ -94,7 +97,7 @@ module Pgbus
           lock_queue = Uniqueness.lock_queue_name(event["queue_name"])
 
           outcome = resend_job(payload, lock_queue: lock_queue, holder: [lock_queue, event["msg_id"].to_i, nil],
-                                        drop_source: -> { delete_failed_row(event) }) do
+                                        drop_source: -> { delete_failed_row(event) }, headers: headers) do
             @client.send_message(event["queue_name"], payload, headers: headers)
           end
           delete_failed_row(event) if outcome == :sent
@@ -129,11 +132,12 @@ module Pgbus
         # Proven unsent, the row taken for it goes (matched by its stamp, so
         # never a successor's). An error from the produce that may hide a
         # committed send (a lost connection or reply, as
-        # Adapter#ambiguous_delivery? counts it) keeps the row: the copy may
-        # be live, and the reaper takes the row if it is not. A failed
-        # give-back is logged, so the send's error is the one that surfaces.
-        def give_back_resend_lock(key, stamp, error = nil, sending: false)
-          if sending && ambiguous_resend?(error)
+        # Adapter#ambiguous_delivery? counts it), or any error from the park's
+        # commit, keeps the row: the copy may be live, and the reaper takes
+        # the row if it is not. A failed give-back is logged, so the send's
+        # error is the one that surfaces.
+        def give_back_resend_lock(key, stamp, error = nil, sending: nil)
+          if sending == :park || (sending == :produce && ambiguous_resend?(error))
             Pgbus.logger.warn { "[Pgbus::Web] Re-send of #{key} may have been sent (#{error.class}); its key stays held" }
             return
           end
@@ -143,9 +147,13 @@ module Pgbus
           Pgbus.logger.warn { "[Pgbus::Web] Giving back the uniqueness key #{key} failed: #{e.message}" }
         end
 
+        # ActiveRecord wraps a PG error (StatementInvalid, ConnectionFailed),
+        # so the cause is asked too.
         def ambiguous_resend?(error)
-          (defined?(PGMQ::Errors::ConnectionError) && error.is_a?(PGMQ::Errors::ConnectionError)) ||
-            (defined?(PG::Error) && error.is_a?(PG::Error))
+          [error, error&.cause].compact.any? do |err|
+            (defined?(PGMQ::Errors::ConnectionError) && err.is_a?(PGMQ::Errors::ConnectionError)) ||
+              (defined?(PG::Error) && err.is_a?(PG::Error))
+          end
         end
 
         # The key a re-sent copy has to hold: only an enqueue-locked one. An

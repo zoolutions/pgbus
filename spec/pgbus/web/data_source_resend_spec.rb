@@ -259,10 +259,43 @@ RSpec.describe Pgbus::Web::DataSource::Resend do
       it "withdraws the park and gives the key back when removing the source fails" do
         allow(Pgbus::BlockedExecution).to receive(:where).with(id: 77).and_return(double(delete_all: 1))
 
-        expect { resend(slotted, drop_source: -> { raise PG::Error, "delete failed" }) { "17" } }
-          .to raise_error(PG::Error, "delete failed")
+        expect { resend(slotted, drop_source: -> { raise ArgumentError, "delete failed" }) { "17" } }
+          .to raise_error(ArgumentError, "delete failed")
 
         expect(Pgbus::UniquenessKey).to have_received(:release_if_unbound!).with("order-1", acquired_before: acquired_at)
+      end
+
+      # The DELETE may have committed with its reply lost: withdrawing the
+      # park could leave neither copy.
+      it "keeps the park when removing the source fails with an unknown outcome" do
+        allow(Pgbus::BlockedExecution).to receive(:where)
+        wrapped = ActiveRecord::StatementInvalid.new("connection lost")
+        allow(wrapped).to receive(:cause).and_return(PG::Error.new("server closed the connection"))
+
+        expect(resend(slotted, drop_source: -> { raise wrapped }) { "17" }).to eq(:parked)
+
+        expect(Pgbus::BlockedExecution).not_to have_received(:where)
+        expect(Pgbus::UniquenessKey).not_to have_received(:release_if_unbound!)
+      end
+
+      # The COMMIT may have landed with its reply lost: the park may be live.
+      it "keeps the key when the park's commit raises" do
+        allow(Pgbus::Semaphore).to receive(:transaction) do |**, &blk|
+          blk.call
+          raise ActiveRecord::StatementInvalid, "commit failed"
+        end
+
+        expect { resend(slotted) { "17" } }.to raise_error(ActiveRecord::StatementInvalid)
+
+        expect(Pgbus::UniquenessKey).not_to have_received(:release_if_unbound!)
+      end
+
+      it "carries the headers the copy would have been sent with in the parked payload" do
+        data_source.send(:resend_job, slotted, lock_queue: "default", holder: holder, drop_source: -> {},
+                                               headers: { "pgbus_dlq_retries" => 1 }) { "17" }
+
+        parked = slotted.merge("pgbus_park_headers" => { "pgbus_dlq_retries" => 1 })
+        expect(Pgbus::Concurrency::BlockedExecution).to have_received(:insert).with(hash_including(payload: parked))
       end
 
       it "keeps a park already promoted when removing the source fails, and says the source stays" do
@@ -272,7 +305,7 @@ RSpec.describe Pgbus::Web::DataSource::Resend do
 
         expect(Pgbus::UniquenessKey).not_to have_received(:release_if_unbound!)
         expect(Pgbus.logger).to have_received(:warn) do |&block|
-          expect(block.call).to include("removing its source failed (delete failed); the parked copy stands")
+          expect(block.call).to include("removing its source failed (StandardError: delete failed); the parked copy stands")
         end
       end
 

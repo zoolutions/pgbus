@@ -15,18 +15,19 @@ module Pgbus
         # Returns the block's msg_id once the copy is sent holding a slot,
         # :parked when it waits behind a full limit (on_conflict: :block), and
         # :refused when the limit is full under :discard or :raise. A payload
-        # with no concurrency key is sent as it is. +sending+ is set before
-        # the produce, so the caller can tell an error from it (the copy may
-        # be live) from one before it (nothing was sent).
-        def resend_holding_slot(payload, lock_queue, drop_source, sending, &)
+        # with no concurrency key is sent as it is. +sending+ is :produce
+        # around the produce and :park around the park's commit, so the
+        # caller can tell an error that may hide a live copy from one that
+        # proves nothing went out.
+        def resend_holding_slot(payload, lock_queue, drop_source, sending, headers, &)
           key = payload.is_a?(Hash) && Concurrency.extract_key(payload)
           unless key
-            sending[0] = true
+            sending[0] = :produce
             return yield
           end
 
           limits = resend_limits(payload)
-          case (taken = take_resend_slot(key, limits, lock_queue, payload))
+          case (taken = take_resend_slot(key, limits, lock_queue, park_payload(payload, headers), sending))
           when :acquired then send_holding_resend_slot(key, sending, &)
           when :full
             Pgbus.logger.warn do
@@ -56,9 +57,11 @@ module Pgbus
         # logical queue at the job's own priority (the serialized "priority",
         # else the default, as Adapter#handle_conflict parks it): promote_next
         # sends it through Client#send_message, which prefixes the name and
-        # picks the _pN sub-queue by that priority.
-        def take_resend_slot(key, limits, lock_queue, payload)
-          Pgbus::Semaphore.transaction(requires_new: true) do
+        # picks the _pN sub-queue by that priority. Once the park is inserted
+        # only its commit remains, and a COMMIT whose reply is lost may have
+        # landed: +sending+ says so until the transaction returns.
+        def take_resend_slot(key, limits, lock_queue, payload, sending)
+          taken = Pgbus::Semaphore.transaction(requires_new: true) do
             lease = Concurrency.effective_duration(limits[:duration])
             next :acquired if Concurrency::Semaphore.acquire(key, limits[:limit], lease) == :acquired
             next :full unless limits[:on_conflict] == :block
@@ -66,8 +69,20 @@ module Pgbus
             Concurrency::BlockedExecution.insert(
               concurrency_key: key, queue_name: lock_queue, payload: payload,
               priority: payload["priority"] || Pgbus.configuration.default_priority, duration: limits[:duration]
-            ).rows.dig(0, 0)
+            ).rows.dig(0, 0).tap { sending[0] = :park }
           end
+          sending[0] = nil
+          taken
+        end
+
+        # pgbus_blocked_executions has no headers column: the headers the
+        # copy would have been sent with (a DLQ retry's retries count) ride
+        # in the parked payload, and promote_next sends them as headers again
+        # (Concurrency::BlockedExecution::HEADERS_KEY).
+        def park_payload(payload, headers)
+          return payload if headers.nil? || headers.empty?
+
+          payload.merge(Concurrency::BlockedExecution::HEADERS_KEY => headers)
         end
 
         # Hand the slot back only when the failure proves nothing was
@@ -75,7 +90,7 @@ module Pgbus
         # copy may be live, so the hold stands and the lease expiry plus the
         # dispatcher's sweep reclaim it.
         def send_holding_resend_slot(key, sending)
-          sending[0] = true
+          sending[0] = :produce
           yield
         rescue StandardError => e
           if ambiguous_resend?(e)
@@ -94,17 +109,20 @@ module Pgbus
         # connection, or after the commit, so the two cannot share a
         # transaction). If that fails, the park is withdrawn while it still
         # waits, and the error raised: nothing changed, the source stays. A
-        # park that cannot be withdrawn (already promoted: a live copy) stands,
-        # and the source is left for the operator to discard.
+        # removal whose outcome is unknown (a lost reply: its DELETE may have
+        # committed) keeps the park, since withdrawing it could leave neither
+        # copy; so does a park that cannot be withdrawn (already promoted: a
+        # live copy). Either way the source may stay, for the operator to
+        # discard: a duplicate is preferred over a lost job.
         def drop_parked_source(park_id, key, drop_source)
           drop_source.call
           :parked
         rescue StandardError => e
-          raise if withdraw_park(park_id)
+          raise if !ambiguous_resend?(e) && withdraw_park(park_id)
 
           Pgbus.logger.warn do
-            "[Pgbus::Web] Re-sent copy of #{key} is parked, but removing its source failed (#{e.message}); " \
-              "the parked copy stands, and the source stays to be discarded"
+            "[Pgbus::Web] Re-sent copy of #{key} is parked, but removing its source failed (#{e.class}: #{e.message}); " \
+              "the parked copy stands, and the source may stay to be discarded"
           end
           :parked
         end

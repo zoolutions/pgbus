@@ -199,6 +199,20 @@ RSpec.describe "Dashboard re-send of a limits_concurrency payload (integration)"
       expect(slots_held).to eq(1)
     end
 
+    it "promotes a parked copy with the DLQ retry count a sent copy carries" do
+      define_job(:block)
+      dead_letter_job
+      hold_slot
+
+      expect(resend).to be(true)
+      Pgbus::Concurrency::Semaphore.signal(slot, client: client)
+
+      message = client.read_message(queue, vt: 30)
+      headers = message.headers.is_a?(String) ? JSON.parse(message.headers) : message.headers
+      expect(headers).to include(Pgbus::DeadLetterHeader::RETRIES_KEY => 1)
+      expect(JSON.parse(message.message)).not_to have_key(Pgbus::Concurrency::BlockedExecution::HEADERS_KEY)
+    end
+
     describe "Retry all" do
       it "sends the first copy into the free slot and parks the second behind it" do
         define_job(:block)
