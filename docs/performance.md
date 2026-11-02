@@ -26,6 +26,7 @@ measured it and what it costs, is the docs site's
 | `Client#archive_message` | every job completion (a native prepared statement, issue #605) | `worker_profile_bench.rb` (`WP_BENCH_ROLE=fleet`) |
 | `Client#read_batch_fair` | every worker poll cycle when `config.fair_share` is set (issue #426) | `fair_read_bench.rb` |
 | `Executor#execute` | every job execution (deserialize + dispatch + archive) | `executor_bench.rb` |
+| `StatBuffer#flush` | every `stats_flush_size` jobs (default 100) or `stats_flush_interval`, stats on (the default): one multi-row INSERT into `pgbus_job_stats` (issue #622) | `stat_flush_bench.rb` |
 | JSON serialization | every enqueue/dequeue (payload encoding) | `serialization_bench.rb` |
 | Connection pool checkout | every PGMQ operation under concurrency | `connection_pool_bench.rb` |
 | Execution pool dispatch | every job dispatched to thread/async pool | `execution_pool_bench.rb` |
@@ -1125,6 +1126,88 @@ the subscriber) so a worker that has not loaded a job class yet still finds it. 
 `listeners_for`, so a subscriber silenced at boot (a logger above `info`) is
 removed too. The executor allocation budget is unchanged: the knob adds nothing
 per job.
+
+### Job stats flush (issue #622)
+
+#618's split put `StatBuffer#write_to_database` at 12–15 % of a no-op job's
+on-CPU time: `JobStat.insert_all` of 100 rows, where ActiveRecord checks every
+attribute against the schema, type-casts every value, visits an Arel
+`ValuesList`, and adds `ON CONFLICT DO NOTHING RETURNING "id"`, so the 100 new
+ids come back and are cast into an `ActiveRecord::Result` nobody reads. The
+values are Strings and Integers pgbus produced itself.
+
+The flush now builds the one multi-row `INSERT` itself and runs it with
+`execute` on a connection from `JobStat.connection_pool.with_connection`
+(the model's database, `connects_to` included). The integer columns go through
+`Integer()`, `NULL` for nil; an entry with a value `Integer()` refuses is
+logged and dropped alone, and the rest of the flush is written; the strings (`job_class` comes from the message) go
+through the connection's own quoting, memoized per flush, so 100 rows of three
+job classes and two queues cost about seven `quote` calls. `pgbus_job_stats`
+has no unique index besides the primary key, so dropping `ON CONFLICT DO
+NOTHING` changes no outcome. The missing-latency-columns fallback is the same:
+the six-column statement first, and on PostgreSQL's `undefined_column` error
+(`PG::UndefinedColumn`, the cause ActiveRecord keeps) naming
+`enqueue_latency_ms` or `retry_count`, the four-column one, warned once. main
+retried on any `StatementInvalid` whose message contained a column name, which
+an unrelated error's `LINE 1:` excerpt of the statement does; the error class
+is also what keeps it working when the server's `lc_messages` is not English.
+
+A constant `INSERT … SELECT * FROM unnest($1::varchar[], …)` with six array
+binds (`PG::TextEncoder::Array`) was the other candidate. One scratch run, same
+database, 100 rows, load 0.62× cores: `insert_all` 984 µs CPU and 3 193
+objects per flush, multi-row `VALUES` 96 µs / 429, `unnest` 133 µs / 1 002.
+`unnest` had the lower wall time (538 vs 734 µs, it is a prepared statement),
+but that time is spent in libpq with the GVL released; a local worker is
+GVL-bound, so Ruby CPU picked `VALUES`.
+
+Measured 2026-11-02 on the M-series laptop, local PostgreSQL 18, Ruby 3.4.2,
+YJIT, with three other worktrees' agents on the same machine; load is recorded
+before and after every invocation. `rake bench:one[stat_flush_bench]` (new,
+real database) pushes 100 worker-shaped entries and flushes. Ranges are rounds,
+main and branch alternated. ActiveRecord 8.1.4, four rounds: two (load
+0.63–0.92×) with an earlier version of the bench that created the table
+without indexes (historical: the committed bench always creates the
+migration's four indexes, so the "bare table" row cannot be reproduced with
+it) and two with the committed bench (load 0.39–0.56×); ActiveRecord 7.1.6
+(`gemfiles/rails_7_1.gemfile`), one round with the committed bench (load
+0.39–0.42×):
+
+| | main 8.1 | branch 8.1 | main 7.1 | branch 7.1 |
+|---|---:|---:|---:|---:|
+| Ruby CPU per flush | 936–1 999 µs | 120–229 µs | 1 440 µs | 101 µs |
+| Ruby CPU per job (÷ 100) | 9.4–20 µs | 1.2–2.3 µs | 14 µs | 1.0 µs |
+| objects per flush | 3 161 | 518 | 2 850 | 521 |
+| bytes per flush | 265 KB | 50 KB | 252 KB | 50 KB |
+| wall i/s, bare table (historical bench) | 282–483 | 954–1 449 | — | — |
+| wall i/s, indexed table | 254–289 | 513–696 | 207 | 866 |
+
+Ruby CPU per flush moves with machine load (main's four rounds spread 2×);
+the objects per flush do not move at all.
+
+`WP_BENCH_ROLE=worker rake bench:worker_profile`, two rounds alternated
+(main, branch, main, branch), load 0.63–0.73×:
+
+| cell | jobs/s main | jobs/s branch | `pgbus_rails` share of on-CPU, main | branch |
+|---|---:|---:|---:|---:|
+| local / YJIT | 5 139–6 452 | 7 499–7 840 | 17.7–18.1 % | 7.7–7.8 % |
+| local / no JIT | 5 580–5 897 | 5 886–6 349 | 17.1–18.3 % | 0.7 % |
+
+What the numbers say:
+
+- **The flush costs 4.7–14× less Ruby CPU and allocates a sixth of the
+  objects**, on ActiveRecord 8.1 and 7.1 alike. The ratio is per main/branch
+  pair, run back to back: 947/120 and 936/200 on the bare table, 1 999/161
+  and 1 118/229 indexed, 1 440/101 on 7.1. Per job that is ~9–20 → 1–2.3 µs.
+- **`pgbus_rails` is no longer a meaningful share of a worker's on-CPU time.**
+  What remains is `Heartbeat#register_process` / `#deregister_process`, which
+  run once per drain (each drain builds a new Worker: a bench artefact), and a
+  handful of flush samples in the `Rails` category (`execute`'s logging and the
+  query cache's dirty hook). The profiled drains are 2 000 jobs, so each cell
+  rests on a few hundred on-CPU samples: read the YJIT 7.7–7.8 % as "a few
+  samples of the heartbeat", not as a YJIT-specific cost.
+- **jobs/s: up with YJIT (the ranges do not overlap), within noise without a
+  JIT.** The machine was shared and the main YJIT pair alone spread 26 %;
+  the CPU-per-flush table is the measurement this change stands on.
 
 ### Fair share reads (issue #426)
 
