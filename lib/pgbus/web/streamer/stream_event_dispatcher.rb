@@ -372,9 +372,42 @@ module Pgbus
           # prefix: pgmq.q_<prefixed>.INSERT. Registry and the in-flight
           # buffer use the logical name. The Dispatcher is the single
           # translator between the two naming worlds.
+          #
+          # Only a stream's first subscriber waits on the listener (issue
+          # #630). remove_listening is issued in exactly one place,
+          # cleanup_stream_if_unused, and only when the registry holds no
+          # connection on the stream. So a registered connection, dead or
+          # alive, proves the stream's last ensure_listening returned after
+          # its last remove_listening was issued. The listener runs commands
+          # in order, and a LISTEN that raised is acked only once the reconnect
+          # that follows has re-LISTENed it, so the LISTEN is active. Two
+          # exceptions. A listener thread on its way out (at stop, or after an
+          # unexpected error) releases every waiting caller with nothing
+          # LISTENed. And a first connect whose ack timed out (a stuck or
+          # reconnecting listener) leaves its LISTEN queued, ahead of any
+          # later UNLISTEN, to run when the listener recovers; until then the
+          # fast-path connects share the window that first connect already
+          # had, and a durable stream's next wake re-reads from the min
+          # cursor. A listener reconnect re-LISTENs its whole set; a hub
+          # failover replays FailoverListener's subscriptions, which the
+          # first-connect / last-disconnect calls keep exact. An empty stream
+          # always takes the slow path: that covers a connect that died
+          # mid-replay and unlistened without ever registering.
+          # @full_to_logical is set here and deleted only by that same
+          # cleanup, so it is present whenever the stream is not empty.
+          #
+          # The fast path holds while the listener reconnects, on purpose.
+          # Waiting on a reconnecting listener would cost every connect the
+          # full ack budget (health_check_ms + 1 s) for as long as the
+          # database stays unreachable: the storm this rule removes. A
+          # connect in that window has the same exposure as every connection
+          # already registered: a durable stream's next wake after the
+          # re-LISTEN re-reads from the min cursor.
           full_name = notify_queue_name_for(stream)
-          @full_to_logical[full_name] = stream
-          @listener.ensure_listening(full_name)
+          if @registry.empty?(stream)
+            @full_to_logical[full_name] = stream
+            @listener.ensure_listening(full_name)
+          end
 
           # Step 2: install the in-flight buffer BEFORE any read.
           buffer = []

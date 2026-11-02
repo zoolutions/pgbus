@@ -4,9 +4,12 @@
 # benchmarks/streams_scale_bench.rb, never forked: a forked child would inherit
 # the parent's PG::Connection sockets and PQfinish them on exit (#440).
 #
-#   ruby benchmarks/support/streams_scale_client.rb URL COUNT CONNECT_TIMEOUT READ_TIMEOUT SLOW
+#   ruby benchmarks/support/streams_scale_client.rb COUNT CONNECT_TIMEOUT READ_TIMEOUT SLOW OFFSET URL...
 #
-# Builds COUNT SseTestClients for URL, prints STREAMS_SCALE_CHILD_READY and
+# Builds COUNT SseTestClients, the one at slot i for the stream URL at
+# StreamsScaleHarness.stream_index(i, offset: OFFSET, streams: URL count): with
+# STREAMS_SCALE_STREAMS=N the bench passes N URLs and each child's global
+# OFFSET, so clients are dealt over the streams round-robin (issue #630). Prints STREAMS_SCALE_CHILD_READY and
 # waits for "go" on stdin (the start barrier). Then starts all of them at once
 # (one reader thread each, none polling) and waits for "stop". A client whose
 # connect failed before any response (the kernel's accept queue overflowed, as
@@ -55,13 +58,18 @@ end
 
 def monotonic = Process.clock_gettime(Process::CLOCK_MONOTONIC)
 
-url, count, connect_timeout, read_timeout, slow = ARGV
+count, connect_timeout, read_timeout, slow, offset, *urls = ARGV
 count = Integer(count, 10)
+offset = Integer(offset, 10)
+fail! "streams scale client: no stream URL given" if urls.empty?
 klass = slow == "1" ? SlowSseTestClient : SseTestSupport::SseTestClient
-build = -> { klass.new(url: url, timeout: Float(connect_timeout), read_timeout: Float(read_timeout)) }
+build = lambda do |slot|
+  url = urls.fetch(StreamsScaleHarness.stream_index(slot, offset: offset, streams: urls.size))
+  klass.new(url: url, timeout: Float(connect_timeout), read_timeout: Float(read_timeout))
+end
 StreamsScaleHarness.raise_fd_limit!(StreamsScaleHarness.fd_needed(count))
 
-slots = Array.new(count) { { client: build.call, retries: 0, failed_at: nil } }
+slots = Array.new(count) { |slot| { client: build.call(slot), index: slot, retries: 0, failed_at: nil } }
 $stdout.puts(StreamsScaleHarness::CHILD_READY)
 $stdout.flush
 # Every failed connect warns; the result line tallies them instead. A crash
@@ -93,7 +101,7 @@ retrier = Thread.new do # rubocop:disable ThreadSafety/NewThread -- joined after
 
       slot[:retries] += 1
       slot[:failed_at] = nil
-      slot[:client] = build.call.start_nowait
+      slot[:client] = build.call(slot[:index]).start_nowait
     end
   end
 end

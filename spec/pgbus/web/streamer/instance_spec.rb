@@ -17,17 +17,27 @@ RSpec.describe Pgbus::Web::Streamer::Instance do
     # PG::Error is used by Listener and is not loaded in unit tests.
     stub_const("PG", Module.new) unless defined?(PG)
     stub_const("PG::Error", Class.new(StandardError)) unless defined?(PG::Error)
+    stub_const("PG::ConnectionBad", Class.new(PG::Error)) unless defined?(PG::ConnectionBad)
+    stub_const("PG::CONNECTION_OK", 0) unless defined?(PG::CONNECTION_OK)
+    stub_const("PG::CONNECTION_BAD", 1) unless defined?(PG::CONNECTION_BAD)
   end
 
-  # Reuse the same fake PG connection shape from listener_spec so the
-  # Listener thread has something to pop from.
+  # The surface the Listener's select loop uses (issue #630; listener_spec has
+  # the scripted version): a socket that never turns readable, so the listener
+  # only wakes on its own pipe or its keepalive deadline.
   let(:fake_pg) do
     Class.new do
       attr_reader :executed
 
       def initialize
         @executed = []
-        @events = Queue.new
+      end
+
+      # Built on first use, which only a running listener makes, so an
+      # Instance that never starts holds no descriptors.
+      def socket_io
+        @socket_io, @socket_writer = IO.pipe unless @socket_io
+        @socket_io
       end
 
       def exec(sql)
@@ -35,27 +45,14 @@ RSpec.describe Pgbus::Web::Streamer::Instance do
         nil
       end
 
-      # Mirrors PG::Connection#wait_for_notify(timeout): returns nil once the
-      # timeout elapses. Honoring the timeout matters because Listener#stop
-      # signals shutdown by clearing a flag the listener thread checks between
-      # waits — it no longer closes the connection out from under that thread
-      # (issue #375).
-      def wait_for_notify(timeout)
-        event = @events.pop(timeout: timeout)
-        case event&.first
-        when nil, :timeout
-          nil
-        when :notify
-          yield event[1], 0, nil
-          event[1]
-        when :close
-          raise PG::Error, "closed"
-        end
-      end
-
+      def consume_input = socket_io.read_nonblock(4096, exception: false)
+      def notifies = nil
+      def status = PG::CONNECTION_OK
       def reset = nil
-      def close = @events << [:close]
-      def push_timeout = @events << [:timeout]
+
+      def close
+        [@socket_io, @socket_writer].compact.each { |io| io.close unless io.closed? }
+      end
     end.new
   end
 
@@ -303,7 +300,6 @@ RSpec.describe Pgbus::Web::Streamer::Instance do
   describe "#start" do
     it "starts the listener, dispatcher, and heartbeat threads" do
       streamer.start
-      fake_pg.push_timeout
       expect(streamer.listener).to be_a(Pgbus::Web::Streamer::Listener)
       expect(streamer.dispatcher).to be_a(Pgbus::Web::Streamer::StreamEventDispatcher)
       expect(streamer.heartbeat).to be_a(Pgbus::Web::Streamer::Heartbeat)
@@ -315,7 +311,6 @@ RSpec.describe Pgbus::Web::Streamer::Instance do
       config.streams_heartbeat_interval = 30
       config.streams_peer_close_interval = 0.05
       streamer.start
-      fake_pg.push_timeout
       conn, reader = build_sse_connection
       streamer.register(conn)
       deadline = Time.now + 2
@@ -332,14 +327,12 @@ RSpec.describe Pgbus::Web::Streamer::Instance do
     it "does not start the peer-close watcher when streams_peer_close_interval is nil" do
       config.streams_peer_close_interval = nil
       streamer.start
-      fake_pg.push_timeout
 
       expect(streamer.peer_close_watcher).to be_nil
     end
 
     it "is idempotent — calling start twice does not spawn duplicate threads" do
       streamer.start
-      fake_pg.push_timeout
       expect { streamer.start }.not_to raise_error
     end
   end
@@ -347,7 +340,6 @@ RSpec.describe Pgbus::Web::Streamer::Instance do
   describe "#register" do
     it "enqueues a ConnectMessage that the dispatcher processes" do
       streamer.start
-      fake_pg.push_timeout
 
       conn, reader = build_sse_connection
       streamer.register(conn)
@@ -362,7 +354,6 @@ RSpec.describe Pgbus::Web::Streamer::Instance do
 
     it "is a no-op for a connection that is already dead" do
       streamer.start
-      fake_pg.push_timeout
       conn, reader = build_sse_connection
       conn.mark_dead!
 
@@ -382,7 +373,6 @@ RSpec.describe Pgbus::Web::Streamer::Instance do
       # The fix marks such late connections dead so the caller knows
       # registration was rejected.
       streamer.start
-      fake_pg.push_timeout
       streamer.shutdown!
 
       conn, reader = build_sse_connection(id: "late")
@@ -415,7 +405,6 @@ RSpec.describe Pgbus::Web::Streamer::Instance do
 
     it "writes a pgbus:shutdown sentinel to every registered connection" do
       streamer.start
-      fake_pg.push_timeout
       conn, reader = build_sse_connection
       streamer.registry.register(conn)
 
@@ -432,7 +421,6 @@ RSpec.describe Pgbus::Web::Streamer::Instance do
 
     it "returns an empty list when every component thread stopped within its join budget (issue #443)" do
       streamer.start
-      fake_pg.push_timeout
       expect(streamer.shutdown!).to eq([])
     end
 
@@ -440,7 +428,6 @@ RSpec.describe Pgbus::Web::Streamer::Instance do
       log = StringIO.new
       instance = described_class.new(client: client, config: config, pg_connection: fake_pg, logger: Logger.new(log))
       instance.start
-      fake_pg.push_timeout
       stuck = Thread.new { sleep }
       allow(instance.dispatcher).to receive(:threads).and_return([stuck])
 
@@ -454,14 +441,12 @@ RSpec.describe Pgbus::Web::Streamer::Instance do
 
     it "returns [] from a second shutdown! call (idempotent) (issue #443)" do
       streamer.start
-      fake_pg.push_timeout
       streamer.shutdown!
       expect(streamer.shutdown!).to eq([])
     end
 
     it "is idempotent — calling shutdown! twice is a no-op the second time" do
       streamer.start
-      fake_pg.push_timeout
       streamer.shutdown!
       expect { streamer.shutdown! }.not_to raise_error
     end
@@ -485,7 +470,6 @@ RSpec.describe Pgbus::Web::Streamer::Instance do
         streamer.start
         expect(streamer.pump.alive?).to be true # workers running while up
 
-        fake_pg.push_timeout
         streamer.shutdown!
 
         # Assert on the pump's OWN writer threads, not the global Thread.list
@@ -515,7 +499,6 @@ RSpec.describe Pgbus::Web::Streamer::Instance do
         client: client, config: config, pg_connection: fake_pg2,
         logger: Logger.new(IO::NULL)
       ).tap(&:start)
-      fake_pg2.push_timeout
       Pgbus::Web::Streamer.current = instance1
 
       Pgbus::Web::Streamer.reset!
@@ -533,7 +516,6 @@ RSpec.describe Pgbus::Web::Streamer::Instance do
         client: client, config: config, pg_connection: fake_pg2,
         logger: Logger.new(IO::NULL)
       ).tap(&:start)
-      fake_pg2.push_timeout
       allow(instance1).to(receive(:shutdown!).and_wrap_original do |m|
         m.call
         ["dispatcher"]
@@ -563,7 +545,6 @@ RSpec.describe Pgbus::Web::Streamer::Instance do
         end
       end
       threads.each(&:join)
-      fake_pgs.each(&:push_timeout)
 
       expect(instances.uniq.size).to eq(1)
       expect(build_count.value).to eq(1)

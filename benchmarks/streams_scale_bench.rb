@@ -47,7 +47,10 @@
 # profile per cell there and prints the dispatcher thread's top self frames
 # and the inclusive share of io_writer.rb / write_nonblock / framing / the
 # audience filter: the #617 Ractor gate's profile half, issue #621; profiling
-# slows the cell, so time and profile in separate runs).
+# slows the cell, so time and profile in separate runs), STREAMS_SCALE_STREAMS
+# (1: N stream queues, the clients dealt over them round-robin; each broadcast
+# sample publishes to all N in turn, its fan-out timed from the first publish;
+# N first connects each cost a listener round trip, issue #630).
 #
 # The fd soft limit is raised first thing in every cell and client process
 # (to the hard limit, or OPEN_MAX when that is infinite, as on macOS); an M
@@ -149,10 +152,11 @@ def instrument(streamer)
   sinks
 end
 
-def spawn_client(url, count, slow:)
+def spawn_client(urls, count, offset:, slow:)
   out_r, out_w = IO.pipe
   in_r, in_w = IO.pipe
-  args = [RbConfig.ruby, CLIENT_SCRIPT, url, count.to_s, CONNECT_TIMEOUT_S.to_s, READ_TIMEOUT_S.to_s, slow ? "1" : "0"]
+  args = [RbConfig.ruby, CLIENT_SCRIPT, count.to_s, CONNECT_TIMEOUT_S.to_s, READ_TIMEOUT_S.to_s, slow ? "1" : "0",
+          offset.to_s, *urls]
   pid = Process.spawn({ "RUBY_YJIT_ENABLE" => nil }, *args, in: in_r, out: out_w)
   out_w.close
   in_r.close
@@ -211,11 +215,13 @@ def cpu_seconds
   t.utime + t.stime
 end
 
-def run_broadcasts(stream)
+# One sample publishes to every stream in turn; its fan-out is timed from the
+# first publish (the tag is the same on every stream).
+def run_broadcasts(streams)
   Array.new(KNOBS[:broadcasts]) do |i|
     sleep BROADCAST_GAP_S unless i.zero?
     at = realtime
-    stream.broadcast(broadcast_html(i.to_s))
+    streams.each { |stream| stream.broadcast(broadcast_html(i.to_s)) }
     { "tag" => i.to_s, "at" => at }
   end
 end
@@ -229,23 +235,27 @@ end
 def run_cell(clients, mode)
   cap = StreamsScaleHarness.raise_fd_limit!(StreamsScaleHarness.fd_needed(clients + KNOBS[:slow]))
   reason = StreamsScaleHarness.fd_skip_reason(clients + KNOBS[:slow], cap: cap)
-  return { "m" => clients, "skip_reason" => reason } if reason
+  return { "m" => clients, "streams" => KNOBS[:streams], "skip_reason" => reason } if reason
 
-  stream_name = "ss_#{mode}_#{SecureRandom.hex(4)}"
-  Pgbus.client.ensure_stream_queue(stream_name)
-  stream = Pgbus.stream(stream_name, durable: mode == :durable)
+  run_id = SecureRandom.hex(4)
+  stream_names = Array.new(KNOBS[:streams]) { |i| "ss_#{mode}_#{run_id}_#{i}" }
+  stream_names.each { |name| Pgbus.client.ensure_stream_queue(name) }
+  streams = stream_names.map { |name| Pgbus.stream(name, durable: mode == :durable) }
   log = StringIO.new
   streamer, harness = boot_server(log)
   sinks = instrument(streamer)
   streamer.dispatcher.threads.first.name = DISPATCHER_THREAD if KNOBS[:profile]
-  url = "#{harness.url("/#{Pgbus::Streams::SignedName.sign(stream_name)}")}?since=#{stream.current_msg_id}"
+  urls = stream_names.zip(streams).map do |name, stream|
+    "#{harness.url("/#{Pgbus::Streams::SignedName.sign(name)}")}?since=#{stream.current_msg_id}"
+  end
 
   GC.start
   rss_before = rss_kb
-  children = StreamsScaleHarness.split_clients(clients, KNOBS[:client_processes]).map do |n|
-    spawn_client(url, n, slow: false)
+  counts = StreamsScaleHarness.split_clients(clients, KNOBS[:client_processes])
+  children = counts.zip(StreamsScaleHarness.client_offsets(counts)).map do |n, offset|
+    spawn_client(urls, n, offset: offset, slow: false)
   end
-  children << spawn_client(url, KNOBS[:slow], slow: true) if KNOBS[:slow].positive?
+  children << spawn_client(urls, KNOBS[:slow], offset: clients, slow: true) if KNOBS[:slow].positive?
   expected = clients + KNOBS[:slow]
 
   go_at = realtime
@@ -255,13 +265,13 @@ def run_cell(clients, mode)
   rss_connected = rss_kb
 
   connects = StreamsScaleHarness.drain(sinks[:connect])
-  stream.broadcast(broadcast_html("warmup"))
+  streams.each { |stream| stream.broadcast(broadcast_html("warmup")) }
   sleep 0.5
   sinks.each_value { |q| StreamsScaleHarness.drain(q) }
   cpu0 = cpu_seconds
   wall0 = monotonic
   broadcasts, profile = profiled(mode, clients) do
-    run_broadcasts(stream).tap { streamer.heartbeat.tick }
+    run_broadcasts(streams).tap { streamer.heartbeat.tick }
   end
   cpu_ratio = (cpu_seconds - cpu0) / (monotonic - wall0)
   rss_after = rss_kb
@@ -285,7 +295,7 @@ def run_cell(clients, mode)
   wakes = timings[:wake]
 
   {
-    "m" => clients, "registered" => registered, "connect_all_s" => connect_all_s,
+    "m" => clients, "streams" => KNOBS[:streams], "registered" => registered, "connect_all_s" => connect_all_s,
     "connect_p50_ms" => connect[:p50_ms], "connect_p99_ms" => connect[:p99_ms],
     "fanout_first_p50_ms" => fanout[:first_p50_ms], "fanout_last_p50_ms" => fanout[:last_p50_ms],
     "fanout_last_p99_ms" => fanout[:last_p99_ms], "misses" => fanout[:misses],
@@ -307,8 +317,8 @@ def run_cell(clients, mode)
 ensure
   streamer&.shutdown!
   harness&.shutdown
-  # A fresh queue per cell; dropping it keeps repeated runs from piling up.
-  Pgbus.client.drop_queue(stream_name) if stream_name
+  # Fresh queues per cell; dropping them keeps repeated runs from piling up.
+  stream_names&.each { |name| Pgbus.client.drop_queue(name) }
 end
 
 DISPATCHER_THREAD = "pgbus-streams-dispatcher"
@@ -331,9 +341,9 @@ def print_cell_notes(mode, row)
   return if row["skip_reason"]
 
   StreamsScaleHarness.profile_lines(row["profile"]).each { |l| puts "  dispatcher profile: #{l}" } if row["profile"]
-  printf "  %s M=%d: registered %d; connect p50 %.1f ms; dispatcher handle_connect p50/p99 %.1f / %.1f ms; " \
+  printf "  %s M=%d over %d stream(s): registered %d; connect p50 %.1f ms; dispatcher handle_connect p50/p99 %.1f / %.1f ms; " \
          "%d wakes for %d broadcasts; %d heartbeat tick(s); RSS %d → %d → %d KB\n",
-         mode, row["m"], row["registered"], row["connect_p50_ms"] || Float::NAN,
+         mode, row["m"], row["streams"], row["registered"], row["connect_p50_ms"] || Float::NAN,
          row["handle_connect_p50_ms"] || Float::NAN, row["handle_connect_p99_ms"] || Float::NAN,
          row["wake_count"], KNOBS[:broadcasts], row["heartbeat_ticks"],
          row["rss_before_kb"], row["rss_connected_kb"], row["rss_after_kb"]
@@ -387,7 +397,8 @@ def print_header
        "peer-close watcher #{Pgbus.configuration.streams_peer_close_interval.inspect} s, " \
        "listen health check #{Pgbus.configuration.streams_listen_health_check_ms} ms"
   puts "  fd soft limit #{cap}, somaxconn #{somaxconn}, #{KNOBS[:client_processes]} client processes, " \
-       "#{KNOBS[:broadcasts]} broadcasts #{(BROADCAST_GAP_S * 1000).round} ms apart, slow clients #{KNOBS[:slow]}"
+       "#{KNOBS[:broadcasts]} broadcasts #{(BROADCAST_GAP_S * 1000).round} ms apart, slow clients #{KNOBS[:slow]}, " \
+       "#{KNOBS[:streams]} stream(s), clients dealt round-robin"
   puts "  load average before: #{StreamsScaleHarness.load_average || "unknown"}"
   puts "=" * 78
 end

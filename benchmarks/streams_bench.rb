@@ -24,9 +24,12 @@
 #      batching matters — Connection#enqueue called M times means M
 #      io.write_nonblock calls.
 #
-#   4. Connect latency under thundering herd: time to open K SSE
-#      connections concurrently. This is where Listener mutex
-#      contention shows up if ensure_listening serializes badly.
+#   4. Connect latency under thundering herd: time until K SSE
+#      connections opened concurrently are all registered (each
+#      client's pgbus:connected frame, written when the dispatcher
+#      registers it; the response headers come before that). This is
+#      where the dispatcher's per-connect listener wait shows up
+#      (issue #630).
 #
 # The A/B comparison at the end prints the stats=off baseline vs the
 # stats=on cost so the opt-in default can be justified numerically.
@@ -41,6 +44,10 @@ require "pgbus"
 
 require_relative "../spec/support/puma_test_harness"
 require_relative "../spec/support/sse_test_client"
+
+# Section 4 waits this long for each client's pgbus:connected frame: on a
+# tree where every connect costs a listener cycle (250 ms), K = 50 takes ~12.5 s.
+CONNECT_REGISTER_TIMEOUT_S = 60
 
 DATABASE_URL = ENV.fetch("PGBUS_DATABASE_URL") do
   abort "PGBUS_DATABASE_URL not set. Example: postgres://user@host/db"
@@ -278,7 +285,12 @@ def run_suite(stats_enabled:)
       t0 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       threads = Array.new(k) do
         # K concurrent connects, on purpose; each is joined by #value below.
-        Thread.new { connect_client(harness, stream_name, since_id: since) } # rubocop:disable ThreadSafety/NewThread
+        Thread.new do # rubocop:disable ThreadSafety/NewThread
+          client = connect_client(harness, stream_name, since_id: since)
+          raise "a client was never registered" unless client.wait_for_connection_id(timeout: CONNECT_REGISTER_TIMEOUT_S)
+
+          client
+        end
       end
       clients = threads.map(&:value)
       elapsed = (Process.clock_gettime(Process::CLOCK_MONOTONIC) - t0) * 1000.0
