@@ -55,9 +55,11 @@ module Pgbus
     # quiet_active_job_logs (issue #618): true makes each worker process
     # unsubscribe ActiveJob's LogSubscriber from perform_start.active_job and
     # perform.active_job (Pgbus::ActiveJob::QuietLogs), so the per-job
-    # "Performing …" / "Performed …" info lines stop. Every other ActiveJob
-    # line (Enqueued, Retrying, Stopped retrying, Discarded) still logs, a
-    # failed job still logs its error line through ErrorReporter, and the web
+    # "Performing …" / "Performed …" info lines stop, and with them ActiveJob's
+    # "Error performing …" line (the same perform listener writes it): a job
+    # that raised is still logged by ErrorReporter and recorded in
+    # pgbus_failed_events, a job a before_perform callback halted logs nothing.
+    # Enqueued, Retrying, Stopped retrying and Discarded still log, and the web
     # process is untouched. Without ActiveJob it does nothing.
     attr_reader :quiet_active_job_logs
     # visibility_heartbeat / visibility_heartbeat_interval: while a job runs,

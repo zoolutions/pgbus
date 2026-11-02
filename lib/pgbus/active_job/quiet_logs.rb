@@ -5,9 +5,14 @@ module Pgbus
     # config.quiet_active_job_logs (issue #618): a worker process stops
     # ActiveJob's per-job "Performing …" / "Performed …" info lines by
     # unsubscribing ActiveJob::LogSubscriber from perform_start.active_job and
-    # perform.active_job, and from nothing else. Every other ActiveJob line
-    # (Enqueued, Retrying, Stopped retrying, Discarded) still logs as the host
-    # configured it, and the web process is untouched. Swapping
+    # perform.active_job. The perform listener also writes ActiveJob's
+    # "Error performing …" error line, for a job that raised (with its
+    # backtrace) and for one a before_perform callback halted, so those go too:
+    # a raised job is still logged by ErrorReporter (class and message at
+    # error) and recorded in pgbus_failed_events; a halted job logs nothing.
+    # The other ActiveJob events (Enqueued, Retrying, Stopped retrying,
+    # Discarded) still log as the host configured them, and the web process is
+    # untouched. Swapping
     # ActiveJob::Base.logger instead would reach the web process too, and by
     # default that logger is Rails.logger.
     module QuietLogs

@@ -875,7 +875,7 @@ it is specific; otherwise the nearest owner frame toward the root does:
 
 | sub-bucket | what lands there |
 |---|---|
-| `aj_log` | ActiveJob's log subscriber, `ActiveJob::Logging` (the `tag_logger` wrapper), ActiveSupport's log subscriber and loggers |
+| `aj_log` | ActiveJob's log subscriber, `ActiveJob::Logging` (the `tag_logger` wrapper), and any ActiveSupport log subscriber or logger frame (in this bench only ActiveJob's lines reach one: the app logs at `info` and pgbus's logger is a plain `Logger`) |
 | `aj_arguments` | `ActiveJob::Arguments`, the serializers, GlobalID |
 | `aj_callbacks` | ActiveSupport callbacks run by ActiveJob (`perform` callbacks) |
 | `notif:activejob` | `ActiveSupport::Notifications` work for ActiveJob's `perform_start` / `perform` events, the listeners included |
@@ -929,17 +929,16 @@ LogSubscriber's listener being invoked, so `aj_log` alone understates the lines:
 
 What the numbers say:
 
-- **Of #484's 37 %, a third to a half is pgbus's own ActiveRecord work, a fifth
-  to a quarter the two log lines, a quarter to a third ActiveJob's per-job
-  core.** ActiveJob's framework overhead is smaller than the bucket made it
-  look. `pgbus_rails` is mostly `StatBuffer#write_to_database` (job stats'
+- **Of #484's 37 % (the Rails-off cells), 35–53 % is pgbus's own ActiveRecord
+  work, 19–29 % the two log lines, 24–39 % ActiveJob's per-job core.**
+  ActiveJob's framework overhead is smaller than the bucket made it look. `pgbus_rails` is mostly `StatBuffer#write_to_database` (job stats'
   `insert_all`, 100 rows per flush): ~31–41 % of the bucket, about 12–15 % of
   all on-CPU time (a frame tally of one 3 000-job profiled drain per mode). The rest of
   `pgbus_rails` is `Heartbeat#register_process` / `#deregister_process`, which run
   once per drain (each drain builds a new Worker), a bench artefact a long-lived
   worker does not pay per job. The flush is followed up in #622: it is
   pgbus-owned, over 10 % of on-CPU, and needs its own before/after.
-- **The log lines: without a JIT, warn and quiet both buy +7–10 % jobs/s**
+- **The log lines: without a JIT, warn and quiet both buy +6–10 % jobs/s**
   (4 824–4 888 → 5 182–5 307 and 5 250–5 299, equal within noise); with YJIT all
   three cells are within noise (the Rails-off YJIT pair alone spread 14 %).
   `quiet` removes more of the profile than `warn` here because the bench's
@@ -947,9 +946,12 @@ What the numbers say:
   still pays `ActiveJob::Logging#tag_logger` and the subscriber's `silenced?`
   checks. A host's `ActiveJob::Base.logger` is `Rails.logger`, which is tagged,
   so in a Rails app `quiet` keeps that `tag_logger` push and pop too. The knob's
-  case is scope, not speed: it acts in worker processes only, keeps every other
-  ActiveJob line (`Enqueued`, `Retrying`, `Stopped retrying`, `Discarded`) and a
-  failed job's `error` line, and leaves the web process and `Rails.logger` alone.
+  case is scope, not speed: it acts in worker processes only, keeps `Enqueued`,
+  `Retrying`, `Stopped retrying` and `Discarded`, and leaves the web process and
+  `Rails.logger` alone. It also drops ActiveJob's `Error performing …` line
+  (the same `perform` listener writes it): a job that raised is still logged by
+  pgbus's `ErrorReporter` and kept in `pgbus_failed_events`, and a job a
+  `before_perform` callback halted logs nothing.
 - **The executor wrap: 13–18 % of on-CPU time, kept.** Its hooks are
   ActiveRecord's async-query tracker, the query cache's enable/clear, the
   connection pool's return, and the callbacks that run them. The Rails app
@@ -958,13 +960,14 @@ What the numbers say:
   with YJIT. It stays: the wrap is what returns the job's ActiveRecord
   connections, clears the query cache and lets development reload code, and
   SolidQueue wraps every job the same way.
-- **`notif:pgbus` is 0–2 % of the bucket (under 1 % of on-CPU time)**, far under the 10 %
+- **`notif:pgbus` is 0–3 % of the bucket (at most 1.2 % of on-CPU time)**, far under the 10 %
   that would justify touching pgbus's three `instrument` calls per job.
 
 `config.quiet_active_job_logs` (default `false`) unsubscribes
 `ActiveJob::LogSubscriber` from `perform_start.active_job` and
 `perform.active_job` once, first thing in `Process::Worker#run`
-(`Pgbus::ActiveJob::QuietLogs`). It uses `Fanout#all_listeners_for`, not
+(`Pgbus::ActiveJob::QuietLogs`), after loading `ActiveJob::Base` (which attaches
+the subscriber) so a worker that has not loaded a job class yet still finds it. It uses `Fanout#all_listeners_for`, not
 `listeners_for`, so a subscriber silenced at boot (a logger above `info`) is
 removed too. The executor allocation budget is unchanged: the knob adds nothing
 per job.

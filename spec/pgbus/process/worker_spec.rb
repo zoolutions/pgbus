@@ -99,9 +99,20 @@ RSpec.describe Pgbus::Process::Worker do
       expect(Pgbus::ActiveJob::QuietLogs).not_to have_received(:apply!)
     end
 
-    it "does nothing without ActiveJob's log subscriber" do
+    # ActiveJob::LogSubscriber attaches when active_job/base loads; a worker
+    # whose app eager-loaded no job class would find nothing to unsubscribe.
+    it "loads ActiveJob::Base before it quiets the lines" do
       config.quiet_active_job_logs = true
-      hide_const("ActiveJob::LogSubscriber")
+      allow(worker).to receive(:require).and_call_original
+
+      expect { worker.run }.to raise_error(stop_run)
+      expect(worker).to have_received(:require).with("active_job/base").ordered
+      expect(Pgbus::ActiveJob::QuietLogs).to have_received(:apply!).ordered
+    end
+
+    it "does nothing without ActiveJob" do
+      config.quiet_active_job_logs = true
+      hide_const("ActiveJob::Base")
 
       expect { worker.run }.to raise_error(stop_run)
       expect(Pgbus::ActiveJob::QuietLogs).not_to have_received(:apply!)

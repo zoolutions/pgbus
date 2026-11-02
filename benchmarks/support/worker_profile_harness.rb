@@ -28,7 +28,8 @@ require "json"
 #
 # Issue #618 splits the on-CPU `rails` bucket by who owns the work (the
 # "inside rails" table). The leaf rails frame names it when it is specific
-# (ActiveJob's log subscriber and loggers: aj_log; argument deserialization
+# (ActiveJob's log subscriber and any ActiveSupport log subscriber or logger
+# frame: aj_log, which in the bench only ActiveJob's lines reach; argument deserialization
 # and GlobalID: aj_arguments). Otherwise the nearest owner frame, leaf first,
 # names it: Rails.application.executor's wrap (executor_wrap, its hooks
 # included); ActiveJob (aj_callbacks for a callbacks leaf, notif:activejob for
