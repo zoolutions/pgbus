@@ -526,7 +526,10 @@ RSpec.describe Pgbus::Process::Supervisor do
         ready_w.close
         ready = ready_r.read(1)
         ready_r.close
-        raise "forked child #{pid} exited before reporting ready" unless ready
+        unless ready
+          kill_child(pid) # reap it: the caller never gets the pid
+          raise "forked child #{pid} exited before reporting ready"
+        end
 
         pid
       end
