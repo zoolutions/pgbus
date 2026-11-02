@@ -42,7 +42,8 @@ module Pgbus
         say "Next steps:"
         say "  1. Deploy pgbus 0.23.0+ everywhere first: an older process recreates its mixed-case row"
         say "  2. Run: rails db:migrate#{migrate_command_suffix}"
-        say "  3. Check: rake pgbus:doctor (\"Queue name case\" is ok)"
+        say "  3. Check: rake pgbus:doctor (\"Queue name case\" is ok); if it still names a queue,"
+        say "     run: rake pgbus:queues:fold_case"
         say ""
       end
 

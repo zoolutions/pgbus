@@ -105,6 +105,30 @@ RSpec.describe "Queue names in lower case (integration)", :integration do
   end
 
   describe "dropping a queue" do
+    # Until the fold migration runs, the dashboard lists both spellings and the
+    # orphan stream sweep sees both; they name one table.
+    it "removes only the pgmq.meta row of a mixed-case duplicate, keeping the shared table" do
+      client.ensure_queue("casedup")
+      client.send_message("casedup", { "n" => 1 })
+      conn.execute("SELECT pgmq.create('pgbus_int_CaseDup')")
+
+      client.drop_queue("pgbus_int_CaseDup", prefixed: false)
+
+      expect(meta_rows("pgbus_int_casedup")).to eq(["pgbus_int_casedup"])
+      expect(client.read_batch("casedup", qty: 5, vt: 0).size).to eq(1)
+    ensure
+      client.drop_queue("casedup")
+    end
+
+    it "removes every spelling's pgmq.meta row with the table" do
+      client.ensure_queue("casegone")
+      conn.execute("SELECT pgmq.create('pgbus_int_CaseGone')")
+
+      client.drop_queue("casegone")
+
+      expect(meta_rows("pgbus_int_casegone")).to be_empty
+    end
+
     it "clears failed events recorded under a mixed-case spelling of it" do
       client.ensure_queue("casedrop")
       conn.execute(<<~SQL)

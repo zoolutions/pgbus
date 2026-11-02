@@ -273,7 +273,8 @@ module Pgbus
       Check.new(name: "Queue name case", status: :warn,
                 detail: "#{names.size} queue(s) in pgmq.meta spelled in mixed case (#{shown}); their tables are " \
                         "lower case and pgbus now uses that spelling — once every process runs this pgbus, run " \
-                        "`rails generate pgbus:fold_queue_name_case` and migrate")
+                        "`rails generate pgbus:fold_queue_name_case` and migrate " \
+                        "(`rake pgbus:queues:fold_case` once that migration has run)")
     rescue StandardError => e
       Check.new(name: "Queue name case", status: :warn, detail: "could not read pgmq.meta (#{e.class}: #{e.message})")
     end

@@ -2246,7 +2246,7 @@ A single preflight command that answers "is this environment healthy enough to r
 | Database | Unreachable (`SELECT 1` via `Client#ping`) | — |
 | PGMQ schema | Schema not installed | Installed but untracked, or behind the vendored version |
 | Queues | A configured queue has no PGMQ table | — |
-| Queue name case | — | `pgmq.meta` holds a queue spelled in mixed case (created before 0.23.0): it shares its lower-case table with the spelling pgbus now uses, so the dashboard lists it twice until `rails generate pgbus:fold_queue_name_case` runs |
+| Queue name case | — | `pgmq.meta` holds a queue spelled in mixed case (created before 0.23.0): it shares its lower-case table with the spelling pgbus now uses, so the dashboard lists it twice until `rails generate pgbus:fold_queue_name_case` runs (`rake pgbus:queues:fold_case` for a row an older process recreated after it); dropping the mixed-case entry removes only its `pgmq.meta` row, never the shared table |
 | LISTEN/NOTIFY | — | A configured queue is missing its insert trigger (falls back to polling) |
 | Process liveness | Verdict is `STALLED` | Verdict is `DEGRADED` |
 | GlobalID allowlist | — | `allowed_global_id_models` is `nil` (allow-all) in production |

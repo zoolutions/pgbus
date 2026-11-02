@@ -9,6 +9,17 @@ namespace :pgbus do
       puts "Done. FIFO indexes created on all queues."
     end
 
+    # Issue #633: the pgbus:fold_queue_name_case migration runs once; a
+    # mixed-case pgmq.meta row an older process recreated after it is folded
+    # here (pgbus doctor's "Queue name case" check names them).
+    desc "Spell mixed-case queues (pgmq.meta, NOTIFY triggers, pgbus's queue-name columns) in lower case"
+    task fold_case: :environment do
+      pool = Pgbus.configuration.connects_to ? Pgbus::BusRecord.connection_pool : ActiveRecord::Base.connection_pool
+      names = Pgbus.client.mixed_case_queue_names
+      pool.with_connection { |connection| connection.transaction { Pgbus::QueueNameFold.run!(connection) } }
+      puts names.empty? ? "Every queue is already spelled in lower case." : "Folded: #{names.join(", ")}"
+    end
+
     desc "Create FIFO index on a specific queue (QUEUE=name)"
     task fifo_index: :environment do
       queue = ENV.fetch("QUEUE") do

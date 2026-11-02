@@ -114,7 +114,10 @@ RSpec.describe "pgbus:fold_queue_name_case migration (integration)", :integratio
         INSERT INTO pgbus_queue_states (queue_name, paused, created_at, updated_at)
           VALUES ('Critical', true, now(), now()), ('Mixed', true, now(), now()), ('mixed', false, now(), now());
         INSERT INTO pgbus_uniqueness_keys (lock_key, queue_name, msg_id) VALUES ('fold-lock', 'Critical', 7);
-        INSERT INTO pgbus_failed_events (queue_name, msg_id, source_queue) VALUES ('Critical', 3, 'pgbus_Critical_p1');
+        INSERT INTO pgbus_failed_events (queue_name, msg_id, source_queue, error_message)
+          VALUES ('Critical', 3, 'pgbus_Critical_p1', 'only'),
+                 ('Critical', 4, 'pgbus_Critical_p1', 'before the deploy'),
+                 ('Critical', 4, 'pgbus_critical_p1', 'after the deploy');
       SQL
 
       migrate
@@ -126,8 +129,9 @@ RSpec.describe "pgbus:fold_queue_name_case migration (integration)", :integratio
       expect(conn.select_value("SELECT queue_name FROM pgbus_uniqueness_keys WHERE lock_key = 'fold-lock'")).to eq("critical")
       # queue_name is the executor's logical name, kept as configured; the
       # source queue is the physical one, now spelled in lower case.
-      expect(conn.select_rows("SELECT queue_name, source_queue FROM pgbus_failed_events WHERE msg_id = 3"))
-        .to eq([%w[Critical pgbus_critical_p1]])
+      expect(conn.select_rows("SELECT msg_id, source_queue, error_message FROM pgbus_failed_events ORDER BY msg_id"))
+        .to eq([[3, "pgbus_critical_p1", "only"], [4, "pgbus_critical_p1", "after the deploy"]])
+      expect(conn.select_values("SELECT DISTINCT queue_name FROM pgbus_failed_events")).to eq(["Critical"])
     end
   end
 

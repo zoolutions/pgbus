@@ -740,10 +740,16 @@ module Pgbus
 
     def drop_queue(queue_name, prefixed: true)
       name = prefixed ? config.queue_name(queue_name) : queue_name
+      if case_duplicate?(name)
+        forget_case_duplicate(name)
+        return true
+      end
+
       result = with_stale_connection_retry do
         synchronized { @pgmq.drop_queue(name) }
       end
       @queues_created.delete(name)
+      forget_other_spellings(name)
       # Failed-event rows are keyed by the name the executor saw (physical or
       # logical); a recreated queue reuses msg_ids, so neither may survive.
       FailedEventRecorder.clear_queue!([name, name.delete_prefix("#{config.queue_prefix}_")].uniq)
@@ -1638,6 +1644,41 @@ module Pgbus
     # duplicate as its cause automatically.
     def duplicate_relation_error?(error)
       duplicate_install_error?(error) || duplicate_install_error?(error.cause)
+    end
+
+    # A mixed-case pgmq.meta row from before issue #633 whose lower-case
+    # spelling is registered too: both name one table, the lower-case row is
+    # the queue every current process uses. Dropping the duplicate (the
+    # dashboard lists both until pgbus:fold_queue_name_case runs, and the
+    # orphan stream sweep sees both) must not drop that table.
+    def case_duplicate?(name)
+      name != name.downcase && queue_registered?(name.downcase)
+    end
+
+    # Removes only the duplicate's pgmq.meta row (its throttle and topic
+    # bindings cascade); the table and the lower-case queue stay.
+    def forget_case_duplicate(name)
+      with_stale_connection_retry do
+        synchronized do
+          @pgmq.with_connection do |conn|
+            conn.exec_params("DELETE FROM pgmq.meta WHERE queue_name = $1", [name])
+          end
+        end
+      end
+      @queues_created.delete(name)
+    end
+
+    # pgmq.drop_queue removes the table and only its own pgmq.meta row; a
+    # mixed-case spelling from before issue #633 would be left naming a table
+    # that is gone.
+    def forget_other_spellings(name)
+      synchronized do
+        @pgmq.with_connection do |conn|
+          conn.exec_params(
+            "DELETE FROM pgmq.meta WHERE lower(queue_name) = lower($1) AND queue_name <> $1", [name]
+          )
+        end
+      end
     end
 
     # Whether pgmq.meta records the queue — the authoritative "create
