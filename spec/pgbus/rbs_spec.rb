@@ -62,6 +62,7 @@ RSpec.describe "the RBS signatures in sig/" do # rubocop:disable RSpec/DescribeC
     "Pgbus::Streams::Stream" => -> { [own_instance_methods(Pgbus::Streams::Stream), :instance] },
     "Pgbus::Streams::Stream (class methods)" => -> { [own_singleton_methods(Pgbus::Streams::Stream), :singleton] },
     "Pgbus::ActiveJob::Adapter" => -> { [own_instance_methods(Pgbus::ActiveJob::Adapter), :instance] },
+    "Pgbus::ActiveJob::QuietLogs" => -> { [own_singleton_methods(Pgbus::ActiveJob::QuietLogs), :singleton] },
     "ActiveJob::QueueAdapters::PgbusAdapter" => -> { [own_instance_methods(ActiveJob::QueueAdapters::PgbusAdapter), :instance] },
     "Pgbus::Concurrency::ClassMethods" => -> { [Pgbus::Concurrency::ClassMethods.public_instance_methods(false).sort, :instance] },
     "Pgbus::Uniqueness::ClassMethods" => -> { [Pgbus::Uniqueness::ClassMethods.public_instance_methods(false).sort, :instance] },

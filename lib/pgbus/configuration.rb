@@ -70,6 +70,18 @@ module Pgbus
     # libpq 14+ and pg 1.5+ (pipeline mode), checked by validate!. true
     # (default) commits as before.
     attr_reader :completion_synchronous_commit
+    # quiet_active_job_logs (issue #618): true makes each worker process
+    # unsubscribe ActiveJob's LogSubscriber from perform_start.active_job and
+    # perform.active_job (Pgbus::ActiveJob::QuietLogs), so the per-job
+    # "Performing …" / "Performed …" info lines stop, and with them ActiveJob's
+    # "Error performing …" line (the same perform listener writes it): an
+    # exception that escapes ActiveJob's handlers is still logged by
+    # ErrorReporter and recorded in pgbus_failed_events, one retry_on catches
+    # still logs ActiveJob's "Retrying …" line, and a job a before_perform
+    # callback halted logs nothing.
+    # Enqueued, Retrying, Stopped retrying and Discarded still log, and the web
+    # process is untouched. Without ActiveJob it does nothing.
+    attr_reader :quiet_active_job_logs
     # visibility_heartbeat / visibility_heartbeat_interval: while a job runs,
     # its message's visibility timeout is re-armed every interval seconds
     # (default: a third of visibility_timeout), so a job that outlives the
@@ -386,6 +398,7 @@ module Pgbus
       @completion_batch_size = 100
       @completed_jobs = :archive
       @completion_synchronous_commit = true
+      @quiet_active_job_logs = false
       @execution_mode = :threads
 
       @max_jobs_per_worker = nil
@@ -881,6 +894,14 @@ module Pgbus
       end
 
       @completion_synchronous_commit = value
+    end
+
+    def quiet_active_job_logs=(value)
+      unless [true, false].include?(value)
+        raise Pgbus::ConfigurationError, "quiet_active_job_logs must be true or false (got #{value.inspect})"
+      end
+
+      @quiet_active_job_logs = value
     end
 
     def native_statements=(value)

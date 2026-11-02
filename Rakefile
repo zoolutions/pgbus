@@ -26,7 +26,7 @@ namespace :bench do
   db_benches = %w[connection_pool_bench integration_bench streams_bench streams_read_pool_bench
                   execution_modes_bench pool_swap_bench pool_autoscale_bench job_burst_bench
                   notify_wake_bench notify_chaos_bench streams_hub_bench fair_read_bench
-                  worker_profile_bench workflow_insights_bench].freeze
+                  worker_profile_bench workflow_insights_bench streams_scale_bench].freeze
   # The unit suite is every *_bench.rb that doesn't need a database, derived
   # from the directory so a new unit bench is picked up automatically (kept in
   # sync with bench:one, which globs the same files).
@@ -86,6 +86,12 @@ namespace :bench do
   desc "Run streams benchmarks (requires PGBUS_DATABASE_URL; boots real Puma + SSE)"
   task :streams do
     ruby "benchmarks/streams_bench.rb"
+  end
+
+  desc "Run the streams scale bench: STREAMS_SCALE_CLIENTS (default 100,1000) SSE clients on one Puma process — " \
+       "connect storm, fan-out p99, dispatcher wake, heartbeat tick, RSS per connection (requires PGBUS_DATABASE_URL)"
+  task :streams_scale do
+    ruby "benchmarks/streams_scale_bench.rb"
   end
 
   desc "Run execution-mode connection benchmark (threads vs async pool usage; requires PGBUS_DATABASE_URL)"

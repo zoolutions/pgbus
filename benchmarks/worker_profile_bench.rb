@@ -48,7 +48,14 @@
 # or delete sets config.completed_jobs in every cell, issue #607; unset leaves
 # the default), WP_BENCH_COMPLETION_COMMIT (sync or async sets
 # config.completion_synchronous_commit to true or false in every cell, issue
-# #619; unset leaves the default).
+# #619; unset leaves the default),
+# WP_BENCH_AJ_LOGS (issue #618: default keeps the bench's
+# ActiveJob logger, warn gives ActiveJob a TaggedLogging logger at warn, quiet
+# sets config.quiet_active_job_logs), WP_BENCH_RAILS_APP (1 boots a minimal
+# Rails app in every cell so jobs run inside Rails.application.executor.wrap,
+# issue #618; unset or 0 leaves Rails out, the shape #484 measured).
+# Worker and consumer cells also print an "inside rails" table: the on-CPU rails bucket
+# split by owner (benchmarks/support/worker_profile_harness.rb).
 # Raw vernier profiles land in tmp/benchmarks/ (open in profiler.firefox.com).
 # Requires PGBUS_DATABASE_URL. Run-and-report, never a CI gate.
 
@@ -75,6 +82,8 @@ begin
   COMPLETION_BATCHING = WorkerProfileHarness.completion_batching?
   COMPLETED_JOBS = WorkerProfileHarness.completed_jobs
   COMPLETION_COMMIT = WorkerProfileHarness.completion_commit
+  AJ_LOGS = WorkerProfileHarness.aj_logs
+  RAILS_APP = WorkerProfileHarness.rails_app?
 rescue ArgumentError => e
   abort e.message
 end
@@ -117,7 +126,7 @@ def run_child(role, location, url)
     role: role, location: location, jit: jit, jobs: JOBS,
     wall_s: timed[:wall_s], cpu_s: timed[:cpu_s], gc_s: timed[:gc_s],
     jobs_per_s: JOBS / timed[:wall_s], pool_shares: profiled[:pool_shares], loop_shares: profiled[:loop_shares],
-    cpu_shares: profiled[:cpu_shares], profile_path: profile_path
+    cpu_shares: profiled[:cpu_shares], rails_sub_shares: profiled[:rails_sub_shares], profile_path: profile_path
   )
   puts RESULT_PREFIX + JSON.generate(cell.to_h)
 end
@@ -198,11 +207,18 @@ def print_table(cells)
   print_fleet_table(fleet) if fleet.any?
 end
 
+def print_rails_split(cells)
+  puts
+  puts "Inside rails (share of the rails bucket / share of all on-CPU time):"
+  puts WorkerProfileHarness.rails_sub_table(cells)
+end
+
 def print_profile_table(cells)
   print_throughput(cells)
   print_split(cells, "pool_shares", "Job-pool threads (where each executing job's time goes)")
   print_split(cells, "loop_shares", "Main loop (reads batches, hands them to the pool)")
   print_split(cells, "cpu_shares", "On-CPU composition, all threads (whose code ran while holding the GVL)", CPU_BUCKETS)
+  print_rails_split(cells)
   puts
   puts "jobs/s and ms/job come from the unprofiled drain (#{JOBS} jobs, #{THREADS} threads, " \
        "read_ahead #{READ_AHEAD.nil? ? "not passed" : READ_AHEAD})."
@@ -246,6 +262,8 @@ puts "  read_ahead: #{READ_AHEAD.nil? ? "not passed" : READ_AHEAD}"
 puts "  completion_batching: #{COMPLETION_BATCHING ? "on" : "off"}"
 puts "  completed_jobs (workers; consumers always archive): #{COMPLETED_JOBS || "default"}"
 puts "  completion commit: #{completion_commit_label}"
+puts "  ActiveJob log lines: #{AJ_LOGS}"
+puts "  Rails app (executor wrap): #{RAILS_APP ? "on" : "off (set WP_BENCH_RAILS_APP=1)"}"
 puts "  proxied cells: #{proxy_url ? "on" : "off (set PGBUS_BENCH_PROXY_URL)"}"
 puts "  fleet processes: #{PROCESSES.join(", ")}" if ROLES.fetch(ROLE).include?("fleet")
 puts "=" * 70
