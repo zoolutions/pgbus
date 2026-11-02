@@ -620,7 +620,7 @@ RSpec.describe Pgbus::Web::Streamer::StreamEventDispatcher do
       # half of the race fix in isolation.
       connection = build_conn(id: "new", stream_name: "chat", last_msg_id_sent: 1000)
       buffer = []
-      dispatcher.instance_variable_get(:@in_flight)["chat"] << [connection, buffer]
+      (dispatcher.instance_variable_get(:@in_flight)["chat"] ||= []) << [connection, buffer]
 
       allow(client).to receive(:read_after)
         .with("chat", after_id: 1000, limit: 500)
@@ -662,6 +662,21 @@ RSpec.describe Pgbus::Web::Streamer::StreamEventDispatcher do
       # The envelope must have landed on the connection via the buffer
       # drain (step 4), since step 3 returned an empty result.
       expect(connection.enqueued.map(&:msg_id)).to contain_exactly(1050)
+      # The drain frames per connection, with no wake frames (issue #621).
+      expect(connection.enqueue_frames).to all(be_nil)
+    end
+
+    it "keeps no per-stream state for a wake on a stream with no local subscriber (issue #621)" do
+      conn = build_conn(id: "a", stream_name: "order_42")
+      allow(client).to receive(:read_after).and_return([])
+      dispatcher.send(:handle, described_class::ConnectMessage.new(connection: conn))
+      dispatcher.send(:handle, described_class::DisconnectMessage.new(connection: conn))
+
+      # A NOTIFY already in flight when the last subscriber left.
+      dispatcher.send(:handle, described_class::WakeMessage.new(queue_name: "order_42"))
+
+      expect(dispatcher.instance_variable_get(:@in_flight)).to be_empty
+      expect(registry.instance_variable_get(:@stream_snapshots)).to be_empty
     end
 
     it "handles the simple case where step 3 finds the envelope in the archive" do

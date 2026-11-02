@@ -80,7 +80,13 @@ module Pgbus
         # object until the stream's membership changes.
         def connections_for(stream_name)
           @mutex.synchronize do
-            @stream_snapshots[stream_name] ||= @by_stream[stream_name]&.dup&.freeze || EMPTY
+            # No entry for a stream without members: a wake that lands after
+            # the last subscriber left must not leave a slot behind for every
+            # per-record stream name (order_42, …) the process ever served.
+            members = @by_stream[stream_name]
+            next EMPTY unless members
+
+            @stream_snapshots[stream_name] ||= members.dup.freeze
           end
         end
 

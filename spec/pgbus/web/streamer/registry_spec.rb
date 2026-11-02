@@ -149,6 +149,17 @@ RSpec.describe Pgbus::Web::Streamer::Registry do
       expect(registry.connections_for("chat")).to eq(conns)
     end
 
+    it "keeps nothing for a stream asked about after its last connection left (no per-stream leak)" do
+      conn = build_conn(id: "c1", stream_name: "order_42")
+      registry.register(conn)
+      registry.connections_for("order_42")
+      registry.unregister(conn)
+
+      expect(registry.connections_for("order_42")).to be(described_class::EMPTY)
+      expect(registry.connections_for("never_seen")).to be(described_class::EMPTY)
+      expect(registry.instance_variable_get(:@stream_snapshots)).to be_empty
+    end
+
     it "returns an empty frozen array for unknown streams" do
       expect(registry.connections_for("unknown")).to eq([])
       expect(registry.connections_for("unknown")).to be_frozen
