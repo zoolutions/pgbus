@@ -164,8 +164,10 @@ class Views::Docs::Pages::PerformanceTuning < DocsUI::Page
         11. **Job stats.** `stats_enabled` (default `true`): keep it on.
             *Measured:* in the mocked executor bench, execute 65.8k / 66.4k i/s and
             execute + stat recording 60.1k / 59.4k i/s (39.9k / 40.5k before #604).
-            The real worker's stats flush (one multi-row INSERT per flush; at the
-            default `stats_flush_size` of 100, measured on 100-row flushes) costs
+            The real worker's stats flush (one multi-row INSERT per flush once the
+            latency migration has run, two before it: the six-column attempt and the
+            base-column retry; at the default `stats_flush_size` of 100, measured on
+            100-row flushes) costs
             1–2.3 µs of Ruby CPU per job, down from 9–20 µs with `insert_all`
             (12–15 % of a no-op job's on-CPU time before #622). Flushes triggered
             by `stats_flush_interval` carry fewer rows and cost more per job.
