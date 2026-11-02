@@ -35,7 +35,8 @@ module Pgbus
           # it: the DLQ copy carries it in its headers (issue #495).
           last_error = FailedEventRecorder.last_error(queue_name: queue_name, msg_id: message.msg_id.to_i,
                                                       source_queue: physical_queue(queue_name, source_queue))
-          # Before the release below: the lookup asks who else holds the key.
+          # Before the release below: the lookup asks whether the key's row is
+          # still this message's own (a crashed attempt's), see dead_letter_reason.
           reason = dead_letter_reason(message, queue_name, payload, last_error)
           handle_dead_letter(message, queue_name, payload, source_queue: source_queue, last_error: last_error,
                                                            reason: reason)
