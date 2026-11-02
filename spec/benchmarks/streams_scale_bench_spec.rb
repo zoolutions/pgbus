@@ -138,6 +138,19 @@ RSpec.describe StreamsScaleHarness do
       expect(described_class.fd_target(soft: 256, hard: infinity, needed: 2_064, infinity: infinity))
         .to eq(described_class::OPEN_MAX)
     end
+
+    it "never lowers a soft limit above OPEN_MAX that still falls short" do
+      expect(described_class.fd_target(soft: 20_000, hard: infinity, needed: 20_064, infinity: infinity)).to be_nil
+    end
+  end
+
+  describe ".raise_fd_limit!" do
+    it "keeps the current soft limit when the kernel refuses the raise, so the skip hint can print" do
+      allow(Process).to receive(:getrlimit).with(:NOFILE).and_return([256, Process::RLIM_INFINITY])
+      allow(Process).to receive(:setrlimit).and_raise(Errno::EINVAL)
+
+      expect(described_class.raise_fd_limit!(2_064)).to eq(256)
+    end
   end
 
   describe ".fd_needed and .fd_skip_reason" do

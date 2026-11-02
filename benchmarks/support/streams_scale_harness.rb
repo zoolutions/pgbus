@@ -104,20 +104,27 @@ module StreamsScaleHarness
   def fd_needed(clients) = (FD_PER_CLIENT * clients) + FD_HEADROOM
 
   # The soft limit to set, or nil when the current one already fits `needed`
-  # (a soft limit above OPEN_MAX is never lowered).
+  # or the cap would not raise it (a soft limit is never lowered).
   def fd_target(soft:, hard:, needed:, infinity: Process::RLIM_INFINITY)
     return nil if soft >= needed
 
-    hard == infinity ? OPEN_MAX : hard
+    target = hard == infinity ? OPEN_MAX : hard
+    target > soft ? target : nil
   end
 
   # Raises this process's soft fd limit as far as fd_target allows and
-  # returns the soft limit in force afterwards.
+  # returns the soft limit in force afterwards. A kernel that refuses the raise
+  # (macOS with kern.maxfilesperproc under OPEN_MAX) leaves the current limit,
+  # so the caller's skip message names it.
   def raise_fd_limit!(needed)
     soft, hard = Process.getrlimit(:NOFILE)
     target = fd_target(soft: soft, hard: hard, needed: needed)
-    Process.setrlimit(:NOFILE, target, hard) if target
+    return soft unless target
+
+    Process.setrlimit(:NOFILE, target, hard)
     Process.getrlimit(:NOFILE).first
+  rescue Errno::EINVAL, Errno::EPERM
+    soft
   end
 
   def fd_skip_reason(clients, cap:)

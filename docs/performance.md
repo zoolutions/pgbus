@@ -1043,7 +1043,7 @@ PGMQ and real LISTEN/NOTIFY, then sends 20 broadcasts 250 ms apart, in ephemeral
 - A client whose connect the kernel resets reconnects after 2 s, the `retry:` the
   streamer sends and an EventSource would wait; the "retried connects" column counts
   those. They are macOS's accept queue: `somaxconn` is 128 and caps Puma's backlog of
-  1 024, so a burst of 1 000 connects overflows it (0 retries at M = 100, 583–797 at
+  1 024, so a burst of 1 000 connects overflows it (0 retries at M = 100, 583–724 at
   1 000). Linux's default is 4 096.
 - The fd soft limit is raised in every process (to the hard limit, or `OPEN_MAX` = 10 240
   when that is infinite, as on macOS); an M whose `2 × M + 64` descriptors do not fit is
@@ -1055,7 +1055,9 @@ with YJIT, Puma 8.0.2 (`max_threads` 8), every streams setting at its default
 (`streams_heartbeat_interval` 15 s, `streams_peer_close_interval` 1 s,
 `streams_listen_health_check_ms` 250, `streams_writer_threads` 0). Two rounds; load average
 8.3–11.7 on 12 cores from other sessions' benches and suites. Ranges are those two rounds.
-Every row: 0 missed broadcasts, 0 failed clients, 0 503s.
+Every row: 0 missed broadcasts, 0 failed clients, 0 503s. Every 1 000-client cell also logged
+2–29 Puma `Socket timeout writing data` thread-pool errors: Puma writing to connections the
+kernel had reset, which those clients retried.
 
 | mode | M | connect all (s) | fan-out first p50 (ms) | fan-out last p50 / p99 (ms) | dispatcher wake p50 / p99 (ms) | heartbeat tick (ms) | watcher build (ms) | RSS Δ / conn (KB) | CPU / wall |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
