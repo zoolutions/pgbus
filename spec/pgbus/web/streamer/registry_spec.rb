@@ -229,15 +229,6 @@ RSpec.describe Pgbus::Web::Streamer::Registry do
       expect(registry.connections_for("s1").map(&:id)).to eq([])
       expect(registry.streams).not_to include("s1")
     end
-
-    it "does not take the lock to answer size (read once per connect by the StreamApp)" do
-      registry.register(build_conn(id: "a", stream_name: "chat"))
-      lock = registry.instance_variable_get(:@mutex)
-      allow(lock).to receive(:synchronize).and_call_original
-
-      expect(registry.size).to eq(1)
-      expect(lock).not_to have_received(:synchronize)
-    end
   end
 
   describe "#each_connection" do

@@ -43,12 +43,14 @@ RSpec.describe Pgbus::Streams::Cursor do
         .to raise_error(Pgbus::Streams::Cursor::InvalidCursor, /negative/)
     end
 
-    it "raises on a negative Integer last_event_id instead of silently falling through to query_since" do
-      # Previously, last_event_id: -5 would be treated as "not present" by
-      # `present?`, causing pick to fall through to query_since. Now any
-      # Integer counts as present and validate! rejects the negative.
-      expect { described_class.parse(query_since: "100", last_event_id: -5) }
-        .to raise_error(Pgbus::Streams::Cursor::InvalidCursor, /negative/)
+    it "skips a negative Last-Event-ID, an ephemeral frame's id, and falls back to ?since= (issue #621)" do
+      # Ephemeral broadcasts go out with a negative `id:` (they have no
+      # archive position), so a native EventSource that saw one last
+      # reconnects with `Last-Event-ID: -N`. That is not a cursor: the
+      # element's ?since= carries its last durable id.
+      expect(described_class.parse(query_since: "100", last_event_id: "-5")).to eq(100)
+      expect(described_class.parse(query_since: "100", last_event_id: -5)).to eq(100)
+      expect(described_class.parse(query_since: nil, last_event_id: "-5")).to eq(0)
     end
 
     it "raises on cursor exceeding 64-bit signed range" do

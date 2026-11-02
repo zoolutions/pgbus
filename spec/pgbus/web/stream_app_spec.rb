@@ -238,6 +238,12 @@ RSpec.describe Pgbus::Web::StreamApp do
       expect(streamer.registered.first.last_msg_id_sent).to eq(200)
     end
 
+    it "resumes from ?since= when Last-Event-ID is an ephemeral frame's negative id (issue #621)" do
+      env, = hijacked_env(query: "since=100", headers: { "HTTP_LAST_EVENT_ID" => "-3" })
+      app.call(env)
+      expect(streamer.registered.first.last_msg_id_sent).to eq(100)
+    end
+
     it "stores the client's ?seat= on the connection (issue #515)" do
       env, = hijacked_env(query: "since=1&seat=9b2f-tab_1")
       app.call(env)

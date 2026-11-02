@@ -15,14 +15,16 @@ module Pgbus
       # snapshot is not rebuilt on register / unregister themselves, so a
       # connect storm of M clients does not copy the M-element list M times
       # (an eager copy-on-write registry measured +35 MB of RSS and 80 ms for
-      # 2 000 registers, against 0.4 MB and 2.5 ms for this one). size reads
-      # an Integer kept under the mutex, without the lock.
+      # 2 000 registers, against 0.4 MB and 2.5 ms for this one). Each
+      # stream's members are an identity Hash (insertion-ordered), so a
+      # register or an unregister is O(1), not a scan of the stream.
       class Registry
         EMPTY = [].freeze
 
         def initialize
           @mutex = Mutex.new
-          # stream name → Array of its connections (mutated under @mutex only).
+          # stream name → identity Hash of its connections (connection => true),
+          # mutated under @mutex only.
           @by_stream = {}
           @by_id = {}
           # stream name → the frozen snapshot of @by_stream[name]; an entry is
@@ -30,7 +32,6 @@ module Pgbus
           @stream_snapshots = {}
           # The frozen snapshot of every connection, nil after a change.
           @all_snapshot = nil
-          @size = 0
         end
 
         def register(connection)
@@ -50,7 +51,7 @@ module Pgbus
             # Not already a member: the same object under its id returned
             # above, and a connection's id never changes.
             @by_id[connection.id] = connection
-            (@by_stream[connection.stream_name] ||= []) << connection
+            (@by_stream[connection.stream_name] ||= {}.compare_by_identity)[connection] = true
             membership_changed(connection.stream_name)
           end
         end
@@ -86,7 +87,7 @@ module Pgbus
             members = @by_stream[stream_name]
             next EMPTY unless members
 
-            @stream_snapshots[stream_name] ||= members.dup.freeze
+            @stream_snapshots[stream_name] ||= members.keys.freeze
           end
         end
 
@@ -99,10 +100,9 @@ module Pgbus
           @mutex.synchronize { !@by_stream.key?(stream_name) }
         end
 
-        # Read once per connect by the StreamApp's capacity check: an Integer
-        # written under @mutex and read whole, so a reader sees the count
-        # before or after a change, never a torn one.
-        attr_reader :size
+        def size
+          @mutex.synchronize { @by_id.size }
+        end
 
         # Yields every registered connection across all streams. The iteration
         # walks the current frozen snapshot, so the block may safely call back
@@ -118,7 +118,6 @@ module Pgbus
         def membership_changed(stream_name)
           @stream_snapshots.delete(stream_name)
           @all_snapshot = nil
-          @size = @by_id.size
         end
 
         # Must be called while holding @mutex.
@@ -127,7 +126,7 @@ module Pgbus
           members = @by_stream[name]
           return unless members
 
-          members.reject! { |c| c.equal?(connection) }
+          members.delete(connection)
           @by_stream.delete(name) if members.empty?
           @stream_snapshots.delete(name)
         end
