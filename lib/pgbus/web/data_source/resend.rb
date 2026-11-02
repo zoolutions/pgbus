@@ -4,53 +4,77 @@ module Pgbus
   module Web
     class DataSource
       # Re-sending a job payload as a new message — DLQ Retry, and failed-job
-      # Retry when the original message is gone (issue #631). The payload names
-      # its uniqueness key and strategy, and the copy releases the row it
-      # holds when it starts (:until_executing) or finishes (:until_executed).
-      # Re-sent without a row of its own, that release could match a newer
-      # copy's unbound row (one parked behind its concurrency limit) and free
-      # the key while that copy waits. So the key is taken the way
-      # Adapter#enqueue takes it: unbound before the send, bound to the new
-      # message after it, given back if the send fails before producing.
+      # Retry when the original message is gone (issues #631, #636). The
+      # payload names its uniqueness key and strategy, and its
+      # limits_concurrency key. The copy releases the uniqueness row it holds
+      # when it starts (:until_executing) or finishes (:until_executed), and
+      # signals the semaphore when it finishes. Re-sent without a row or a
+      # slot of its own, that release could free a newer parked copy's key,
+      # and that signal gave back a slot another copy held and promoted a
+      # parked job beside it. So the copy goes out the way Adapter#enqueue
+      # sends a job: the uniqueness key taken unbound before the send and
+      # bound to the new message after it; a slot taken before the send, or
+      # the copy parked behind a full limit (on_conflict: :block), or the
+      # retry refused (:discard, :raise) with the source left in place.
       module Resend
         private
 
-        # Yields to send the payload and returns true once it is sent, false
-        # when another copy holds the key (nothing is sent, so the source — the
-        # DLQ message or the failed row — stays for a later retry). The block
-        # returns the new msg_id. +lock_queue+ is the queue as the executor
-        # spells the lock (Uniqueness.lock_queue_name); +holder+ is the
-        # [lock queue, msg_id, enqueued_at] of the message the payload was
-        # read from, as the dashboard's discards name it (#lock_holder).
-        def resend_holding_uniqueness(payload, lock_queue:, holder:)
+        # Yields to send the payload; the block returns the new msg_id.
+        # Returns :sent, :parked (a BlockedExecution the limit's next signal
+        # promotes; nothing is sent and the block does not run), or false
+        # when another copy holds the uniqueness key or the limit is full
+        # under :discard / :raise (nothing is sent, so the source — the DLQ
+        # message or the failed row — stays for a later retry).
+        # +lock_queue+ is the queue as the executor spells the lock
+        # (Uniqueness.lock_queue_name), which is also the logical queue a
+        # parked copy is promoted onto; +holder+ is the [lock queue, msg_id,
+        # enqueued_at] of the message the payload was read from, as the
+        # dashboard's discards name it (#lock_holder). +drop_source+ removes
+        # the source once the copy is parked (a sent copy's source is the
+        # block's to remove). +headers+ (a Hash) are the ones the block
+        # sends; a parked copy carries them to its promotion.
+        def resend_job(payload, lock_queue:, holder:, drop_source:, headers: nil, &)
           key = resend_lock_key(payload)
-          unless key
-            yield
-            return true
-          end
-
-          stamp = take_resend_lock(key, lock_queue, holder)
-          unless stamp
+          stamp = key && take_resend_lock(key, lock_queue, holder)
+          if key && !stamp
             Pgbus.logger.warn { "[Pgbus::Web] Not re-sending #{payload["job_class"]}: uniqueness key #{key} is held by another copy" }
             return false
           end
 
+          # Only an error raised by the produce (:produce), or by the park's
+          # commit (:park: the COMMIT may have landed with its reply lost),
+          # can hide a live copy: one from the slot upsert, the park's insert
+          # or the source's removal proves nothing went out, however
+          # database-shaped it is.
+          sending = [nil]
           begin
-            msg_id = yield
+            outcome = resend_holding_slot(payload, lock_queue, drop_source, sending, headers, &)
           rescue StandardError => e
-            give_back_resend_lock(key, stamp, e)
+            give_back_resend_lock(key, stamp, e, sending: sending.first) if key
             raise
           end
-          bind_resent_lock(key, lock_queue, msg_id, stamp)
-          true
+
+          case outcome
+          when :refused
+            give_back_resend_lock(key, stamp) if key
+            false
+          when :parked
+            # Unbound, as a parked enqueue's row is: the promoted copy's
+            # release takes it (UniquenessKey.release_held_by!).
+            :parked
+          else
+            bind_resent_lock(key, lock_queue, outcome, stamp) if key
+            :sent
+          end
         ensure
           UniquenessKey.clear_bind_stamp!(key) if key
         end
 
         # A failed job's message back to work: its vt reset to 0 while it is
-        # still queued (a second copy would run beside it), else its payload
-        # re-sent. The failed row goes either way; false (row kept) while the
-        # re-send's key is held.
+        # still queued (a second copy would run beside it; a failed attempt
+        # keeps its concurrency slot, so it needs no other), else its payload
+        # re-sent or parked. The failed row goes either way; false (row kept)
+        # while the re-send's key is held or its limit refuses it.
         def retry_failed_job(event)
           physical = failed_message_queue(event)
           return resend_failed_event(event) unless physical
@@ -61,22 +85,23 @@ module Pgbus
         end
 
         # A failed job's payload as a new message on its queue, its failed row
-        # deleted once it is sent. Its message is gone, so it can hold only a
-        # row still bound to it (nil send time: no unbound row is its own).
-        # The delete comes after the key is bound: PGMQ sends on its own
-        # connection, so a failed delete cannot undo the send, and must not
-        # give back the key of a live copy.
-        def resend_failed_event(event)
+        # deleted once it is sent or parked. Its message is gone, so it can
+        # hold only a row still bound to it (nil send time: no unbound row is
+        # its own). The delete comes after the key is bound: PGMQ sends on its
+        # own connection, so a failed delete cannot undo the send, and must
+        # not give back the key of a live copy.
+        def resend_failed_event(event) # rubocop:disable Naming/PredicateMethod
           payload = JSON.parse(event["payload"])
           headers = event["headers"]
           headers = JSON.parse(headers) if headers.is_a?(String)
           lock_queue = Uniqueness.lock_queue_name(event["queue_name"])
 
-          sent = resend_holding_uniqueness(payload, lock_queue: lock_queue, holder: [lock_queue, event["msg_id"].to_i, nil]) do
+          outcome = resend_job(payload, lock_queue: lock_queue, holder: [lock_queue, event["msg_id"].to_i, nil],
+                                        drop_source: -> { delete_failed_row(event) }, headers: headers) do
             @client.send_message(event["queue_name"], payload, headers: headers)
           end
-          delete_failed_row(event) if sent
-          sent
+          delete_failed_row(event) if outcome == :sent
+          outcome != false
         end
 
         def delete_failed_row(event)
@@ -103,14 +128,16 @@ module Pgbus
           Thread.current[:pgbus_uniqueness_created_at]&.[](key)
         end
 
-        # The send raised. Proven unsent, the row taken for it goes (matched
-        # by its stamp, so never a successor's). An error that may hide a
-        # committed send (a lost connection or reply, as Adapter#ambiguous_delivery?
-        # counts it) keeps the row: the copy may be live, and the reaper
-        # takes the row if it is not. A failed give-back is logged, so the
-        # send's error is the one that surfaces.
-        def give_back_resend_lock(key, stamp, error)
-          if ambiguous_resend?(error)
+        # The copy did not go out (the limit refused it), or the send raised.
+        # Proven unsent, the row taken for it goes (matched by its stamp, so
+        # never a successor's). An error from the produce that may hide a
+        # committed send (a lost connection or reply, as
+        # Adapter#ambiguous_delivery? counts it), or any error from the park's
+        # commit, keeps the row: the copy may be live, and the reaper takes
+        # the row if it is not. A failed give-back is logged, so the send's
+        # error is the one that surfaces.
+        def give_back_resend_lock(key, stamp, error = nil, sending: nil)
+          if sending == :park || (sending == :produce && ambiguous_resend?(error))
             Pgbus.logger.warn { "[Pgbus::Web] Re-send of #{key} may have been sent (#{error.class}); its key stays held" }
             return
           end
@@ -120,9 +147,13 @@ module Pgbus
           Pgbus.logger.warn { "[Pgbus::Web] Giving back the uniqueness key #{key} failed: #{e.message}" }
         end
 
+        # ActiveRecord wraps a PG error (StatementInvalid, ConnectionFailed),
+        # so the cause is asked too.
         def ambiguous_resend?(error)
-          (defined?(PGMQ::Errors::ConnectionError) && error.is_a?(PGMQ::Errors::ConnectionError)) ||
-            (defined?(PG::Error) && error.is_a?(PG::Error))
+          [error, error&.cause].compact.any? do |err|
+            (defined?(PGMQ::Errors::ConnectionError) && err.is_a?(PGMQ::Errors::ConnectionError)) ||
+              (defined?(PG::Error) && err.is_a?(PG::Error))
+          end
         end
 
         # The key a re-sent copy has to hold: only an enqueue-locked one. An

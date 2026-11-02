@@ -6,6 +6,12 @@ require "time"
 module Pgbus
   module Concurrency
     module BlockedExecution
+      # Headers a parked job is to be sent with. pgbus_blocked_executions has
+      # no headers column, so a dashboard retry parked behind its limit
+      # (Web::DataSource::ResendSlot) carries them in its payload under this
+      # key; promote_next takes them out and sends them as headers.
+      HEADERS_KEY = "pgbus_park_headers"
+
       class << self
         # Insert a blocked execution for a job that hit the concurrency limit.
         #
@@ -64,8 +70,10 @@ module Pgbus
 
             # Carry the enqueuer's priority through: under priority routing it
             # picks the _pN sub-queue, not just the release order (issue #423).
+            headers = released[:payload].is_a?(Hash) ? released[:payload].delete(HEADERS_KEY) : nil
             msg_id = client.send_message(released[:queue_name], released[:payload],
-                                         delay: actual_delay, priority: released[:priority])
+                                         delay: actual_delay, priority: released[:priority],
+                                         **(headers ? { headers: headers } : {}))
           end
 
           return false unless released && msg_id

@@ -232,6 +232,15 @@ class Views::Docs::Pages::ConcurrencyUniqueness < DocsUI::Page
         - **A duplicate delivery never releases a slot twice.** Archiving the
           message is the exact-once claim; a worker whose message was already
           archived elsewhere (its heartbeat lapsed) skips the release.
+        - **A retried job takes a slot like an enqueue.** Retrying a
+          dead-lettered copy (dashboard, `pgbus dlq retry`, Retry All) or a
+          failed job whose message is gone sends a new message, which takes a
+          free slot first. At the limit, a `:block` job's copy is parked (the
+          dead-lettered copy or failed job goes, the parked one runs when a
+          slot frees); a `:discard` or `:raise` job's retry is refused and the
+          dead-lettered copy or failed job stays, since dropping it would lose
+          the job the retry asked for. A failed job whose message is still
+          queued already holds its slot: its retry only makes it visible.
       MD
       DocsUI::Callout(:info) do
         plain "`duration` bounds silence, not run time. A slot is taken at enqueue "
