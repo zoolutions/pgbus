@@ -37,7 +37,7 @@ FAST = Class.new do
   def stream_name = "chat"
   def context = nil
   def last_msg_id_sent = 0
-  def enqueue(envelopes, deadline_ms: nil) = envelopes # rubocop:disable Lint/UnusedMethodArgument
+  def enqueue(envelopes, deadline_ms: nil, frames: nil) = envelopes # rubocop:disable Lint/UnusedMethodArgument
   def dead? = false
   def mark_dead! = nil
 end
@@ -59,7 +59,7 @@ SLOW = Class.new do
   def context = nil
   def last_msg_id_sent = 0
 
-  def enqueue(_envelopes, deadline_ms: nil) # rubocop:disable Lint/UnusedMethodArgument
+  def enqueue(_envelopes, deadline_ms: nil, frames: nil) # rubocop:disable Lint/UnusedMethodArgument
     sleep(@slow_s)
     @dead = true
     []

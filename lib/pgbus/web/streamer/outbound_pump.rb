@@ -36,7 +36,7 @@ module Pgbus
       # ArgumentError on a negative msg_id as a defense-in-depth guard against a
       # future refactor accidentally offloading one.
       class OutboundPump
-        WriteJob = Data.define(:connection, :envelopes, :batch_max, :deadline_ms)
+        WriteJob = Data.define(:connection, :envelopes, :batch_max, :deadline_ms, :frames)
         private_constant :WriteJob
 
         DRAIN = :__drain__
@@ -85,7 +85,9 @@ module Pgbus
 
         # Hand a durable fanout write to the pump. Returns immediately — the
         # dispatcher does not block. Raises on a negative (ephemeral) msg_id.
-        def post(connection, envelopes, batch_max, deadline_ms:)
+        # frames: the wake's prebuilt frames, handed to Connection#enqueue
+        # (issue #621).
+        def post(connection, envelopes, batch_max, deadline_ms:, frames: nil)
           if envelopes.any? { |e| e.msg_id.negative? }
             raise ArgumentError,
                   "OutboundPump received an ephemeral (negative msg_id) envelope; " \
@@ -94,7 +96,7 @@ module Pgbus
 
           partition_for(connection).push(
             WriteJob.new(connection: connection, envelopes: envelopes,
-                         batch_max: batch_max, deadline_ms: deadline_ms)
+                         batch_max: batch_max, deadline_ms: deadline_ms, frames: frames)
           )
         end
 
@@ -149,7 +151,7 @@ module Pgbus
           conn = job.connection
           return if conn.dead?
 
-          written = conn.enqueue(job.envelopes, deadline_ms: job.deadline_ms)
+          written = conn.enqueue(job.envelopes, deadline_ms: job.deadline_ms, frames: job.frames)
 
           if conn.dead?
             @on_dead.call(conn)

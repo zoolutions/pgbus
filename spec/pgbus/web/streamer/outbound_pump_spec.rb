@@ -28,7 +28,7 @@ RSpec.describe Pgbus::Web::Streamer::OutboundPump do
   # on the first non-:ok. `result` scripts the per-frame outcome.
   def build_conn(id:, results: nil)
     Class.new do
-      attr_reader :id, :written, :write_threads
+      attr_reader :id, :written, :write_threads, :frames_seen
       attr_accessor :last_msg_id_sent
 
       def initialize(id, results)
@@ -36,14 +36,16 @@ RSpec.describe Pgbus::Web::Streamer::OutboundPump do
         @results = results
         @written = []
         @write_threads = []
+        @frames_seen = []
         @last_msg_id_sent = 0
         @dead = false
         @mutex = Mutex.new
       end
 
-      def enqueue(envelopes, deadline_ms: nil) # rubocop:disable Lint/UnusedMethodArgument
+      def enqueue(envelopes, deadline_ms: nil, frames: nil) # rubocop:disable Lint/UnusedMethodArgument
         accepted = []
         @mutex.synchronize do
+          @frames_seen << frames
           envelopes.each do |e|
             outcome = @results ? @results.shift : :ok
             @write_threads << Thread.current
@@ -101,6 +103,31 @@ RSpec.describe Pgbus::Web::Streamer::OutboundPump do
 
       expect { pump.post(conn, [envelope(-1)], -1, deadline_ms: 250) }
         .to raise_error(ArgumentError, /ephemeral|negative/i)
+    end
+  end
+
+  describe "#post — prebuilt frames (issue #621)" do
+    it "hands the wake's frames to Connection#enqueue and acks as before" do
+      pump.start
+      conn = build_conn(id: "a")
+      frames = { 10 => "frame 10", 11 => "frame 11" }.freeze
+
+      pump.post(conn, [envelope(10), envelope(11)], 11, deadline_ms: 250, frames: frames)
+      ack = drain_ack
+
+      expect(conn.frames_seen).to eq([frames])
+      expect(conn.frames_seen.first).to be(frames)
+      expect(ack.accepted_max).to eq(11)
+    end
+
+    it "passes nil when the caller gives no frames" do
+      pump.start
+      conn = build_conn(id: "a")
+
+      pump.post(conn, [envelope(10)], 10, deadline_ms: 250)
+      drain_ack
+
+      expect(conn.frames_seen).to eq([nil])
     end
   end
 
@@ -232,7 +259,7 @@ RSpec.describe Pgbus::Web::Streamer::OutboundPump do
           @dead = false
         end
 
-        def enqueue(envelopes, deadline_ms: nil) # rubocop:disable Lint/UnusedMethodArgument
+        def enqueue(envelopes, deadline_ms: nil, frames: nil) # rubocop:disable Lint/UnusedMethodArgument
           @gate.pop # block the worker until released
           envelopes.each { |e| record(e) }
           envelopes

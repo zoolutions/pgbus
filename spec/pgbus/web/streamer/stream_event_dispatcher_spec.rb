@@ -48,7 +48,7 @@ RSpec.describe Pgbus::Web::Streamer::StreamEventDispatcher do
   let(:conn_class) do
     Class.new do
       attr_accessor :last_msg_id_sent, :presence_member, :on_connected
-      attr_reader :id, :stream_name, :enqueued, :context, :enqueue_deadlines, :connected_writes
+      attr_reader :id, :stream_name, :enqueued, :context, :enqueue_deadlines, :connected_writes, :enqueue_frames
 
       def initialize(id:, stream_name:, last_msg_id_sent: 0, context: nil)
         @id = id
@@ -60,6 +60,9 @@ RSpec.describe Pgbus::Web::Streamer::StreamEventDispatcher do
         # tests can assert fanout uses the short deadline and connect-replay
         # the full one (issue #315 item 3).
         @enqueue_deadlines = []
+        # The frames: Hash passed on each enqueue (issue #621): the wake's
+        # prebuilt frames, or nil on the connect replay.
+        @enqueue_frames = []
         @dead = false
         @presence_member = nil
         @connected_writes = 0
@@ -73,8 +76,9 @@ RSpec.describe Pgbus::Web::Streamer::StreamEventDispatcher do
         :ok
       end
 
-      def enqueue(envelopes, deadline_ms: nil)
+      def enqueue(envelopes, deadline_ms: nil, frames: nil)
         @enqueue_deadlines << deadline_ms
+        @enqueue_frames << frames
         @enqueued.concat(envelopes)
         envelopes.each { |e| @last_msg_id_sent = e.msg_id if e.msg_id > @last_msg_id_sent }
         envelopes
@@ -202,7 +206,7 @@ RSpec.describe Pgbus::Web::Streamer::StreamEventDispatcher do
           @presence_member = nil
         end
 
-        def enqueue(envelopes, deadline_ms: nil)
+        def enqueue(envelopes, deadline_ms: nil, frames: nil) # rubocop:disable Lint/UnusedMethodArgument
           @enqueue_deadlines << deadline_ms
           sleep(@stall) # models the write blocking up to the fanout deadline
           mark_dead!    # a :blocked write marks the connection dead
@@ -272,8 +276,9 @@ RSpec.describe Pgbus::Web::Streamer::StreamEventDispatcher do
 
         def initialize = @posts = []
 
-        def post(connection, envelopes, batch_max, deadline_ms:)
-          @posts << { connection: connection, envelopes: envelopes, batch_max: batch_max, deadline_ms: deadline_ms }
+        def post(connection, envelopes, batch_max, deadline_ms:, frames: nil)
+          @posts << { connection: connection, envelopes: envelopes, batch_max: batch_max, deadline_ms: deadline_ms,
+                      frames: frames }
         end
       end.new
     end
@@ -372,6 +377,131 @@ RSpec.describe Pgbus::Web::Streamer::StreamEventDispatcher do
       expect(pump.posts.size).to eq(1)
       expect(pump.posts.first[:envelopes]).to be_empty
       expect(pump.posts.first[:batch_max]).to eq(12)
+    end
+  end
+
+  describe "frame once per wake (issue #621)" do
+    # Real Connections over a recording writer: the frame count is the whole
+    # system's, dispatcher and connections together.
+    let(:frame_writer) do
+      Class.new do
+        attr_reader :writes
+
+        def initialize = @writes = []
+
+        def write(connection, bytes, deadline_ms:) # rubocop:disable Lint/UnusedMethodArgument
+          @writes << [connection.id, bytes]
+          :ok
+        end
+      end.new
+    end
+
+    # An envelope-shaped fixture whose #hash raises: the fan-out must look
+    # frames up by the Integer msg_id, never by the envelope (a StreamEnvelope's
+    # #hash walks its payload). Not frozen, unlike the Data envelopes.
+    let(:unhashable_envelope) do
+      Struct.new(:msg_id, :enqueued_at, :payload, :source, :visible_to, :exclude, :event) do
+        def hash = raise("an envelope was hashed during the fan-out")
+      end
+    end
+
+    def real_conn(id)
+      Pgbus::Web::Streamer::Connection.new(id: id, stream_name: "chat", io: StringIO.new, since_id: 0,
+                                           writer: frame_writer, write_deadline_ms: 5_000)
+    end
+
+    it "builds each durable frame once for every connection on the stream" do
+      conns = Array.new(4) { |i| real_conn("c#{i}") }
+      conns.each { |c| registry.register(c) }
+      allow(client).to receive(:read_after).and_return([build_envelope(10), build_envelope(11), build_envelope(12)])
+      allow(Pgbus::Streams::Envelope).to receive(:message).and_call_original
+
+      dispatcher.send(:handle, described_class::WakeMessage.new(queue_name: "chat"))
+
+      expect(Pgbus::Streams::Envelope).to have_received(:message).exactly(3).times
+      expect(frame_writer.writes.size).to eq(12)
+      frame_writer.writes.group_by { |(_id, bytes)| bytes }.each_value do |writes|
+        expect(writes.map(&:last).map(&:object_id).uniq.size).to eq(1)
+      end
+      expect(conns.map(&:last_msg_id_sent)).to all(eq(12))
+    end
+
+    it "hands every connection the same frozen Hash of frozen frames keyed by msg_id" do
+      c1 = build_conn(id: "a", stream_name: "chat")
+      c2 = build_conn(id: "b", stream_name: "chat")
+      registry.register(c1)
+      registry.register(c2)
+      allow(client).to receive(:read_after).and_return([build_envelope(10), build_envelope(11)])
+
+      dispatcher.send(:handle, described_class::WakeMessage.new(queue_name: "chat"))
+
+      frames = c1.enqueue_frames.first
+      expect(c2.enqueue_frames.first).to be(frames)
+      expect(frames.keys).to eq([10, 11])
+      expect(frames).to be_frozen
+      expect(frames.values).to all(be_frozen)
+      expect(frames[10]).to eq(Pgbus::Streams::Envelope.message(id: 10, event: "turbo-stream",
+                                                                data: "<turbo-stream>10</turbo-stream>"))
+    end
+
+    it "never hashes an envelope during the fan-out" do
+      fixtures = [10, 11].to_h do |id|
+        [id, unhashable_envelope.new(msg_id: id, payload: "<p>#{id}</p>", source: "live")]
+      end
+      conns = Array.new(3) { |i| real_conn("c#{i}") }
+      conns.each { |c| registry.register(c) }
+      allow(client).to receive(:read_after).and_return([build_envelope(10), build_envelope(11)])
+      allow(dispatcher).to receive(:unwrap_stream_envelope) { |raw| fixtures.fetch(raw.msg_id) }
+
+      dispatcher.send(:handle, described_class::WakeMessage.new(queue_name: "chat"))
+
+      expect(frame_writer.writes.size).to eq(6)
+      expect(conns.map(&:last_msg_id_sent)).to all(eq(11))
+    end
+
+    it "builds an ephemeral frame once, keyed by its negative msg_id" do
+      conns = Array.new(4) { |i| real_conn("c#{i}") }
+      conns.each { |c| registry.register(c) }
+      allow(Pgbus::Streams::Envelope).to receive(:message).and_call_original
+      payload = JSON.generate({ "html" => "<turbo-stream>live</turbo-stream>", "event" => "chat" })
+
+      dispatcher.send(:handle, described_class::WakeMessage.new(queue_name: "chat", payload: payload))
+
+      expect(Pgbus::Streams::Envelope).to have_received(:message).once
+      expect(frame_writer.writes.map(&:last).uniq.size).to eq(1)
+      expect(frame_writer.writes.first.last).to start_with("id: -1\nevent: chat\n")
+    end
+
+    it "hands the pump the wake's frames" do
+      pump = Class.new do
+        attr_reader :frames
+
+        def initialize = @frames = []
+        def post(_conn, _envelopes, _batch_max, deadline_ms:, frames: nil) = @frames << [deadline_ms, frames]
+      end.new
+      offloading = described_class.new(client: client, registry: registry, listener: listener,
+                                       dispatch_queue: dispatch_queue, logger: logger, config: dispatcher_config,
+                                       pump: pump, ack_queue: Queue.new)
+      registry.register(build_conn(id: "a", stream_name: "chat"))
+      registry.register(build_conn(id: "b", stream_name: "chat"))
+      allow(client).to receive(:read_after).and_return([build_envelope(10)])
+
+      offloading.send(:handle, described_class::WakeMessage.new(queue_name: "chat"))
+
+      shared = pump.frames.first.last
+      expect(pump.frames.size).to eq(2)
+      expect(pump.frames.map(&:last)).to all(be(shared))
+      expect(shared.keys).to eq([10])
+    end
+
+    it "leaves the connect replay building its own frames" do
+      conn = build_conn(id: "a", stream_name: "chat")
+      allow(client).to receive(:read_after).and_return([build_envelope(10)])
+
+      dispatcher.send(:handle, described_class::ConnectMessage.new(connection: conn))
+
+      expect(conn.enqueued.map(&:msg_id)).to eq([10])
+      expect(conn.enqueue_frames).to all(be_nil)
     end
   end
 
@@ -492,7 +622,7 @@ RSpec.describe Pgbus::Web::Streamer::StreamEventDispatcher do
       # half of the race fix in isolation.
       connection = build_conn(id: "new", stream_name: "chat", last_msg_id_sent: 1000)
       buffer = []
-      dispatcher.instance_variable_get(:@in_flight)["chat"] << [connection, buffer]
+      (dispatcher.instance_variable_get(:@in_flight)["chat"] ||= []) << [connection, buffer]
 
       allow(client).to receive(:read_after)
         .with("chat", after_id: 1000, limit: 500)
@@ -534,6 +664,23 @@ RSpec.describe Pgbus::Web::Streamer::StreamEventDispatcher do
       # The envelope must have landed on the connection via the buffer
       # drain (step 4), since step 3 returned an empty result.
       expect(connection.enqueued.map(&:msg_id)).to contain_exactly(1050)
+      # The drain frames per connection, with no wake frames (issue #621).
+      expect(connection.enqueue_frames).to all(be_nil)
+    end
+
+    it "keeps no per-stream state for a wake on a stream with no local subscriber (issue #621)" do
+      conn = build_conn(id: "a", stream_name: "order_42")
+      allow(client).to receive(:read_after).and_return([])
+      dispatcher.send(:handle, described_class::ConnectMessage.new(connection: conn))
+      expect(registry.connections_for("order_42")).to eq([conn]) # a cached snapshot exists
+      expect(registry.instance_variable_get(:@stream_snapshots)).to have_key("order_42")
+      dispatcher.send(:handle, described_class::DisconnectMessage.new(connection: conn))
+
+      # A NOTIFY already in flight when the last subscriber left.
+      dispatcher.send(:handle, described_class::WakeMessage.new(queue_name: "order_42"))
+
+      expect(dispatcher.instance_variable_get(:@in_flight)).to be_empty
+      expect(registry.instance_variable_get(:@stream_snapshots)).to be_empty
     end
 
     it "handles the simple case where step 3 finds the envelope in the archive" do

@@ -76,7 +76,8 @@ module Pgbus
             interval: @config.streams_heartbeat_interval,
             idle_timeout: @config.streams_idle_timeout,
             logger: @logger,
-            presence_expiry: Array(@config.streams_presence_patterns).any?
+            presence_expiry: Array(@config.streams_presence_patterns).any?,
+            fanout_write_deadline_ms: @config.streams_fanout_write_deadline_ms
           )
           @peer_close_watcher = build_peer_close_watcher
           @started = false
