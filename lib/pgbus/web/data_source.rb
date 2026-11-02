@@ -8,6 +8,7 @@ module Pgbus
       include JobList
       include DeadLetter
       include Resend
+      include ResendSlot
       include ListCounts
       include QueueSummary
       include EventList
@@ -326,8 +327,9 @@ module Pgbus
       # in its handler queue, so a re-sent copy would run the handler twice.
       # Each job goes back the way Retry sends it (#retry_failed_job): a
       # message still queued gets its vt reset, one that is gone is re-sent.
-      # A row it cannot retry (the re-send's key is held, or a call fails)
-      # stays, and the walk goes on past it by id.
+      # A row it cannot retry (the re-send's key is held, its concurrency
+      # limit refuses it, or a call fails) stays, and the walk goes on past it
+      # by id.
       def retry_all_failed
         count = 0
         last_id = 0
