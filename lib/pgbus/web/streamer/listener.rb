@@ -102,6 +102,9 @@ module Pgbus
           @listening_to = Set.new
           @commands = Queue.new
           @running = false
+          # Set by #stop: no thread will serve a command again (a listener is
+          # never restarted in production), so ensure_listening answers at once.
+          @stopped = false
           @thread = nil
           @health_check_due_at = nil
           # ensure_listening acks held back while the reconnect that re-LISTENs
@@ -130,6 +133,7 @@ module Pgbus
           end
 
           @wake_reader, @wake_writer = IO.pipe if @wake_reader.nil? || @wake_reader.closed? || @wake_writer.closed?
+          @stopped = false
           @running = true
           # The LISTEN thread, owned by this object: Instance#start starts it
           # once (under Streamer's @current_mutex); #stop clears @running,
@@ -161,6 +165,7 @@ module Pgbus
           return unless @running
 
           @running = false
+          @stopped = true
           # Deliberately does NOT touch @conn. PG::Connection is not
           # thread-safe and #close is PQfinish: it frees the PGconn and its
           # OpenSSL objects out from under whatever libpq call the listener
@@ -198,6 +203,10 @@ module Pgbus
         # (streams_listen_health_check_ms, default 250ms) plus a small margin,
         # so a stuck listener can't hang the dispatcher forever.
         def ensure_listening(queue_name)
+          # A connect the dispatcher drains during shutdown (Instance#shutdown!
+          # stops the listener first) must not wait out the ack budget.
+          return nil if @stopped
+
           ack = Queue.new
           @commands << [:listen, queue_name, ack]
           wake
