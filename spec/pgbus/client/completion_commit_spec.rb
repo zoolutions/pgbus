@@ -38,6 +38,13 @@ RSpec.describe Pgbus::Client::AsyncCommit do
       # backend killed mid-call does.
       def lose_connection! = (@lose_connection = true)
 
+      # The next pipeline's first get_result raises a non-PG error (a
+      # Timeout, an interrupt) with the connection still up and results unread.
+      def interrupt_read! = (@interrupt_read = true)
+
+      # The next pipeline answers no sync: libpq runs out of results.
+      def drop_sync! = (@drop_sync = true)
+
       def finished? = false
 
       # PG::Connection#reset: a new session, out of pipeline mode.
@@ -75,8 +82,11 @@ RSpec.describe Pgbus::Client::AsyncCommit do
         @pipeline_status = PG::PQ_PIPELINE_ON
       end
 
+      # libpq refuses to leave pipeline mode with results left unread.
       def exit_pipeline_mode
         @calls << [:exit_pipeline_mode]
+        raise PG::Error, "cannot exit pipeline mode with uncollected results" if @replies&.any?
+
         @pipeline_status = PG::PQ_PIPELINE_OFF
       end
 
@@ -96,6 +106,10 @@ RSpec.describe Pgbus::Client::AsyncCommit do
       end
 
       def get_result # rubocop:disable Naming/AccessorMethodName -- PG::Connection#get_result's name
+        if @interrupt_read
+          @interrupt_read = false
+          raise Interrupt
+        end
         if @lose_connection
           @lose_connection = false
           @status = PG::CONNECTION_BAD
@@ -135,6 +149,8 @@ RSpec.describe Pgbus::Client::AsyncCommit do
           [result, nil]
         end
         @queued = []
+        return replies + [nil] if @drop_sync
+
         replies << @result_class.new(PG::PGRES_PIPELINE_SYNC, [])
       end
     end
@@ -278,6 +294,23 @@ RSpec.describe Pgbus::Client::AsyncCommit do
     expect { client.delete_message("default", 9, job_completion: true) }.to raise_error(PG::TRSerializationFailure, /could not serialize/)
     expect(conn.pipeline_status).to eq(PG::PQ_PIPELINE_OFF)
     expect(conn.calls).not_to include([:exec, "ROLLBACK"])
+  end
+
+  it "raises instead of waiting for a sync libpq will not deliver" do
+    conn.drop_sync!
+
+    expect { client.archive_message("default", 9, job_completion: true) }
+      .to raise_error(PG::ConnectionBad, /pipeline ended before its sync/)
+  end
+
+  it "resets a connection that cannot leave pipeline mode, so the pool never hands it out in it" do
+    conn.interrupt_read!
+    allow(Pgbus.logger).to receive(:warn)
+
+    expect { client.archive_message("default", 9, job_completion: true) }.to raise_error(Interrupt)
+    expect(conn.calls.last(2)).to eq([[:exit_pipeline_mode], [:reset]])
+    expect(conn.pipeline_status).to eq(PG::PQ_PIPELINE_OFF)
+    expect(Pgbus.logger).to have_received(:warn)
   end
 
   it "falls back to prepare_and_exec outside the pipeline when the statement is not prepared on this session" do
