@@ -317,8 +317,10 @@ module Pgbus
           nil
         end
 
+        # One read empties the pipe of every wake written so far (each is
+        # one byte), so a burst of commands costs one extra select return.
         def drain_wake
-          @wake_reader.read_nonblock(64, exception: false)
+          @wake_reader.read_nonblock(4096, exception: false)
         end
 
         def close_wake_pipe
@@ -401,8 +403,10 @@ module Pgbus
         # The channel joins @listening_to BEFORE the exec: if the LISTEN
         # raises, run_loop reconnects, reconnect! re-LISTENs it with the rest,
         # and only then is the caller acked (drain_commands), so an acked
-        # ensure_listening always means an active LISTEN (the dispatcher's
-        # no-second-wait rule rests on that, issue #630).
+        # ensure_listening means an active LISTEN (the dispatcher's
+        # no-second-wait rule rests on that, issue #630). The exception is a
+        # thread on its way out (stop, or an unexpected error): run_loop's
+        # ensure releases every waiting caller with nothing LISTENed.
         def do_listen(queue_name)
           channel = channel_for(queue_name)
           return if @listening_to.include?(channel)

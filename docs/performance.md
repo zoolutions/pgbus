@@ -1586,8 +1586,9 @@ What the numbers say:
   in 0.08–0.17 s instead of 25 s. At M = 1 000 the branch registers everyone in 4.5–6.6 s instead
   of 255–267 s, and the dispatcher's share of that is `handle_connect` p50 0.1–0.3 ms, about 0.3 s
   for all 1 000. The rest is macOS's accept queue: `somaxconn` 128 resets 676–869 of the 1 000
-  connects, and those clients retry after the 2 s `retry:` an EventSource would wait (connect p50
-  ≈ 2.3 s, p99 ≈ 4.5 s: one or two retry clocks). Linux's default of 4 096 resets none.
+  connects, and those clients retry after the 2 s `retry:` an EventSource would wait (connect p99
+  ≈ 4.5 s, one or two retry clocks; connect p50 2.3 s in seven of the eight branch cells and
+  0.28 s in one, where the median client was not reset). Linux's default of 4 096 resets none.
 - **B is what the 100-stream rows show.** At M = 100 over 100 streams every connect is a stream's
   first, so every one goes to the listener: 0.7–1.0 ms each on the branch, 255–258 ms on `main`.
   At M = 1 000 the 100-stream rows land at 4.49–4.53 s, inside the one-stream rows' 4.46–6.58 s;

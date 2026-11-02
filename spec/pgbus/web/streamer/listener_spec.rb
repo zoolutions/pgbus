@@ -570,9 +570,11 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
     end
 
     it "runs one SELECT 1 per cycle, not one per select return" do
-      idle = build_listener(health_check_ms: 300)
+      # A 1 s cycle against a ~0.1 s window of wakes: a loaded runner cannot
+      # stretch the window into a second cycle.
+      idle = build_listener(health_check_ms: 1_000)
       idle.start
-      wait_until { fake_pg.executed.include?("SELECT 1") }
+      wait_until(timeout: 3) { fake_pg.executed.include?("SELECT 1") }
 
       # Five wakes inside the cycle: each returns the select early, and none
       # may count as an idle cycle.
