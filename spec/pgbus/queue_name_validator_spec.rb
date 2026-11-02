@@ -42,11 +42,20 @@ RSpec.describe Pgbus::QueueNameValidator do
       expect(described_class.validate!(name)).to eq(name)
     end
 
-    it "matches the effective limit enforced by pgmq-ruby (< 48 chars)" do
-      # pgmq-ruby rejects length >= 48 in PGMQ::Client#validate_queue_name!,
-      # so our constant must stay below that to avoid letting names through
-      # pgbus that then fail deep in the transport gem.
-      expect(described_class::MAX_QUEUE_NAME_LENGTH).to be < 48
+    it "matches the effective limit enforced by pgmq-ruby" do
+      # pgmq-ruby's PGMQ::QueueName.validate! rejects length >= MAX_LENGTH, so
+      # our constant must be one below it: higher lets names through pgbus
+      # that then fail deep in the transport gem, lower rejects names PGMQ takes.
+      expect(described_class::MAX_QUEUE_NAME_LENGTH).to eq(real_pgmq_queue_name::MAX_LENGTH - 1)
+    end
+
+    it "names the same ceiling as pgmq-ruby's own error (pgmq-ruby 0.8.2+)" do
+      max = described_class::MAX_QUEUE_NAME_LENGTH
+      queue_name = real_pgmq_queue_name
+
+      expect(queue_name.validate!("a" * max)).to eq("a" * max)
+      expect { queue_name.validate!("a" * (max + 1)) }
+        .to raise_error(PGMQ::Errors::InvalidQueueNameError, /maximum length of #{max} characters/)
     end
   end
 
