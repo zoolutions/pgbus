@@ -121,10 +121,21 @@ module Pgbus
       # applied again here.
       def discard_session(conn, reason)
         Pgbus.logger.warn { "[Pgbus::Client] #{reason}, resetting the connection" }
-        conn.reset
+        begin
+          conn.reset
+        rescue PG::Error => e
+          Pgbus.logger.warn { "[Pgbus::Client] Resetting the connection failed: #{e.message}" }
+          return
+        end
+        reapply_session_gucs(conn)
+      end
+
+      def reapply_session_gucs(conn)
         apply_session_gucs(conn, @session_gucs) if @session_gucs
       rescue PG::Error => e
-        Pgbus.logger.warn { "[Pgbus::Client] Resetting the connection failed: #{e.message}" }
+        Pgbus.logger.warn do
+          "[Pgbus::Client] Re-applying the session's database.yml variables after the reset failed: #{e.message}"
+        end
       end
 
       # The failed BEGIN block (INERROR) is still open after the sync. A failed

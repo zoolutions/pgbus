@@ -412,6 +412,17 @@ RSpec.describe Pgbus::Client::AsyncCommit do
       expect { client.archive_message("default", 9, job_completion: true) }.to raise_error(Interrupt)
       expect(conn.calls.last(3)).to eq([[:exit_pipeline_mode], [:reset], [:exec, "SET lock_timeout = '5s'"]])
     end
+
+    it "logs a SET that fails after the reset as that, not as a failed reset" do
+      conn.interrupt_read!
+      allow(conn).to receive(:exec).and_call_original
+      allow(conn).to receive(:exec).with("SET lock_timeout = '5s'").and_raise(PG::InvalidParameterValue, "bad value")
+      messages = []
+      allow(Pgbus.logger).to receive(:warn) { |&blk| messages << blk.call }
+
+      expect { client.archive_message("default", 9, job_completion: true) }.to raise_error(Interrupt)
+      expect(messages.last).to match(/Re-applying the session's database.yml variables after the reset failed: bad value/)
+    end
   end
 
   # The Proc connection_params path hands pgbus ActiveRecord's own connection:
