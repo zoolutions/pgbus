@@ -429,7 +429,10 @@ class Views::Docs::Pages::UpgradingPgbus < DocsUI::Page
         A **no-argument** `:until_executed` job (e.g. a recurring `CleanupJob`
         that must not overlap itself) still uses the class-name default and does
         **not** raise — that case has one logical instance, so there is nothing to
-        collapse. `:while_executing` is unaffected.
+        collapse. `:until_executing` (the debounce strategy added after 1.0.0)
+        takes its lock at enqueue too, so it has the same guard: without a
+        `key:`, an argument-taking `:until_executing` job raises the same
+        `ArgumentError`. `:while_executing` is unaffected.
 
         **New in 1.0.0:**
 

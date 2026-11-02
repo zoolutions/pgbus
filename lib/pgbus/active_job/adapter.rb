@@ -215,7 +215,7 @@ module Pgbus
           return true
         when :discard
           Pgbus.logger.info { "[Pgbus] Discarding job #{active_job.class.name}: concurrency limit for #{key}" }
-          # The job will never run: roll back an :until_executed uniqueness lock
+          # The job will never run: roll back an enqueue-time uniqueness lock
           # acquired earlier in this enqueue (no executor will release it), and
           # uncount it from its batch so completion is not waited on forever.
           rollback_acquired_uniqueness_lock
@@ -226,7 +226,8 @@ module Pgbus
         false
       end
 
-      # Releases an :until_executed lock this enqueue acquired, if any.
+      # Releases an enqueue-time lock (:until_executed, :until_executing) this
+      # enqueue acquired, if any.
       # Used when the job is dropped before a message is sent (concurrency
       # :discard, or send_message raising) — otherwise the lock is orphaned
       # because no executor will ever release it.

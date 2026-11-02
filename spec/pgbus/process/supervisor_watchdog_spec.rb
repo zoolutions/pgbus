@@ -495,6 +495,14 @@ RSpec.describe Pgbus::Process::Supervisor do
       # the helper to be inside sleep: a TTIN that lands while it is still
       # starting dumps an empty backtrace for it (seen on CI, Ruby 4.0).
       def fork_parked_child(before_sleep: -> {})
+        # connection_pool's fork hook reloads every live pool in the child and
+        # asks each pooled connection respond_to?(:close). A pool an earlier
+        # spec built over a PG::Connection double still holds it, and that
+        # double has expired, so the hook raised and the child died before it
+        # reported ready (order-dependent: seed 10889 on Ruby 4.0). This child
+        # resets the client and never touches those pools. Not loaded yet:
+        # no pool exists and no hook runs.
+        allow(ConnectionPool).to receive(:after_fork) if defined?(ConnectionPool)
         ready_r, ready_w = IO.pipe
         pid = fork do
           ready_r.close
@@ -516,8 +524,13 @@ RSpec.describe Pgbus::Process::Supervisor do
           exit!(1)
         end
         ready_w.close
-        ready_r.read(1)
+        ready = ready_r.read(1)
         ready_r.close
+        unless ready
+          kill_child(pid) # reap it: the caller never gets the pid
+          raise "forked child #{pid} exited before reporting ready"
+        end
+
         pid
       end
 

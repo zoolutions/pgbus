@@ -1288,6 +1288,20 @@ RSpec.describe Pgbus::Web::DataSource do
       expect(Pgbus::UniquenessKey).to have_received(:release_if_unbound!).once
     end
 
+    # Issue #628: the limits_concurrency recipe parks a debounced copy with
+    # its row unbound; discarding it from the dashboard must not orphan it.
+    it "releases an until_executing uniqueness lock, but only while it is unbound" do
+      allow(relation).to receive(:lock).and_return(
+        double(to_a: [double("BlockedExecution", id: 9, concurrency_key: "k", created_at: parked_at,
+                                                 payload: unique_payload.merge(Pgbus::Uniqueness::STRATEGY_KEY => "until_executing"))])
+      )
+
+      data_source.discard_parked_jobs("ProcessOrder-42")
+
+      expect(Pgbus::UniquenessKey).to have_received(:release_if_unbound!)
+        .with("import-42", acquired_before: parked_at).once
+    end
+
     it "keeps an until_start lock held" do
       allow(relation).to receive(:lock).and_return(
         double(to_a: [double("BlockedExecution", id: 9, concurrency_key: "k", created_at: parked_at,

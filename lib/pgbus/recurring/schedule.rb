@@ -26,7 +26,7 @@ module Pgbus
         RecurringExecution.record(task.key, run_at) do
           payload = build_payload(task)
           headers = build_headers(task, run_at)
-          payload = inject_uniqueness_metadata(task, payload)
+          payload = inject_uniqueness_metadata(task, payload, acquired_key)
 
           Pgbus.client.ensure_queue(queue)
           msg_id = Pgbus.client.send_message(queue, payload, headers: headers)
@@ -138,7 +138,7 @@ module Pgbus
 
         config = job_class.pgbus_uniqueness
         return nil unless config
-        return nil unless config[:strategy] == :until_executed
+        return nil unless Uniqueness::ENQUEUE_LOCK_STRATEGIES.include?(config[:strategy])
 
         key = resolve_uniqueness_key(job_class, config, task)
         return nil unless key
@@ -216,10 +216,13 @@ module Pgbus
       end
 
       # Inject uniqueness metadata into the payload so the executor releases
-      # the lock after the job completes.
-      # Only inject for :until_executed strategy — :while_executing locks are
-      # acquired at execution time by the executor, not by the scheduler.
-      def inject_uniqueness_metadata(task, payload)
+      # the lock: after the job completes (:until_executed) or when it starts
+      # (:until_executing, issue #628). Not for :while_executing — its locks
+      # are acquired at execution time by the executor, not by the scheduler.
+      # The key is the one the row was acquired under when there is one: a
+      # key proc resolved again could answer differently, and the executor
+      # would release a key nobody holds and orphan the acquired row.
+      def inject_uniqueness_metadata(task, payload, acquired_key = nil)
         return payload unless task.class_name
 
         job_class = task.class_name.safe_constantize
@@ -227,9 +230,9 @@ module Pgbus
 
         config = job_class.pgbus_uniqueness
         return payload unless config
-        return payload unless config[:strategy] == :until_executed
+        return payload unless Uniqueness::ENQUEUE_LOCK_STRATEGIES.include?(config[:strategy])
 
-        key = resolve_uniqueness_key(job_class, config, task)
+        key = acquired_key.is_a?(String) ? acquired_key : resolve_uniqueness_key(job_class, config, task)
         return payload unless key
 
         payload.merge(

@@ -89,6 +89,16 @@ RSpec.describe Pgbus::Uniqueness do
       end.to raise_error(ArgumentError, /lock_ttl.*removed.*upgrading-pgbus/im)
     end
 
+    it "accepts the :until_executing (debounce) strategy (issue #628)" do
+      job_class = Class.new do
+        include Pgbus::Uniqueness
+
+        ensures_uniqueness strategy: :until_executing, key: ->(id) { "rollup-#{id}" }, on_conflict: :discard
+      end
+
+      expect(job_class.pgbus_uniqueness).to include(strategy: :until_executing, on_conflict: :discard)
+    end
+
     it "rejects invalid strategies" do
       expect do
         Class.new do
@@ -176,6 +186,41 @@ RSpec.describe Pgbus::Uniqueness do
         stub_const("ImportOrderJob2", job_class)
 
         expect(described_class.resolve_key(ImportOrderJob2.new(42))).to eq("order-42")
+      end
+
+      it "RAISES for a no-key :until_executing job enqueued WITH arguments, naming that strategy (issue #628)" do
+        job_class = Class.new(ActiveJob::Base) do
+          include Pgbus::Uniqueness
+
+          ensures_uniqueness strategy: :until_executing
+        end
+        stub_const("RollupJob", job_class)
+
+        expect { described_class.resolve_key(RollupJob.new(42)) }
+          .to raise_error(ArgumentError, /strategy: :until_executing with no key:.*collapse/m)
+      end
+
+      it "names :until_executed in the message for an :until_executed job" do
+        job_class = Class.new(ActiveJob::Base) do
+          include Pgbus::Uniqueness
+
+          ensures_uniqueness strategy: :until_executed
+        end
+        stub_const("ImportOrderJob3", job_class)
+
+        expect { described_class.resolve_key(ImportOrderJob3.new(42)) }
+          .to raise_error(ArgumentError, /strategy: :until_executed with no key:/)
+      end
+
+      it "uses the class-name default for a NO-argument :until_executing job" do
+        job_class = Class.new(ActiveJob::Base) do
+          include Pgbus::Uniqueness
+
+          ensures_uniqueness strategy: :until_executing
+        end
+        stub_const("RollupAllJob", job_class)
+
+        expect(described_class.resolve_key(RollupAllJob.new)).to eq("RollupAllJob")
       end
 
       it "does NOT raise for :while_executing with arguments and no key" do
@@ -271,6 +316,28 @@ RSpec.describe Pgbus::Uniqueness do
       expect(Pgbus::UniquenessKey).to have_received(:acquire!).with(
         "test-key", queue_name: "critical", msg_id: 0
       )
+    end
+
+    it "acquires the enqueue lock for :until_executing (issue #628)" do
+      job_class = Class.new(ActiveJob::Base) do
+        include Pgbus::Uniqueness
+
+        ensures_uniqueness strategy: :until_executing, key: ->(*) { "k" }
+      end
+
+      expect(described_class.acquire_enqueue_lock("test-key", job_class.new, queue_name: "critical")).to eq(:acquired)
+      expect(Pgbus::UniquenessKey).to have_received(:acquire!).with("test-key", queue_name: "critical", msg_id: 0)
+    end
+
+    it "returns :locked for :until_executing while a copy for the key is queued" do
+      allow(Pgbus::UniquenessKey).to receive(:acquire!).and_return(false)
+      job_class = Class.new(ActiveJob::Base) do
+        include Pgbus::Uniqueness
+
+        ensures_uniqueness strategy: :until_executing, key: ->(*) { "k" }
+      end
+
+      expect(described_class.acquire_enqueue_lock("test-key", job_class.new)).to eq(:locked)
     end
 
     it "returns :no_lock for :while_executing strategy" do
