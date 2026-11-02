@@ -360,9 +360,9 @@ RSpec.describe StreamsScaleHarness do
     end
 
     it "prints a skipped row with its reason" do
-      line = described_class.table([{ "m" => 2000, "skip_reason" => "skipped: M=2000 needs more" }]).last
+      line = described_class.table([{ "m" => 2000, "streams" => 100, "skip_reason" => "skipped: M=2000 needs more" }]).last
 
-      expect(line).to eq("| 2000 | skipped: M=2000 needs more | | | | | | | | | | | |")
+      expect(line).to eq("| 2000 | 100 | skipped: M=2000 needs more | | | | | | | | | | |")
     end
 
     it "prints 1 for a row from before the streams knob" do

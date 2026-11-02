@@ -27,11 +27,17 @@ RSpec.describe Pgbus::Web::Streamer::Instance do
   # only wakes on its own pipe or its keepalive deadline.
   let(:fake_pg) do
     Class.new do
-      attr_reader :executed, :socket_io
+      attr_reader :executed
 
       def initialize
         @executed = []
-        @socket_io, @socket_writer = IO.pipe
+      end
+
+      # Built on first use, which only a running listener makes, so an
+      # Instance that never starts holds no descriptors.
+      def socket_io
+        @socket_io, @socket_writer = IO.pipe unless @socket_io
+        @socket_io
       end
 
       def exec(sql)
@@ -39,13 +45,13 @@ RSpec.describe Pgbus::Web::Streamer::Instance do
         nil
       end
 
-      def consume_input = @socket_io.read_nonblock(4096, exception: false)
+      def consume_input = socket_io.read_nonblock(4096, exception: false)
       def notifies = nil
       def status = PG::CONNECTION_OK
       def reset = nil
 
       def close
-        [@socket_io, @socket_writer].each { |io| io.close unless io.closed? }
+        [@socket_io, @socket_writer].compact.each { |io| io.close unless io.closed? }
       end
     end.new
   end

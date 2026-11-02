@@ -359,6 +359,8 @@ module Pgbus
             # connection, so the rest of the queue is moot.
             return unless @running
 
+            # A backlog that never empties must not postpone the keepalive.
+            run_health_check unless (@health_check_due_at - @clock.call).positive?
             cmd = @commands.pop(true)
             case cmd[0]
             when :listen

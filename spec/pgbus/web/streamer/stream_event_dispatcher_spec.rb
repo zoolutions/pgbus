@@ -691,6 +691,16 @@ RSpec.describe Pgbus::Web::Streamer::StreamEventDispatcher do
       expect(dispatcher.instance_variable_get(:@full_to_logical)).to be_empty
     end
 
+    it "waits on the listener again while it is reconnecting, so read_after follows the re-LISTEN" do
+      allow(listener).to receive(:connected?).and_return(true)
+      connect(first)
+      allow(listener).to receive(:connected?).and_return(false)
+
+      connect(second)
+
+      expect(listener).to have_received(:ensure_listening).with("chat").twice
+    end
+
     it "fans a wake out to the fast-path connection as well as the first one" do
       connect(first)
       connect(second)

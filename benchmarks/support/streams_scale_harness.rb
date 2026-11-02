@@ -250,7 +250,7 @@ module StreamsScaleHarness
   end
 
   def table_row(row)
-    return "| #{row["m"]} | #{row["skip_reason"]} |#{" |" * (COLUMNS.size - 2)}" if row["skip_reason"]
+    return "| #{row["m"]} | #{row.fetch("streams", 1)} | #{row["skip_reason"]} |#{" |" * (COLUMNS.size - 3)}" if row["skip_reason"]
 
     failures = "#{row["misses"]} / #{row["errors"]} / #{row["over_capacity"]}"
     failures = "**#{failures}**" if row["misses"].to_i.positive? || row["errors"].to_i.positive?

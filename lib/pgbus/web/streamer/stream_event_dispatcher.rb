@@ -395,8 +395,15 @@ module Pgbus
           # mid-replay and unlistened without ever registering.
           # @full_to_logical is set here and deleted only by that same
           # cleanup, so it is present whenever the stream is not empty.
+          #
+          # A local Listener that is reconnecting (connected? false) has no
+          # LISTEN on any channel until reconnect! re-LISTENs its set, so the
+          # connect waits on it like a first one: its ack comes after the
+          # re-LISTEN, and read_after cannot run ahead of it. A hub client
+          # exposes no such state; a durable stream's next wake re-reads from
+          # the min cursor.
           full_name = notify_queue_name_for(stream)
-          if @registry.empty?(stream)
+          if @registry.empty?(stream) || listener_reconnecting?
             @full_to_logical[full_name] = stream
             @listener.ensure_listening(full_name)
           end
@@ -472,6 +479,12 @@ module Pgbus
           cleanup_stream_if_unused(stream)
           connection.mark_dead!
           @logger.error { "[Pgbus::Streamer::StreamEventDispatcher] connect failed for #{connection.id}: #{e.class}: #{e.message}" }
+        end
+
+        # Listener#connected? is an unsynchronized ivar read (atomic in MRI); a
+        # stale answer costs one fast path or one listener round trip.
+        def listener_reconnecting?
+          @listener.respond_to?(:connected?) && !@listener.connected?
         end
 
         def handle_disconnect(msg)

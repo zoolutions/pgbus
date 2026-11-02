@@ -597,8 +597,10 @@ module Pgbus
       @streams_idle_timeout = 3_600 # 1 hour
       # 250ms — this value plays two roles: (1) the TCP keepalive
       # interval for the streamer's PG LISTEN connection, and (2) the
-      # budget (plus 1s) a stream's first connect waits for a stuck
-      # Listener to acknowledge its ensure_listening. A live listener
+      # budget (plus 1s) a stream's first connect waits for a stuck local
+      # Listener to acknowledge its ensure_listening (with
+      # streams_listen_scope :master, HubClient waits this cycle plus 2s
+      # before failing over). A live listener
       # is woken through a pipe and acks within a thread hop, and a
       # connect on a stream that already has a subscriber does not
       # wait at all (issue #630), so connects no longer pay this cycle.

@@ -235,7 +235,7 @@ end
 def run_cell(clients, mode)
   cap = StreamsScaleHarness.raise_fd_limit!(StreamsScaleHarness.fd_needed(clients + KNOBS[:slow]))
   reason = StreamsScaleHarness.fd_skip_reason(clients + KNOBS[:slow], cap: cap)
-  return { "m" => clients, "skip_reason" => reason } if reason
+  return { "m" => clients, "streams" => KNOBS[:streams], "skip_reason" => reason } if reason
 
   run_id = SecureRandom.hex(4)
   stream_names = Array.new(KNOBS[:streams]) { |i| "ss_#{mode}_#{run_id}_#{i}" }

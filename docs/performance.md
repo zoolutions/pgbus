@@ -1513,15 +1513,21 @@ evaluations above.
 
 The baseline above named the connect storm as its largest number: every SSE connect cost one
 `streams_listen_health_check_ms` cycle (250 ms) on the single dispatcher thread, so 1 000
-clients took ~255 s to register and none got a byte before it did. Two causes, two changes:
+clients took ~255 s to register and none got its `pgbus:connected` frame or a heartbeat before
+it did (the response headers, `retry:` and the opening comment go out first). Two causes, two
+changes:
 
 - **A. No listener wait for a stream that already has a subscriber.** `handle_connect` called
   `Listener#ensure_listening` for every connect, and the listener acked it only when its
   current wait ended, even for a channel it already LISTENed on. It now calls it only when
   `@registry.empty?(stream)`. `remove_listening` is issued from one place,
   `cleanup_stream_if_unused`, and only when the registry holds no connection on the stream, so
-  a registered connection proves the stream's last `ensure_listening` returned after its last
-  `remove_listening`. An empty stream always takes the slow path.
+  a registered connection proves the stream's last `ensure_listening` was issued after its last
+  `remove_listening`, and the listener runs commands in order. When that `ensure_listening` was
+  acked, the LISTEN is active; when it timed out (a stuck listener), the LISTEN is still queued
+  ahead of any UNLISTEN and runs once the listener recovers, the same window that first connect
+  had. An empty stream, and any connect while the local listener is reconnecting, takes the
+  slow path.
 - **B. The listener drains commands on a self-pipe wake.** The listener thread parked in
   `wait_for_notify(health_check_ms)` and drained its command queue only between waits, so a
   stream's first connect, every unlisten and every master-hub sub waited out the current wait.

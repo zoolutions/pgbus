@@ -603,6 +603,24 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
     end
   end
 
+  describe "a command backlog" do
+    it "runs the keepalive between commands once it is due, so a backlog cannot postpone it" do
+      clock = [0.0]
+      backlog = build_listener(clock: -> { clock[0] })
+      backlog.instance_variable_set(:@running, true)
+      backlog.instance_variable_set(:@health_check_due_at, 1.0)
+      backlog.remove_listening("a")
+      clock[0] = 2.0 # overdue while the queue still holds commands
+      backlog.remove_listening("b")
+
+      backlog.send(:drain_commands)
+
+      expect(fake_pg.executed.count("SELECT 1")).to eq(1)
+    ensure
+      backlog&.instance_variable_set(:@running, false)
+    end
+  end
+
   describe "a keepalive slower than a cycle" do
     it "still selects on the socket between keepalives" do
       fake_pg.slow_exec!("SELECT 1", 0.03)
