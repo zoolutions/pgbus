@@ -1,0 +1,21 @@
+lib/pgbus/web/streamer/stream_event_dispatcher.rb
+  s_f7f0f606932d66::t_d9dd71b9b6e81c 375-389,391-394
+spec/pgbus/web/streamer/stream_event_dispatcher_spec.rb
+  s_f7f0f606932d66::t_3617bf58caef2a 611-705
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "bcee4d4ae99019a3b1fde96ff27eb9740f688268",
+  "prompts": {},
+  "sessions": {
+    "s_f7f0f606932d66": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f21615f0-ca1d-43df-80e0-f58672e7ea31",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
