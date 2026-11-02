@@ -32,6 +32,14 @@ module RealPgmqErrors
     PGMQ::Metrics
   end
 
+  # The genuine PGMQ::QueueName, loaded the same way, so a spec comparing
+  # pgbus's queue-name ceiling with pgmq-ruby's fails when pgmq-ruby moves it.
+  def real_pgmq_queue_name
+    real_pgmq_connection_error
+    load(Gem.find_files("pgmq/queue_name.rb").first) unless defined?(PGMQ::QueueName)
+    PGMQ::QueueName
+  end
+
   # The genuine PGMQ::Connection. Since pgmq-ruby 0.8 its class body needs the
   # gem's Contracts, so it can't be loaded file by file: this requires the gem,
   # whose Zeitwerk setup reopens a bare ::PGMQ.
