@@ -1,0 +1,11 @@
+module Pgbus
+  module ActiveJob
+    # config.quiet_active_job_logs: a worker process unsubscribes
+    # ActiveJob::LogSubscriber from perform_start and perform.
+    module QuietLogs
+      EVENTS: Array[String]
+
+      def self.apply!: (?notifier: untyped) -> bool
+    end
+  end
+end

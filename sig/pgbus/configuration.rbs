@@ -152,6 +152,8 @@ module Pgbus
     def queue_name: (untyped name) -> untyped
     def queue_prefix: () -> String
     def queue_prefix=: (untyped) -> untyped
+    def quiet_active_job_logs: () -> bool
+    def quiet_active_job_logs=: (bool value) -> bool
     def read_ahead: () -> Integer
     def read_ahead=: (untyped value) -> untyped
     def read_ahead_for: (untyped entry) -> untyped

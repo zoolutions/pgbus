@@ -30,5 +30,41 @@ RSpec.describe WorkerProfileRunner do
       expect(config.pool_size).to be_nil
       expect(ActiveRecord::Base).to have_received(:establish_connection).with("postgres://localhost/bench?pool=20")
     end
+
+    # Issue #618: WP_BENCH_AJ_LOGS picks the ActiveJob log-line cell.
+    context "with WP_BENCH_AJ_LOGS" do
+      around do |example|
+        previous = ENV.fetch("WP_BENCH_AJ_LOGS", nil)
+        example.run
+      ensure
+        ENV["WP_BENCH_AJ_LOGS"] = previous
+      end
+
+      it "sets quiet_active_job_logs for quiet and keeps the plain logger" do
+        ENV["WP_BENCH_AJ_LOGS"] = "quiet"
+        described_class.configure!("postgres://localhost/bench", threads: 12)
+
+        expect(config.quiet_active_job_logs).to be(true)
+        expect(ActiveJob::Base).to have_received(:logger=).with(an_instance_of(Logger))
+      end
+
+      it "gives ActiveJob a TaggedLogging logger at warn for warn" do
+        ENV["WP_BENCH_AJ_LOGS"] = "warn"
+        described_class.configure!("postgres://localhost/bench", threads: 12)
+
+        expect(config.quiet_active_job_logs).to be(false)
+        expect(ActiveJob::Base).to have_received(:logger=)
+          .with(satisfy { |l| l.respond_to?(:tagged) && l.level == Logger::WARN })
+      end
+
+      it "leaves both alone by default" do
+        ENV["WP_BENCH_AJ_LOGS"] = nil
+        described_class.configure!("postgres://localhost/bench", threads: 12)
+
+        expect(config.quiet_active_job_logs).to be(false)
+        expect(ActiveJob::Base).to have_received(:logger=)
+          .with(satisfy { |l| !l.respond_to?(:tagged) && l.level == Logger::DEBUG })
+      end
+    end
   end
 end
