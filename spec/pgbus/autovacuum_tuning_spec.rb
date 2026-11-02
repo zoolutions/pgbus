@@ -34,12 +34,12 @@ RSpec.describe Pgbus::AutovacuumTuning do
     end
 
     it "applies queue settings to q_ tables" do
-      expect(sql).to include("pgmq.q_%I")
+      expect(sql).to include("'q_' || lower(q.queue_name)")
       expect(sql).to include("autovacuum_vacuum_scale_factor = 0.01")
     end
 
     it "applies archive settings to a_ tables" do
-      expect(sql).to include("pgmq.a_%I")
+      expect(sql).to include("'a_' || lower(q.queue_name)")
       expect(sql).to include("autovacuum_vacuum_scale_factor = 0.05")
     end
   end

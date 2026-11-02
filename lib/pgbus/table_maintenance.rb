@@ -37,7 +37,7 @@ module Pgbus
             q RECORD;
           BEGIN
             FOR q IN SELECT queue_name FROM pgmq.meta LOOP
-              EXECUTE format('ALTER TABLE pgmq.q_%I SET (fillfactor = #{FILLFACTOR})', q.queue_name);
+              EXECUTE format('ALTER TABLE pgmq.%I SET (fillfactor = #{FILLFACTOR})', 'q_' || lower(q.queue_name));
             END LOOP;
           END $$;
         SQL

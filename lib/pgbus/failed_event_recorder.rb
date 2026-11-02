@@ -85,11 +85,14 @@ module Pgbus
       # queue is dropped: PGMQ restarts msg_ids on recreate, so a surviving
       # row would aim the dashboard's retry/discard at an unrelated message.
       # Queue names are validated word characters, so the array literal is safe.
+      # Matched in any case (issue #633): the dropped queue's name is lower
+      # case, while a row may carry the executor's configured spelling
+      # ("Critical") or a physical name from before #633.
       def clear_queue!(queue_names)
         connection.exec_delete(
-          "DELETE FROM pgbus_failed_events WHERE queue_name = ANY($1::text[])",
+          "DELETE FROM pgbus_failed_events WHERE lower(queue_name) = ANY($1::text[])",
           "FailedEvent Clear Queue",
-          ["{#{queue_names.join(",")}}"]
+          ["{#{queue_names.map(&:downcase).join(",")}}"]
         )
       rescue StandardError => e
         Pgbus.logger.error do

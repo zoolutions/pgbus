@@ -60,14 +60,23 @@ module Pgbus
     # (`Pgbus.stream([user, :notifications])` → `"user_gid:notifications"`),
     # so they must map to a safe character rather than be stripped —
     # otherwise `"a:b"` and `"ab"` would collide on the same queue.
+    #
+    # The result is lower case (issue #633): PGMQ lower-cases its table
+    # names (`pgmq.format_table_name`), so "Orders" and "orders" share
+    # `pgmq.q_orders` while `pgmq.meta` records each spelling as its own
+    # queue. Spelling every name the way its table is gives one name per
+    # table. `validate!` and `sanitize!` keep case: they also run on names
+    # read back from `pgmq.meta`, which an install from before #633 may
+    # still hold in mixed case (`rails generate pgbus:fold_queue_name_case`).
     def normalize(name)
       name = name.to_s
-      return validate!(name) if VALID_QUEUE_NAME_PATTERN.match?(name)
+      return validate!(name).downcase if VALID_QUEUE_NAME_PATTERN.match?(name)
 
       normalized = name.gsub(/[-.:]/, "_")          # hyphens/dots/colons → underscores
                        .gsub(/[^a-zA-Z0-9_]/, "")   # strip remaining invalid chars
                        .gsub(/_+/, "_")              # collapse consecutive underscores
                        .gsub(/\A_|_\z/, "")          # strip leading/trailing underscores
+                       .downcase
       validate!(normalized)
       normalized
     end

@@ -359,6 +359,44 @@ class Views::Docs::Pages::UpgradingPgbus < DocsUI::Page
         Messages already queued when you deploy carry no policy and keep the
         old redelivery (as `:reject`, with the backoff). A skip or a discard
         no longer counts as a success for the circuit breaker.
+
+        ### Queue names are lower case
+
+        PGMQ spells every queue table in lower case but records each spelling
+        in `pgmq.meta`, so `Orders` and `orders` shared `pgmq.q_pgbus_orders`
+        while the dashboard listed two queues. pgbus now spells every queue
+        name in lower case (`queue_name("Orders") == "pgbus_orders"`, and a
+        `queue_prefix` of `"MyApp"` becomes `"myapp"`). No table moves: PGMQ
+        already kept each queue in its lower-case table, and its messages stay
+        where they are.
+
+        An install with a queue that has an upper-case letter in its name (a
+        mixed-case name in `queues:` or `queue_as`, or a GlobalID stream such
+        as `pgbus_stream_from Current.user`) keeps working after the deploy,
+        but lists that queue twice until its rows are folded. `pgbus doctor`
+        names them under "Queue name case", and `pgbus:update` lists the
+        migration that folds them. **Run it after every process runs the new
+        version** (an older process that restarts recreates its mixed-case
+        row; running the migration again folds it):
+      MD
+      DocsUI::Code(<<~SHELL, lexer: :shell)
+        rails generate pgbus:fold_queue_name_case
+        rails db:migrate            # single database
+        rails db:migrate:pgbus      # separate-database install
+      SHELL
+      md <<~'MD'
+        It renames each mixed-case `pgmq.meta` row to the lower-case spelling,
+        moves its NOTIFY throttle and topic bindings, re-arms its insert
+        trigger under the new name, and lower-cases `pgbus_stream_queues`,
+        `pgbus_queue_states`, `pgbus_uniqueness_keys.queue_name` and
+        `pgbus_failed_events.source_queue`. Where both spellings exist, it
+        deletes only the extra `pgmq.meta` row. It never drops a table.
+
+        Until the last old process stops, an old web process LISTENs on the
+        mixed-case channel, so its SSE clients miss broadcasts until they
+        reconnect, and an old worker falls back to polling. Two stream names
+        that differ only in case now share one queue, as their table already
+        did.
       MD
     end
   end

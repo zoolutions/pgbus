@@ -5,7 +5,7 @@ require "pgbus/mcp/health_analyzer"
 
 module Pgbus
   # Preflight diagnostics for a pgbus deployment — the single command that
-  # answers "is this environment healthy enough to run?". Runs thirteen checks and
+  # answers "is this environment healthy enough to run?". Runs fourteen checks and
   # returns a machine-readable result plus a human report, so `pgbus doctor`
   # and `rake pgbus:doctor` can gate a deploy or CI run (exit 0 on success,
   # 1 on any failure).
@@ -36,6 +36,7 @@ module Pgbus
       "Database" => :check_database,
       "PGMQ schema" => :check_pgmq_schema,
       "Queues" => :check_queues,
+      "Queue name case" => :check_queue_name_case,
       "LISTEN/NOTIFY" => :check_notify,
       "Process liveness" => :check_processes,
       "GlobalID allowlist" => :check_allowed_global_id_models,
@@ -252,6 +253,29 @@ module Pgbus
       end
     rescue StandardError => e
       Check.new(name: "Queues", status: :fail, detail: "#{e.class}: #{e.message}")
+    end
+
+    # How many mixed-case queue names the queue-name case check lists.
+    CASE_NAMES_SHOWN = 5
+    private_constant :CASE_NAMES_SHOWN
+
+    # 4b. Queue-name case (issue #633). PGMQ spells every queue table in lower
+    # case, and pgbus now spells every queue name that way; a pgmq.meta row an
+    # older pgbus created as "pgbus_Orders" shares pgmq.q_pgbus_orders with the
+    # current spelling. Its messages are reachable, so this warns rather than
+    # fails: the dashboard lists the queue twice until the fold migration runs.
+    def check_queue_name_case
+      names = @client.mixed_case_queue_names
+      return Check.new(name: "Queue name case", status: :ok, detail: "every queue is spelled in lower case") if names.empty?
+
+      shown = names.first(CASE_NAMES_SHOWN).join(", ")
+      shown += ", …" if names.size > CASE_NAMES_SHOWN
+      Check.new(name: "Queue name case", status: :warn,
+                detail: "#{names.size} queue(s) in pgmq.meta spelled in mixed case (#{shown}); their tables are " \
+                        "lower case and pgbus now uses that spelling — once every process runs this pgbus, run " \
+                        "`rails generate pgbus:fold_queue_name_case` and migrate")
+    rescue StandardError => e
+      Check.new(name: "Queue name case", status: :warn, detail: "could not read pgmq.meta (#{e.class}: #{e.message})")
     end
 
     # 5. LISTEN/NOTIFY — when configured on, every configured queue should carry

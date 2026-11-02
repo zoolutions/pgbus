@@ -4,6 +4,12 @@ module Pgbus
   class QueueState < BusRecord
     self.table_name = "pgbus_queue_states"
 
+    # One row per queue whatever the spelling (issue #633): the dashboard
+    # names a queue from its pgmq.meta row, which PGMQ's lower-case table
+    # names make lower case, while a worker names it as configured
+    # ("Critical"). Applies to writes and to find_by/where.
+    normalizes :queue_name, with: ->(name) { name.to_s.downcase }
+
     scope :paused, -> { where(paused: true) }
 
     def self.paused?(queue_name)

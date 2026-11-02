@@ -30,6 +30,9 @@ module Pgbus
     PGMQ_META_CHECK_SQL = "SELECT 1 FROM pg_tables WHERE schemaname = 'pgmq' AND tablename = 'meta' LIMIT 1"
     private_constant :PGMQ_META_CHECK_SQL
 
+    MIXED_CASE_QUEUES_SQL = "SELECT queue_name FROM pgmq.meta WHERE queue_name <> lower(queue_name) ORDER BY queue_name"
+    private_constant :MIXED_CASE_QUEUES_SQL
+
     PGMQ_INSTALL_SAVEPOINT = "pgbus_pgmq_install"
     private_constant :PGMQ_INSTALL_SAVEPOINT
 
@@ -311,6 +314,16 @@ module Pgbus
     def pgmq_installed?
       with_raw_connection do |conn|
         conn.exec(PGMQ_META_CHECK_SQL).ntuples.positive?
+      end
+    end
+
+    # pgmq.meta rows spelled with an upper-case letter (issue #633). PGMQ
+    # lower-cases table names, so each shares its table with the lower-case
+    # spelling pgbus now uses; `rails generate pgbus:fold_queue_name_case`
+    # renames them. Pgbus::Doctor reports them.
+    def mixed_case_queue_names
+      with_raw_connection do |conn|
+        conn.exec(MIXED_CASE_QUEUES_SQL).column_values(0)
       end
     end
 
@@ -1643,7 +1656,13 @@ module Pgbus
     end
 
     # Check whether the NOTIFY trigger already exists on this queue with the
-    # expected throttle interval. When it does, we can skip the destructive
+    # expected throttle interval, armed under this spelling of its name. PGMQ
+    # 1.13.1's trigger NOTIFYs on the channel of the name it was armed with
+    # (its argument), and every spelling of a name shares the queue's table
+    # (issue #633): a process from before #633 that re-arms it under a
+    # mixed-case name moves its NOTIFYs to a channel no listener uses. A
+    # trigger without an argument (older PGMQ) NOTIFYs on the table's name,
+    # which is the lower-case spelling. When it does, we can skip the destructive
     # DROP TRIGGER + CREATE TRIGGER cycle that causes deadlocks when multiple
     # forked processes race during bootstrap.
     #
@@ -1665,6 +1684,7 @@ module Pgbus
           WHERE n.nspname = 'pgmq'
             AND c.relname = pgmq.format_table_name($1, 'q')
             AND t.tgname = '#{NOTIFY_TRIGGER_NAME}'
+            AND (t.tgnargs = 0 OR t.tgargs = convert_to($1, 'UTF8') || '\\000'::bytea)
             AND EXISTS (
               SELECT 1 FROM pgmq.notify_insert_throttle
               WHERE queue_name = $1

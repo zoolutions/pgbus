@@ -738,6 +738,23 @@ RSpec.describe Pgbus::Process::Worker do
       end
     end
 
+    # Issue #633: Postgres names the table in lower case, the worker holds the
+    # queue as configured.
+    context "when a queue configured in mixed case loses its table" do
+      let(:worker) { described_class.new(queues: %w[default Stale-Queue], threads: 5) }
+      let(:prefix) { worker.config.queue_prefix }
+
+      before do
+        allow(mock_client).to receive(:read_multi)
+          .and_raise(StandardError, "ERROR:  relation \"pgmq.q_#{prefix}_stale_queue\" does not exist")
+      end
+
+      it "evicts it under its configured name" do
+        worker.send(:fetch_messages, 5)
+        expect(worker.queues).to eq(%w[default])
+      end
+    end
+
     context "when eviction removes ALL queues (regression: issue #174)" do
       let(:worker) { described_class.new(queues: %w[only_queue], threads: 5) }
       let(:prefix) { worker.config.queue_prefix }

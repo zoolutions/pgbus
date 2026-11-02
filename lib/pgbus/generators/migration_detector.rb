@@ -102,7 +102,8 @@ module Pgbus
         add_batch_executions: "pgbus:add_batch_executions",
         add_batch_callback_jobs: "pgbus:add_batch_callback_jobs",
         tune_autovacuum: "pgbus:tune_autovacuum",
-        tune_fillfactor: "pgbus:tune_fillfactor"
+        tune_fillfactor: "pgbus:tune_fillfactor",
+        fold_queue_name_case: "pgbus:fold_queue_name_case"
       }.freeze
 
       # Human-friendly description of each migration for the generator
@@ -128,8 +129,12 @@ module Pgbus
         add_batch_executions: "batch execution-row tracking (self-healing completion, on_failure rename)",
         add_batch_callback_jobs: "batch callback-job columns (configured ActiveJob instances as batch callbacks)",
         tune_autovacuum: "autovacuum tuning for PGMQ queue and archive tables",
-        tune_fillfactor: "fillfactor=70 on PGMQ queue tables (reduces page density during update churn)"
+        tune_fillfactor: "fillfactor=70 on PGMQ queue tables (reduces page density during update churn)",
+        fold_queue_name_case: "lower-case spelling for queues created in mixed case (PGMQ's table names are lower case)"
       }.freeze
+
+      # A pgmq.meta row spelled with an upper-case letter (issue #633).
+      MIXED_CASE_QUEUE_SQL = "SELECT 1 FROM pgmq.meta WHERE queue_name <> lower(queue_name) LIMIT 1"
 
       def initialize(connection)
         @connection = connection
@@ -143,6 +148,9 @@ module Pgbus
         return [FRESH_INSTALL] if fresh_install?
 
         [
+          # First: the tuning migrations below build table names from
+          # pgmq.meta, which a mixed-case row spells unlike its table.
+          *queue_name_case_migrations,
           *uniqueness_key_migrations,
           *job_stats_migrations,
           *stream_stats_migrations,
@@ -326,6 +334,22 @@ module Pgbus
         return [] if autovacuum_already_tuned?
 
         [:tune_autovacuum]
+      end
+
+      # Issue #633: a queue an older pgbus created in mixed case shares its
+      # lower-case table with the spelling pgbus now uses. An unreadable
+      # pgmq.meta queues nothing: the doctor's "Queue name case" check says why.
+      def queue_name_case_migrations
+        return [] unless pgmq_schema_exists?
+        return [] unless mixed_case_queue?
+
+        [:fold_queue_name_case]
+      end
+
+      def mixed_case_queue?
+        connection.select_value(MIXED_CASE_QUEUE_SQL).present?
+      rescue StandardError
+        false
       end
 
       # Fillfactor tuning: check if any PGMQ queue table already has

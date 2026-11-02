@@ -22,7 +22,7 @@ class TunePgbusFillfactor < ActiveRecord::Migration<%= migration_version %>
         q RECORD;
       BEGIN
         FOR q IN SELECT queue_name FROM pgmq.meta LOOP
-          EXECUTE format('ALTER TABLE pgmq.q_%I RESET (fillfactor)', q.queue_name);
+          EXECUTE format('ALTER TABLE pgmq.%I RESET (fillfactor)', 'q_' || lower(q.queue_name));
         END LOOP;
       END $$;
     SQL

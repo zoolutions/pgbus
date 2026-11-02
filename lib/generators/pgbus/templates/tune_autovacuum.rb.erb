@@ -25,8 +25,8 @@ class TunePgbusAutovacuum < ActiveRecord::Migration<%= migration_version %>
         q RECORD;
       BEGIN
         FOR q IN SELECT queue_name FROM pgmq.meta LOOP
-          EXECUTE format('ALTER TABLE pgmq.q_%I RESET (autovacuum_vacuum_scale_factor, autovacuum_vacuum_cost_delay, autovacuum_analyze_scale_factor)', q.queue_name);
-          EXECUTE format('ALTER TABLE pgmq.a_%I RESET (autovacuum_vacuum_scale_factor, autovacuum_vacuum_cost_delay, autovacuum_analyze_scale_factor)', q.queue_name);
+          EXECUTE format('ALTER TABLE pgmq.%I RESET (autovacuum_vacuum_scale_factor, autovacuum_vacuum_cost_delay, autovacuum_analyze_scale_factor)', 'q_' || lower(q.queue_name));
+          EXECUTE format('ALTER TABLE pgmq.%I RESET (autovacuum_vacuum_scale_factor, autovacuum_vacuum_cost_delay, autovacuum_analyze_scale_factor)', 'a_' || lower(q.queue_name));
         END LOOP;
       END $$;
     SQL

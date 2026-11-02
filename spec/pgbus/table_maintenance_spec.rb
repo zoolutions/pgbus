@@ -24,12 +24,12 @@ RSpec.describe Pgbus::TableMaintenance do
     end
 
     it "applies fillfactor to q_ tables only" do
-      expect(sql).to include("pgmq.q_%I")
+      expect(sql).to include("'q_' || lower(q.queue_name)")
       expect(sql).to include("fillfactor = 70")
     end
 
     it "does not apply fillfactor to archive tables" do
-      expect(sql).not_to include("pgmq.a_%I")
+      expect(sql).not_to include("'a_' ||")
     end
   end
 
