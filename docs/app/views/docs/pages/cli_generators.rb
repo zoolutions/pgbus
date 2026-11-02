@@ -215,7 +215,7 @@ class Views::Docs::Pages::CliGenerators < DocsUI::Page
         [
           [ [ :code, "pgbus:tune_autovacuum" ], "Apply aggressive autovacuum settings to the high-churn queue tables." ],
           [ [ :code, "pgbus:tune_fillfactor" ], "Tune table fillfactor for existing installations." ],
-          [ [ :code, "pgbus:fold_queue_name_case" ], "Rename queues created in mixed case before 0.23.0 to the lower-case spelling of their tables (pgmq.meta rows, NOTIFY triggers, pgbus's queue-name columns). Never drops a table." ]
+          [ [ :code, "pgbus:fold_queue_name_case" ], "Rename queues created in mixed case before 0.23.0 to the lower-case spelling of their tables (pgmq.meta rows, NOTIFY triggers, pgbus's queue-name columns). Never drops a table. Run it once every process runs 0.23.0+ (an older process recreates its mixed-case row); rake pgbus:queues:fold_case folds a row that comes back." ]
         ]
       )
       DocsUI::Callout(:tip) do

@@ -33,8 +33,9 @@ RSpec.describe Pgbus::Generators::FoldQueueNameCaseGenerator do
       end
     end
 
-    # Issue #633: both spellings share one table, so the fold may only touch
-    # pgmq.meta rows, never the tables.
+    # Issue #633: both spellings share one table, so the fold renames rows
+    # only (pgmq.meta and pgbus's queue-name columns); it never drops or
+    # renames a table.
     it "folds through Pgbus::QueueNameFold, which never drops a table" do
       generate_migration(described_class, basename: basename) do |_path, content|
         expect(content).to include("Pgbus::QueueNameFold.run!(connection)")

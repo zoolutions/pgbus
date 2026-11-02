@@ -133,8 +133,10 @@ module Pgbus
         fold_queue_name_case: "lower-case spelling for queues created in mixed case (PGMQ's table names are lower case)"
       }.freeze
 
-      # A pgmq.meta row spelled with an upper-case letter (issue #633).
-      MIXED_CASE_QUEUE_SQL = "SELECT 1 FROM pgmq.meta WHERE queue_name <> lower(queue_name) LIMIT 1"
+      # A pgbus pgmq.meta row ($1: the lower-case "<queue_prefix>_") spelled
+      # with an upper-case letter (issue #633).
+      MIXED_CASE_QUEUE_SQL = "SELECT 1 FROM pgmq.meta WHERE queue_name <> lower(queue_name) " \
+                             "AND left(lower(queue_name), length($1)) = $1 LIMIT 1"
 
       def initialize(connection)
         @connection = connection
@@ -347,7 +349,8 @@ module Pgbus
       end
 
       def mixed_case_queue?
-        connection.select_value(MIXED_CASE_QUEUE_SQL).present?
+        prefix = "#{Pgbus.configuration.queue_prefix.to_s.downcase}_"
+        connection.select_value(MIXED_CASE_QUEUE_SQL.gsub("$1", connection.quote(prefix))).present?
       rescue StandardError
         false
       end

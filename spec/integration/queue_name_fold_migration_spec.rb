@@ -57,89 +57,115 @@ RSpec.describe "pgbus:fold_queue_name_case migration (integration)", :integratio
 
   it "renames a mixed-case queue's pgmq.meta row, keeps its messages and re-arms NOTIFY under the new spelling" do
     rolled_back do
-      conn.execute("SELECT pgmq.create('pgbus_fold_Orders')")
-      conn.execute("SELECT pgmq.enable_notify_insert('pgbus_fold_Orders', 0)")
-      conn.execute(%(SELECT pgmq.send('pgbus_fold_Orders', '{"n":1}'::jsonb)))
+      conn.execute("SELECT pgmq.create('pgbus_int_fold_Orders')")
+      conn.execute("SELECT pgmq.enable_notify_insert('pgbus_int_fold_Orders', 0)")
+      conn.execute(%(SELECT pgmq.send('pgbus_int_fold_Orders', '{"n":1}'::jsonb)))
 
       migrate
 
-      expect(meta_names("pgbus_fold_orders")).to eq(["pgbus_fold_orders"])
-      expect(table_count("pgbus_fold_orders")).to eq(1)
-      expect(trigger_args("q_pgbus_fold_orders").sole).to eq('pgbus_fold_orders\\000')
+      expect(meta_names("pgbus_int_fold_orders")).to eq(["pgbus_int_fold_orders"])
+      expect(table_count("pgbus_int_fold_orders")).to eq(1)
+      expect(trigger_args("q_pgbus_int_fold_orders").sole).to eq('pgbus_int_fold_orders\\000')
       expect(conn.select_rows(
                "SELECT queue_name, throttle_interval_ms FROM pgmq.notify_insert_throttle " \
-               "WHERE lower(queue_name) = 'pgbus_fold_orders'"
-             )).to eq([["pgbus_fold_orders", 0]])
+               "WHERE lower(queue_name) = 'pgbus_int_fold_orders'"
+             )).to eq([["pgbus_int_fold_orders", 0]])
     end
   end
 
   it "drops only the extra pgmq.meta row when both spellings exist, and keeps the lower-case row's NOTIFY throttle" do
     rolled_back do
-      conn.execute("SELECT pgmq.create('pgbus_fold_twin')")
-      conn.execute("SELECT pgmq.enable_notify_insert('pgbus_fold_twin', 250)")
+      conn.execute("SELECT pgmq.create('pgbus_int_fold_twin')")
+      conn.execute("SELECT pgmq.enable_notify_insert('pgbus_int_fold_twin', 250)")
       # Armed last, so the shared table's trigger carries the mixed-case name.
-      conn.execute("SELECT pgmq.create('pgbus_fold_Twin')")
-      conn.execute("SELECT pgmq.enable_notify_insert('pgbus_fold_Twin', 0)")
-      conn.execute(%(SELECT pgmq.send('pgbus_fold_Twin', '{"n":1}'::jsonb)))
-      conn.execute(%(SELECT pgmq.send('pgbus_fold_twin', '{"n":2}'::jsonb)))
+      conn.execute("SELECT pgmq.create('pgbus_int_fold_Twin')")
+      conn.execute("SELECT pgmq.enable_notify_insert('pgbus_int_fold_Twin', 0)")
+      conn.execute(%(SELECT pgmq.send('pgbus_int_fold_Twin', '{"n":1}'::jsonb)))
+      conn.execute(%(SELECT pgmq.send('pgbus_int_fold_twin', '{"n":2}'::jsonb)))
 
       migrate
 
-      expect(meta_names("pgbus_fold_twin")).to eq(["pgbus_fold_twin"])
-      expect(table_count("pgbus_fold_twin")).to eq(2)
-      expect(trigger_args("q_pgbus_fold_twin").sole).to eq('pgbus_fold_twin\\000')
+      expect(meta_names("pgbus_int_fold_twin")).to eq(["pgbus_int_fold_twin"])
+      expect(table_count("pgbus_int_fold_twin")).to eq(2)
+      expect(trigger_args("q_pgbus_int_fold_twin").sole).to eq('pgbus_int_fold_twin\\000')
       expect(conn.select_value(
-        "SELECT throttle_interval_ms FROM pgmq.notify_insert_throttle WHERE queue_name = 'pgbus_fold_twin'"
+        "SELECT throttle_interval_ms FROM pgmq.notify_insert_throttle WHERE queue_name = 'pgbus_int_fold_twin'"
       ).to_i).to eq(250)
     end
   end
 
   it "moves a mixed-case queue's topic bindings to the lower-case spelling" do
     rolled_back do
-      conn.execute("SELECT pgmq.create('pgbus_fold_Topic')")
-      conn.execute("SELECT pgmq.bind_topic('orders.*', 'pgbus_fold_Topic')")
+      conn.execute("SELECT pgmq.create('pgbus_int_fold_Topic')")
+      conn.execute("SELECT pgmq.bind_topic('orders.*', 'pgbus_int_fold_Topic')")
 
       migrate
 
       expect(conn.select_rows(
-               "SELECT pattern, queue_name FROM pgmq.topic_bindings WHERE lower(queue_name) = 'pgbus_fold_topic'"
-             )).to eq([["orders.*", "pgbus_fold_topic"]])
+               "SELECT pattern, queue_name FROM pgmq.topic_bindings WHERE lower(queue_name) = 'pgbus_int_fold_topic'"
+             )).to eq([["orders.*", "pgbus_int_fold_topic"]])
     end
   end
 
   it "lower-cases pgbus's own queue-name columns that are matched against the new spelling" do
     rolled_back do
       conn.execute(<<~SQL)
-        INSERT INTO pgbus_stream_queues (queue_name) VALUES ('pgbus_fold_Z2lk'), ('pgbus_fold_Dup'), ('pgbus_fold_dup');
+        INSERT INTO pgbus_stream_queues (queue_name) VALUES ('pgbus_int_fold_Z2lk'), ('pgbus_int_fold_Dup'), ('pgbus_int_fold_dup');
         INSERT INTO pgbus_queue_states (queue_name, paused, created_at, updated_at)
           VALUES ('Critical', true, now(), now()), ('Mixed', true, now(), now()), ('mixed', false, now(), now());
         INSERT INTO pgbus_uniqueness_keys (lock_key, queue_name, msg_id) VALUES ('fold-lock', 'Critical', 7);
         INSERT INTO pgbus_failed_events (queue_name, msg_id, source_queue, error_message)
           VALUES ('Critical', 3, 'pgbus_Critical_p1', 'only'),
                  ('Critical', 4, 'pgbus_Critical_p1', 'before the deploy'),
-                 ('Critical', 4, 'pgbus_critical_p1', 'after the deploy');
+                 ('Critical', 4, 'pgbus_critical_p1', 'after the deploy'),
+                 ('Critical', 5, 'pgbus_Critical_p1', 'older spelling'),
+                 ('Critical', 5, 'pgbus_CRITICAL_p1', 'newer spelling');
       SQL
 
       migrate
 
-      expect(conn.select_values("SELECT queue_name FROM pgbus_stream_queues WHERE lower(queue_name) LIKE 'pgbus_fold_%' ORDER BY 1"))
-        .to eq(%w[pgbus_fold_dup pgbus_fold_z2lk])
+      expect(conn.select_values("SELECT queue_name FROM pgbus_stream_queues WHERE lower(queue_name) LIKE 'pgbus_int_fold_%' ORDER BY 1"))
+        .to eq(%w[pgbus_int_fold_dup pgbus_int_fold_z2lk])
       expect(conn.select_rows("SELECT queue_name, paused FROM pgbus_queue_states ORDER BY 1"))
         .to eq([["critical", true], ["mixed", true]])
       expect(conn.select_value("SELECT queue_name FROM pgbus_uniqueness_keys WHERE lock_key = 'fold-lock'")).to eq("critical")
       # queue_name is the executor's logical name, kept as configured; the
       # source queue is the physical one, now spelled in lower case.
       expect(conn.select_rows("SELECT msg_id, source_queue, error_message FROM pgbus_failed_events ORDER BY msg_id"))
-        .to eq([[3, "pgbus_critical_p1", "only"], [4, "pgbus_critical_p1", "after the deploy"]])
+        .to eq([[3, "pgbus_critical_p1", "only"], [4, "pgbus_critical_p1", "after the deploy"],
+                [5, "pgbus_critical_p1", "newer spelling"]])
       expect(conn.select_values("SELECT DISTINCT queue_name FROM pgbus_failed_events")).to eq(["Critical"])
+    end
+  end
+
+  it "leaves a mixed-case queue that is not pgbus's (another PGMQ user of the schema) alone" do
+    rolled_back do
+      conn.execute("SELECT pgmq.create('OtherApp_Jobs')")
+
+      migrate
+
+      expect(meta_names("otherapp_jobs")).to eq(["OtherApp_Jobs"])
+    end
+  end
+
+  it "folds a mixed-case row recreated after it ran, when run again" do
+    rolled_back do
+      conn.execute("SELECT pgmq.create('pgbus_int_fold_Again')")
+      migrate
+      conn.execute("SELECT pgmq.create('pgbus_int_fold_Again')") # an older process restarts
+
+      migrate
+
+      expect(meta_names("pgbus_int_fold_again")).to eq(["pgbus_int_fold_again"])
+      expect { migrate }.not_to(change { meta_names("pgbus_int_fold_%") })
     end
   end
 
   it "is a no-op on an install with no mixed-case queue" do
     rolled_back do
-      conn.execute("SELECT pgmq.create('pgbus_fold_plain')")
+      conn.execute("SELECT pgmq.create('pgbus_int_fold_plain')")
 
-      expect { migrate }.not_to(change { meta_names("pgbus_fold_%") })
+      expect { migrate }.not_to(change { meta_names("pgbus_int_fold_%") })
     end
   end
 end

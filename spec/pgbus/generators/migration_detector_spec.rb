@@ -30,9 +30,10 @@ RSpec.describe Pgbus::Generators::MigrationDetector do
     allow(connection).to receive(:select_value)
       .with(/reloptions.*fillfactor/)
       .and_return("t")
+    allow(connection).to receive(:quote) { |value| "'#{value}'" }
     # Default: every queue already spelled in lower case (issue #633).
     allow(connection).to receive(:select_value)
-      .with(described_class::MIXED_CASE_QUEUE_SQL)
+      .with(/queue_name <> lower\(queue_name\)/)
       .and_return(nil)
   end
 
@@ -492,7 +493,7 @@ RSpec.describe Pgbus::Generators::MigrationDetector do
     context "with queue-name case detection" do
       it "queues fold_queue_name_case first when pgmq.meta holds a mixed-case queue" do
         allow(connection).to receive(:select_value)
-          .with(described_class::MIXED_CASE_QUEUE_SQL)
+          .with(/queue_name <> lower\(queue_name\)/)
           .and_return(1)
         allow(connection).to receive(:select_value)
           .with(/reloptions.*fillfactor/)
@@ -500,6 +501,17 @@ RSpec.describe Pgbus::Generators::MigrationDetector do
 
         expect(detector.missing_migrations.first).to eq(:fold_queue_name_case)
         expect(detector.missing_migrations).to include(:tune_fillfactor)
+      end
+
+      it "looks only at pgbus's own queues, named after the queue prefix" do
+        allow(connection).to receive(:select_value)
+          .with(/queue_name <> lower\(queue_name\)/)
+          .and_return(nil)
+
+        detector.missing_migrations
+
+        prefix = "#{Pgbus.configuration.queue_prefix}_"
+        expect(connection).to have_received(:select_value).with(including("length('#{prefix}')) = '#{prefix}'"))
       end
 
       it "does not queue it when every queue is spelled in lower case" do
@@ -511,7 +523,7 @@ RSpec.describe Pgbus::Generators::MigrationDetector do
           .with("SELECT 1 FROM information_schema.schemata WHERE schema_name = 'pgmq'")
           .and_return(nil)
         allow(connection).to receive(:select_value)
-          .with(described_class::MIXED_CASE_QUEUE_SQL)
+          .with(/queue_name <> lower\(queue_name\)/)
           .and_return(1)
 
         expect(detector.missing_migrations).not_to include(:fold_queue_name_case)
@@ -519,7 +531,7 @@ RSpec.describe Pgbus::Generators::MigrationDetector do
 
       it "does not queue it when pgmq.meta cannot be read" do
         allow(connection).to receive(:select_value)
-          .with(described_class::MIXED_CASE_QUEUE_SQL)
+          .with(/queue_name <> lower\(queue_name\)/)
           .and_raise(ActiveRecord::StatementInvalid, "boom")
 
         expect(detector.missing_migrations).not_to include(:fold_queue_name_case)

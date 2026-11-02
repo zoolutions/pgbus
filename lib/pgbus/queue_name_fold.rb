@@ -13,12 +13,15 @@ module Pgbus
   #
   # Run by the pgbus:fold_queue_name_case migration and by
   # `rake pgbus:queues:fold_case` (for a row an older process recreated after
-  # the migration ran). Idempotent. Takes an ActiveRecord connection.
+  # the migration ran). Idempotent. Takes an ActiveRecord connection and
+  # folds pgbus's queues only (those named "<prefix>_…" in any case), so
+  # another PGMQ user of the same schema keeps its spelling and its NOTIFY
+  # channel.
   module QueueNameFold
     module_function
 
-    def run!(connection)
-      fold_pgmq_meta(connection)
+    def run!(connection, prefix: Pgbus.configuration.queue_prefix)
+      fold_pgmq_meta(connection, "#{prefix.to_s.downcase}_")
       fold_unique_column(connection, :pgbus_stream_queues, prefer: "")
       fold_unique_column(connection, :pgbus_queue_states, prefer: "paused DESC,")
       fold_column(connection, :pgbus_uniqueness_keys, :queue_name)
@@ -31,7 +34,8 @@ module Pgbus
     # trigger NOTIFYs on the channel of the name it was armed with, which
     # listeners now spell in lower case. Where both spellings exist, the
     # lower-case row's throttle wins.
-    def fold_pgmq_meta(connection)
+    def fold_pgmq_meta(connection, own_prefix)
+      prefix = connection.quote(own_prefix)
       connection.execute(<<~SQL)
         DO $$
         DECLARE
@@ -45,6 +49,7 @@ module Pgbus
             SELECT queue_name, is_partitioned, is_unlogged, created_at
             FROM pgmq.meta
             WHERE queue_name <> lower(queue_name)
+              AND left(lower(queue_name), length(#{prefix})) = #{prefix}
             ORDER BY queue_name
           LOOP
             folded := lower(q.queue_name);
@@ -110,27 +115,29 @@ module Pgbus
     # source_queue is the physical queue a failure was read from, now spelled in
     # lower case. queue_name is the executor's logical name, as configured, and
     # stays. A message that failed under both spellings (before and after the
-    # deploy) has two rows: the lower-case one is the newer, so the older goes.
+    # deploy) has two rows: one per (queue_name, msg_id, folded source) stays,
+    # the lower-case one if there is one (written after the deploy), else the
+    # newest, so the (queue_name, msg_id, source_queue) unique index holds.
     def fold_failed_event_source_queues(connection)
       return unless connection.table_exists?(:pgbus_failed_events) && connection.column_exists?(:pgbus_failed_events, :source_queue)
 
       connection.execute(<<~SQL)
-        DELETE FROM pgbus_failed_events f
-        WHERE f.source_queue <> lower(f.source_queue)
-          AND EXISTS (
-            SELECT 1 FROM pgbus_failed_events o
-            WHERE o.queue_name = f.queue_name AND o.msg_id = f.msg_id AND o.source_queue = lower(f.source_queue)
-          )
+        DELETE FROM pgbus_failed_events WHERE id IN (
+          SELECT id FROM (
+            SELECT id, row_number() OVER (
+              PARTITION BY queue_name, msg_id, lower(source_queue)
+              ORDER BY (source_queue = lower(source_queue)) DESC, id DESC
+            ) AS rank
+            FROM pgbus_failed_events
+            WHERE (queue_name, msg_id, lower(source_queue)) IN (
+              SELECT queue_name, msg_id, lower(source_queue) FROM pgbus_failed_events
+              WHERE source_queue <> lower(source_queue)
+            )
+          ) ranked
+          WHERE rank > 1
+        )
       SQL
-      connection.execute(<<~SQL)
-        UPDATE pgbus_failed_events f
-        SET source_queue = lower(f.source_queue)
-        WHERE f.source_queue <> lower(f.source_queue)
-          AND NOT EXISTS (
-            SELECT 1 FROM pgbus_failed_events o
-            WHERE o.queue_name = f.queue_name AND o.msg_id = f.msg_id AND o.source_queue = lower(f.source_queue)
-          )
-      SQL
+      fold_column(connection, :pgbus_failed_events, :source_queue)
     end
 
     private_class_method :fold_pgmq_meta, :fold_unique_column, :fold_column, :fold_failed_event_source_queues

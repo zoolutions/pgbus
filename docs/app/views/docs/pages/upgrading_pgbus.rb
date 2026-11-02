@@ -386,12 +386,20 @@ class Views::Docs::Pages::UpgradingPgbus < DocsUI::Page
         rails db:migrate:pgbus      # separate-database install
       SHELL
       md <<~'MD'
-        It renames each mixed-case `pgmq.meta` row to the lower-case spelling,
-        moves its NOTIFY throttle and topic bindings, re-arms its insert
-        trigger under the new name, and lower-cases `pgbus_stream_queues`,
-        `pgbus_queue_states`, `pgbus_uniqueness_keys.queue_name` and
+        It renames each of pgbus's mixed-case `pgmq.meta` rows (those named
+        after `queue_prefix`; another PGMQ user of the schema keeps its
+        spelling) to the lower-case spelling, moves its NOTIFY throttle and
+        topic bindings, re-arms its insert trigger under the new name, and
+        lower-cases `pgbus_stream_queues`, `pgbus_queue_states`,
+        `pgbus_uniqueness_keys.queue_name` and
         `pgbus_failed_events.source_queue`. Where both spellings exist, it
         deletes only the extra `pgmq.meta` row. It never drops a table.
+
+        Rows that collide once lower-cased are merged, keeping one:
+        `pgbus_stream_queues` and `pgbus_queue_states` keep one row per queue
+        (a paused state wins), and a message that failed under two spellings
+        of its source queue keeps one failed-event row, the lower-case one or
+        else the newest, so the older error of that message is deleted.
 
         Until the fold runs, the dashboard lists such a queue under both
         spellings. Dropping the mixed-case entry (from the dashboard, or the
@@ -402,9 +410,11 @@ class Views::Docs::Pages::UpgradingPgbus < DocsUI::Page
         Until the last old process stops, an old web process LISTENs on the
         mixed-case channel, so its SSE clients miss broadcasts until they
         reconnect; an old worker falls back to polling; and a uniqueness lock
-        an old process took under the mixed-case name is not released by a
-        new one, so its key stays held until the orphan-lock reaper (every
-        five minutes) frees it. Two stream names that differ only in case now
+        an old process takes under the mixed-case name after the fold ran is
+        not released by a new process, so its key stays held until the
+        orphan-lock reaper (every five minutes) frees it once the job is
+        gone. A lock taken before the fold is lower-cased with it, and a new
+        process releases it as usual. Two stream names that differ only in case now
         share one queue, as their table already did.
       MD
     end

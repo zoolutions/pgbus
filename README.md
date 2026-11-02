@@ -2246,7 +2246,7 @@ A single preflight command that answers "is this environment healthy enough to r
 | Database | Unreachable (`SELECT 1` via `Client#ping`) | — |
 | PGMQ schema | Schema not installed | Installed but untracked, or behind the vendored version |
 | Queues | A configured queue has no PGMQ table | — |
-| Queue name case | — | `pgmq.meta` holds a queue spelled in mixed case (created before 0.23.0): it shares its lower-case table with the spelling pgbus now uses, so the dashboard lists it twice until `rails generate pgbus:fold_queue_name_case` runs (`rake pgbus:queues:fold_case` for a row an older process recreated after it); dropping the mixed-case entry removes only its `pgmq.meta` row, never the shared table |
+| Queue name case | — | `pgmq.meta` holds a queue spelled in mixed case (created before 0.23.0): it shares its lower-case table with the spelling pgbus now uses, so the dashboard lists it twice until it is folded: once every process runs 0.23.0+, `rails generate pgbus:fold_queue_name_case` and `rails db:migrate` (`rake pgbus:queues:fold_case` for a row an older process recreated after that); dropping the mixed-case entry removes only its `pgmq.meta` row, never the shared table |
 | LISTEN/NOTIFY | — | A configured queue is missing its insert trigger (falls back to polling) |
 | Process liveness | Verdict is `STALLED` | Verdict is `DEGRADED` |
 | GlobalID allowlist | — | `allowed_global_id_models` is `nil` (allow-all) in production |
@@ -2494,7 +2494,7 @@ Curated headline options for the README. The full operator reference (with types
 | `connects_to` | `nil` | Rails multi-database config for a dedicated pgbus database (`{ database: { writing: :pgbus } }`) |
 | `require_primary` | `false` | Reject a job connection that lands on a read-only replica (`pg_is_in_recovery`) at boot — pooler safety against a read/write splitter |
 | `connection_guc_mode` | `:options` | How database.yml GUCs (`variables:`) reach pgbus connections — `:options` (libpq startup) or `:session` (post-connect `SET`, for transaction-mode PgBouncer) |
-| `queue_prefix` | `"pgbus"` | Prefix for all PGMQ queue names. Queue names are lower case (`Orders` and `orders` are one queue, `pgbus_orders`), the way PGMQ spells its tables; an install from before 0.23.0 folds its mixed-case queues with `rails generate pgbus:fold_queue_name_case` |
+| `queue_prefix` | `"pgbus"` | Prefix for all PGMQ queue names. Queue names are lower case (`Orders` and `orders` are one queue, `pgbus_orders`), the way PGMQ spells its tables; an install from before 0.23.0 folds its mixed-case queues with `rails generate pgbus:fold_queue_name_case` and `rails db:migrate`, once every process runs 0.23.0+ |
 | `default_queue` | `"default"` | Default queue for jobs without explicit queue |
 | `pool_size` | `nil` (auto) | Connection pool size. Auto-tuned from worker thread counts: `sum(workers.threads) + sum(event_consumers.threads) + 2`. Set explicitly to override. |
 | `pool_timeout` | `5` | Seconds to wait for a pooled connection |

@@ -136,6 +136,29 @@ RSpec.describe "Queue names in lower case (integration)", :integration do
       client.drop_queue("casedup")
     end
 
+    it "re-arms the shared trigger under the lower-case name when the duplicate armed it last" do
+      conn.execute("SELECT pgmq.create('pgbus_int_casearm')")
+      conn.execute("SELECT pgmq.enable_notify_insert('pgbus_int_casearm', 250)")
+      conn.execute("SELECT pgmq.create('pgbus_int_CaseArm')")
+      conn.execute("SELECT pgmq.enable_notify_insert('pgbus_int_CaseArm', 0)")
+
+      client.drop_queue("pgbus_int_CaseArm", prefixed: false)
+
+      expect(trigger_arg("q_pgbus_int_casearm")).to eq('pgbus_int_casearm\\000')
+      expect(conn.select_value("SELECT throttle_interval_ms FROM pgmq.notify_insert_throttle " \
+                               "WHERE queue_name = 'pgbus_int_casearm'").to_i).to eq(250)
+    ensure
+      drop_both("pgbus_int_casearm", "pgbus_int_CaseArm")
+    end
+
+    it "drops a queue named in mixed case whose own row is gone (only the lower-case one is registered)" do
+      client.ensure_queue("caseonly")
+
+      client.drop_queue("pgbus_int_CaseOnly", prefixed: false)
+
+      expect(meta_rows("pgbus_int_caseonly")).to be_empty
+    end
+
     it "removes every spelling's pgmq.meta row with the table" do
       client.ensure_queue("casegone")
       conn.execute("SELECT pgmq.create('pgbus_int_CaseGone')")
