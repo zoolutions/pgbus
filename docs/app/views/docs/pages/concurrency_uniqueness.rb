@@ -24,7 +24,8 @@ class Views::Docs::Pages::ConcurrencyUniqueness < DocsUI::Page
         `ensures_uniqueness` guarantees that at most one job with a given key
         exists in the system at a time. The lock is held in
         `pgbus_uniqueness_keys` — never released by a timer, only when the job
-        completes, is dead-lettered, or is found orphaned by the reaper.
+        completes (or, for `:until_executing`, starts), is dead-lettered, or is
+        found orphaned by the reaper.
       MD
       DocsUI::Code(<<~'RUBY', filename: "app/jobs/import_order_job.rb")
         class ImportOrderJob < ApplicationJob
@@ -79,9 +80,60 @@ class Views::Docs::Pages::ConcurrencyUniqueness < DocsUI::Page
         [ "Strategy", "Lock acquired", "Prevents" ],
         [
           [ [ :code, ":until_executed" ], "At enqueue, held until success or dead-letter", "Duplicate enqueue AND execution" ],
+          [ [ :code, ":until_executing" ], "At enqueue, released when execution starts", "Duplicate enqueue while a copy is queued (a debounce)" ],
           [ [ :code, ":while_executing" ], "At execution start, released on completion or failure", "Duplicate execution only" ]
         ]
       )
+      md <<~'MD'
+        ### Debounce with `:until_executing`
+
+        A job that recomputes a parent's rollup is enqueued by every child that
+        finishes. While one copy is **queued**, further enqueues for the key get
+        the conflict policy: the queued copy has not run yet and will see their
+        state. The lock is released before `perform`, so an enqueue that
+        arrives while the copy **runs** is accepted and queues the trailing
+        copy. At most one copy for the key is queued at a time, and every
+        write made before an accepted or dropped enqueue is seen by a run that
+        starts after it.
+      MD
+      DocsUI::Code(<<~'RUBY', filename: "app/jobs/rollup_job.rb")
+        class RollupJob < ApplicationJob
+          ensures_uniqueness strategy: :until_executing,
+                             key: ->(parent_id) { "rollup-#{parent_id}" },
+                             on_conflict: :discard
+
+          def perform(parent_id) = Parent.find(parent_id).recompute_rollup!
+        end
+      RUBY
+      md <<~'MD'
+        Two runs can overlap: the trailing copy can start while the first is
+        still running. For a debounce **and** no overlap, add a concurrency
+        limit of one with `:block`. The trailing enqueue takes the free
+        uniqueness key and parks behind the semaphore, further enqueues are
+        dropped by the key, and the parked copy runs when the first finishes:
+      MD
+      DocsUI::Code(<<~'RUBY', filename: "app/jobs/rollup_job.rb")
+        class RollupJob < ApplicationJob
+          ensures_uniqueness strategy: :until_executing,
+                             key: ->(parent_id) { "rollup-#{parent_id}" },
+                             on_conflict: :discard
+          limits_concurrency to: 1,
+                             key: ->(parent_id) { "rollup-#{parent_id}" },
+                             on_conflict: :block
+        end
+      RUBY
+      md <<~'MD'
+        A scheduled copy (`set(wait:)`) holds the lock for its whole wait, so
+        enqueues during the wait are dropped; a recurring task is skipped
+        while its previous copy is still queued. In one `perform_all_later`
+        bulk, same-key jobs yield one message (`on_conflict: :reject` raises
+        `Pgbus::JobNotUnique` at the second, as for `:until_executed`). A
+        `retry_on` re-enqueue goes out without a lock (the attempt released
+        its own at start), so it can sit beside one fresh copy. Both run, in
+        no guaranteed order and possibly at once; each sees the state written
+        before it started. Without a `key:`, a job enqueued with
+        arguments raises, as for `:until_executed`.
+      MD
       md <<~'MD'
         A `:while_executing` lock is bound to the message being executed: a
         failed attempt releases it so the retry can run, and a row left behind

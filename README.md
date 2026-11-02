@@ -322,7 +322,20 @@ end
 | Strategy | Lock acquired | Lock released | Prevents |
 |----------|--------------|---------------|----------|
 | `:until_executed` | At enqueue | On completion or DLQ | Duplicate enqueue AND execution |
+| `:until_executing` | At enqueue | When execution starts | Duplicate enqueue while a copy is queued (a debounce) |
 | `:while_executing` | At execution start | On completion or DLQ | Duplicate execution only |
+
+`:until_executing` fits the "recompute a rollup" job that every finished child enqueues. While one copy is queued, further enqueues for the key follow `on_conflict:` (the queued copy has not run yet and will see their state). The executor releases the lock before `perform`, so an enqueue that arrives while the copy runs is accepted and queues the trailing copy. At most one copy for the key is queued at a time, and every write made before an accepted or dropped enqueue is seen by a run that starts after it.
+
+```ruby
+class RollupJob < ApplicationJob
+  ensures_uniqueness strategy: :until_executing, key: ->(parent_id) { "rollup-#{parent_id}" }, on_conflict: :discard
+
+  def perform(parent_id) = Parent.find(parent_id).recompute_rollup!
+end
+```
+
+Two runs can overlap: the trailing copy can start while the first is still running. For "debounce **and** no overlap", add `limits_concurrency to: 1, key: ->(parent_id) { "rollup-#{parent_id}" }, on_conflict: :block`. The trailing enqueue takes the free uniqueness key and parks behind the semaphore, further enqueues are dropped by the key, and the parked copy runs when the first finishes. A `retry_on` re-enqueue goes out without a lock (the attempt released its own at start), so it can sit beside one fresh copy. Both run, in no guaranteed order and possibly at once; each sees the state written before it started.
 
 #### Conflict policies
 
@@ -334,7 +347,7 @@ end
 
 #### Lock lifecycle
 
-The lock is **never released by a timer**. It is held as long as the job's message exists in the queue:
+The lock is **never released by a timer**. It is held as long as the job's message exists in the queue (an `:until_executing` lock only until the job starts):
 
 ```text
 Enqueue ──→ pgbus_uniqueness_keys (lock_key, queue_name, msg_id)
@@ -368,9 +381,9 @@ Enqueue ──→ pgbus_uniqueness_keys (lock_key, queue_name, msg_id)
 |---|---|---|
 | **Purpose** | Prevent duplicate jobs | Limit concurrent execution slots |
 | **Lock type** | Binary lock (one or none) | Counting semaphore (up to N) |
-| **At enqueue** | `:until_executed` blocks duplicates | Checks semaphore, blocks/discards/raises |
+| **At enqueue** | `:until_executed` and `:until_executing` block duplicates | Checks semaphore, blocks/discards/raises |
 | **At execution** | `:while_executing` blocks duplicate runs | Not checked (semaphore acquired at enqueue) |
-| **Duplicate in queue** | `:until_executed`: impossible. `:while_executing`: allowed, only one runs | Allowed up to N, rest blocked |
+| **Duplicate in queue** | `:until_executed`: impossible. `:until_executing`: impossible for ordinary enqueues (a `retry_on` re-enqueue takes no lock and can sit beside one fresh copy). `:while_executing`: allowed, only one runs | Allowed up to N, rest blocked |
 | **Crash recovery** | Reaper checks heartbeats | Semaphore `expires_at` + dispatcher cleanup |
 | **Use when** | "This exact job must not run twice" | "At most N of these can run at once" |
 

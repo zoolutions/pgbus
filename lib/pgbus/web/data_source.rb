@@ -634,9 +634,10 @@ module Pgbus
       # Drop every job parked behind a key. The jobs never run, so the
       # bookkeeping they would have resolved has to be resolved here: a parked
       # batch child is marked failed (otherwise its batch waits forever and
-      # on_failure never fires — issue #413) and an :until_executed uniqueness
-      # lock is released (otherwise it is orphaned, since no executor will ever
-      # release it — issue #423). Returns the number of jobs discarded.
+      # on_failure never fires — issue #413) and an :until_executed or
+      # :until_executing uniqueness lock is released (otherwise it is
+      # orphaned, since no executor will ever release it — issue #423).
+      # Returns the number of jobs discarded.
       def discard_parked_jobs(key)
         return 0 if key.to_s.strip.empty?
 
@@ -1162,9 +1163,15 @@ module Pgbus
       # one acquired after this row was parked.
       def release_parked_uniqueness_lock(payload, parked_at)
         key = payload[Uniqueness::METADATA_KEY]
-        return unless key && payload[Uniqueness::STRATEGY_KEY].to_s == "until_executed"
+        return unless key && enqueue_locked_strategy?(payload[Uniqueness::STRATEGY_KEY])
 
         UniquenessKey.release_if_unbound!(key, acquired_before: parked_at)
+      end
+
+      # The strategies whose row is taken at enqueue and so is held by a parked
+      # job: :until_executed, and :until_executing (issue #628).
+      def enqueue_locked_strategy?(strategy)
+        Uniqueness::ENQUEUE_LOCK_STRATEGIES.any? { |s| s.to_s == strategy.to_s }
       end
 
       # A row parked before the double-encoding fix stores a jsonb *string*

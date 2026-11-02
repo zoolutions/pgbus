@@ -19,7 +19,7 @@ module Pgbus
   module Uniqueness
     module ClassMethods
       # Any other keyword raises ArgumentError (lock_ttl: with a pointer to 1.0's removal).
-      def ensures_uniqueness: (?strategy: :until_executed | :while_executing, ?key: untyped,
+      def ensures_uniqueness: (?strategy: :until_executed | :until_executing | :while_executing, ?key: untyped,
                                ?on_conflict: :reject | :discard | :log) -> untyped
       def pgbus_uniqueness: () -> Hash[Symbol, untyped]?
     end

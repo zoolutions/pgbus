@@ -64,8 +64,9 @@ module Pgbus
     end
 
     # The uniqueness keys, out of +lock_keys+, that a parked job carries. Its
-    # :until_executed row stays unbound until it runs and it sits in no queue,
-    # so the uniqueness reaper asks here before calling the row an orphan. A
+    # :until_executed or :until_executing row stays unbound until it runs and
+    # it sits in no queue, so the uniqueness reaper asks here before calling
+    # the row an orphan. A
     # row parked before the double-encoding fix is read through its string,
     # since the reaper can run before the promote sweep repairs it.
     def self.parked_uniqueness_keys(lock_keys)

@@ -2,7 +2,7 @@ name: Dependency watch
 
 # Nightly check for upstream drift on the two hand-tracked dependencies pgbus
 # vendors/pins: the PGMQ SQL schema (lib/pgbus/pgmq_schema/pgmq_v*.sql) and the
-# pgmq-ruby gem (pinned `~> 0.7.0` in pgbus.gemspec). Nothing else watches these
+# pgmq-ruby gem (pinned in pgbus.gemspec). Nothing else watches these
 # upstreams, so a newer PGMQ release or pgmq-ruby release can sit unnoticed.
 #
 # This workflow is notification-only: it never vendors SQL or bumps the gem. On
@@ -173,8 +173,8 @@ jobs:
           BODY_DETAIL: >-
             Gemfile.lock is behind the upstream
             [pgmq-ruby](https://rubygems.org/gems/pgmq-ruby) gem (pinned
-            `~> 0.7.0` in `pgbus.gemspec`). Review the changelog before
-            bumping the constraint -- this issue does not auto-bump anything.
+            in `pgbus.gemspec`). Review the changelog before bumping the
+            constraint -- this issue does not auto-bump anything.
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
           set -euo pipefail
