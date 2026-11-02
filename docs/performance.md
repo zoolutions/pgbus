@@ -1145,11 +1145,12 @@ through the connection's own quoting, memoized per flush, so 100 rows of three
 job classes and two queues cost about seven `quote` calls. `pgbus_job_stats`
 has no unique index besides the primary key, so dropping `ON CONFLICT DO
 NOTHING` changes no outcome. The missing-latency-columns fallback is the same:
-the six-column statement first, and when PostgreSQL reports `column
-"enqueue_latency_ms"` or `column "retry_count"` … `does not exist`, the
-four-column one, warned once. That error is now matched exactly: main retried
-on any message containing a column name, which an unrelated error's `LINE 1:`
-excerpt of the statement can do.
+the six-column statement first, and on PostgreSQL's `undefined_column` error
+(`PG::UndefinedColumn`, the cause ActiveRecord keeps) naming
+`enqueue_latency_ms` or `retry_count`, the four-column one, warned once. main
+retried on any `StatementInvalid` whose message contained a column name, which
+an unrelated error's `LINE 1:` excerpt of the statement does; the error class
+is also what keeps it working when the server's `lc_messages` is not English.
 
 A constant `INSERT … SELECT * FROM unnest($1::varchar[], …)` with six array
 binds (`PG::TextEncoder::Array`) was the other candidate. One scratch run, same

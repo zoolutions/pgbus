@@ -9,10 +9,6 @@ module Pgbus
     DEFAULT_FLUSH_INTERVAL = 5 # seconds
     BASE_COLUMNS = "job_class, queue_name, status, duration_ms"
     ALL_COLUMNS = "#{BASE_COLUMNS}, enqueue_latency_ms, retry_count".freeze
-    # PostgreSQL's error for a latency column the migration has not added. The
-    # column names are quoted only in the error text, never in the statement
-    # excerpt ("LINE 1: …") an unrelated error carries.
-    MISSING_LATENCY_COLUMN = /column "(?:enqueue_latency_ms|retry_count)"(?: of relation "[^"]*")? does not exist/
 
     attr_reader :flush_size, :flush_interval
 
@@ -88,12 +84,22 @@ module Pgbus
       JobStat.connection_pool.with_connection do |conn|
         conn.execute(insert_sql(conn, entries, latency: true), "Pgbus::JobStat Bulk Insert")
       rescue ActiveRecord::StatementInvalid => e
-        raise unless MISSING_LATENCY_COLUMN.match?(e.message)
+        raise unless missing_latency_column?(e)
 
         write_base_columns(conn, entries)
       end
     rescue StandardError => e
       Pgbus.logger.warn { "[Pgbus] Stat buffer flush failed: #{e.message}" }
+    end
+
+    # PostgreSQL's undefined_column (42703, PG::UndefinedColumn: the cause
+    # ActiveRecord keeps) naming a latency column. The class, not the text,
+    # says the column is missing: the text follows the server's lc_messages,
+    # and an unrelated error's "LINE 1:" excerpt of the statement names both
+    # latency columns too. pg is loaded once PostgreSQL has raised anything.
+    def missing_latency_column?(error)
+      defined?(::PG::UndefinedColumn) && error.cause.is_a?(::PG::UndefinedColumn) &&
+        (error.message.include?("enqueue_latency_ms") || error.message.include?("retry_count"))
     end
 
     def write_base_columns(conn, entries)

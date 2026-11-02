@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "pg"
 
 RSpec.describe Pgbus::StatBuffer do
   subject(:buffer) { described_class.new(flush_size: 3, flush_interval: 0.1) }
@@ -200,16 +201,25 @@ RSpec.describe Pgbus::StatBuffer do
   end
 
   describe "fallback when latency columns missing in DB" do
+    # What ActiveRecord raises for PostgreSQL's undefined_column (42703): the
+    # PG error is the cause, its text (in the server's lc_messages) the message.
+    def undefined_column(text)
+      raise PG::UndefinedColumn, text
+    rescue PG::UndefinedColumn
+      raise ActiveRecord::StatementInvalid, "PG::UndefinedColumn: #{text}"
+    end
+
+    let(:missing_column_text) { 'ERROR:  column "enqueue_latency_ms" of relation "pgbus_job_stats" does not exist' }
+
     before do
       allow(Pgbus.logger).to receive(:warn)
       allow(conn).to receive(:execute) do |sql, *|
         statements << sql
-        raise ActiveRecord::StatementInvalid, 'PG::UndefinedColumn: column "enqueue_latency_ms" does not exist' if
-          sql.include?("enqueue_latency_ms")
+        undefined_column(missing_column_text) if sql.include?("enqueue_latency_ms")
       end
     end
 
-    it "retries with base columns on StatementInvalid" do
+    it "retries with base columns on an undefined latency column" do
       buffer.push(stat_attrs)
       buffer.flush
 
@@ -219,19 +229,29 @@ RSpec.describe Pgbus::StatBuffer do
                                   "VALUES ('TestJob', 'default', 'success', 42)")
     end
 
-    it "retries on PostgreSQL's own wording for the missing column" do
+    it "retries when retry_count is the missing column" do
       allow(conn).to receive(:execute) do |sql, *|
         statements << sql
-        if sql.include?("enqueue_latency_ms")
-          raise ActiveRecord::StatementInvalid,
-                'PG::UndefinedColumn: ERROR:  column "retry_count" of relation "pgbus_job_stats" does not exist'
-        end
+        undefined_column('ERROR:  column "retry_count" of relation "pgbus_job_stats" does not exist') if
+          sql.include?("retry_count")
       end
 
       buffer.push(stat_attrs)
       buffer.flush
 
       expect(statements.size).to eq(2)
+    end
+
+    context "with a server whose lc_messages is not English" do
+      let(:missing_column_text) { "FEHLER:  Spalte »enqueue_latency_ms« von Relation »pgbus_job_stats« existiert nicht" }
+
+      it "still retries with base columns" do
+        buffer.push(stat_attrs)
+        buffer.flush
+
+        expect(statements.size).to eq(2)
+        expect(statements[1]).not_to include("enqueue_latency_ms")
+      end
     end
 
     it "does not retry an error whose statement excerpt merely contains the latency columns" do
@@ -248,6 +268,18 @@ RSpec.describe Pgbus::StatBuffer do
       expect(Pgbus.logger).to have_received(:warn) { |&block| expect(block.call).to include("integer out of range") }
     end
 
+    it "does not retry an undefined column that is not a latency column" do
+      allow(conn).to receive(:execute) do |sql, *|
+        statements << sql
+        undefined_column('ERROR:  column "status" of relation "pgbus_job_stats" does not exist')
+      end
+
+      buffer.push(stat_attrs)
+      buffer.flush
+
+      expect(statements.size).to eq(1)
+    end
+
     it "warns about the missing columns once, not on every flush" do
       2.times do
         buffer.push(stat_attrs)
@@ -259,11 +291,17 @@ RSpec.describe Pgbus::StatBuffer do
     end
 
     it "logs a failed base-column retry without raising" do
-      allow(conn).to receive(:execute).and_raise(ActiveRecord::StatementInvalid, 'column "retry_count" does not exist')
+      warnings = []
+      allow(Pgbus.logger).to receive(:warn) { |&block| warnings << block.call }
+      allow(conn).to receive(:execute) do |sql, *|
+        statements << sql
+        undefined_column('ERROR:  column "retry_count" of relation "pgbus_job_stats" does not exist')
+      end
 
       buffer.push(stat_attrs)
       expect { buffer.flush }.not_to raise_error
-      expect(conn).to have_received(:execute).twice
+      expect(statements.size).to eq(2)
+      expect(warnings.last).to include("Stat buffer fallback flush failed", "retry_count")
     end
   end
 end
