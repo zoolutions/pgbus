@@ -1,0 +1,26 @@
+spec/benchmarks/streams_scale_bench_spec.rb
+  s_f7f0f606932d66::t_14adc74fb00932 62,70-71,76,79-103,335,346,352,365-371
+benchmarks/support/streams_scale_client.rb
+  s_f7f0f606932d66::t_433c40897dab08 7,9-12,61,63-64,66-69,72,104
+benchmarks/support/streams_scale_harness.rb
+  s_f7f0f606932d66::t_478d86c9eb7784 23-24,52,69-70,106-108,110-115,258
+  s_f7f0f606932d66::t_b65fc948ebffdb 109
+benchmarks/streams_scale_bench.rb
+  s_f7f0f606932d66::t_433c40897dab08 50-53,155,158-159,218-220,224,240-243,248-250,254-256,258,268,274,298,320-321,344,346,400-401
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "0925d5391e592caffdb1d15ef6ea922021b0dc46",
+  "prompts": {},
+  "sessions": {
+    "s_f7f0f606932d66": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f21615f0-ca1d-43df-80e0-f58672e7ea31",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
