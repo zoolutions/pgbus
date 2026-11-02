@@ -83,6 +83,35 @@ RSpec.describe "StatBuffer integration", :integration do
       expect(buffer.size).to eq(0)
     end
 
+    it "stores a nil latency as NULL and a quote in a job class verbatim" do
+      buffer = Pgbus::StatBuffer.new(flush_size: 100, flush_interval: 60)
+
+      buffer.push(stat_attrs.merge(job_class: "O'Brien::Job", enqueue_latency_ms: nil, retry_count: 2))
+      buffer.push(stat_attrs.merge(status: "failed", duration_ms: 7))
+      buffer.flush
+
+      rows = ActiveRecord::Base.connection.select_rows(
+        "SELECT job_class, queue_name, status, duration_ms, enqueue_latency_ms, retry_count FROM pgbus_job_stats ORDER BY id"
+      )
+      expect(rows).to eq([["O'Brien::Job", "default", "success", 42, nil, 2],
+                          ["TestJob", "default", "failed", 7, 150, 0]])
+    end
+
+    it "falls back to the base columns when the latency migration has not run" do
+      conn = ActiveRecord::Base.connection
+      conn.execute("ALTER TABLE pgbus_job_stats DROP COLUMN enqueue_latency_ms, DROP COLUMN retry_count")
+      buffer = Pgbus::StatBuffer.new(flush_size: 100, flush_interval: 60)
+
+      2.times { buffer.push(stat_attrs) }
+      buffer.flush
+
+      expect(conn.select_rows("SELECT job_class, status, duration_ms FROM pgbus_job_stats"))
+        .to eq([%w[TestJob success] + [42], %w[TestJob success] + [42]])
+    ensure
+      conn.execute("ALTER TABLE pgbus_job_stats ADD COLUMN IF NOT EXISTS enqueue_latency_ms BIGINT, " \
+                   "ADD COLUMN IF NOT EXISTS retry_count INTEGER DEFAULT 0")
+    end
+
     it "flushes remaining entries on stop" do
       buffer = Pgbus::StatBuffer.new(flush_size: 100, flush_interval: 60)
 

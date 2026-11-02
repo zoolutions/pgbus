@@ -1551,7 +1551,7 @@ Pgbus.configure do |c|
   c.streams_peer_close_interval    = 1.0           # notice a closed client at once; nil = heartbeat only
   c.streams_max_connections        = 2_000         # per web-server process (Puma worker or Falcon process)
   c.streams_idle_timeout           = 3_600         # close idle connections after 1h
-  c.streams_listen_health_check_ms = 250           # PG LISTEN keepalive + ensure_listening ack budget
+  c.streams_listen_health_check_ms = 250           # PG LISTEN keepalive cadence + the ack budget for a stuck listener; a stream's first connect waits a thread hop on a live one, later connects not at all
   c.streams_write_deadline_ms      = 5_000         # hijacked-socket write_nonblock deadline (connect replay, sentinels)
   c.streams_fanout_write_deadline_ms = 250         # hijacked-socket fan-out and heartbeat writes; a slower client reconnects (Falcon's streaming body ignores both)
   c.streams_falcon_streaming_body  = false         # opt-in: Falcon-native streaming body

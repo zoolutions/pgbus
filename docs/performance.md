@@ -26,6 +26,7 @@ measured it and what it costs, is the docs site's
 | `Client#archive_message` | every job completion (a native prepared statement, issue #605) | `worker_profile_bench.rb` (`WP_BENCH_ROLE=fleet`) |
 | `Client#read_batch_fair` | every worker poll cycle when `config.fair_share` is set (issue #426) | `fair_read_bench.rb` |
 | `Executor#execute` | every job execution (deserialize + dispatch + archive) | `executor_bench.rb` |
+| `StatBuffer#flush` | every `stats_flush_size` jobs (default 100) or `stats_flush_interval`, stats on (the default): one multi-row INSERT into `pgbus_job_stats` (issue #622) | `stat_flush_bench.rb` |
 | JSON serialization | every enqueue/dequeue (payload encoding) | `serialization_bench.rb` |
 | Connection pool checkout | every PGMQ operation under concurrency | `connection_pool_bench.rb` |
 | Execution pool dispatch | every job dispatched to thread/async pool | `execution_pool_bench.rb` |
@@ -1126,6 +1127,88 @@ the subscriber) so a worker that has not loaded a job class yet still finds it. 
 removed too. The executor allocation budget is unchanged: the knob adds nothing
 per job.
 
+### Job stats flush (issue #622)
+
+#618's split put `StatBuffer#write_to_database` at 12–15 % of a no-op job's
+on-CPU time: `JobStat.insert_all` of 100 rows, where ActiveRecord checks every
+attribute against the schema, type-casts every value, visits an Arel
+`ValuesList`, and adds `ON CONFLICT DO NOTHING RETURNING "id"`, so the 100 new
+ids come back and are cast into an `ActiveRecord::Result` nobody reads. The
+values are Strings and Integers pgbus produced itself.
+
+The flush now builds the one multi-row `INSERT` itself and runs it with
+`execute` on a connection from `JobStat.connection_pool.with_connection`
+(the model's database, `connects_to` included). The integer columns go through
+`Integer()`, `NULL` for nil; an entry with a value `Integer()` refuses is
+logged and dropped alone, and the rest of the flush is written; the strings (`job_class` comes from the message) go
+through the connection's own quoting, memoized per flush, so 100 rows of three
+job classes and two queues cost about seven `quote` calls. `pgbus_job_stats`
+has no unique index besides the primary key, so dropping `ON CONFLICT DO
+NOTHING` changes no outcome. The missing-latency-columns fallback is the same:
+the six-column statement first, and on PostgreSQL's `undefined_column` error
+(`PG::UndefinedColumn`, the cause ActiveRecord keeps) naming
+`enqueue_latency_ms` or `retry_count`, the four-column one, warned once. main
+retried on any `StatementInvalid` whose message contained a column name, which
+an unrelated error's `LINE 1:` excerpt of the statement does; the error class
+is also what keeps it working when the server's `lc_messages` is not English.
+
+A constant `INSERT … SELECT * FROM unnest($1::varchar[], …)` with six array
+binds (`PG::TextEncoder::Array`) was the other candidate. One scratch run, same
+database, 100 rows, load 0.62× cores: `insert_all` 984 µs CPU and 3 193
+objects per flush, multi-row `VALUES` 96 µs / 429, `unnest` 133 µs / 1 002.
+`unnest` had the lower wall time (538 vs 734 µs, it is a prepared statement),
+but that time is spent in libpq with the GVL released; a local worker is
+GVL-bound, so Ruby CPU picked `VALUES`.
+
+Measured 2026-11-02 on the M-series laptop, local PostgreSQL 18, Ruby 3.4.2,
+YJIT, with three other worktrees' agents on the same machine; load is recorded
+before and after every invocation. `rake bench:one[stat_flush_bench]` (new,
+real database) pushes 100 worker-shaped entries and flushes. Ranges are rounds,
+main and branch alternated. ActiveRecord 8.1.4, four rounds: two (load
+0.63–0.92×) with an earlier version of the bench that created the table
+without indexes (historical: the committed bench always creates the
+migration's four indexes, so the "bare table" row cannot be reproduced with
+it) and two with the committed bench (load 0.39–0.56×); ActiveRecord 7.1.6
+(`gemfiles/rails_7_1.gemfile`), one round with the committed bench (load
+0.39–0.42×):
+
+| | main 8.1 | branch 8.1 | main 7.1 | branch 7.1 |
+|---|---:|---:|---:|---:|
+| Ruby CPU per flush | 936–1 999 µs | 120–229 µs | 1 440 µs | 101 µs |
+| Ruby CPU per job (÷ 100) | 9.4–20 µs | 1.2–2.3 µs | 14 µs | 1.0 µs |
+| objects per flush | 3 161 | 518 | 2 850 | 521 |
+| bytes per flush | 265 KB | 50 KB | 252 KB | 50 KB |
+| wall i/s, bare table (historical bench) | 282–483 | 954–1 449 | — | — |
+| wall i/s, indexed table | 254–289 | 513–696 | 207 | 866 |
+
+Ruby CPU per flush moves with machine load (main's four rounds spread 2×);
+the objects per flush do not move at all.
+
+`WP_BENCH_ROLE=worker rake bench:worker_profile`, two rounds alternated
+(main, branch, main, branch), load 0.63–0.73×:
+
+| cell | jobs/s main | jobs/s branch | `pgbus_rails` share of on-CPU, main | branch |
+|---|---:|---:|---:|---:|
+| local / YJIT | 5 139–6 452 | 7 499–7 840 | 17.7–18.1 % | 7.7–7.8 % |
+| local / no JIT | 5 580–5 897 | 5 886–6 349 | 17.1–18.3 % | 0.7 % |
+
+What the numbers say:
+
+- **The flush costs 4.7–14× less Ruby CPU and allocates a sixth of the
+  objects**, on ActiveRecord 8.1 and 7.1 alike. The ratio is per main/branch
+  pair, run back to back: 947/120 and 936/200 on the bare table, 1 999/161
+  and 1 118/229 indexed, 1 440/101 on 7.1. Per job that is ~9–20 → 1–2.3 µs.
+- **`pgbus_rails` is no longer a meaningful share of a worker's on-CPU time.**
+  What remains is `Heartbeat#register_process` / `#deregister_process`, which
+  run once per drain (each drain builds a new Worker: a bench artefact), and a
+  handful of flush samples in the `Rails` category (`execute`'s logging and the
+  query cache's dirty hook). The profiled drains are 2 000 jobs, so each cell
+  rests on a few hundred on-CPU samples: read the YJIT 7.7–7.8 % as "a few
+  samples of the heartbeat", not as a YJIT-specific cost.
+- **jobs/s: up with YJIT (the ranges do not overlap), within noise without a
+  JIT.** The machine was shared and the main YJIT pair alone spread 26 %;
+  the CPU-per-flush table is the measurement this change stands on.
+
 ### Fair share reads (issue #426)
 
 `Client#read_batch_fair` replaces `pgmq.read` on the worker when
@@ -1393,7 +1476,8 @@ gate regressions only, and the profile explains the ephemeral/durable gap. The c
 (~255 ms per connect) is outside #621's scope and the largest number here. Skipping the
 listener's ack for a channel already in `listening_to` (or waking the listener when a
 command arrives) would bring 1 000 connects from ~255 s down to the dispatcher's own
-per-connect cost: the step this baseline recommends next. Ractor-gate pre-read (#617: wake wall time above half the fan-out p99 at
+per-connect cost: the step this baseline recommends next (both done in #630, "Connect storm"
+below). Ractor-gate pre-read (#617: wake wall time above half the fan-out p99 at
 1 000): durable 9.2 vs 14.5–17.7 ms, not met; ephemeral 17.4 vs 16.3 (round 1, met) and 23.0
 vs 28.6 (round 2, not met); this bench does not profile, which is the gate's other half.
 
@@ -1507,6 +1591,126 @@ the time to the last client is spent outside the dispatcher's wake (the NOTIFY r
 1 000 clients parsed by 4 client processes), so parallelizing the write loop, by writer threads
 or by Ractors, could remove at most the wake's share. The verdict is recorded with the Ractor
 evaluations above.
+
+### Connect storm (issue #630)
+
+The baseline above named the connect storm as its largest number: every SSE connect cost one
+`streams_listen_health_check_ms` cycle (250 ms) on the single dispatcher thread, so 1 000
+clients took ~255 s to register and none got its `pgbus:connected` frame or a heartbeat before
+it did (the response headers, `retry:` and the opening comment go out first). Two causes, two
+changes:
+
+- **A. No listener wait for a stream that already has a subscriber.** `handle_connect` called
+  `Listener#ensure_listening` for every connect, and the listener acked it only when its
+  current wait ended, even for a channel it already LISTENed on. It now calls it only when
+  `@registry.empty?(stream)`. `remove_listening` is issued from one place,
+  `cleanup_stream_if_unused`, and only when the registry holds no connection on the stream, so
+  a registered connection proves the stream's last `ensure_listening` was issued after its last
+  `remove_listening`, and the listener runs commands in order. When that `ensure_listening` was
+  acked, the LISTEN is active; when it timed out (a stuck listener), the LISTEN is still queued
+  ahead of any UNLISTEN and runs once the listener recovers, the same window that first connect
+  had. An empty stream always takes the slow path. A connect while the listener reconnects keeps
+  the fast path: waiting there would cost every connect the ack budget for as long as the
+  database is unreachable, and its exposure is that of every registered connection (a durable
+  stream's next wake re-reads from the min cursor).
+- **B. The listener drains commands on a self-pipe wake.** The listener thread parked in
+  `wait_for_notify(health_check_ms)` and drained its command queue only between waits, so a
+  stream's first connect, every unlisten and every master-hub sub waited out the current wait.
+  It now parks in `IO.select` on the LISTEN socket and a wake pipe (the `PeerCloseWatcher`
+  pattern); `ensure_listening`, `remove_listening` and `stop` write a byte. It keeps pg's
+  `wait_for_notify` order (buffered notifications, the socket, `consume_input`, the buffer
+  again), and the keepalive runs on a deadline: one `SELECT 1` per idle cycle, scheduled from
+  the end of the last one, which a stream of wakes cannot postpone. Only the pipe crosses
+  threads (#375). `PG::Connection#notifies` reports a NOTIFY without payload as `extra: ""`
+  where `wait_for_notify` yielded `nil`; the loop maps it back so durable wakes stay durable.
+
+The worker-side `Process::NotifyListener` keeps its `wait_for_notify` loop on purpose: its
+subscriptions change only at boot and on a wildcard refresh, so no command waits on it.
+
+`STREAMS_SCALE_STREAMS=N` (new) deals the clients over N streams round-robin and publishes each
+broadcast sample to all N in turn, its fan-out timed from the first publish. With one stream only
+the first connect touches the listener, so that row shows A; with 100 streams there are 100 first
+connects, each a listener round trip, so that row is the one that exercises B. `main` has no such
+knob: its worktree ran the branch's bench files (nothing under `lib/`).
+
+Measured 2026-11-02, same machine and settings as the baseline (Apple M2 Max, 12 cores,
+PostgreSQL 18 on the same machine, Ruby 3.4.2 with YJIT, Puma 8.0.2, every streams setting at its
+default), `main` and the branch alternated, each on its own database. Two rounds; load average
+before each run: main 19.8 and 6.3 (one stream), 10.7 and 7.3 (100 streams); branch 4.1 and 11.3
+(one stream), 5.4 and 8.4 (100 streams). Ranges are the two rounds. Every row: 0 missed
+broadcasts, 0 failed clients.
+
+**M = 1 000**
+
+| mode | streams | tree | connect all (s) | connect p50 (s) | `handle_connect` p50 / p99 (ms) | fan-out first p50 (ms) | fan-out last p50 / p99 (ms) | retried connects |
+|---|---:|---|---:|---:|---:|---:|---:|---:|
+| ephemeral | 1 | main | 255.3 | 127.8–128.0 | 254.1–254.2 / 308–315 | 0.7–0.9 | 16.7–24.8 / 31.6–43.7 | 811–906 |
+| ephemeral | 1 | branch | 4.49–6.58 | 2.31–2.35 | 0.1–0.2 / 1.9–4.7 | 0.5–1.3 | 16.0–18.4 / 32.5–44.0 | 831–869 |
+| durable | 1 | main | 255.6–259.3 | 127.3–132.4 | 254.1–255.3 / 261–431 | 1.9–4.6 | 20.5–22.2 / 33.7–45.0 | 632–821 |
+| durable | 1 | branch | 4.46–4.56 | 2.31–2.36 | 0.1–0.2 / 3.3–3.7 | 2.5–4.3 | 19.1–20.5 / 36.4–59.2 | 676–821 |
+| ephemeral | 100 | main | 259.3–260.2 | 130.7–131.9 | 255.6–257.2 / 372–410 | 0.6–1.1 | 28.0–39.8 / 46.0–80.4 | 683–729 |
+| ephemeral | 100 | branch | 4.49–4.53 | 0.28–2.30 | 0.2–0.3 / 3.1–3.6 | 0.7–0.8 | 28.6–28.8 / 38.9–59.7 | 711–748 |
+| durable | 100 | main | 255.3–266.9 | 127.9–133.8 | 254.4–254.7 / 278–618 | 1.8–4.1 | 72.5–89.4 / 197–829 | 691–897 |
+| durable | 100 | branch | 4.51–4.53 | 2.32–2.34 | 0.2–0.3 / 4.5–4.6 | 2.4–6.4 | 97.6–128.5 / 120–215 | 732–826 |
+
+**M = 100** (no connect is retried at this size)
+
+| mode | streams | main: connect all (s) | branch: connect all (s) | main: `handle_connect` p50 (ms) | branch: `handle_connect` p50 (ms) |
+|---|---:|---:|---:|---:|---:|
+| ephemeral | 1 | 25.34–25.43 | 0.08–0.10 | 253.7 | 0.2 |
+| durable | 1 | 25.17–25.80 | 0.08–0.09 | 254.0–254.3 | 0.1–0.3 |
+| ephemeral | 100 | 25.28–25.71 | 0.16–0.17 | 255.0–257.1 | 0.7–1.0 |
+| durable | 100 | 25.47–27.14 | 0.15–0.16 | 256.3–258.1 | 0.7–0.8 |
+
+`rake bench:streams` section 4 (K concurrent connects on one stream, `streams_listen_health_check_ms`
+100 in that bench) returned at the response headers, which `StreamApp` writes before the
+dispatcher registers the connection, so it showed ~0.6 ms per connect on `main` as well; it now
+waits for every client's `pgbus:connected` frame. Two rounds each, same bench file on both trees
+(load 7.6–12.1): K = 50 registers in 5 181–5 191 ms on `main` (~104 ms per connect, one cycle
+each) and in 49–64 ms on the branch; K = 5 / 20 / 50 cost 102–107 ms per connect on `main` and
+1.0–2.6 ms on the branch. Its single-broadcast roundtrip, the NOTIFY → dispatcher → client path
+the listener rewrite touched, is 11.7–12.7 ms median on both trees.
+
+What the numbers say:
+
+- **The storm is gone.** At M = 100, where the kernel resets no connect, every client registers
+  in 0.08–0.17 s instead of 25 s. At M = 1 000 the branch registers everyone in 4.5–6.6 s instead
+  of 255–267 s, and the dispatcher's share of that is `handle_connect` p50 0.1–0.3 ms, about 0.3 s
+  for all 1 000. The rest is macOS's accept queue: `somaxconn` 128 resets 676–869 of the 1 000
+  connects, and those clients retry after the 2 s `retry:` an EventSource would wait (connect p99
+  ≈ 4.5 s, one or two retry clocks; connect p50 2.3 s in seven of the eight branch cells and
+  0.28 s in one, where the median client was not reset). Linux's default of 4 096 resets none.
+- **B is what the 100-stream rows show.** At M = 100 over 100 streams every connect is a stream's
+  first, so every one goes to the listener: 0.7–1.0 ms each on the branch, 255–258 ms on `main`.
+  At M = 1 000 the 100-stream rows land at 4.49–4.53 s, inside the one-stream rows' 4.46–6.58 s;
+  without B the 100 first connects alone would add 100 × 250 ms = 25 s.
+- **Against the targets** (#617's comment, restated in #630): 1 000 connects register in under
+  10 s, one stream and 100 streams, both modes: met (4.46–6.58 s). The 100-stream row within 2 s
+  of the one-stream row: met. `handle_connect` p50 at the cost of one `read_after` plus the replay
+  write: 0.1–1.0 ms.
+- **Fan-out is a regression gate, and it holds.** The first-client p50, the NOTIFY → dispatcher
+  path the select loop replaced, is 0.5–6.4 ms on the branch against 0.6–4.6 ms on `main`, and the
+  roundtrip above is unchanged. Last-client p99 is the slowest of 20 broadcasts and both trees
+  throw outliers: `main` 829 ms in one durable 100-stream cell, the branch 1 571 ms in a durable
+  100-stream cell at M = 100. The durable 100-stream rows sit 8–56 ms higher on the branch at
+  p50 (M = 100: 94.4–99.6 against 81.8–82.6 ms); swapping the two databases moved that gap with the database, not the code (M = 100,
+  durable, 100 streams, two runs per pairing, load 6.3–19.1: on `main`'s database 91.7 and
+  106.8 ms for `main`, 86.8 and 85.1 ms for the branch; on the branch's database 124.6 and
+  120.4 ms for `main`, 116.8 and 121.8 ms for the branch). That cell is load-sensitive on both
+  trees: one of `main`'s runs on its own database at load 12.3 missed 64 broadcasts. In those rows
+  the last client's time includes the bench publishing 100 broadcasts in turn.
+- **RSS per connection reads lower on the branch** (15–16 against 28–29 KB at one stream,
+  6.8–8.4 against 16–19 KB at 100 streams). The bench samples RSS right after the connects
+  without a GC, and the storm now lasts seconds instead of minutes, so this is when the next GC
+  runs, not a per-connection saving; the bench does not separate the two.
+- **`rake bench:streams_hub`** (the hub's broadcast round trip, a regression gate; it does not time
+  `handle_sub`, which B also shortens): p50 13.3–16.7 ms on `main` and 13.9–16.4 ms on the branch,
+  `:process` and `:master` alike, over 11 runs per tree. Its client polls every 10 ms, so the
+  figure is mostly that poll. The first five alternated runs had the branch 0.3–2.2 ms slower;
+  six more per tree, alternated with each tree on both databases, put both at 16.0 ms in most
+  runs, and in the last round the branch was the faster (13.9–14.9 against 15.2–16.0 ms).
+- **`rake bench:notify_wake`** (control: the worker-side `NotifyListener` is untouched): direct
+  listener p50 0.93 ms / p99 4.81 ms, hub → pipe p50 0.81 ms / p99 11.0 ms, load 5.4.
 
 ### Execution mode and DB pool sizing (threads vs async)
 

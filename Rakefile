@@ -26,7 +26,7 @@ namespace :bench do
   db_benches = %w[connection_pool_bench integration_bench streams_bench streams_read_pool_bench
                   execution_modes_bench pool_swap_bench pool_autoscale_bench job_burst_bench
                   notify_wake_bench notify_chaos_bench streams_hub_bench fair_read_bench
-                  worker_profile_bench workflow_insights_bench streams_scale_bench].freeze
+                  worker_profile_bench workflow_insights_bench streams_scale_bench stat_flush_bench].freeze
   # The unit suite is every *_bench.rb that doesn't need a database, derived
   # from the directory so a new unit bench is picked up automatically (kept in
   # sync with bench:one, which globs the same files).
