@@ -9,7 +9,9 @@ module Pgbus
   module QueueNameValidator
     # PostgreSQL's NAMEDATALEN caps identifiers at 63 bytes, but the
     # effective limit is tighter: pgmq-ruby (our transport gem) rejects
-    # any queue name with `length >= 48` in `PGMQ::Client#validate_queue_name!`.
+    # any queue name with `length >= PGMQ::QueueName::MAX_LENGTH` (48) in
+    # `PGMQ::QueueName.validate!`, whose error has said "maximum length of
+    # 47 characters" since pgmq-ruby 0.8.2 (48 before).
     # That leaves an actual usable ceiling of 47 characters for the
     # fully-prefixed name (`<queue_prefix>_<logical_name>`), which is what
     # this constant expresses. pgmq-ruby picked 48 to leave headroom for
