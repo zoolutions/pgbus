@@ -34,8 +34,7 @@ module Pgbus
         redirect_to dead_letter_index_path, notice: "Message re-enqueued to original queue."
       else
         redirect_to dead_letter_index_path,
-                    alert: "Could not retry message. Another copy of the job may hold its uniqueness key; " \
-                           "the log says why. The message stays in the dead-letter queue."
+                    alert: "Could not retry message: it is gone, the retry failed, or another copy of the job holds its uniqueness key."
       end
     end
 

@@ -20,8 +20,8 @@ module Pgbus
       if data_source.retry_failed_event(params[:id])
         redirect_after_failed_event_action notice: "Job re-enqueued."
       else
-        redirect_after_failed_event_action alert: "Could not retry job. Another copy of the job may hold its uniqueness key; " \
-                                                  "the log says why. The failed job stays in the list."
+        redirect_after_failed_event_action alert: "Could not retry job: it is gone, the retry failed, " \
+                                                  "or another copy of the job holds its uniqueness key."
       end
     end
 

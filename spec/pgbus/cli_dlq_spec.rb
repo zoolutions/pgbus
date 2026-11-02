@@ -175,13 +175,13 @@ RSpec.describe Pgbus::CLI::DLQ do
     end
 
     # Issue #631: a retry is refused while another copy holds the job's
-    # uniqueness key; the message says so and where the message stays.
+    # uniqueness key; the message names it among the reasons.
     it "exits 1 naming the held uniqueness key as a cause when the retry is refused" do
       allow(data_source).to receive(:dlq_message_detail).with("42").and_return(dlq_message)
       allow(data_source).to receive(:retry_dlq_message).with("pgbus_default_dlq", 42).and_return(false)
 
-      message = "Failed to retry msg_id 42. Another copy of the job may hold its uniqueness key; " \
-                "the log says why. The message stays in the dead-letter queue.\n"
+      message = "Failed to retry msg_id 42: it is gone, the retry failed, " \
+                "or another copy of the job holds its uniqueness key.\n"
 
       expect { described_class.start(%w[retry 42], data_source: data_source) }
         .to output(message).to_stderr.and raise_error(SystemExit) { |e| expect(e.status).to eq(1) }

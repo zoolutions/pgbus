@@ -70,11 +70,12 @@ class Views::Docs::Pages::ConcurrencyUniqueness < DocsUI::Page
         Retrying a dead-lettered copy (dashboard, `pgbus dlq retry`, Retry All)
         or a failed job whose message is gone sends a new message, and that
         message takes the lock the way an enqueue does: a lock still held by
-        the message it came from moves onto it, a free key is acquired, and
-        while another copy of the job holds the key the retry is refused
-        ("Could not retry") and the dead-lettered copy or failed job stays
-        where it is. A `:while_executing` job, and an `:until_executing`
-        `retry_on` re-enqueue, retry without a lock, as they were sent.
+        the message it came from moves onto it, and a free key is acquired.
+        While another copy of the job holds the key the retry is refused (the
+        alert lists the held key as a possible cause, the log names it) and
+        the dead-lettered copy or failed job stays where it is. A
+        `:while_executing` job, and an `:until_executing` `retry_on`
+        re-enqueue, retry without a lock, as they were sent.
       MD
     end
   end
