@@ -93,13 +93,16 @@ module Pgbus
     end
 
     # PostgreSQL's undefined_column (42703, PG::UndefinedColumn: the cause
-    # ActiveRecord keeps) naming a latency column. The class, not the text,
-    # says the column is missing: the text follows the server's lc_messages,
-    # and an unrelated error's "LINE 1:" excerpt of the statement names both
-    # latency columns too. pg is loaded once PostgreSQL has raised anything.
+    # ActiveRecord keeps) naming a latency column in its first line. The
+    # class, not the wording, says a column is missing (the wording follows
+    # the server's lc_messages); only the first line names which, because the
+    # "LINE 1:" excerpt of the statement below it shows both latency columns
+    # whatever went wrong. pg is loaded once PostgreSQL has raised anything.
     def missing_latency_column?(error)
-      defined?(::PG::UndefinedColumn) && error.cause.is_a?(::PG::UndefinedColumn) &&
-        (error.message.include?("enqueue_latency_ms") || error.message.include?("retry_count"))
+      return false unless defined?(::PG::UndefinedColumn) && error.cause.is_a?(::PG::UndefinedColumn)
+
+      primary = error.cause.message.lines.first.to_s
+      primary.include?("enqueue_latency_ms") || primary.include?("retry_count")
     end
 
     def write_base_columns(conn, entries)

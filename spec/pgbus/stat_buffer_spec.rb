@@ -271,7 +271,8 @@ RSpec.describe Pgbus::StatBuffer do
     it "does not retry an undefined column that is not a latency column" do
       allow(conn).to receive(:execute) do |sql, *|
         statements << sql
-        undefined_column('ERROR:  column "status" of relation "pgbus_job_stats" does not exist')
+        undefined_column(%(ERROR:  column "status" of relation "pgbus_job_stats" does not exist\n) +
+                         "LINE 1: ...stats (job_class, queue_name, status, duration_ms, enqueue_latency_ms, retry_count)...")
       end
 
       buffer.push(stat_attrs)
