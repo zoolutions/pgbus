@@ -380,7 +380,8 @@ module Pgbus
           # alive, proves the stream's last ensure_listening returned after
           # its last remove_listening was issued. The listener runs commands
           # in order, and a LISTEN that raised is re-LISTENed by the reconnect
-          # that follows, so the LISTEN is active. The one exception is a
+          # that follows, so the LISTEN is active, or is once that reconnect
+          # completes. The one exception is a
           # first connect whose ack timed out (a stuck or reconnecting
           # listener): its LISTEN is still queued, ahead of any later
           # UNLISTEN, and runs when the listener recovers; until then the

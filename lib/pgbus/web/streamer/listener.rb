@@ -117,6 +117,14 @@ module Pgbus
         def start
           return if @running
 
+          # A previous thread that outlived #stop's join still owns the
+          # connection; a second loop on it is the cross-thread use #375 is
+          # about.
+          if @thread&.alive?
+            @logger.warn { "[Pgbus::Streamer::Listener] previous listener thread still running; not starting another" }
+            return
+          end
+
           @wake_reader, @wake_writer = IO.pipe if @wake_reader.nil? || @wake_reader.closed? || @wake_writer.closed?
           @running = true
           # The LISTEN thread, owned by this object: Instance#start starts it
@@ -149,7 +157,6 @@ module Pgbus
           return unless @running
 
           @running = false
-          @commands << [:stop]
           # Deliberately does NOT touch @conn. PG::Connection is not
           # thread-safe and #close is PQfinish: it frees the PGconn and its
           # OpenSSL objects out from under whatever libpq call the listener
@@ -162,7 +169,9 @@ module Pgbus
           # keepalive or a reconnect rather than the select.
           wake
           joined = @thread.nil? || @thread.join(stop_join_timeout)
-          @thread = nil
+          # A thread past its budget stays referenced, so #start refuses to
+          # run a second loop beside it.
+          @thread = nil if joined
           close_wake_pipe(joined)
           self
         end
@@ -286,8 +295,9 @@ module Pgbus
         # the thread drains it on its first pass.
         def wake
           @wake_writer&.write_nonblock(".", exception: false)
-        rescue IOError
-          # Closed by #stop: nothing is left to wake.
+        rescue IOError, Errno::EPIPE
+          # Closed by #stop (IOError), or its reader closed first (EPIPE):
+          # nothing is left to wake.
           nil
         end
 
@@ -307,8 +317,10 @@ module Pgbus
             return
           end
 
-          @wake_reader.close unless @wake_reader.closed?
+          # Writer first: a late wake then meets a closed writer (IOError), not
+          # a writer whose reader is gone.
           @wake_writer.close unless @wake_writer.closed?
+          @wake_reader.close unless @wake_reader.closed?
         end
 
         def schedule_health_check
@@ -317,6 +329,10 @@ module Pgbus
 
         def drain_commands
           loop do
+            # #stop cleared the flag: run_loop is about to exit and close the
+            # connection, so the rest of the queue is moot.
+            return unless @running
+
             cmd = @commands.pop(true)
             case cmd[0]
             when :listen
@@ -331,8 +347,6 @@ module Pgbus
                 ack&.push(:done)
               end
             when :unlisten then do_unlisten(cmd[1])
-            when :stop     then @running = false
-                                return
             end
           rescue ThreadError
             # empty queue

@@ -335,28 +335,72 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
       expect(listener.instance_variable_get(:@wake_writer)).not_to be_closed
     end
 
-    it "leaves the pipe open, and says so, when the thread outlives the join budget" do
-      stub_const("#{described_class}::STOP_JOIN_GRACE_SECONDS", 0.05)
-      log = StringIO.new
-      stuck = described_class.new(
-        pg_connection: fake_pg, dispatch_queue: dispatch_queue, health_check_ms: 20,
-        logger: Logger.new(log), connection_factory: -> {}
-      )
-      fake_pg.gate_exec!("SELECT 1")
-      stuck.start
-      wait_until { fake_pg.executed.include?("SELECT 1") }
-      thread = stuck.threads.first
-      reader = stuck.instance_variable_get(:@wake_reader)
+    it "serves commands again when started after a clean stop" do
+      listener.start
+      listener.stop
+      listener.instance_variable_set(:@conn, fake_pg_class.new)
 
-      stuck.stop
+      listener.start
+      listener.ensure_listening("chat")
 
-      expect(reader).not_to be_closed
-      expect(log.string).to include("did not stop")
+      expect(listener.listening_to).to include("pgmq.q_chat.INSERT")
+    end
+
+    it "does not raise when a wake races the pipe's close (the reader already gone)" do
+      reader, writer = IO.pipe
+      reader.close
+      listener.instance_variable_set(:@wake_writer, writer)
+
+      expect { listener.remove_listening("chat") }.not_to raise_error
     ensure
-      fake_pg.release_exec!
-      thread&.join(2)
-      reader&.close
-      stuck&.instance_variable_get(:@wake_writer)&.close
+      writer&.close
+    end
+
+    it "does not raise when a wake comes after stop closed the pipe" do
+      listener.start
+      listener.stop
+
+      expect { listener.remove_listening("chat") }.not_to raise_error
+    end
+
+    context "when the thread outlives the join budget" do
+      let(:log) { StringIO.new }
+      # The stuck thread and its pipe, captured before #stop.
+      let(:held) { {} }
+      let(:stuck) do
+        described_class.new(
+          pg_connection: fake_pg, dispatch_queue: dispatch_queue, health_check_ms: 20,
+          logger: Logger.new(log), connection_factory: -> {}
+        )
+      end
+
+      before do
+        stub_const("#{described_class}::STOP_JOIN_GRACE_SECONDS", 0.05)
+        fake_pg.gate_exec!("SELECT 1")
+        stuck.start
+        wait_until { fake_pg.executed.include?("SELECT 1") }
+        held[:thread] = stuck.threads.first
+        held[:pipe] = %i[@wake_reader @wake_writer].map { |ivar| stuck.instance_variable_get(ivar) }
+        stuck.stop
+      end
+
+      after do
+        fake_pg.release_exec!
+        held[:thread].join(2)
+        held[:pipe].each { |io| io.close unless io.closed? }
+      end
+
+      it "leaves the pipe open and says so" do
+        expect(held[:pipe]).to all(satisfy { |io| !io.closed? })
+        expect(log.string).to include("did not stop")
+      end
+
+      it "refuses to start a second loop beside it" do
+        stuck.start
+
+        expect(stuck.threads).to eq([held[:thread]])
+        expect(log.string).to include("still running")
+      end
     end
   end
 
