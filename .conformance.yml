@@ -151,9 +151,9 @@ main_only:
       Rails::Engine's own class state, set by Rails at boot on the main Ractor
   # Rails' own class state on pgbus's models
   - ancestor: ActiveRecord::Base
-    ivars: ["@_type_candidates_cache", "@find_by_statement_cache", "@load_schema_monitor", "@relation_delegate_cache"]
+    ivars: ["@_type_candidates_cache", "@find_by_statement_cache", "@load_schema_monitor", "@relation_delegate_cache", "@pending_attribute_modifications"]
     reason: >-
-      ActiveRecord::Base's own class state (schema, statement and relation caches), built by Rails on the main Ractor; pgbus models are not used from non-main Ractors (Active Job inside Ractors is out of scope, #527)
+      ActiveRecord::Base's own class state (schema, statement and relation caches, and the attribute decorators `normalizes` registers, issue #633), built by Rails on the main Ractor; pgbus models are not used from non-main Ractors (Active Job inside Ractors is out of scope, #527)
   # Rails' own class state on the dashboard controllers
   - ancestor: ActionController::Base
     ivars: ["@_parameter_encodings", "@controller_path", "@renderer"]
