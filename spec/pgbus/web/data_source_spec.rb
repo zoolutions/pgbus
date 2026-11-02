@@ -307,6 +307,30 @@ RSpec.describe Pgbus::Web::DataSource do
       expect(mock_connection).to have_received(:select_all)
     end
 
+    it "keeps them when the drop fails" do
+      allow(mock_connection).to receive(:select_all).and_return([])
+      allow(data_source).to receive(:lock_holders_for).and_return([["key", "default", 1, nil]])
+      allow(Pgbus::UniquenessKey).to receive(:release_all_held_by!)
+      allow(mock_client).to receive(:drop_queue) do |*_args, &before_drop|
+        before_drop.call
+        raise StandardError, "drop failed"
+      end
+
+      expect { data_source.drop_queue("pgbus_default") }.to raise_error(StandardError, "drop failed")
+      expect(Pgbus::UniquenessKey).not_to have_received(:release_all_held_by!)
+    end
+
+    it "releases them after the table is dropped" do
+      allow(mock_connection).to receive(:select_all).and_return([])
+      allow(data_source).to receive(:lock_holders_for).and_return([["key", "default", 1, nil]])
+      allow(Pgbus::UniquenessKey).to receive(:release_all_held_by!)
+      allow(mock_client).to receive(:drop_queue) { |*_args, &before_drop| before_drop.call && true }
+
+      data_source.drop_queue("pgbus_default")
+
+      expect(Pgbus::UniquenessKey).to have_received(:release_all_held_by!).with([["key", "default", 1, nil]])
+    end
+
     it "keeps them when the client keeps the table (a case duplicate)" do
       allow(mock_connection).to receive(:select_all)
       allow(mock_client).to receive(:drop_queue).and_return(true)

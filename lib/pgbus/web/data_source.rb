@@ -177,12 +177,17 @@ module Pgbus
         @client.purge_queue(name, prefixed: false)
       end
 
-      # The locks are released only when the table is dropped: a mixed-case
-      # duplicate from before issue #633 shares its table with the lower-case
-      # queue, which keeps its messages and so their locks (the client decides
-      # once, and runs the block only on a real drop).
+      # The messages' uniqueness locks are released only once the table is
+      # gone: their holders are read just before the drop (the client runs
+      # the block only when it drops the table, not for a mixed-case
+      # duplicate from before issue #633, whose table and messages stay with
+      # the lower-case queue) and released after it succeeds, so a failed
+      # drop leaves both messages and locks.
       def drop_queue(name)
-        @client.drop_queue(name, prefixed: false) { release_uniqueness_keys_for_queue(name) }
+        holders = nil
+        result = @client.drop_queue(name, prefixed: false) { holders = queue_lock_holders(name) }
+        release_lock_holders(holders) if holders
+        result
       end
 
       def pause_queue(name, reason: nil)
@@ -1609,10 +1614,19 @@ module Pgbus
       # Release the locks a collection of formatted messages hold, in a single
       # query.
       def release_locks_for_messages(messages)
-        holders = messages.filter_map do |m|
+        release_lock_holders(lock_holders_for(messages))
+      rescue StandardError => e
+        Pgbus.logger.debug { "[Pgbus::Web] Error releasing locks for messages: #{e.message}" }
+      end
+
+      def lock_holders_for(messages)
+        messages.filter_map do |m|
           key = extract_uniqueness_key_from_payload_str(m[:message])
           [key, *lock_holder(m[:queue_name], m[:msg_id], m[:headers], m[:enqueued_at])] if key
         end
+      end
+
+      def release_lock_holders(holders)
         UniquenessKey.release_all_held_by!(holders) if holders.any?
       rescue StandardError => e
         Pgbus.logger.debug { "[Pgbus::Web] Error releasing locks for messages: #{e.message}" }
@@ -1798,10 +1812,18 @@ module Pgbus
       # Release all uniqueness keys associated with a queue before purge/drop.
       # Scans queue messages for uniqueness metadata and deletes matching rows.
       def release_uniqueness_keys_for_queue(queue_name)
-        messages = query_queue_messages_raw(queue_name, 10_000, 0)
-        release_locks_for_messages(messages)
+        holders = queue_lock_holders(queue_name)
+        release_lock_holders(holders) if holders
+      end
+
+      # The uniqueness-lock holders of a queue's messages, or nil when they
+      # cannot be read (the purge or drop goes ahead; the reaper frees what
+      # is left).
+      def queue_lock_holders(queue_name)
+        lock_holders_for(query_queue_messages_raw(queue_name, 10_000, 0))
       rescue StandardError => e
-        Pgbus.logger.debug { "[Pgbus::Web] Error releasing uniqueness keys for queue #{queue_name}: #{e.message}" }
+        Pgbus.logger.debug { "[Pgbus::Web] Error reading uniqueness keys for queue #{queue_name}: #{e.message}" }
+        nil
       end
     end
   end
