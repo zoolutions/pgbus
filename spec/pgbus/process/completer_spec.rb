@@ -13,8 +13,10 @@ RSpec.describe Pgbus::Process::Completer do
   # archive_batch answers like pgmq-ruby: the archived ids as Strings, ids
   # already gone simply absent.
   def archive_all
-    allow(client).to receive(:archive_batch) do |queue, ids, prefixed:|
+    allow(client).to receive(:archive_batch) do |queue, ids, prefixed:, job_completion:|
       raise ArgumentError, "expected prefixed: false" unless prefixed == false
+      # A job's completion: config.completion_synchronous_commit applies (#619).
+      raise ArgumentError, "expected job_completion: true" unless job_completion == true
 
       calls << [queue, ids]
       ids.map(&:to_s)
@@ -62,7 +64,7 @@ RSpec.describe Pgbus::Process::Completer do
 
   it "coalesces the ids that arrive while a flush is in flight into the next archive_batch" do
     gate = Thread::Queue.new
-    allow(client).to receive(:archive_batch) do |queue, ids, prefixed:| # rubocop:disable Lint/UnusedBlockArgument
+    allow(client).to receive(:archive_batch) do |queue, ids, prefixed:, **| # rubocop:disable Lint/UnusedBlockArgument
       calls << [queue, ids]
       gate.pop if ids == [1] # hold the first flush until every other id is pending
       ids.map(&:to_s)
@@ -82,7 +84,7 @@ RSpec.describe Pgbus::Process::Completer do
 
   it "reports :already_archived for an id missing from the result, :archived for the rest" do
     gate = Thread::Queue.new
-    allow(client).to receive(:archive_batch) do |_queue, ids, prefixed:| # rubocop:disable Lint/UnusedBlockArgument
+    allow(client).to receive(:archive_batch) do |_queue, ids, prefixed:, **| # rubocop:disable Lint/UnusedBlockArgument
       gate.pop if ids == [0]
       ids.reject { |id| id == 2 }.map(&:to_s)
     end
@@ -102,7 +104,7 @@ RSpec.describe Pgbus::Process::Completer do
   # only one of them may own the completion signals (rails/solid_queue#761).
   it "gives :archived to one waiter of a duplicated id and :already_archived to the other" do
     gate = Thread::Queue.new
-    allow(client).to receive(:archive_batch) do |_queue, ids, prefixed:| # rubocop:disable Lint/UnusedBlockArgument
+    allow(client).to receive(:archive_batch) do |_queue, ids, prefixed:, **| # rubocop:disable Lint/UnusedBlockArgument
       gate.pop if ids == [0]
       ids.uniq.map(&:to_s)
     end
@@ -120,7 +122,7 @@ RSpec.describe Pgbus::Process::Completer do
   it "raises the flush's exception on every waiter of that queue and on no other" do
     boom = Class.new(StandardError)
     gate = Thread::Queue.new
-    allow(client).to receive(:archive_batch) do |queue, ids, prefixed:| # rubocop:disable Lint/UnusedBlockArgument
+    allow(client).to receive(:archive_batch) do |queue, ids, prefixed:, **| # rubocop:disable Lint/UnusedBlockArgument
       gate.pop if ids == [0]
       raise boom, "archive failed" if queue == "bad"
 
@@ -141,7 +143,7 @@ RSpec.describe Pgbus::Process::Completer do
 
   it "flushes two queues as two statements" do
     gate = Thread::Queue.new
-    allow(client).to receive(:archive_batch) do |queue, ids, prefixed:| # rubocop:disable Lint/UnusedBlockArgument
+    allow(client).to receive(:archive_batch) do |queue, ids, prefixed:, **| # rubocop:disable Lint/UnusedBlockArgument
       calls << [queue, ids]
       gate.pop if ids == [0]
       ids.map(&:to_s)
@@ -164,7 +166,7 @@ RSpec.describe Pgbus::Process::Completer do
 
     it "splits the group into statements of at most batch_size ids" do
       gate = Thread::Queue.new
-      allow(client).to receive(:archive_batch) do |queue, ids, prefixed:| # rubocop:disable Lint/UnusedBlockArgument
+      allow(client).to receive(:archive_batch) do |queue, ids, prefixed:, **| # rubocop:disable Lint/UnusedBlockArgument
         calls << [queue, ids]
         gate.pop if ids == [0]
         ids.map(&:to_s)
@@ -186,7 +188,7 @@ RSpec.describe Pgbus::Process::Completer do
   describe "#stop" do
     it "flushes what is pending, then joins the flusher" do
       gate = Thread::Queue.new
-      allow(client).to receive(:archive_batch) do |queue, ids, prefixed:| # rubocop:disable Lint/UnusedBlockArgument
+      allow(client).to receive(:archive_batch) do |queue, ids, prefixed:, **| # rubocop:disable Lint/UnusedBlockArgument
         calls << [queue, ids]
         gate.pop if ids == [0]
         ids.map(&:to_s)
@@ -225,7 +227,7 @@ RSpec.describe Pgbus::Process::Completer do
 
     it "fails a waiter with Stopped when the flusher dies before serving it" do
       gate = Thread::Queue.new
-      allow(client).to receive(:archive_batch) do |_queue, ids, prefixed:| # rubocop:disable Lint/UnusedBlockArgument
+      allow(client).to receive(:archive_batch) do |_queue, ids, prefixed:, **| # rubocop:disable Lint/UnusedBlockArgument
         gate.pop
         ids.map(&:to_s)
       end
@@ -245,8 +247,10 @@ RSpec.describe Pgbus::Process::Completer do
     subject(:completer) { described_class.new(client: client, batch_size: batch_size, completed_jobs: :delete) }
 
     def delete_all(missing: [])
-      allow(client).to receive(:delete_batch) do |queue, ids, prefixed:|
+      allow(client).to receive(:delete_batch) do |queue, ids, prefixed:, job_completion:|
         raise ArgumentError, "expected prefixed: false" unless prefixed == false
+        # A job's completion: config.completion_synchronous_commit applies (#619).
+        raise ArgumentError, "expected job_completion: true" unless job_completion == true
 
         calls << [queue, ids]
         (ids - missing).map(&:to_s)
@@ -294,7 +298,7 @@ RSpec.describe Pgbus::Process::Completer do
 
   it "keeps serving after a flush raised something that is not a StandardError" do
     calls_made = 0
-    allow(client).to receive(:archive_batch) do |_queue, ids, prefixed:| # rubocop:disable Lint/UnusedBlockArgument
+    allow(client).to receive(:archive_batch) do |_queue, ids, prefixed:, **| # rubocop:disable Lint/UnusedBlockArgument
       calls_made += 1
       raise NotImplementedError, "not a StandardError" if calls_made == 1
 

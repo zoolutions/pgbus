@@ -94,7 +94,8 @@ module Pgbus
         return waiter.value if waiter
 
         # Stopped: complete on the caller's thread, with the same results.
-        @client.public_send(@batch_op, queue, [msg_id], prefixed: false).empty? ? :already_archived : :archived
+        done = @client.public_send(@batch_op, queue, [msg_id], prefixed: false, job_completion: true)
+        done.empty? ? :already_archived : :archived
       end
 
       # Flushes whatever is pending, then joins the flusher. Past timeout the
@@ -157,7 +158,8 @@ module Pgbus
       # is absent. A duplicated id (the same message held by two threads after
       # a redelivery) is archived once, so only its first waiter gets :archived.
       def flush_slice(queue, slice)
-        archived = @client.public_send(@batch_op, queue, slice.map(&:first).uniq, prefixed: false).to_set(&:to_i)
+        archived = @client.public_send(@batch_op, queue, slice.map(&:first).uniq, prefixed: false, job_completion: true)
+                          .to_set(&:to_i)
         slice.each { |msg_id, waiter| waiter.resolve(archived.delete?(msg_id) ? :archived : :already_archived) }
       rescue Exception => e # rubocop:disable Lint/RescueException -- delivered to the waiters, never swallowed
         log_flush_failure(queue, slice, e) unless e.is_a?(StandardError)

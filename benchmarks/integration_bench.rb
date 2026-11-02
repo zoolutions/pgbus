@@ -3,6 +3,8 @@
 # Integration benchmark — measures real PostgreSQL performance.
 # Requires PGBUS_DATABASE_URL to be set:
 #   PGBUS_DATABASE_URL=postgres://pgbus:pgbus@localhost:5432/pgbus_test bin/rake bench:integration
+# PGBUS_BENCH_COMPLETION_COMMIT=sync|async sets config.completion_synchronous_commit
+# to true / false (issue #619); anything else aborts.
 
 require "benchmark/ips"
 require "memory_profiler"
@@ -34,6 +36,13 @@ Pgbus.configure do |c|
   c.pgmq_schema_mode = :embedded
   c.listen_notify = false
   c.stats_enabled = false
+  # Issue #619: PGBUS_BENCH_COMPLETION_COMMIT=async runs the executor rows with
+  # config.completion_synchronous_commit = false (the pipelined completion).
+  completion_commit = ENV.fetch("PGBUS_BENCH_COMPLETION_COMMIT", nil)
+  if completion_commit && !%w[sync async].include?(completion_commit)
+    abort "PGBUS_BENCH_COMPLETION_COMMIT must be sync or async (got #{completion_commit})"
+  end
+  c.completion_synchronous_commit = completion_commit != "async" if completion_commit
 end
 
 # Ensure schema + queues exist

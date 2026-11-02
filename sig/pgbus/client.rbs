@@ -3,8 +3,8 @@
 # public method is missing here.
 module Pgbus
   class Client
-    def archive_batch: (untyped queue_name, untyped msg_ids, ?prefixed: untyped) -> untyped
-    def archive_message: (untyped queue_name, untyped msg_id, ?prefixed: untyped) -> untyped
+    def archive_batch: (untyped queue_name, untyped msg_ids, ?prefixed: untyped, ?job_completion: bool) -> untyped
+    def archive_message: (untyped queue_name, untyped msg_id, ?prefixed: untyped, ?job_completion: bool) -> untyped
     def bind_topic: (untyped pattern, untyped queue_name) -> untyped
     def close: () -> untyped
     def config: () -> untyped
@@ -14,8 +14,8 @@ module Pgbus
     def create_fifo_index: (untyped queue_name) -> untyped
     def create_fifo_indexes_all: () -> untyped
     def dead_letter_physical_name: (untyped queue_name, ?prefixed: untyped) -> untyped
-    def delete_batch: (untyped queue_name, untyped msg_ids, ?prefixed: untyped) -> untyped
-    def delete_message: (untyped queue_name, untyped msg_id, ?prefixed: untyped) -> untyped
+    def delete_batch: (untyped queue_name, untyped msg_ids, ?prefixed: untyped, ?job_completion: bool) -> untyped
+    def delete_message: (untyped queue_name, untyped msg_id, ?prefixed: untyped, ?job_completion: bool) -> untyped
     def drop_queue: (untyped queue_name, ?prefixed: untyped) -> untyped
     def ensure_all_queues: () -> untyped
     def ensure_dead_letter_queue: (untyped name) -> untyped

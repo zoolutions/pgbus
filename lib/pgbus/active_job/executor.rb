@@ -433,7 +433,9 @@ module Pgbus
       # config.completed_jobs = :delete it deletes the message instead
       # (delete_message, or the completer's delete_batch): pgmq.delete is as
       # idempotent and returns false the same way, so the symbols keep their
-      # names and "archived" means "completed".
+      # names and "archived" means "completed". job_completion: true lets
+      # config.completion_synchronous_commit = false commit it with
+      # synchronous_commit off (issue #619).
       #
       # A `false` reported after our OWN retry is ambiguous, not a duplicate:
       # the first archive may well have committed with only its reply lost to
@@ -450,13 +452,13 @@ module Pgbus
                      # Spelled out, no `**` forward: on Ruby 3.3 that
                      # allocates per job even without keywords (#484 budget).
                      elsif @delete_completed && source_queue
-                       client.delete_message(source_queue, msg_id, prefixed: false)
+                       client.delete_message(source_queue, msg_id, prefixed: false, job_completion: true)
                      elsif @delete_completed
-                       client.delete_message(queue_name, msg_id)
+                       client.delete_message(queue_name, msg_id, job_completion: true)
                      elsif source_queue
-                       client.archive_message(source_queue, msg_id, prefixed: false)
+                       client.archive_message(source_queue, msg_id, prefixed: false, job_completion: true)
                      else
-                       client.archive_message(queue_name, msg_id)
+                       client.archive_message(queue_name, msg_id, job_completion: true)
                      end
           return :archived unless archived == false
 
