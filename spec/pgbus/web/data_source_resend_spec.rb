@@ -18,10 +18,16 @@ RSpec.describe Pgbus::Web::DataSource::Resend do
       "pgbus_uniqueness_key" => "order-1", "pgbus_uniqueness_strategy" => "until_executed" }
   end
   let(:holder) { ["default", 9, "2026-11-02 10:00:00+00"] }
+  # What acquire! stamps the row with (and keeps for this thread's bind!).
+  let(:acquired_at) { "2026-11-02 10:06:00.654321" }
 
   before do
     allow(Pgbus::BusRecord).to receive(:connection).and_return(mock_connection)
-    allow(Pgbus::UniquenessKey).to receive_messages(unbind!: nil, acquire!: true)
+    allow(Pgbus::UniquenessKey).to receive(:unbind!).and_return(nil)
+    allow(Pgbus::UniquenessKey).to receive(:acquire!) do |key, **|
+      (Thread.current[:pgbus_uniqueness_created_at] ||= {})[key] = acquired_at
+      true
+    end
     allow(Pgbus::UniquenessKey).to receive(:release_if_unbound!)
     allow(Pgbus::UniquenessKey).to receive(:bind!)
     allow(Pgbus::UniquenessKey).to receive(:release!)
@@ -29,15 +35,47 @@ RSpec.describe Pgbus::Web::DataSource::Resend do
     allow(Pgbus.logger).to receive(:warn)
   end
 
+  after { Thread.current[:pgbus_uniqueness_created_at] = nil }
+
   def resend(payload, &) = data_source.send(:resend_holding_uniqueness, payload, lock_queue: "default", holder: holder, &)
 
-  it "gives the key back and re-raises when the send fails" do
-    expect { resend(payload) { raise StandardError, "produce failed" } }.to raise_error(StandardError, "produce failed")
+  it "acquires a free key before the send and binds it to the new message by its stamp" do
+    expect(resend(payload) { "17" }).to be(true)
 
     expect(Pgbus::UniquenessKey).to have_received(:acquire!).with("order-1", queue_name: "default", msg_id: 0)
-    expect(Pgbus::UniquenessKey).to have_received(:release!).with("order-1")
+    expect(Pgbus::UniquenessKey).to have_received(:bind!)
+      .with("order-1", queue_name: "default", msg_id: 17, acquired_at: acquired_at)
+    expect(Pgbus::UniquenessKey).to have_received(:clear_bind_stamp!).with("order-1")
+  end
+
+  it "gives the key back by its stamp and re-raises when the send fails" do
+    expect { resend(payload) { raise StandardError, "produce failed" } }.to raise_error(StandardError, "produce failed")
+
+    expect(Pgbus::UniquenessKey).to have_received(:release_if_unbound!).with("order-1", acquired_before: acquired_at)
+    expect(Pgbus::UniquenessKey).not_to have_received(:release!)
     expect(Pgbus::UniquenessKey).not_to have_received(:bind!)
     expect(Pgbus::UniquenessKey).to have_received(:clear_bind_stamp!).with("order-1")
+  end
+
+  it "keeps the key when the send's outcome is unknown (the copy may be live)" do
+    stub_const("PG::Error", Class.new(StandardError)) unless defined?(PG::Error)
+
+    expect { resend(payload) { raise PG::Error, "server closed the connection" } }.to raise_error(PG::Error)
+
+    expect(Pgbus::UniquenessKey).not_to have_received(:release_if_unbound!)
+    expect(Pgbus.logger).to have_received(:warn) do |&block|
+      expect(block.call).to include("Re-send of order-1 may have been sent (PG::Error); its key stays held")
+    end
+  end
+
+  it "logs a failed give-back and raises the send's error" do
+    allow(Pgbus::UniquenessKey).to receive(:release_if_unbound!).and_raise(StandardError, "release failed")
+
+    expect { resend(payload) { raise ArgumentError, "produce failed" } }.to raise_error(ArgumentError, "produce failed")
+
+    expect(Pgbus.logger).to have_received(:warn) do |&block|
+      expect(block.call).to include("Giving back the uniqueness key order-1 failed: release failed")
+    end
   end
 
   it "logs a failed bind and still reports the copy as sent" do
@@ -45,11 +83,23 @@ RSpec.describe Pgbus::Web::DataSource::Resend do
 
     expect(resend(payload) { "17" }).to be(true)
 
-    expect(Pgbus::UniquenessKey).to have_received(:bind!).with("order-1", queue_name: "default", msg_id: 17,
-                                                                          acquired_at: nil)
     expect(Pgbus.logger).to have_received(:warn) do |&block|
       expect(block.call).to include("Uniqueness bind of re-sent order-1 failed: connection lost")
     end
+  end
+
+  # PGMQ sends on its own connection: a failed delete of the failed row
+  # cannot undo the send, so the live copy keeps its key.
+  it "binds a re-sent failed job's key before deleting its failed row, and keeps it when the delete fails" do
+    event = { "id" => 1, "queue_name" => "default", "msg_id" => 42, "payload" => JSON.generate(payload), "headers" => nil }
+    allow(mock_client).to receive(:send_message).and_return("17")
+    allow(mock_connection).to receive(:exec_delete).and_raise(StandardError, "delete failed")
+
+    expect { data_source.send(:resend_failed_event, event) }.to raise_error(StandardError, "delete failed")
+
+    expect(Pgbus::UniquenessKey).to have_received(:bind!)
+      .with("order-1", queue_name: "default", msg_id: 17, acquired_at: acquired_at)
+    expect(Pgbus::UniquenessKey).not_to have_received(:release_if_unbound!)
   end
 
   describe "the row the source message still holds" do
@@ -65,15 +115,14 @@ RSpec.describe Pgbus::Web::DataSource::Resend do
                    queue_name: "default"
       )
       expect(Pgbus::UniquenessKey).not_to have_received(:acquire!)
-      expect(Pgbus::UniquenessKey).to have_received(:bind!).with("order-1", queue_name: "default", msg_id: 17,
-                                                                            acquired_at: stamp)
+      expect(Pgbus::UniquenessKey).to have_received(:bind!)
+        .with("order-1", queue_name: "default", msg_id: 17, acquired_at: stamp)
     end
 
     it "goes by its stamp when the send fails" do
       expect { resend(payload) { raise StandardError, "produce failed" } }.to raise_error(StandardError)
 
       expect(Pgbus::UniquenessKey).to have_received(:release_if_unbound!).with("order-1", acquired_before: stamp)
-      expect(Pgbus::UniquenessKey).not_to have_received(:release!)
     end
   end
 
@@ -89,8 +138,9 @@ RSpec.describe Pgbus::Web::DataSource::Resend do
     end
   end
 
-  it "takes no key for a :while_executing payload, or one without a key" do
-    [payload.merge("pgbus_uniqueness_strategy" => "while_executing"), payload.except("pgbus_uniqueness_key")].each do |other|
+  it "takes no key for a :while_executing payload, one without a key, or one that is not an object" do
+    [payload.merge("pgbus_uniqueness_strategy" => "while_executing"), payload.except("pgbus_uniqueness_key"),
+     "a bare string", [1, 2]].each do |other|
       expect(resend(other) { "1" }).to be(true)
     end
 

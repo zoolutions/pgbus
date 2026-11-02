@@ -11,7 +11,7 @@ module Pgbus
       # copy's unbound row (one parked behind its concurrency limit) and free
       # the key while that copy waits. So the key is taken the way
       # Adapter#enqueue takes it: unbound before the send, bound to the new
-      # message after it, given back if the send fails.
+      # message after it, given back if the send fails before producing.
       module Resend
         private
 
@@ -29,17 +29,16 @@ module Pgbus
             return true
           end
 
-          taken = take_resend_lock(key, lock_queue, holder)
-          unless taken
+          stamp = take_resend_lock(key, lock_queue, holder)
+          unless stamp
             Pgbus.logger.warn { "[Pgbus::Web] Not re-sending #{payload["job_class"]}: uniqueness key #{key} is held by another copy" }
             return false
           end
 
-          stamp = taken unless taken == true
           begin
             msg_id = yield
-          rescue StandardError
-            give_back_resend_lock(key, stamp)
+          rescue StandardError => e
+            give_back_resend_lock(key, stamp, e)
             raise
           end
           bind_resent_lock(key, lock_queue, msg_id, stamp)
@@ -62,21 +61,22 @@ module Pgbus
         end
 
         # A failed job's payload as a new message on its queue, its failed row
-        # deleted with the send. Its message is gone, so it can hold only a
+        # deleted once it is sent. Its message is gone, so it can hold only a
         # row still bound to it (nil send time: no unbound row is its own).
+        # The delete comes after the key is bound: PGMQ sends on its own
+        # connection, so a failed delete cannot undo the send, and must not
+        # give back the key of a live copy.
         def resend_failed_event(event)
           payload = JSON.parse(event["payload"])
           headers = event["headers"]
           headers = JSON.parse(headers) if headers.is_a?(String)
           lock_queue = Uniqueness.lock_queue_name(event["queue_name"])
 
-          resend_holding_uniqueness(payload, lock_queue: lock_queue, holder: [lock_queue, event["msg_id"].to_i, nil]) do
-            connection.transaction do
-              msg_id = @client.send_message(event["queue_name"], payload, headers: headers)
-              delete_failed_row(event)
-              msg_id
-            end
+          sent = resend_holding_uniqueness(payload, lock_queue: lock_queue, holder: [lock_queue, event["msg_id"].to_i, nil]) do
+            @client.send_message(event["queue_name"], payload, headers: headers)
           end
+          delete_failed_row(event) if sent
+          sent
         end
 
         def delete_failed_row(event)
@@ -89,21 +89,40 @@ module Pgbus
         # taken over (it went without releasing it — a release that failed,
         # or a failed job whose message is gone), as a retry takes its
         # attempt's (Adapter#hand_lock_to_retry); else a free key is
-        # acquired. Returns the takeover's stamp, true when acquired, false
-        # when another copy holds the key. A newer copy parked after the
-        # source released its row was acquired after the source was sent, so
-        # the takeover never matches it.
+        # acquired. Returns the row's created_at stamp (bind! and the
+        # give-back match the row by it), nil when another copy holds the
+        # key. A newer copy parked after the source released its row was
+        # acquired after the source was sent, so the takeover never matches it.
         def take_resend_lock(key, lock_queue, holder)
           from_queue, from_msg_id, from_enqueued_at = holder
           stamp = UniquenessKey.unbind!(key, from_queue_name: from_queue, from_msg_id: from_msg_id,
                                              from_enqueued_at: from_enqueued_at, queue_name: lock_queue)
-          stamp || UniquenessKey.acquire!(key, queue_name: lock_queue, msg_id: 0)
+          return stamp if stamp
+          return unless UniquenessKey.acquire!(key, queue_name: lock_queue, msg_id: 0)
+
+          Thread.current[:pgbus_uniqueness_created_at]&.[](key)
         end
 
-        # No copy was sent: the row taken for it goes. A taken-over row is
-        # matched by its stamp, an acquired one is this thread's alone.
-        def give_back_resend_lock(key, stamp)
-          stamp ? UniquenessKey.release_if_unbound!(key, acquired_before: stamp) : UniquenessKey.release!(key)
+        # The send raised. Proven unsent, the row taken for it goes (matched
+        # by its stamp, so never a successor's). An error that may hide a
+        # committed send (a lost connection or reply, as Adapter#ambiguous_delivery?
+        # counts it) keeps the row: the copy may be live, and the reaper
+        # takes the row if it is not. A failed give-back is logged, so the
+        # send's error is the one that surfaces.
+        def give_back_resend_lock(key, stamp, error)
+          if ambiguous_resend?(error)
+            Pgbus.logger.warn { "[Pgbus::Web] Re-send of #{key} may have been sent (#{error.class}); its key stays held" }
+            return
+          end
+
+          UniquenessKey.release_if_unbound!(key, acquired_before: stamp)
+        rescue StandardError => e
+          Pgbus.logger.warn { "[Pgbus::Web] Giving back the uniqueness key #{key} failed: #{e.message}" }
+        end
+
+        def ambiguous_resend?(error)
+          (defined?(PGMQ::Errors::ConnectionError) && error.is_a?(PGMQ::Errors::ConnectionError)) ||
+            (defined?(PG::Error) && error.is_a?(PG::Error))
         end
 
         # The key a re-sent copy has to hold: only an enqueue-locked one. An
@@ -111,6 +130,8 @@ module Pgbus
         # re-enqueue, which went out with no row and whose copy releases none
         # (Executor#holds_uniqueness_row?): a row taken for it would never go.
         def resend_lock_key(payload)
+          return unless payload.is_a?(Hash)
+
           key = Uniqueness.extract_key(payload)
           strategy = Uniqueness.extract_strategy(payload)
           return unless key && Uniqueness::ENQUEUE_LOCK_STRATEGIES.include?(strategy)
@@ -120,7 +141,7 @@ module Pgbus
         end
 
         # The copy is live: a failed bind is logged, not raised. The row stays
-        # unbound and acquired before the send, so the copy's own release
+        # unbound and stamped before the send, so the copy's own release
         # still takes it.
         def bind_resent_lock(key, lock_queue, msg_id, stamp)
           UniquenessKey.bind!(key, queue_name: lock_queue, msg_id: msg_id.to_i, acquired_at: stamp)

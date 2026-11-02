@@ -151,6 +151,51 @@ RSpec.describe "Dashboard re-send of a uniqueness payload (integration)", :integ
       end
     end
 
+    # The issue's repro end to end: the newer copy is really parked behind
+    # limits_concurrency on_conflict: :block, and still runs after the
+    # refused retry.
+    describe "with a copy parked behind limits_concurrency on_conflict: :block" do
+      let(:slot) { "resend-slot-42" }
+
+      before do
+        Pgbus::Semaphore.delete_all
+        Pgbus::BlockedExecution.delete_all
+        state = outcome
+        queue_name = queue
+        stub_const("ResendUniqueJob", Class.new(ActiveJob::Base) do
+          include Pgbus::Uniqueness
+          include Pgbus::Concurrency
+
+          queue_as(queue_name)
+          ensures_uniqueness strategy: :until_executing, on_conflict: :discard, key: ->(id) { "resend-#{id}" }
+          limits_concurrency to: 1, key: ->(id) { "resend-slot-#{id}" }, on_conflict: :block
+
+          define_method(:perform) { |_id| raise ArgumentError, "boom" if state[:fail] }
+        end)
+      end
+
+      it "refuses the retry and leaves the parked copy runnable, holding its key" do
+        ResendUniqueJob.perform_later(42)
+        drive_to_dlq # dead-lettering signals the slot back
+        expect(Pgbus::Concurrency::Semaphore.acquire(slot, 1, 600)).to eq(:acquired) # another copy runs
+        ResendUniqueJob.perform_later(42)
+        expect(Pgbus::BlockedExecution.count).to eq(1)
+        parked_at = lock_row.created_at
+        expect(lock_row.msg_id).to eq(0)
+
+        expect(data_source.retry_dlq_message(dlq_name, dlq_rows.sole[:msg_id])).to be(false)
+
+        expect(dlq_rows.size).to eq(1)
+        expect(queued_msg_ids).to be_empty
+        expect(Pgbus::BlockedExecution.count).to eq(1)
+        expect(lock_row).to have_attributes(msg_id: 0, created_at: parked_at)
+
+        Pgbus::Concurrency::Semaphore.signal(slot, client: client) # the running copy finishes
+        run_queued_copy
+        expect(lock_row).to be_nil
+      end
+    end
+
     # The executor's release at dead-letter time failed: the row is still
     # bound to the message the DLQ copy came from. Nobody live holds it, so
     # the copy takes it over (the row Discard would release).

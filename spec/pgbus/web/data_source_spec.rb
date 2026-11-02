@@ -534,7 +534,6 @@ RSpec.describe Pgbus::Web::DataSource do
     before do
       allow(mock_connection).to receive(:select_one).with(anything, "Pgbus Failed Event", [1]).and_return(event)
       allow(mock_connection).to receive(:exec_delete)
-      allow(mock_connection).to receive(:transaction).and_yield
       allow(mock_client).to receive(:set_visibility_timeout)
       allow(mock_client).to receive(:send_message)
     end
