@@ -102,8 +102,9 @@ RSpec.describe ":while_executing duplicates (integration)", :integration do
 
     it "skips the copy as :reject instead of discarding it" do
       RollupJob.perform_later(42)
-      payload = JSON.parse(client.read_message("default", vt: 0).message)
-      ActiveRecord::Base.connection.execute("DELETE FROM pgmq.q_#{config.queue_name("default")}")
+      enqueued = client.read_message("default", vt: 30)
+      payload = JSON.parse(enqueued.message)
+      client.delete_message("default", enqueued.msg_id.to_i)
       legacy = payload.except(Pgbus::Uniqueness::ON_CONFLICT_KEY)
       expect(legacy).to include(Pgbus::Uniqueness::STRATEGY_KEY => "while_executing")
       client.send_message("default", legacy)
