@@ -67,7 +67,9 @@ class Views::Docs::Pages::Observability < DocsUI::Page
           [ [ :code, "pgbus.executor.execute" ], "Every job execution (wraps the run)." ],
           [ [ :code, "pgbus.job_completed" ], "A job finished successfully." ],
           [ [ :code, "pgbus.job_failed" ], "A job raised." ],
-          [ [ :code, "pgbus.job_dead_lettered" ], "A job exceeded max_retries." ],
+          [ [ :code, "pgbus.job_dead_lettered" ], [ :md, "A job exceeded max_retries (`reason`: `max_retries_exceeded` or `uniqueness_conflict`)." ] ],
+          [ [ :code, "pgbus.job_skipped" ], "A :while_executing copy met another copy holding its key and was left for a later delivery." ],
+          [ [ :code, "pgbus.job_discarded" ], "A :while_executing copy met another copy holding its key and was dropped (on_conflict: :discard)." ],
           [ [ :code, "pgbus.event_processed" ], "An event handler ran." ],
           [ [ :code, "pgbus.event_failed" ], "An event handler raised." ],
           [ [ :code, "pgbus.event_dead_lettered" ], "The consumer moved an event that exceeded max_retries to its DLQ." ],
@@ -107,7 +109,9 @@ class Views::Docs::Pages::Observability < DocsUI::Page
       RUBY
       md <<~'MD'
         Emitted metrics are all `pgbus_`-prefixed with low-cardinality tags:
-        `pgbus_queue_job_count`, `pgbus_job_duration_ms`, `pgbus_event_count`
+        `pgbus_queue_job_count` (`status` `processed`, `failed`, `skipped`,
+        `discarded` or `dead_lettered`; `reason` on a skip, a discard and a
+        dead letter), `pgbus_job_duration_ms`, `pgbus_event_count`
         (`status` `processed`, `failed`, `skipped` or `dead_lettered`),
         `pgbus_messages_sent` / `_read`, `pgbus_stream_broadcast_count`,
         `pgbus_outbox_published`, `pgbus_recurring_enqueued`,

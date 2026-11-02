@@ -149,15 +149,33 @@ class Views::Docs::Pages::ConcurrencyUniqueness < DocsUI::Page
         failed attempt releases it so the retry can run, and a row left behind
         by a crashed attempt is re-acquired by the same message on its next
         read rather than treated as a duplicate.
+
+        The enqueue-time strategies meet a duplicate when it is enqueued;
+        `:while_executing` meets it when a worker reads a copy while another
+        copy holds the key:
       MD
       DocsUI::Table(
-        [ "Conflict policy", "Behavior" ],
+        [ "Conflict policy", "At enqueue (:until_executed, :until_executing)", "At execution (:while_executing)" ],
         [
-          [ [ :code, ":reject" ], [ :md, "Raise `Pgbus::JobNotUnique` (default)" ] ],
-          [ [ :code, ":discard" ], "Silently drop the duplicate" ],
-          [ [ :code, ":log" ], "Log a warning and drop" ]
+          [ [ :code, ":reject" ], [ :md, "Raise `Pgbus::JobNotUnique` (default)" ],
+            "Leave the copy queued for a backed-off redelivery: it runs once the holder is done, or dead-letters as uniqueness_conflict if skipped past max_retries" ],
+          [ [ :code, ":discard" ], "Silently drop the duplicate",
+            [ :md, "Complete the copy without running it (`pgbus.job_discarded`)" ] ],
+          [ [ :code, ":log" ], "Log a warning and drop", [ :md, "As `:reject`, and log the skip at warn" ] ]
         ]
       )
+      md <<~'MD'
+        A `:while_executing` copy left queued comes back after
+        `visibility_timeout × 2^(read_ct − 1)` (jittered, capped at
+        `retry_backoff_max`, never below `visibility_timeout`), so repeated
+        skips stretch over a long holder's run; each skip emits
+        `pgbus.job_skipped`. PGMQ counts every read toward `max_retries`, so a
+        copy skipped past `max_retries` still dead-letters, and when none of
+        its attempts failed its DLQ headers say `reason: uniqueness_conflict`. A recurring `:while_executing` task
+        carries its key, so a run that outlasts its interval is not
+        overlapped by the next. For a trailing run that sees writes enqueued
+        while the current run executes, use `:until_executing`.
+      MD
       md <<~'MD'
         Add the table with `rails generate pgbus:add_uniqueness_keys` (append
         `--database=pgbus` for a separate database).

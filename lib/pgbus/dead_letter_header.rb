@@ -20,6 +20,9 @@ module Pgbus
     ORIGINAL_KEY = "pgbus_original_headers"
     VERSION = 1
     REASON_MAX_RETRIES = "max_retries_exceeded"
+    # A :while_executing duplicate skipped on every read while another
+    # message held its key, until read_ct passed max_retries (issue #629).
+    REASON_UNIQUENESS_CONFLICT = "uniqueness_conflict"
     # The release that started writing the block: rows without it predate it.
     SINCE = "0.18.0"
     MESSAGE_LIMIT = 1_000

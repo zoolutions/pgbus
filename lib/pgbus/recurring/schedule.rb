@@ -198,12 +198,15 @@ module Pgbus
         args = task.arguments || []
         return default_uniqueness_key(job_class, args) unless key_proc
 
-        begin
+        key = begin
           args.empty? ? key_proc.call : key_proc.call(*args)
         rescue StandardError => e
           Pgbus.logger.warn { "[Pgbus] Could not resolve uniqueness key for #{task.key}: #{e.message}" }
           raise
         end
+        # As Uniqueness.resolve_key does for an ordinary enqueue: a record
+        # becomes its GlobalID, so both paths key one record the same way.
+        key.respond_to?(:to_global_id) ? key.to_global_id.to_s : key
       end
 
       # Class-name default for the scheduler path, args-qualified so distinct
@@ -217,8 +220,12 @@ module Pgbus
 
       # Inject uniqueness metadata into the payload so the executor releases
       # the lock: after the job completes (:until_executed) or when it starts
-      # (:until_executing, issue #628). Not for :while_executing — its locks
-      # are acquired at execution time by the executor, not by the scheduler.
+      # (:until_executing, issue #628). For :while_executing the executor
+      # takes the lock at execution start, and only when the payload carries
+      # the key, so the scheduler takes none but carries key, strategy and
+      # on_conflict (issue #629): a run that outlasts its interval is not
+      # overlapped by the next. A key proc that raises propagates, so the
+      # tick enqueues nothing rather than a run without that protection.
       # The key is the one the row was acquired under when there is one: a
       # key proc resolved again could answer differently, and the executor
       # would release a key nobody holds and orphan the acquired row.
@@ -230,15 +237,14 @@ module Pgbus
 
         config = job_class.pgbus_uniqueness
         return payload unless config
-        return payload unless Uniqueness::ENQUEUE_LOCK_STRATEGIES.include?(config[:strategy])
+        return payload unless Uniqueness::VALID_STRATEGIES.include?(config[:strategy])
 
         key = acquired_key.is_a?(String) ? acquired_key : resolve_uniqueness_key(job_class, config, task)
         return payload unless key
 
-        payload.merge(
-          Pgbus::Uniqueness::METADATA_KEY => key,
-          Pgbus::Uniqueness::STRATEGY_KEY => config[:strategy].to_s
-        )
+        metadata = { Uniqueness::METADATA_KEY => key, Uniqueness::STRATEGY_KEY => config[:strategy].to_s }
+        metadata[Uniqueness::ON_CONFLICT_KEY] = config[:on_conflict].to_s if config[:strategy] == :while_executing
+        payload.merge(metadata)
       end
     end
   end

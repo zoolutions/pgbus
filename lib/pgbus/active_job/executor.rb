@@ -35,7 +35,11 @@ module Pgbus
           # it: the DLQ copy carries it in its headers (issue #495).
           last_error = FailedEventRecorder.last_error(queue_name: queue_name, msg_id: message.msg_id.to_i,
                                                       source_queue: physical_queue(queue_name, source_queue))
-          handle_dead_letter(message, queue_name, payload, source_queue: source_queue, last_error: last_error)
+          # Before the release below: the lookup asks whether the key's row is
+          # still this message's own (a crashed attempt's), see dead_letter_reason.
+          reason = dead_letter_reason(message, queue_name, payload, last_error)
+          handle_dead_letter(message, queue_name, payload, source_queue: source_queue, last_error: last_error,
+                                                           reason: reason)
           FailedEventRecorder.clear!(queue_name: queue_name, msg_id: message.msg_id.to_i,
                                      source_queue: physical_queue(queue_name, source_queue))
           signal_concurrency(payload)
@@ -50,7 +54,8 @@ module Pgbus
             provider_job_id: payload["provider_job_id"],
             read_ct: read_count,
             msg_id: message.msg_id.to_i,
-            error: last_error&.dig(:error_class)
+            error: last_error&.dig(:error_class),
+            reason: reason
           )
           Pgbus.logger.debug { "[Pgbus::Executor] dead_lettered #{log_tag(message, queue_name)} job_class=#{job_class}" }
           return :dead_lettered
@@ -66,17 +71,15 @@ module Pgbus
             # released on completion or DLQ.
             nil
           when :while_executing
-            # Acquire the lock now, bound to this message. If another worker is
-            # already executing this job, skip it — VT will expire and it'll be
-            # retried. A row left by a crashed attempt of THIS message is
+            # Acquire the lock now, bound to this message. If another message
+            # holds it, the job's on_conflict decides (issue #629): :discard
+            # drops this copy, :reject and :log leave it for a backed-off
+            # redelivery. A row left by a crashed attempt of THIS message is
             # re-acquired, not treated as a duplicate.
             acquired = Uniqueness.acquire_execution_lock(
               uniqueness_key, payload, msg_id: message.msg_id.to_i, queue_name: queue_name
             )
-            unless acquired
-              Pgbus.logger.info { "[Pgbus] Skipping duplicate execution for #{job_class}" }
-              return :skipped
-            end
+            return handle_uniqueness_conflict(message, queue_name, payload, uniqueness_key, source_queue) unless acquired
           when :until_executing
             # A debounce (issue #628): the row guarded the queued copy, and
             # goes before perform so an enqueue that arrives while this runs
@@ -387,13 +390,88 @@ module Pgbus
                   RetryBackoff.compute_delay(attempt: attempt)
                 end
 
+        set_message_visibility(message, queue_name, delay, source_queue)
+      rescue StandardError => e
+        Pgbus.logger.debug { "[Pgbus] Retry backoff VT update failed: #{e.message}" }
+      end
+
+      def set_message_visibility(message, queue_name, delay, source_queue)
         if source_queue
           client.set_visibility_timeout(source_queue, message.msg_id.to_i, vt: delay, prefixed: false)
         else
           client.set_visibility_timeout(queue_name, message.msg_id.to_i, vt: delay)
         end
-      rescue StandardError => e
-        Pgbus.logger.debug { "[Pgbus] Retry backoff VT update failed: #{e.message}" }
+      end
+
+      # A :while_executing message whose key another message holds (issue
+      # #629). The duplicate holds no uniqueness row, so nothing is released.
+      def handle_uniqueness_conflict(message, queue_name, payload, key, source_queue)
+        policy = Uniqueness.extract_on_conflict(payload)
+        if policy == :discard
+          discard_duplicate(message, queue_name, payload, key, source_queue)
+        else
+          skip_duplicate(message, queue_name, payload, key, source_queue, policy)
+        end
+      end
+
+      # :discard — the duplicate will never run: complete it, then the
+      # bookkeeping the dead-letter path does for such a message. Lost to
+      # another worker that completed it first: that worker owns the signals.
+      def discard_duplicate(message, queue_name, payload, key, source_queue)
+        msg_id = message.msg_id.to_i
+        if complete_from(queue_name, msg_id, source_queue: source_queue) == :already_archived
+          Pgbus.logger.warn do
+            "[Pgbus::Executor] already #{@completed_word} elsewhere, skipping signals " \
+              "#{log_tag(message, queue_name)} job_class=#{payload["job_class"]}"
+          end
+          return :duplicate
+        end
+        if message.read_ct.to_i > 1
+          FailedEventRecorder.clear!(queue_name: queue_name, msg_id: msg_id,
+                                     source_queue: physical_queue(queue_name, source_queue))
+        end
+        signal_concurrency(payload)
+        signal_batch_discarded(payload)
+        instrument("pgbus.job_discarded", queue: queue_name, job_class: payload["job_class"], job_id: payload["job_id"],
+                                          provider_job_id: payload["provider_job_id"], msg_id: msg_id, reason: "uniqueness")
+        Pgbus.logger.info do
+          "[Pgbus] Discarded duplicate #{payload["job_class"]}: uniqueness key #{key} is held by another message " \
+            "(#{log_tag(message, queue_name)})"
+        end
+        :discarded
+      end
+
+      # :reject / :log — the copy still runs once the holder is done, but each
+      # skip backs its redelivery off so the skips stretch over the holder's
+      # run. read_ct cannot be decremented, so a skip still counts toward
+      # max_retries; the dead-letter reason says when that is why it died.
+      def skip_duplicate(message, queue_name, payload, key, source_queue, policy)
+        delay = skip_delay(message, payload)
+        begin
+          set_message_visibility(message, queue_name, delay, source_queue)
+        rescue StandardError => e
+          Pgbus.logger.warn { "[Pgbus] Skip backoff VT update failed: #{e.message}" }
+        end
+        text = "[Pgbus] Skipping duplicate execution for #{payload["job_class"]}: uniqueness key #{key} is held by " \
+               "another message (#{log_tag(message, queue_name)}); next delivery in #{delay}s"
+        policy == :log ? Pgbus.logger.warn { text } : Pgbus.logger.info { text }
+        instrument("pgbus.job_skipped", queue: queue_name, job_class: payload["job_class"], job_id: payload["job_id"],
+                                        provider_job_id: payload["provider_job_id"], msg_id: message.msg_id.to_i,
+                                        read_ct: message.read_ct.to_i, on_conflict: policy, vt: delay)
+        :skipped
+      end
+
+      # visibility_timeout * 2^(read_ct - 1), jittered and capped at the job's
+      # (or the global) retry_backoff_max, and never below visibility_timeout:
+      # a skip never comes back sooner than the read's own timeout would.
+      def skip_delay(message, payload)
+        vt = config.visibility_timeout
+        job_class = resolve_job_class(payload)
+        overrides = (job_class.respond_to?(:pgbus_retry_backoff_config) && job_class.pgbus_retry_backoff_config) || {}
+        max = [overrides[:max] || config.retry_backoff_max, vt].max
+        delay = RetryBackoff.compute_delay(attempt: message.read_ct.to_i, base: vt, max: max,
+                                           jitter: overrides[:jitter] || config.retry_backoff_jitter)
+        [delay, vt].max
       end
 
       def resolve_job_class(payload)
@@ -513,14 +591,37 @@ module Pgbus
         defined?(PGMQ::Errors::ConnectionError) && error.is_a?(PGMQ::Errors::ConnectionError)
       end
 
-      def handle_dead_letter(message, queue_name, payload, source_queue: nil, last_error: nil)
+      # uniqueness_conflict for a :while_executing message no attempt of
+      # which failed: it was skipped on every read until read_ct passed
+      # max_retries (issue #629). Not whether the key is held at this read:
+      # the backed-off skips span minutes and the holder may have finished
+      # inside the last one. The one other way to die without a failed-event
+      # row is a crash loop, and a crashed attempt leaves the key's row bound
+      # to this message: that keeps max_retries_exceeded. A failed lookup
+      # keeps the stronger signal, the missing failed-event row.
+      def dead_letter_reason(message, queue_name, payload, last_error)
+        return DeadLetterHeader::REASON_MAX_RETRIES if last_error
+
+        key = Uniqueness.extract_key(payload)
+        return DeadLetterHeader::REASON_MAX_RETRIES unless key && Uniqueness.extract_strategy(payload) == :while_executing
+
+        own = UniquenessKey.bound_to?(key, queue_name: Uniqueness.lock_queue_name(queue_name, config: config),
+                                           msg_id: message.msg_id.to_i)
+        own ? DeadLetterHeader::REASON_MAX_RETRIES : DeadLetterHeader::REASON_UNIQUENESS_CONFLICT
+      rescue StandardError => e
+        Pgbus.logger.warn { "[Pgbus] Uniqueness row lookup failed, dead-lettering as uniqueness_conflict: #{e.message}" }
+        DeadLetterHeader::REASON_UNIQUENESS_CONFLICT
+      end
+
+      def handle_dead_letter(message, queue_name, payload, source_queue: nil, last_error: nil,
+                             reason: DeadLetterHeader::REASON_MAX_RETRIES)
         Pgbus.logger.warn do
           job_class = payload["job_class"] || "unknown"
           error = last_error ? " (last error: #{last_error[:error_class]})" : ""
           "[Pgbus] Moving job #{job_class} to dead letter queue after #{message.read_ct} attempts#{error}"
         end
         headers = DeadLetterHeader.build(
-          existing: message.headers, reason: DeadLetterHeader::REASON_MAX_RETRIES, source: "worker",
+          existing: message.headers, reason: reason, source: "worker",
           source_queue: source_queue || config.queue_name(queue_name), source_msg_id: message.msg_id.to_i,
           source_enqueued_at: message.enqueued_at, attempts: message.read_ct.to_i,
           max_retries: config.max_retries, error: last_error

@@ -60,6 +60,8 @@ module Pgbus
             subscribe("pgbus.job_completed") { |event| on_job_completed(event) },
             subscribe("pgbus.job_failed") { |event| on_job_failed(event) },
             subscribe("pgbus.job_dead_lettered") { |event| on_job_dead_lettered(event) },
+            subscribe("pgbus.job_skipped") { |event| on_job_skipped(event) },
+            subscribe("pgbus.job_discarded") { |event| on_job_discarded(event) },
             subscribe("pgbus.job_visibility_extended") { |event| on_job_visibility_extended(event) },
             subscribe("pgbus.event_processed") { |event| on_event_processed(event) },
             subscribe("pgbus.event_failed") { |event| on_event_failed(event) },
@@ -121,11 +123,35 @@ module Pgbus
           )
         end
 
+        # reason: max_retries_exceeded, or uniqueness_conflict for a
+        # :while_executing duplicate skipped until it ran out of reads (#629).
         def on_job_dead_lettered(event)
           payload = event.payload
           backend.increment(
             "#{METRIC_PREFIX}queue_job_count", 1,
-            compact(queue: payload[:queue], job_class: payload[:job_class], status: "dead_lettered")
+            compact(queue: payload[:queue], job_class: payload[:job_class], status: "dead_lettered",
+                    reason: payload[:reason])
+          )
+        end
+
+        # A :while_executing duplicate left for a later delivery because
+        # another message held its key (issue #629): counted per skip, so one
+        # copy waiting out a long holder counts several times.
+        def on_job_skipped(event)
+          payload = event.payload
+          backend.increment(
+            "#{METRIC_PREFIX}queue_job_count", 1,
+            compact(queue: payload[:queue], job_class: payload[:job_class], status: "skipped", reason: "uniqueness")
+          )
+        end
+
+        # A :while_executing duplicate dropped under on_conflict: :discard.
+        def on_job_discarded(event)
+          payload = event.payload
+          backend.increment(
+            "#{METRIC_PREFIX}queue_job_count", 1,
+            compact(queue: payload[:queue], job_class: payload[:job_class], status: "discarded",
+                    reason: payload[:reason])
           )
         end
 

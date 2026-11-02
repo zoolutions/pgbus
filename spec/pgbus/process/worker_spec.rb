@@ -1184,6 +1184,32 @@ RSpec.describe Pgbus::Process::Worker do
       worker.send(:process_message, message, "default")
       expect(circuit_breaker).to have_received(:record_failure).with("default")
     end
+
+    # Issue #629: a uniqueness skip or discard ran no job, so it tells the
+    # breaker nothing either way: record_success would wipe the failure count
+    # of a queue whose real jobs are failing while duplicates are skipped.
+    %i[skipped discarded].each do |outcome|
+      it "leaves the circuit breaker alone when executor returns :#{outcome}" do
+        allow(executor).to receive(:execute).and_return(outcome)
+        worker.send(:process_message, message, "default")
+        expect(circuit_breaker).not_to have_received(:record_success)
+        expect(circuit_breaker).not_to have_received(:record_failure)
+        expect(worker.stats[:jobs_processed]).to eq(1)
+        expect(worker.stats[:jobs_failed]).to eq(0)
+      end
+    end
+
+    # A skipped copy comes back and is processed later: counting it now would
+    # count one job twice. A discarded copy is finished.
+    it "counts a discard but not a skip in the processed rate" do
+      allow(executor).to receive(:execute).and_return(:skipped, :discarded)
+      allow(worker.rate_counter).to receive(:increment).and_call_original
+      worker.send(:process_message, message, "default")
+      expect(worker.rate_counter).not_to have_received(:increment).with(:processed)
+
+      worker.send(:process_message, message, "default")
+      expect(worker.rate_counter).to have_received(:increment).with(:processed).once
+    end
   end
 
   describe "circuit breaker integration" do

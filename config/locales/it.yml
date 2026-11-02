@@ -224,6 +224,7 @@ it:
         retried_before:
           one: Già riprovato dalla DLQ una volta.
           other: Già riprovato dalla DLQ %{count} volte.
+        uniqueness_conflict_html: Saltato in tutte le %{attempts} letture (max %{max}) mentre un’altra copia del job deteneva la sua chiave di unicità — nessun tentativo eseguito
       show:
         back: Torna a DLQ
         context: Contesto

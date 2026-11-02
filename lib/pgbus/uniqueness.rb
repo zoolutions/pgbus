@@ -43,7 +43,10 @@ module Pgbus
   #
   #   :while_executing — Lock acquired at execution start, released on completion.
   #                      Allows duplicate enqueue (multiple copies in queue) but only one
-  #                      executes at a time.
+  #                      executes at a time. A copy read while another message holds
+  #                      the key follows on_conflict (issue #629): :discard completes
+  #                      it without running; :reject and :log leave it for a
+  #                      backed-off redelivery (:log warns).
   #
   # Usage:
   #   class ImportOrderJob < ApplicationJob
@@ -60,6 +63,9 @@ module Pgbus
 
     METADATA_KEY = "pgbus_uniqueness_key"
     STRATEGY_KEY = "pgbus_uniqueness_strategy"
+    # The on_conflict policy of a :while_executing job, read by the executor
+    # when the lock is held by another message (issue #629).
+    ON_CONFLICT_KEY = "pgbus_uniqueness_on_conflict"
     # Synthetic queue stored before produce when the caller does not know the
     # real queue yet. Never a live PGMQ queue — the reaper must not probe
     # pgmq.q_<prefix>_pending for these rows (issue #418).
@@ -169,10 +175,9 @@ module Pgbus
         key = resolve_key(active_job)
         return payload_hash unless key
 
-        payload_hash.merge(
-          METADATA_KEY => key,
-          STRATEGY_KEY => config[:strategy].to_s
-        )
+        metadata = { METADATA_KEY => key, STRATEGY_KEY => config[:strategy].to_s }
+        metadata[ON_CONFLICT_KEY] = config[:on_conflict].to_s if config[:strategy] == :while_executing
+        payload_hash.merge(metadata)
       end
 
       def extract_key(payload)
@@ -181,6 +186,14 @@ module Pgbus
 
       def extract_strategy(payload)
         payload&.dig(STRATEGY_KEY)&.to_sym
+      end
+
+      # The :while_executing policy at the skip point. :reject when the payload
+      # carries none (enqueued before the key existed) or one this version does not know:
+      # that keeps the redelivery such a message had.
+      def extract_on_conflict(payload)
+        policy = payload&.dig(ON_CONFLICT_KEY)&.to_sym
+        VALID_CONFLICTS.include?(policy) ? policy : :reject
       end
 
       def uniqueness_config(active_job)

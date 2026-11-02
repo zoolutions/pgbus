@@ -523,11 +523,18 @@ module Pgbus
       def process_message(message, queue_name, source_queue: nil)
         result = @executor.execute(message, queue_name, source_queue: source_queue)
         @jobs_processed.increment
-        @rate_counter.increment(:processed)
-        if result == :failed
+        # A skipped uniqueness duplicate comes back later: counting it now
+        # would count one job twice (issue #629).
+        @rate_counter.increment(:processed) unless result == :skipped
+        case result
+        when :failed
           @jobs_failed.increment
           @rate_counter.increment(:failed)
           @circuit_breaker.record_failure(queue_name)
+        when :skipped, :discarded
+          # No job ran: neither a failure nor a success that would wipe the
+          # failure streak of a queue whose real jobs keep failing.
+          nil
         else
           @circuit_breaker.record_success(queue_name)
         end

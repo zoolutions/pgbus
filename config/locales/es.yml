@@ -224,6 +224,7 @@ es:
         retried_before:
           one: Reintentado desde la DLQ una vez antes.
           other: Reintentado desde la DLQ %{count} veces antes.
+        uniqueness_conflict_html: Omitido en las %{attempts} lecturas (máx. %{max}) mientras otra copia del job tenía su clave de unicidad — no se ejecutó ningún intento
       show:
         back: Volver a DLQ
         context: Contexto

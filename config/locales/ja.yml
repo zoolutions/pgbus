@@ -224,6 +224,7 @@ ja:
         retried_before:
           one: 以前に DLQ から 1 回リトライされました。
           other: 以前に DLQ から %{count} 回リトライされました。
+        uniqueness_conflict_html: 別のコピーが一意性キーを保持していたため、%{attempts} 回の読み取りすべてでスキップされました(上限 %{max} 回) — 試行は一度も実行されていません
       show:
         back: DLQに戻る
         context: コンテキスト

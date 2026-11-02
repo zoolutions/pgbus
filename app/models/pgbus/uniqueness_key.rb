@@ -191,6 +191,17 @@ module Pgbus
       )
     end
 
+    # True when the key's row is bound to this message (queue + msg_id): its
+    # own attempt holds it, as a crashed attempt leaves it. The executor asks
+    # this when it dead-letters a :while_executing message that never failed
+    # (issue #629): a crash loop, not a uniqueness conflict.
+    def self.bound_to?(lock_key, queue_name:, msg_id:)
+      !connection.select_value(
+        "SELECT 1 FROM #{table_name} WHERE lock_key = $1 AND queue_name = $2 AND msg_id = $3 LIMIT 1",
+        "UniquenessKey Bound To", [lock_key, queue_name.to_s, msg_id.to_i]
+      ).nil?
+    end
+
     # Check if a key is currently locked.
     def self.locked?(lock_key)
       result = connection.select_value(

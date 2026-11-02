@@ -124,7 +124,7 @@ module Pgbus
         end
 
         def sample_stats
-          { total_queues: 8, total_depth: 145, total_visible: 115, active_processes: 10, failed_count: 5, dlq_depth: 4,
+          { total_queues: 8, total_depth: 146, total_visible: 116, active_processes: 10, failed_count: 5, dlq_depth: 5,
             recurring_count: PAGED_ROWS, throughput_rate: 42.7, total_dead_tuples: 1_250, tables_needing_vacuum: 1,
             oldest_transaction_age_sec: 8, parked_total: 5, oldest_parked_age_sec: 300, slots_held: 3,
             keys_at_limit: 1 }
@@ -146,8 +146,8 @@ module Pgbus
               oldest_msg_age_sec: 90, oldest_claimable_age_sec: 80, newest_msg_age_sec: 3, total_messages: 2_100 },
             { name: "pgbus_default_p1", queue_length: 9, queue_visible_length: 9, parked_length: 0,
               oldest_msg_age_sec: 420, oldest_claimable_age_sec: 420, newest_msg_age_sec: 12, total_messages: 3_900 },
-            { name: "pgbus_default_dlq", queue_length: 3, queue_visible_length: 3, parked_length: 0,
-              oldest_msg_age_sec: 18_000, oldest_claimable_age_sec: 18_000, newest_msg_age_sec: 3600, total_messages: 47 },
+            { name: "pgbus_default_dlq", queue_length: 4, queue_visible_length: 4, parked_length: 0,
+              oldest_msg_age_sec: 18_000, oldest_claimable_age_sec: 18_000, newest_msg_age_sec: 1800, total_messages: 47 },
             { name: "pgbus_events_dlq", queue_length: 1, queue_visible_length: 1, parked_length: 0,
               oldest_msg_age_sec: 900, oldest_claimable_age_sec: 900, newest_msg_age_sec: 900, total_messages: 4 }
           ]
@@ -232,7 +232,8 @@ module Pgbus
         # One row per thing the DLQ page explains (issue #495): a job that died
         # of a recorded error, one whose last attempts crashed silently and was
         # already retried from the DLQ once, an event whose handler error was
-        # not recorded, and a legacy row dead-lettered before the header existed.
+        # not recorded, a legacy row dead-lettered before the header existed,
+        # and a :while_executing copy skipped on every read (issue #629).
         def sample_dlq_messages(now)
           [
             { msg_id: 501, queue_name: "pgbus_default_dlq", read_ct: 0, enqueued_at: (now - 7200).utc.iso8601,
@@ -258,13 +259,19 @@ module Pgbus
             { msg_id: 41, queue_name: "pgbus_events_dlq", read_ct: 0, enqueued_at: now - 900,
               vt: now - 900, last_read_at: nil, headers: sample_dead_letter(now - 900, "consumer", "pgbus_events"),
               message: { event_id: "evt-41", payload: { order_id: 1042 }, published_at: (now - 1500).utc.iso8601,
-                         headers: { routing_key: "orders.created" } }.to_json }
+                         headers: { routing_key: "orders.created" } }.to_json },
+            { msg_id: 504, queue_name: "pgbus_default_dlq", read_ct: 0, enqueued_at: (now - 1800).utc.iso8601,
+              vt: (now - 1800).utc.iso8601, last_read_at: nil,
+              headers: sample_dead_letter(now - 1800, "worker", "pgbus_default",
+                                          reason: Pgbus::DeadLetterHeader::REASON_UNIQUENESS_CONFLICT),
+              message: { job_class: "RollupJob", job_id: "dlq-ddd", arguments: [{ parent_id: 42 }] }.to_json }
           ]
         end
 
-        def sample_dead_letter(died_at, source, source_queue, existing: nil, **error)
+        def sample_dead_letter(died_at, source, source_queue, existing: nil,
+                               reason: Pgbus::DeadLetterHeader::REASON_MAX_RETRIES, **error)
           Pgbus::DeadLetterHeader.build(
-            existing: existing, reason: Pgbus::DeadLetterHeader::REASON_MAX_RETRIES, source: source,
+            existing: existing, reason: reason, source: source,
             source_queue: source_queue, attempts: 6, max_retries: 5, now: died_at.utc,
             error: error.empty? ? nil : error.merge(failed_at: (died_at - 60).utc.iso8601)
           )
