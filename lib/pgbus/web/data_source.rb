@@ -7,6 +7,7 @@ module Pgbus
     class DataSource
       include JobList
       include DeadLetter
+      include Resend
       include ListCounts
       include QueueSummary
       include EventList
@@ -299,20 +300,7 @@ module Pgbus
         # duplicate (the original is still in the queue waiting for retry).
         # Falls back to enqueueing a fresh copy only if the original is gone
         # (e.g., already moved to DLQ).
-        physical = failed_message_queue(event)
-        if physical
-          @client.set_visibility_timeout(physical, event["msg_id"].to_i, vt: 0, prefixed: false)
-        else
-          payload = JSON.parse(event["payload"])
-          headers = event["headers"]
-          headers = JSON.parse(headers) if headers.is_a?(String)
-          @client.send_message(event["queue_name"], payload, headers: headers)
-        end
-
-        connection.exec_delete(
-          "DELETE FROM pgbus_failed_events WHERE id = $1", "Pgbus Delete Failed Event", [id.to_i]
-        )
-        true
+        retry_failed_job(event)
       rescue StandardError => e
         Pgbus.logger.debug { "[Pgbus::Web] Error retrying failed event #{id}: #{e.message}" }
         false
@@ -336,27 +324,23 @@ module Pgbus
 
       # Failed jobs only, like discard_all_failed: an event's message is still
       # in its handler queue, so a re-sent copy would run the handler twice.
+      # Each job goes back the way Retry sends it (#retry_failed_job): a
+      # message still queued gets its vt reset, one that is gone is re-sent.
+      # A row it cannot retry (the re-send's key is held, or a call fails)
+      # stays, and the walk goes on past it by id.
       def retry_all_failed
         count = 0
+        last_id = 0
         loop do
           batch = connection.select_all(
-            "SELECT * FROM pgbus_failed_events WHERE #{NOT_HANDLER_QUEUE} ORDER BY id LIMIT 100", "Pgbus Retry Batch",
-            [handler_queue_names_literal]
+            "SELECT * FROM pgbus_failed_events WHERE #{NOT_HANDLER_QUEUE} AND id > $2 ORDER BY id LIMIT 100",
+            "Pgbus Retry Batch", [handler_queue_names_literal, last_id]
           ).to_a
           break if batch.empty?
 
           batch.each do |event|
-            payload = JSON.parse(event["payload"])
-            headers = event["headers"]
-            headers = JSON.parse(headers) if headers.is_a?(String)
-
-            connection.transaction do
-              @client.send_message(event["queue_name"], payload, headers: headers)
-              connection.exec_delete(
-                "DELETE FROM pgbus_failed_events WHERE id = $1", "Pgbus Delete Failed Event", [event["id"].to_i]
-              )
-            end
-            count += 1
+            last_id = event["id"].to_i
+            count += 1 if retry_failed_job(event)
           rescue StandardError => e
             Pgbus.logger.error { "[Pgbus::Web] Failed to retry event #{event["id"]}: #{e.message}" }
           end

@@ -534,6 +534,7 @@ RSpec.describe Pgbus::Web::DataSource do
     before do
       allow(mock_connection).to receive(:select_one).with(anything, "Pgbus Failed Event", [1]).and_return(event)
       allow(mock_connection).to receive(:exec_delete)
+      allow(mock_connection).to receive(:transaction).and_yield
       allow(mock_client).to receive(:set_visibility_timeout)
       allow(mock_client).to receive(:send_message)
     end
@@ -959,7 +960,7 @@ RSpec.describe Pgbus::Web::DataSource do
 
       expect(data_source.retry_all_failed).to eq(0)
       expect(sqls.first).to eq(["SELECT * FROM pgbus_failed_events WHERE NOT (queue_name = ANY($1::text[])) " \
-                                "ORDER BY id LIMIT 100", ["{orders_handler,pgbus_orders_handler}"]])
+                                "AND id > $2 ORDER BY id LIMIT 100", ["{orders_handler,pgbus_orders_handler}", 0]])
     end
   end
 
