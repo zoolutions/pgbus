@@ -11,24 +11,31 @@ module Pgbus
       # Threading:
       #   - #start spawns ONE listener thread
       #   - ensure_listening / remove_listening are called from the
-      #     dispatcher thread, which means the listener thread itself is
-      #     only running `wait_for_notify` — all LISTEN/UNLISTEN SQL goes
-      #     through a command queue that the listener thread drains between
-      #     notifies
-      #   - #stop clears @running and joins; it never touches the connection
+      #     dispatcher thread (the master hub's reader threads for a hub).
+      #     All LISTEN/UNLISTEN SQL goes through a command queue that the
+      #     listener thread drains; the caller then writes a byte to a wake
+      #     pipe, so the thread, parked in IO.select on the LISTEN socket and
+      #     the pipe, drains the command at once instead of at the end of its
+      #     current wait (issue #630)
+      #   - #stop clears @running, wakes the thread through the pipe and joins;
+      #     it never touches the connection, and the thread closes the pipe
+      #     itself on its way out
       #   - the connection is SINGLE-OWNER: the listener thread is the only
       #     thread that may exec, wait, or close on it, from construction
       #     through teardown. PG::Connection is not thread-safe and #close is
       #     PQfinish — freeing the PGconn under a concurrent libpq call is a
-      #     process-killing SEGV, not a rescuable PG::Error (issue #375)
+      #     process-killing SEGV, not a rescuable PG::Error (issue #375). Only
+      #     the pipe is touched from other threads
       #
-      # Health check: `wait_for_notify(timeout)` returns nil on timeout. When
-      # it does, the listener runs `SELECT 1` as a TCP keepalive. If that
-      # raises, the listener rebuilds a FRESH connection via connection_factory
-      # and re-LISTENs every channel in `@listening_to`. This is the fix for
-      # design doc §11 #1 (silently dropped LISTEN connections from NAT / PG
-      # restart / network blips) — a fresh connect also re-resolves DNS and
-      # converges on the promoted primary after a failover.
+      # Health check: once per health_check_ms the listener runs `SELECT 1` as
+      # a TCP keepalive, on a deadline: an idle connection sees exactly one per
+      # cycle, and a stream of wakes or notifications cannot postpone it. If
+      # it raises, the listener rebuilds a FRESH connection via
+      # connection_factory and re-LISTENs every channel in `@listening_to`.
+      # This is the fix for design doc §11 #1 (silently dropped LISTEN
+      # connections from NAT / PG restart / network blips) — a fresh connect
+      # also re-resolves DNS and converges on the promoted primary after a
+      # failover.
       #
       # NOTIFY channel naming (from pgmq_v1.11.0.sql:1634):
       #   PG_NOTIFY('pgmq.' || TG_TABLE_NAME || '.' || TG_OP, NULL)
@@ -96,6 +103,14 @@ module Pgbus
           @commands = Queue.new
           @running = false
           @thread = nil
+          @health_check_due_at = nil
+          # ensure_listening acks held back while the reconnect that re-LISTENs
+          # their channel runs. Listener thread only.
+          @acks_after_reconnect = []
+          # The wake pipe is created by #start, so a listener that never
+          # starts holds no descriptors.
+          @wake_reader = nil
+          @wake_writer = nil
         end
 
         # Count of durable wakes dropped due to the dispatch-queue cap. Read by
@@ -106,10 +121,19 @@ module Pgbus
         def start
           return if @running
 
+          # A previous thread that outlived #stop's join still owns the
+          # connection; a second loop on it is the cross-thread use #375 is
+          # about.
+          if @thread&.alive?
+            @logger.warn { "[Pgbus::Streamer::Listener] previous listener thread still running; not starting another" }
+            return
+          end
+
+          @wake_reader, @wake_writer = IO.pipe if @wake_reader.nil? || @wake_reader.closed? || @wake_writer.closed?
           @running = true
           # The LISTEN thread, owned by this object: Instance#start starts it
-          # once (under Streamer's @current_mutex); #stop clears @running and
-          # joins it.
+          # once (under Streamer's @current_mutex); #stop clears @running,
+          # wakes it and joins it.
           @thread = Thread.new { run_loop } # rubocop:disable ThreadSafety/NewThread
           self
         end
@@ -127,8 +151,8 @@ module Pgbus
         end
 
         # Snapshot of this component's live thread(s). Instance#shutdown! captures
-        # it BEFORE calling #stop so a join that timed out is still observable
-        # after #stop has cleared the reference (issue #443).
+        # it BEFORE calling #stop (issue #443). #stop clears the reference only
+        # when its join returned; a thread past its budget stays listed.
         def threads
           [@thread].compact
         end
@@ -137,18 +161,28 @@ module Pgbus
           return unless @running
 
           @running = false
-          @commands << [:stop]
           # Deliberately does NOT touch @conn. PG::Connection is not
           # thread-safe and #close is PQfinish: it frees the PGconn and its
           # OpenSSL objects out from under whatever libpq call the listener
           # thread is making on the same connection. That is a use-after-free —
           # a process-killing SEGV, not a rescuable PG::Error (issue #375).
           # The listener thread is the sole owner of @conn and closes it in
-          # run_loop's ensure; clearing @running above is the whole stop signal.
-          # It is observed within one wait_for_notify timeout (health_check_ms),
-          # which is what the join budget below is sized against.
-          @thread&.join(stop_join_timeout)
-          @thread = nil
+          # run_loop's ensure; clearing @running above is the whole stop signal,
+          # and the wake makes the thread see it at once. The join budget still
+          # covers a full health-check cycle: the thread may be inside a
+          # keepalive or a reconnect rather than the select.
+          wake
+          joined = @thread.nil? || @thread.join(stop_join_timeout)
+          # A thread past its budget stays referenced, so #start refuses to
+          # run a second loop beside it; it closes its own pipe when it exits.
+          if joined
+            @thread = nil
+          else
+            @logger.warn do
+              "[Pgbus::Streamer::Listener] listener thread did not stop within #{stop_join_timeout}s; " \
+                "it closes its wake pipe when it exits"
+            end
+          end
           self
         end
 
@@ -159,12 +193,14 @@ module Pgbus
         # otherwise a broadcast committed in the gap would be neither
         # in the read_after result nor delivered as a WakeMessage.
         #
-        # The wait is bounded by the next wait_for_notify timeout
-        # (streams_listen_health_check_ms, default 250ms) plus a small
-        # margin so a stuck listener can't hang the dispatcher forever.
+        # The wake pipe makes the typical wait a thread hop (issue #630). The
+        # wait is bounded by one health-check cycle
+        # (streams_listen_health_check_ms, default 250ms) plus a small margin,
+        # so a stuck listener can't hang the dispatcher forever.
         def ensure_listening(queue_name)
           ack = Queue.new
           @commands << [:listen, queue_name, ack]
+          wake
           ack.pop(timeout: ack_timeout)
         end
 
@@ -173,31 +209,28 @@ module Pgbus
         # completing before the caller proceeds, so we don't block.
         def remove_listening(queue_name)
           @commands << [:unlisten, queue_name]
+          wake
         end
 
         private
 
         def run_loop
+          schedule_health_check
           loop do
             break unless @running
 
-            drain_commands
-            break unless @running
-
-            timeout_s = @health_check_ms / 1000.0
             begin
-              got_notify = @conn.wait_for_notify(timeout_s) do |channel, _pid, payload|
-                handle_notify(channel, payload)
-              end
-              # Skip the keepalive when a stop landed during the wait: the loop
-              # is about to exit and close this connection anyway, so the
-              # round-trip would only add latency to shutdown.
-              run_health_check if !got_notify && @running
-            rescue IOError => e
-              # #stop no longer closes the connection to interrupt the wait
-              # (issue #375), so an IOError here is a genuine socket failure,
-              # not the expected shutdown signal. Reconnect unless we're
-              # stopping, in which case exit cleanly.
+              # Inside the rescue: a LISTEN that raises (the connection died
+              # under it) reconnects instead of killing this thread.
+              drain_commands
+              break unless @running
+
+              wait_once
+            rescue IOError, Errno::EBADF => e
+              # #stop never closes the connection to interrupt the wait (issue
+              # #375), so an IOError here — a select on a socket closed under
+              # it — is a genuine socket failure, not the shutdown signal.
+              # Reconnect unless we're stopping, in which case exit cleanly.
               break unless @running
 
               @logger.warn { "[Pgbus::Streamer::Listener] IO error (#{e.class}: #{e.message}) — reconnecting" }
@@ -210,6 +243,12 @@ module Pgbus
             end
           end
         ensure
+          release_held_acks
+          release_pending_acks
+          # The thread that selects on the pipe is the one that closes it, so
+          # no IO is ever closed under a live select (the cross-thread
+          # teardown #375 removed), whether #stop's join returned or not.
+          close_wake_pipe
           # Bookkeeping only — no UNLISTEN round-trip. We close the connection
           # on the next line and closing the session deregisters every LISTEN
           # server-side, so the exec bought nothing while being the statement
@@ -221,24 +260,125 @@ module Pgbus
           @conn = nil
         end
 
+        # One pass of the wait: dispatch what libpq has buffered, then park in
+        # IO.select on the LISTEN socket and the wake pipe until either is
+        # readable or the next keepalive is due. A wake returns to run_loop,
+        # which drains the commands. This keeps pg's own wait_for_notify order:
+        # buffered notifications first, then the socket, consume_input, and the
+        # buffer again.
+        def wait_once
+          # An exec (LISTEN, SELECT 1) may have buffered a notification while
+          # reading its reply, leaving nothing on the socket to wake the select.
+          drain_notifies
+          timeout = @health_check_due_at - @clock.call
+          # Never a zero or negative select timeout: zero is a non-blocking
+          # poll and would spin.
+          return run_health_check unless timeout.positive?
+
+          socket = @conn.socket_io
+          ready, = IO.select([socket, @wake_reader], nil, nil, timeout)
+          # Idle for a full cycle. Skip the keepalive when a stop landed during
+          # the wait: the loop is about to exit and close this connection
+          # anyway, so the round-trip would only add latency to shutdown.
+          return (run_health_check if @running) if ready.nil?
+
+          drain_wake if ready.include?(@wake_reader)
+          read_socket if ready.include?(socket)
+        end
+
+        def read_socket
+          @conn.consume_input
+          # A peer-closed socket stays readable (EOF) whether or not
+          # consume_input raised: check the status, or the loop would spin on
+          # it with the keepalive no longer the thing that notices.
+          raise PG::ConnectionBad, "LISTEN connection lost" unless @conn.status == PG::CONNECTION_OK
+
+          drain_notifies
+        end
+
+        # PG::Connection#notifies reports a NOTIFY without a payload as
+        # extra: "" (wait_for_notify yields nil for it). A durable PGMQ wake
+        # has no payload and must reach handle_notify as nil, or it would be
+        # routed as an ephemeral one.
+        def drain_notifies
+          while (notification = @conn.notifies)
+            extra = notification[:extra]
+            handle_notify(notification[:relname], extra.nil? || extra.empty? ? nil : extra)
+          end
+        end
+
+        # Before #start there is no pipe: the command waits in the queue and
+        # the thread drains it on its first pass.
+        def wake
+          @wake_writer&.write_nonblock(".", exception: false)
+        rescue IOError, Errno::EPIPE
+          # Closed by #stop (IOError), or its reader closed first (EPIPE):
+          # nothing is left to wake.
+          nil
+        end
+
+        # One read empties the pipe of every wake written so far (each is
+        # one byte), so a burst of commands costs one extra select return.
+        def drain_wake
+          @wake_reader.read_nonblock(4096, exception: false)
+        end
+
+        def close_wake_pipe
+          # Writer first: a late wake then meets a closed writer (IOError), not
+          # a writer whose reader is gone (EPIPE). Both are rescued in #wake.
+          @wake_writer.close unless @wake_writer.closed?
+          @wake_reader.close unless @wake_reader.closed?
+        end
+
+        # Acks held back by a LISTEN that raised: the reconnect that
+        # re-LISTENed their channel is done (or the thread is exiting).
+        def release_held_acks
+          @acks_after_reconnect.each { |ack| ack.push(:done) }
+          @acks_after_reconnect.clear
+        end
+
+        # Commands #stop left in the queue: release every ensure_listening
+        # caller now rather than at its ack timeout. Nothing is LISTENed: the
+        # connection closes right after this.
+        def release_pending_acks
+          loop do
+            cmd = @commands.pop(true)
+            cmd[2]&.push(:done) if cmd[0] == :listen
+          end
+        rescue ThreadError
+          nil
+        end
+
+        def schedule_health_check
+          @health_check_due_at = @clock.call + (@health_check_ms / 1000.0)
+        end
+
         def drain_commands
           loop do
+            # #stop cleared the flag: run_loop is about to exit and close the
+            # connection, so the rest of the queue is moot.
+            return unless @running
+
+            # A backlog that never empties must not postpone the keepalive.
+            run_health_check unless (@health_check_due_at - @clock.call).positive?
             cmd = @commands.pop(true)
             case cmd[0]
             when :listen
               ack = cmd[2]
               begin
                 do_listen(cmd[1])
+              rescue StandardError
+                # The connection failed under the LISTEN. run_loop
+                # reconnects, and reconnect! re-LISTENs this channel with the
+                # rest; the caller is acked once that is done, so its
+                # read_after never runs ahead of an active LISTEN.
+                @acks_after_reconnect << ack if ack
+                ack = nil
+                raise
               ensure
-                # Always ack so the caller is never left blocked, even
-                # if do_listen raised. The caller can still detect
-                # failure by checking @listening_to or by other means;
-                # we just promise not to deadlock the dispatcher.
                 ack&.push(:done)
               end
             when :unlisten then do_unlisten(cmd[1])
-            when :stop     then @running = false
-                                return
             end
           rescue ThreadError
             # empty queue
@@ -246,39 +386,45 @@ module Pgbus
           end
         end
 
-        # Caller wait budget for ensure_listening's ack. The listener
-        # thread will process the command at most one wait_for_notify
-        # cycle from now (bounded by health_check_ms); add a small
-        # safety margin so the dispatcher fails loud rather than
-        # hanging if the listener thread is dead.
+        # Caller wait budget for ensure_listening's ack. The wake pipe
+        # makes the usual wait a thread hop; a thread busy in a keepalive
+        # or a reconnect gets one health-check cycle plus a margin, so the
+        # dispatcher fails loud rather than hanging if the thread is dead.
         def ack_timeout
           (@health_check_ms / 1000.0) + 1.0
         end
 
         # How long #stop waits for the listener thread to notice the cleared
-        # @running and finish teardown. The thread can be parked in
-        # wait_for_notify for one full health-check cycle before it re-checks
-        # the flag, so the budget is that cycle plus grace — a flat timeout
-        # would expire before a listener with a large health_check_ms had even
-        # one chance to observe the stop.
+        # @running and finish teardown. The wake pipe interrupts its select at
+        # once, but it may be inside a keepalive or a reconnect attempt, so the
+        # budget stays one health-check cycle plus grace.
         def stop_join_timeout
           (@health_check_ms / 1000.0) + STOP_JOIN_GRACE_SECONDS
         end
 
+        # The channel joins @listening_to BEFORE the exec: if the LISTEN
+        # raises, run_loop reconnects, reconnect! re-LISTENs it with the rest,
+        # and only then is the caller acked (drain_commands), so an acked
+        # ensure_listening means an active LISTEN (the dispatcher's
+        # no-second-wait rule rests on that, issue #630). The exception is a
+        # thread on its way out (stop, or an unexpected error): run_loop's
+        # ensure releases every waiting caller with nothing LISTENed.
         def do_listen(queue_name)
           channel = channel_for(queue_name)
           return if @listening_to.include?(channel)
 
-          @conn.exec(%(LISTEN "#{channel}"))
           @listening_to.add(channel)
+          @conn.exec(%(LISTEN "#{channel}"))
         end
 
+        # The channel leaves @listening_to BEFORE the exec, so a reconnect
+        # after a failed UNLISTEN does not LISTEN it again.
         def do_unlisten(queue_name)
           channel = channel_for(queue_name)
           return unless @listening_to.include?(channel)
 
-          @conn.exec(%(UNLISTEN "#{channel}"))
           @listening_to.delete(channel)
+          @conn.exec(%(UNLISTEN "#{channel}"))
         end
 
         def handle_notify(channel, payload = nil)
@@ -308,15 +454,21 @@ module Pgbus
           @dispatch_queue << WakeMessage.new(queue_name: queue_name, payload: payload)
         end
 
+        # The next keepalive is due one cycle after this one ENDS: scheduled
+        # from its start, a keepalive slower than a cycle would leave every
+        # pass overdue and the loop running SELECT 1 back to back without ever
+        # selecting on the socket or the pipe.
         def run_health_check
           @conn.exec("SELECT 1")
           run_maintenance
+        ensure
+          schedule_health_check
         end
 
         # Periodic maintenance on the idle LISTEN connection, throttled to
         # @maintenance.interval (issue #323). Runs on the listener thread, so it
         # is the only place the non-thread-safe @conn may be queried outside
-        # wait_for_notify. Fail-soft: a raising maintenance callback is logged and
+        # the listen loop itself. Fail-soft: a raising maintenance callback is logged and
         # never disturbs the listen loop.
         def run_maintenance
           return unless @maintenance
@@ -373,6 +525,8 @@ module Pgbus
             @listening_to = Set.new(channels)
             return
           end
+        ensure
+          release_held_acks
         end
 
         # Close a PG connection we're discarding (the old conn at the top of a

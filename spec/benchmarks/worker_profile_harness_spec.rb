@@ -248,7 +248,7 @@ RSpec.describe WorkerProfileHarness do
       expect(classify(*stack)).to eq("aj_other")
     end
 
-    # pgbus's own calls into Rails (the stat buffer's insert_all, the
+    # pgbus's own calls into Rails (the stat buffer's INSERT, the
     # heartbeat's process row) are pgbus's cost, not ActiveJob's.
     it "names a rails leaf whose nearest owner is pgbus, outside notifications, pgbus_rails" do
       stat_flush = frame("/src/pgbus/lib/pgbus/stat_buffer.rb", "Pgbus::StatBuffer#write_to_database")

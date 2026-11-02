@@ -35,7 +35,7 @@ require "json"
 # included); ActiveJob (aj_callbacks for a callbacks leaf, notif:activejob for
 # a notifications leaf, aj_other for its own code and a job's own ActiveRecord
 # work); pgbus (notif:pgbus for a notifications leaf, pgbus_rails for the Rails
-# code pgbus itself calls: the stat buffer's insert_all, the heartbeat's
+# code pgbus itself calls: the stat buffer's INSERT, the heartbeat's
 # process row). A leaf with no owner is aj_other.
 #
 # The pure pieces (classification, share math, JIT label) carry no DB or
