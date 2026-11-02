@@ -355,6 +355,42 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
 
     # Production never restarts a Listener (FailoverListener builds a fresh
     # one); this pins only that nothing left in the queue ends a second run.
+    it "answers an ensure_listening after stop at once instead of at its ack timeout" do
+      listener.start
+      listener.stop
+
+      started = monotonic
+      result = listener.ensure_listening("chat")
+
+      expect(monotonic - started).to be < 0.5 # the ack budget is 6 s here
+      expect(result).to be_nil
+    end
+
+    it "answers at once after a stop that came before any start" do
+      listener.stop
+
+      started = monotonic
+      expect(listener.ensure_listening("chat")).to be_nil
+      expect(monotonic - started).to be < 0.5
+    end
+
+    it "answers at once when stop lands between its stopped check and its push" do
+      stopping = listener
+      racing_queue = Class.new(Queue) do
+        define_method(:<<) do |cmd|
+          super(cmd)
+          stopping.instance_variable_set(:@stopped, true) # stop, and the thread's last release, came first
+        end
+      end.new
+      listener.instance_variable_set(:@commands, racing_queue)
+
+      started = monotonic
+      result = listener.ensure_listening("chat")
+
+      expect(monotonic - started).to be < 0.5 # the ack budget is 6 s here
+      expect(result).to be_nil
+    end
+
     it "serves commands again when started after a clean stop" do
       listener.start
       listener.stop

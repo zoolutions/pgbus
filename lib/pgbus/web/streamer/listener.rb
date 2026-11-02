@@ -102,6 +102,9 @@ module Pgbus
           @listening_to = Set.new
           @commands = Queue.new
           @running = false
+          # Set by #stop: no thread will serve a command again (a listener is
+          # never restarted in production), so ensure_listening answers at once.
+          @stopped = false
           @thread = nil
           @health_check_due_at = nil
           # ensure_listening acks held back while the reconnect that re-LISTENs
@@ -130,6 +133,7 @@ module Pgbus
           end
 
           @wake_reader, @wake_writer = IO.pipe if @wake_reader.nil? || @wake_reader.closed? || @wake_writer.closed?
+          @stopped = false
           @running = true
           # The LISTEN thread, owned by this object: Instance#start starts it
           # once (under Streamer's @current_mutex); #stop clears @running,
@@ -158,8 +162,18 @@ module Pgbus
         end
 
         def stop
-          return unless @running
+          unless @running
+            # Never started (or already stopped): nothing to join, but no
+            # thread will serve a command either.
+            @stopped = true
+            return
+          end
 
+          # @stopped before @running: the thread exits (and releases what is
+          # queued) only after it sees @running false, so by then @stopped is
+          # visible to ensure_listening's second check (MRI's GVL orders these
+          # plain ivar writes and reads).
+          @stopped = true
           @running = false
           # Deliberately does NOT touch @conn. PG::Connection is not
           # thread-safe and #close is PQfinish: it frees the PGconn and its
@@ -198,9 +212,18 @@ module Pgbus
         # (streams_listen_health_check_ms, default 250ms) plus a small margin,
         # so a stuck listener can't hang the dispatcher forever.
         def ensure_listening(queue_name)
+          # A connect the dispatcher drains during shutdown (Instance#shutdown!
+          # stops the listener first) must not wait out the ack budget.
+          return nil if @stopped
+
           ack = Queue.new
           @commands << [:listen, queue_name, ack]
           wake
+          # A stop that landed between the check above and the push may have
+          # let the thread release its queue and exit before the push: no ack
+          # would ever come. Pushed before that release, the command is acked.
+          return nil if @stopped
+
           ack.pop(timeout: ack_timeout)
         end
 
