@@ -104,6 +104,9 @@ module Pgbus
           @running = false
           @thread = nil
           @health_check_due_at = nil
+          # ensure_listening acks held back while the reconnect that re-LISTENs
+          # their channel runs. Listener thread only.
+          @acks_after_reconnect = []
           # The wake pipe is created by #start, so a listener that never
           # starts holds no descriptors.
           @wake_reader = nil
@@ -240,6 +243,7 @@ module Pgbus
             end
           end
         ensure
+          release_held_acks
           release_pending_acks
           # The thread that selects on the pipe is the one that closes it, so
           # no IO is ever closed under a live select (the cross-thread
@@ -324,6 +328,13 @@ module Pgbus
           @wake_reader.close unless @wake_reader.closed?
         end
 
+        # Acks held back by a LISTEN that raised: the reconnect that
+        # re-LISTENed their channel is done (or the thread is exiting).
+        def release_held_acks
+          @acks_after_reconnect.each { |ack| ack.push(:done) }
+          @acks_after_reconnect.clear
+        end
+
         # Commands #stop left in the queue: release every ensure_listening
         # caller now rather than at its ack timeout. Nothing is LISTENed: the
         # connection closes right after this.
@@ -352,11 +363,15 @@ module Pgbus
               ack = cmd[2]
               begin
                 do_listen(cmd[1])
+              rescue StandardError
+                # The connection failed under the LISTEN. run_loop
+                # reconnects, and reconnect! re-LISTENs this channel with the
+                # rest; the caller is acked once that is done, so its
+                # read_after never runs ahead of an active LISTEN.
+                @acks_after_reconnect << ack if ack
+                ack = nil
+                raise
               ensure
-                # Always ack so the caller is never left blocked, even
-                # if do_listen raised. The caller can still detect
-                # failure by checking @listening_to or by other means;
-                # we just promise not to deadlock the dispatcher.
                 ack&.push(:done)
               end
             when :unlisten then do_unlisten(cmd[1])
@@ -384,9 +399,10 @@ module Pgbus
         end
 
         # The channel joins @listening_to BEFORE the exec: if the LISTEN
-        # raises, run_loop reconnects and reconnect! re-LISTENs it with the
-        # rest, so an acked ensure_listening always ends in an active LISTEN
-        # (the dispatcher's no-second-wait rule rests on that, issue #630).
+        # raises, run_loop reconnects, reconnect! re-LISTENs it with the rest,
+        # and only then is the caller acked (drain_commands), so an acked
+        # ensure_listening always means an active LISTEN (the dispatcher's
+        # no-second-wait rule rests on that, issue #630).
         def do_listen(queue_name)
           channel = channel_for(queue_name)
           return if @listening_to.include?(channel)
@@ -503,6 +519,8 @@ module Pgbus
             @listening_to = Set.new(channels)
             return
           end
+        ensure
+          release_held_acks
         end
 
         # Close a PG connection we're discarding (the old conn at the top of a

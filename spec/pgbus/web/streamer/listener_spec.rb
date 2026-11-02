@@ -569,12 +569,17 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
       expect(fake_pg.executed).to include("SELECT 1")
     end
 
-    it "runs one SELECT 1 per idle cycle, not one per select return" do
+    it "runs one SELECT 1 per cycle, not one per select return" do
       idle = build_listener(health_check_ms: 300)
       idle.start
       wait_until { fake_pg.executed.include?("SELECT 1") }
 
-      sleep 0.1
+      # Five wakes inside the cycle: each returns the select early, and none
+      # may count as an idle cycle.
+      5.times do
+        idle.remove_listening("idle")
+        sleep 0.02
+      end
 
       expect(fake_pg.executed.count("SELECT 1")).to eq(1)
     ensure
@@ -689,6 +694,23 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
       new_pg.push_notify("pgmq.q_chat.INSERT")
 
       expect(dispatch_queue.pop(timeout: 2)&.queue_name).to eq("chat")
+    end
+
+    it "acks a LISTEN that raised only once the reconnect has re-LISTENed it" do
+      new_pg = fake_pg_class.new
+      new_pg.gate_exec!(%(LISTEN "pgmq.q_chat.INSERT"))
+      factory_conns << new_pg
+      listener.start
+      fake_pg.fail_next_listen!
+      result = :pending
+      caller_thread = Thread.new { result = listener.ensure_listening("chat") }
+
+      wait_until { new_pg.executed.include?(%(LISTEN "pgmq.q_chat.INSERT")) } # the re-LISTEN, parked
+      expect(result).to eq(:pending)
+
+      new_pg.release_exec!
+      caller_thread.join(2)
+      expect(result).to eq(:done)
     end
 
     it "reconnects, and re-LISTENs the channel, when a LISTEN itself raises" do

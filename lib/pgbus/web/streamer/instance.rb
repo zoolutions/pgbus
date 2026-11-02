@@ -343,8 +343,8 @@ module Pgbus
           when Proc
             # The Proc branch in connection_options typically returns
             # ActiveRecord::Base.connection.raw_connection — a pooled
-            # AR connection. That's fatal for the streamer: LISTEN and
-            # wait_for_notify bind the session to the connection object,
+            # AR connection. That's fatal for the streamer: LISTEN and the
+            # listener's wait on its socket bind the session to the connection object,
             # so if AR's pool hands the same raw_connection to another
             # thread mid-wait, we get concurrent libpq calls → segfault
             # or result corruption. Bail out with a clear error instead
