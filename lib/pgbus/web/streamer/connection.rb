@@ -62,21 +62,24 @@ module Pgbus
         # existing caller is unchanged. The Dispatcher overrides it with the
         # short streams_fanout_write_deadline_ms for hot-loop fanout writes,
         # bounding head-of-line blocking on a slow client (issue #315 item 3).
-        def enqueue(envelopes, deadline_ms: @write_deadline_ms)
+        #
+        # frames: msg_id → the frozen SSE frame, built once per wake by the
+        # Dispatcher for every connection on the stream (issue #621). An
+        # envelope the Hash does not hold (or no Hash: the connect replay, an
+        # in-flight buffer flush) is framed here, so the bytes are the same
+        # either way.
+        def enqueue(envelopes, deadline_ms: @write_deadline_ms, frames: nil)
           written = []
           envelopes.each do |envelope|
-            ephemeral = envelope.msg_id.negative?
-            next if !ephemeral && envelope.msg_id <= @last_msg_id_sent.get
+            msg_id = envelope.msg_id
+            ephemeral = msg_id.negative?
+            next if !ephemeral && msg_id <= @last_msg_id_sent.get
 
-            bytes = Pgbus::Streams::Envelope.message(
-              id: envelope.msg_id,
-              event: sse_event_for(envelope),
-              data: envelope.payload
-            )
+            bytes = frames&.[](msg_id) || frame_for(envelope)
 
             result = @writer.write(self, bytes, deadline_ms: deadline_ms)
             if result == :ok
-              @last_msg_id_sent.set(envelope.msg_id) unless ephemeral
+              @last_msg_id_sent.set(msg_id) unless ephemeral
               @last_write_at = monotonic
               written << envelope
             else
@@ -88,11 +91,26 @@ module Pgbus
         end
 
         def write_comment(text)
-          write_frame(Pgbus::Streams::Envelope.comment(text))
+          write_raw(Pgbus::Streams::Envelope.comment(text))
+        end
+
+        # The one raw writer: bytes that are already a whole SSE frame (the
+        # heartbeat's shared comment, the shutdown sentinel). A successful
+        # write counts as activity for the idle reaper; a failed one marks the
+        # connection dead. The Heartbeat passes the short fan-out deadline
+        # (issue #621); everything else keeps the connection's own.
+        def write_raw(bytes, deadline_ms: @write_deadline_ms)
+          result = @writer.write(self, bytes, deadline_ms: deadline_ms)
+          if result == :ok
+            @last_write_at = monotonic
+          else
+            mark_dead!
+          end
+          result
         end
 
         def write_sentinel(bytes)
-          @writer.write(self, bytes, deadline_ms: @write_deadline_ms)
+          write_raw(bytes)
         end
 
         # The pgbus:connected frame carrying this connection's id. Written by
@@ -100,7 +118,7 @@ module Pgbus
         # seat joined (issue #521), so a client that acts on the id right
         # after the event finds its row.
         def write_connected
-          write_frame(Pgbus::Streams::Envelope.connected(id: @id))
+          write_raw(Pgbus::Streams::Envelope.connected(id: @id))
         end
 
         def idle_for
@@ -143,23 +161,12 @@ module Pgbus
 
         private
 
-        def write_frame(bytes)
-          result = @writer.write(self, bytes, deadline_ms: @write_deadline_ms)
-          if result == :ok
-            @last_write_at = monotonic
-          else
-            mark_dead!
-          end
-          result
-        end
-
-        # The SSE event name for a frame: the envelope's typed event when
-        # present, else the default turbo-stream. Plain ReadAfter::Envelopes
-        # (no event field) and StreamEnvelopes with a nil event both fall
-        # back to the default. (issue #170)
-        def sse_event_for(envelope)
-          event = envelope.respond_to?(:event) ? envelope.event : nil
-          event && !event.to_s.empty? ? event.to_s : Pgbus::Streams::DEFAULT_SSE_EVENT
+        def frame_for(envelope)
+          Pgbus::Streams::Envelope.message(
+            id: envelope.msg_id,
+            event: Pgbus::Streams::Envelope.sse_event_for(envelope),
+            data: envelope.payload
+          )
         end
 
         def monotonic

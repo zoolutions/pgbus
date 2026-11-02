@@ -54,11 +54,18 @@ RSpec.describe "the streamer's dispatch payloads" do # rubocop:disable RSpec/Des
   describe "the frames StreamEventDispatcher enqueues to a Connection" do
     let(:dispatcher_class) { Pgbus::Web::Streamer::StreamEventDispatcher }
     let(:enqueued) { [] }
+    # The frames: Hash handed with each enqueue (issue #621): one per wake,
+    # msg_id → the SSE frame every connection on the stream writes.
+    let(:prebuilt) { [] }
     let(:connection) do
       frames = enqueued
+      hashes = prebuilt
       double("Connection", id: "conn-2", stream_name: "chat", context: nil, last_msg_id_sent: 0,
                            presence_member: nil, dead?: false).tap do |conn|
-        allow(conn).to receive(:enqueue) { |envelopes, **| frames.concat(envelopes) }
+        allow(conn).to receive(:enqueue) do |envelopes, **options|
+          frames.concat(envelopes)
+          hashes << options[:frames]
+        end
       end
     end
     let(:registry) { Pgbus::Web::Streamer::Registry.new.tap { |r| r.register(connection) } }
@@ -79,6 +86,19 @@ RSpec.describe "the streamer's dispatch payloads" do # rubocop:disable RSpec/Des
 
       expect(enqueued).not_to be_empty
       expect(enqueued).to all(satisfy { |frame| Ractor.shareable?(frame) })
+    end
+
+    it "hands over prebuilt SSE frames that are shareable, the Hash and its Strings (issue #621)" do
+      dispatcher.send(:handle, dispatcher_class::WakeMessage.new(queue_name: +"chat", payload: ephemeral_json))
+      row = { "msg_id" => "9", "enqueued_at" => +"2026-10-15 10:00:00+00", "message" => ephemeral_json, "source" => +"live" }
+      envelope = Pgbus::Client::ReadAfter.instance_method(:build_envelope).bind_call(Object.new, row)
+      allow(client).to receive(:read_after).and_return([envelope])
+      dispatcher.send(:handle, dispatcher_class::WakeMessage.new(queue_name: +"chat"))
+
+      expect(prebuilt.size).to eq(2)
+      expect(prebuilt.map(&:keys)).to eq([[-1], [9]])
+      expect(prebuilt).to all(satisfy { |frames| Ractor.shareable?(frames) })
+      expect(prebuilt.flat_map(&:values)).to all(be_a(String).and(satisfy { |frame| Ractor.shareable?(frame) }))
     end
 
     it "is shareable for a durable broadcast, as read back from PGMQ" do

@@ -59,7 +59,7 @@ RSpec.describe StreamsScaleHarness do
     it "has the documented defaults" do
       expect(described_class.knobs({})).to eq(
         clients: [100, 1000], client_processes: 4, broadcasts: 20,
-        modes: %i[ephemeral durable], writers: 0, slow: 0
+        modes: %i[ephemeral durable], writers: 0, slow: 0, profile: nil
       )
     end
 
@@ -67,12 +67,48 @@ RSpec.describe StreamsScaleHarness do
       env = {
         "STREAMS_SCALE_CLIENTS" => "2000", "STREAMS_SCALE_CLIENT_PROCESSES" => "8",
         "STREAMS_SCALE_BROADCASTS" => "5", "STREAMS_SCALE_MODES" => "durable",
-        "STREAMS_SCALE_WRITERS" => "2", "STREAMS_SCALE_SLOW" => "3"
+        "STREAMS_SCALE_WRITERS" => "2", "STREAMS_SCALE_SLOW" => "3", "STREAMS_SCALE_PROFILE" => " tmp/prof "
       }
 
       expect(described_class.knobs(env)).to eq(
-        clients: [2000], client_processes: 8, broadcasts: 5, modes: %i[durable], writers: 2, slow: 3
+        clients: [2000], client_processes: 8, broadcasts: 5, modes: %i[durable], writers: 2, slow: 3,
+        profile: "tmp/prof"
       )
+    end
+  end
+
+  describe ".profile_summary (issue #621)" do
+    let(:frame) { Struct.new(:filename, :label) }
+    let(:write) { frame.new("/gems/pgbus/lib/pgbus/web/streamer/io_writer.rb", "IO#write_nonblock") }
+    let(:enqueue) { frame.new("/gems/pgbus/lib/pgbus/web/streamer/connection.rb", "Connection#enqueue") }
+    let(:framing) { frame.new("/gems/pgbus/lib/pgbus/streams/envelope.rb", "Envelope.message") }
+    let(:pop) { frame.new(nil, "Thread::Queue#pop") }
+
+    it "shares running samples only, by leaf frame and by the gate's markers" do
+      summary = described_class.profile_summary(
+        [[[write, enqueue], :running, 3], [[framing, enqueue], :running, 1], [[pop], :idle, 50], [[enqueue], :stalled, 4]]
+      )
+
+      expect(summary).to include("running" => 4.0, "idle" => 50.0, "stalled" => 4.0)
+      expect(summary["top_self"]).to eq([["io_writer.rb:IO#write_nonblock", 0.75], ["envelope.rb:Envelope.message", 0.25]])
+      expect(summary["inclusive"]).to include("io_writer.rb" => 0.75, "write_nonblock" => 0.75,
+                                              "framing (envelope.rb)" => 0.25, "audience filter" => 0.0)
+    end
+
+    it "reports zero shares when the thread never ran" do
+      summary = described_class.profile_summary([[[pop], :idle, 10]])
+
+      expect(summary["top_self"]).to eq([])
+      expect(summary["inclusive"].values).to all(eq(0.0))
+    end
+
+    it "prints the running count, the GVL wait and both share lists" do
+      lines = described_class.profile_lines(described_class.profile_summary([[[write, enqueue], :running, 3],
+                                                                             [[enqueue], :stalled, 1]]))
+
+      expect(lines[0]).to eq("running 3 samples, stalled (GVL) 25.0 % of running + stalled")
+      expect(lines[1]).to start_with("inclusive: io_writer.rb 100.0 %, write_nonblock 100.0 %")
+      expect(lines[2]).to eq("top self: io_writer.rb:IO#write_nonblock 100.0 %")
     end
   end
 

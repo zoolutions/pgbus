@@ -1535,7 +1535,8 @@ Pgbus.configure do |c|
   c.streams_max_connections        = 2_000         # per web-server process (Puma worker or Falcon process)
   c.streams_idle_timeout           = 3_600         # close idle connections after 1h
   c.streams_listen_health_check_ms = 250           # PG LISTEN keepalive + ensure_listening ack budget
-  c.streams_write_deadline_ms      = 5_000         # write_nonblock deadline
+  c.streams_write_deadline_ms      = 5_000         # hijacked-socket write_nonblock deadline (connect replay, sentinels)
+  c.streams_fanout_write_deadline_ms = 250         # hijacked-socket fan-out and heartbeat writes; a slower client reconnects (Falcon's streaming body ignores both)
   c.streams_falcon_streaming_body  = false         # opt-in: Falcon-native streaming body
   c.streams_broadcast_queue        = nil           # dedicated queue for turbo-rails broadcast jobs (see below)
 end

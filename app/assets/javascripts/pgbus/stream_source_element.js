@@ -220,7 +220,7 @@ class PgbusStreamSourceElement extends HTMLElement {
     })
 
     this.eventSource.addEventListener("turbo-stream", (event) => {
-      this.lastEventId = event.lastEventId
+      this.rememberEventId(event.lastEventId)
       this.emitTurboStream(event.data, event.lastEventId)
     })
 
@@ -243,7 +243,7 @@ class PgbusStreamSourceElement extends HTMLElement {
     // registered by name, so we register one per declared typed event.
     for (const name of this.declaredTypedEvents()) {
       this.eventSource.addEventListener(name, (event) => {
-        if (event.lastEventId) this.lastEventId = event.lastEventId
+        this.rememberEventId(event.lastEventId)
         this.emitTypedEvent(name, event.data, event.lastEventId)
       })
     }
@@ -267,7 +267,7 @@ class PgbusStreamSourceElement extends HTMLElement {
     }
     const data = dataLines.join("\n")
 
-    if (id !== null) this.lastEventId = id
+    this.rememberEventId(id)
 
     if (event === "turbo-stream") {
       this.emitTurboStream(data, id)
@@ -386,6 +386,20 @@ class PgbusStreamSourceElement extends HTMLElement {
     if (since) url.searchParams.set("since", since)
     if (seat) url.searchParams.set("seat", seat)
     return url.toString()
+  }
+
+  // The resume cursor (?since= on the next connect) is the last DURABLE
+  // msg_id. An ephemeral frame's id is negative (it has no archive
+  // position), so it is handed to listeners as the frame's revision but never
+  // kept here: sent back as ?since= it would be rejected (issue #621). A
+  // native EventSource still echoes it as Last-Event-ID on its own
+  // reconnects; the server skips a negative Last-Event-ID and uses ?since=,
+  // which is the cursor as of the switch to EventSource, so durable frames
+  // received after that switch can be delivered once more.
+  rememberEventId(id) {
+    if (id === null || id === undefined || id === "") return
+    if (String(id).startsWith("-")) return
+    this.lastEventId = id
   }
 
   safeJsonParse(str) {

@@ -111,16 +111,58 @@ RSpec.describe Pgbus::Web::Streamer::Registry do
   end
 
   describe "#connections_for" do
-    it "returns a snapshot (mutating the snapshot does not affect the registry)" do
+    it "returns a frozen snapshot the registry never mutates (issue #621)" do
       conn = build_conn(id: "c1", stream_name: "chat")
       registry.register(conn)
       snapshot = registry.connections_for("chat")
-      snapshot.clear
-      expect(registry.connections_for("chat")).to contain_exactly(conn)
+
+      expect(snapshot).to be_frozen
+      registry.register(build_conn(id: "c2", stream_name: "chat"))
+      registry.unregister(conn)
+      expect(snapshot).to eq([conn])
     end
 
-    it "returns an empty array for unknown streams" do
+    it "returns the same object while membership is unchanged, without copying (issue #621)" do
+      registry.register(build_conn(id: "c1", stream_name: "chat"))
+
+      expect(registry.connections_for("chat")).to be(registry.connections_for("chat"))
+    end
+
+    it "returns a new object after a register or an unregister on the stream" do
+      c1 = build_conn(id: "c1", stream_name: "chat")
+      registry.register(c1)
+      before = registry.connections_for("chat")
+
+      registry.register(build_conn(id: "c2", stream_name: "chat"))
+      after_register = registry.connections_for("chat")
+      registry.unregister(c1)
+
+      expect(after_register).not_to be(before)
+      expect(registry.connections_for("chat")).not_to be(after_register)
+      expect(registry.connections_for("chat").map(&:id)).to eq(["c2"])
+    end
+
+    it "keeps registration order" do
+      conns = Array.new(4) { |i| build_conn(id: "c#{i}", stream_name: "chat") }
+      conns.each { |c| registry.register(c) }
+
+      expect(registry.connections_for("chat")).to eq(conns)
+    end
+
+    it "keeps nothing for a stream asked about after its last connection left (no per-stream leak)" do
+      conn = build_conn(id: "c1", stream_name: "order_42")
+      registry.register(conn)
+      registry.connections_for("order_42")
+      registry.unregister(conn)
+
+      expect(registry.connections_for("order_42")).to be(described_class::EMPTY)
+      expect(registry.connections_for("never_seen")).to be(described_class::EMPTY)
+      expect(registry.instance_variable_get(:@stream_snapshots)).to be_empty
+    end
+
+    it "returns an empty frozen array for unknown streams" do
       expect(registry.connections_for("unknown")).to eq([])
+      expect(registry.connections_for("unknown")).to be_frozen
     end
   end
 
@@ -131,11 +173,14 @@ RSpec.describe Pgbus::Web::Streamer::Registry do
       expect(registry.streams).to contain_exactly("chat", "presence")
     end
 
-    it "returns a snapshot" do
+    it "returns a frozen snapshot" do
       registry.register(build_conn(id: "a", stream_name: "chat"))
       snapshot = registry.streams
-      snapshot.clear
-      expect(registry.streams).to contain_exactly("chat")
+
+      expect(snapshot).to be_frozen
+      registry.register(build_conn(id: "b", stream_name: "orders"))
+      expect(snapshot).to eq(["chat"])
+      expect(registry.streams).to contain_exactly("chat", "orders")
     end
   end
 
@@ -163,6 +208,26 @@ RSpec.describe Pgbus::Web::Streamer::Registry do
       registry.register(build_conn(id: "b", stream_name: "chat"))
       registry.register(build_conn(id: "c", stream_name: "presence"))
       expect(registry.size).to eq(3)
+    end
+  end
+
+  describe "invariants across register / unregister (issue #621)" do
+    it "keeps size, each_connection and every stream index in agreement with lookup" do
+      conns = Array.new(6) { |i| build_conn(id: "c#{i}", stream_name: "s#{i % 3}") }
+      conns.each { |c| registry.register(c) }
+      registry.unregister(conns[1])
+      registry.register(build_conn(id: "c4", stream_name: "s9")) # id collision: replaces c4
+
+      everyone = []
+      registry.each_connection { |c| everyone << c }
+      by_stream = registry.streams.flat_map { |name| registry.connections_for(name) }
+
+      expect(registry.size).to eq(5)
+      expect(everyone.size).to eq(5)
+      expect(by_stream).to match_array(everyone)
+      expect(everyone).to all(satisfy { |c| registry.lookup(c.id).equal?(c) })
+      expect(registry.connections_for("s1").map(&:id)).to eq([])
+      expect(registry.streams).not_to include("s1")
     end
   end
 

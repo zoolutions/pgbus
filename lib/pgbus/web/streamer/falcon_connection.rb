@@ -49,20 +49,20 @@ module Pgbus
         # (so the Dispatcher's safe_enqueue can call either class) but ignored:
         # write_to_body is non-blocking under Falcon's fiber reactor, so there
         # is no head-of-line blocking to bound here (issue #315 item 3).
-        def enqueue(envelopes, deadline_ms: @write_deadline_ms) # rubocop:disable Lint/UnusedMethodArgument
+        # frames: as Connection#enqueue (issue #621). Ephemeral envelopes
+        # (negative msg_id) bypass the cursor and never advance it, as there.
+        def enqueue(envelopes, deadline_ms: @write_deadline_ms, frames: nil) # rubocop:disable Lint/UnusedMethodArgument
           written = []
           envelopes.each do |envelope|
-            next if envelope.msg_id <= @last_msg_id_sent.get
+            msg_id = envelope.msg_id
+            ephemeral = msg_id.negative?
+            next if !ephemeral && msg_id <= @last_msg_id_sent.get
 
-            bytes = Pgbus::Streams::Envelope.message(
-              id: envelope.msg_id,
-              event: sse_event_for(envelope),
-              data: envelope.payload
-            )
+            bytes = frames&.[](msg_id) || frame_for(envelope)
 
             result = write_to_body(bytes)
             if result == :ok
-              @last_msg_id_sent.set(envelope.msg_id)
+              @last_msg_id_sent.set(msg_id) unless ephemeral
               @last_write_at = monotonic
               written << envelope
             else
@@ -74,16 +74,28 @@ module Pgbus
         end
 
         def write_comment(text)
-          write_frame(Pgbus::Streams::Envelope.comment(text))
+          write_raw(Pgbus::Streams::Envelope.comment(text))
         end
 
         # See Connection#write_connected (issue #521).
         def write_connected
-          write_frame(Pgbus::Streams::Envelope.connected(id: @id))
+          write_raw(Pgbus::Streams::Envelope.connected(id: @id))
+        end
+
+        # See Connection#write_raw (issue #621). deadline_ms is ignored, as in
+        # #enqueue: the body write does not block.
+        def write_raw(bytes, deadline_ms: @write_deadline_ms) # rubocop:disable Lint/UnusedMethodArgument
+          result = write_to_body(bytes)
+          if result == :ok
+            @last_write_at = monotonic
+          else
+            mark_dead!
+          end
+          result
         end
 
         def write_sentinel(bytes)
-          write_to_body(bytes)
+          write_raw(bytes)
         end
 
         def close
@@ -112,20 +124,12 @@ module Pgbus
 
         private
 
-        # See Connection#sse_event_for. (issue #170)
-        def sse_event_for(envelope)
-          event = envelope.respond_to?(:event) ? envelope.event : nil
-          event && !event.to_s.empty? ? event.to_s : Pgbus::Streams::DEFAULT_SSE_EVENT
-        end
-
-        def write_frame(bytes)
-          result = write_to_body(bytes)
-          if result == :ok
-            @last_write_at = monotonic
-          else
-            mark_dead!
-          end
-          result
+        def frame_for(envelope)
+          Pgbus::Streams::Envelope.message(
+            id: envelope.msg_id,
+            event: Pgbus::Streams::Envelope.sse_event_for(envelope),
+            data: envelope.payload
+          )
         end
 
         def write_to_body(bytes)

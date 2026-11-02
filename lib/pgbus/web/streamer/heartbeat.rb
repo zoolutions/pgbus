@@ -10,7 +10,15 @@ module Pgbus
       #      connection. This keeps proxies and load balancers from timing
       #      out idle HTTP responses; most reverse proxies close HTTP
       #      responses that sit idle for 30-60s, which would silently drop
-      #      SSE clients.
+      #      SSE clients. The frame is built once per tick and shared by
+      #      every connection, and each write runs under the short fan-out
+      #      deadline (streams_fanout_write_deadline_ms, issue #621): the
+      #      writes are serial on this one thread, and each socket write is
+      #      bounded by 250 ms once it holds the connection's mutex, not by
+      #      streams_write_deadline_ms (a concurrent fan-out or replay write
+      #      on the same connection can still delay its turn). A client that
+      #      cannot take the heartbeat comment in that window is marked dead
+      #      and reconnects (durable streams replay from Last-Event-ID).
       #
       #   2. Mark connections that have been idle longer than the
       #      configured idle_timeout as dead. The StreamEventDispatcher's next pass
@@ -30,8 +38,10 @@ module Pgbus
         # presence touch every tick, even with no presence connection here,
         # so the dispatcher can expire seats left by other processes.
         def initialize(registry:, dispatch_queue:, interval:, idle_timeout:, logger: Pgbus.logger, clock: nil,
-                       presence_expiry: false)
+                       presence_expiry: false,
+                       fanout_write_deadline_ms: Pgbus.configuration.streams_fanout_write_deadline_ms)
           @registry = registry
+          @fanout_write_deadline_ms = fanout_write_deadline_ms
           @queue = dispatch_queue
           @interval = interval
           @idle_timeout = idle_timeout
@@ -76,6 +86,7 @@ module Pgbus
         # code goes through the background thread.
         def tick
           now = @clock.call
+          frame = Pgbus::Streams::Envelope.comment("heartbeat #{now.to_i}").freeze
           presence_conns = []
           @registry.each_connection do |connection|
             if connection.dead?
@@ -91,7 +102,7 @@ module Pgbus
               next
             end
 
-            result = connection.write_comment("heartbeat #{now.to_i}")
+            result = connection.write_raw(frame, deadline_ms: @fanout_write_deadline_ms)
             if connection.dead? || result != :ok
               enqueue_disconnect(connection)
               next

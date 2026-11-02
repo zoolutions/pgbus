@@ -46,7 +46,7 @@ WRITER_CONN = Class.new do
 
   # The pump calls this on a worker thread. Sleep models the socket write; return
   # the accepted envelopes (all of them) so the pump acks the full batch.
-  def enqueue(envelopes, deadline_ms: nil) # rubocop:disable Lint/UnusedMethodArgument
+  def enqueue(envelopes, deadline_ms: nil, frames: nil) # rubocop:disable Lint/UnusedMethodArgument
     sleep(@write_s)
     @accepted.increment
     @last = envelopes.last.msg_id if envelopes.any?

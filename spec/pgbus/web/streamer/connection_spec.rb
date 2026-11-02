@@ -258,6 +258,89 @@ RSpec.describe Pgbus::Web::Streamer::Connection do
     end
   end
 
+  describe "#enqueue with prebuilt frames (issue #621)" do
+    it "writes the given frame bytes instead of building them" do
+      envelope = build_envelope(msg_id: 1248, payload: "A")
+      frame = "id: 1248\nevent: turbo-stream\ndata: prebuilt\n\n"
+      allow(Pgbus::Streams::Envelope).to receive(:message).and_call_original
+
+      written = conn.enqueue([envelope], frames: { 1248 => frame })
+
+      expect(written).to eq([envelope])
+      expect(writer.writes.map { |w| w[:bytes] }).to eq([frame])
+      expect(writer.writes.first[:bytes]).to be(frame)
+      expect(Pgbus::Streams::Envelope).not_to have_received(:message)
+    end
+
+    it "advances the cursor exactly as without frames" do
+      envelopes = [build_envelope(msg_id: 1247), build_envelope(msg_id: 1248), build_envelope(msg_id: 1249)]
+      frames = envelopes.to_h { |e| [e.msg_id, "frame #{e.msg_id}"] }
+
+      written = conn.enqueue(envelopes, frames: frames)
+
+      expect(written.map(&:msg_id)).to eq([1248, 1249])
+      expect(conn.last_msg_id_sent).to eq(1249)
+      expect(writer.writes.map { |w| w[:bytes] }).to eq(["frame 1248", "frame 1249"])
+    end
+
+    it "builds the frame itself for an envelope the Hash does not hold" do
+      envelope = build_envelope(msg_id: 1248, payload: "A")
+
+      conn.enqueue([envelope], frames: {})
+
+      expect(writer.writes.first[:bytes]).to eq(
+        Pgbus::Streams::Envelope.message(id: 1248, event: "turbo-stream", data: "A")
+      )
+    end
+
+    it "stops and marks the connection dead on a failed write" do
+      c = described_class.new(id: "c9", stream_name: stream, io: io, since_id: 0,
+                              writer: writer.class.new(result: :timeout), write_deadline_ms: 100)
+
+      written = c.enqueue([build_envelope(msg_id: 1), build_envelope(msg_id: 2)], frames: { 1 => "a", 2 => "b" })
+
+      expect(written).to be_empty
+      expect(c).to be_dead
+      expect(c.last_msg_id_sent).to eq(0)
+    end
+  end
+
+  describe "#write_raw (issue #621)" do
+    it "writes the bytes with the given deadline and returns the writer's result" do
+      expect(conn.write_raw(": heartbeat 1\n\n", deadline_ms: 250)).to eq(:ok)
+      expect(writer.writes.last).to include(bytes: ": heartbeat 1\n\n", deadline_ms: 250)
+    end
+
+    it "defaults to the connection's own write deadline" do
+      conn.write_raw("x")
+      expect(writer.writes.last[:deadline_ms]).to eq(5_000)
+    end
+
+    it "updates last_write_at on success" do
+      clock = [100.0]
+      allow(Process).to receive(:clock_gettime).with(Process::CLOCK_MONOTONIC) { clock[0] }
+      c = described_class.new(id: "c5", stream_name: stream, io: io, since_id: 0, writer: writer, write_deadline_ms: 100)
+      clock[0] = 130.0
+      c.write_raw("x", deadline_ms: 250)
+      clock[0] = 131.0
+
+      expect(c.idle_for).to eq(1.0)
+    end
+
+    it "marks the connection dead when the write times out" do
+      c = described_class.new(id: "c6", stream_name: stream, io: io, since_id: 0,
+                              writer: writer.class.new(result: :timeout), write_deadline_ms: 100)
+
+      expect(c.write_raw("x", deadline_ms: 250)).to eq(:timeout)
+      expect(c).to be_dead
+    end
+
+    it "does not touch last_msg_id_sent" do
+      conn.write_raw("x", deadline_ms: 250)
+      expect(conn.last_msg_id_sent).to eq(1247)
+    end
+  end
+
   describe "#write_comment" do
     it "writes an SSE comment via the writer" do
       conn.write_comment("heartbeat 123")
@@ -320,6 +403,21 @@ RSpec.describe Pgbus::Web::Streamer::Connection do
         writer: failing_writer, write_deadline_ms: 100
       )
       expect(c.write_sentinel("bytes")).to eq(:closed)
+    end
+
+    it "is write_raw with the connection's own deadline (one raw writer, issue #621)" do
+      allow(conn).to receive(:write_raw).and_call_original
+
+      conn.write_sentinel("bytes")
+
+      expect(conn).to have_received(:write_raw).with("bytes")
+    end
+
+    it "marks the connection dead when the writer fails, like every other frame" do
+      c = described_class.new(id: "c7", stream_name: stream, io: io, since_id: 0,
+                              writer: writer.class.new(result: :closed), write_deadline_ms: 100)
+      c.write_sentinel("bytes")
+      expect(c).to be_dead
     end
   end
 

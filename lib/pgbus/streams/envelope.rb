@@ -70,6 +70,16 @@ module Pgbus
         "retry: #{milliseconds}\n\n"
       end
 
+      # The SSE event name for a frame: the envelope's typed event when
+      # present, else the default turbo-stream. Plain ReadAfter::Envelopes
+      # (no event field) and StreamEnvelopes with a nil event both fall back
+      # to the default (issue #170). Shared by the connections and the
+      # dispatcher, which frames each envelope once per wake (issue #621).
+      def self.sse_event_for(envelope)
+        event = envelope.respond_to?(:event) ? envelope.event : nil
+        event && !event.to_s.empty? ? event.to_s : Pgbus::Streams::DEFAULT_SSE_EVENT
+      end
+
       def self.http_response_headers
         RESPONSE_HEADERS
       end
@@ -82,6 +92,12 @@ module Pgbus
       # empty strings, so a payload ending in \n round-trips as an empty
       # final `data:` line (the client's rejoin restores the newline).
       def self.data_lines(str)
+        # Most payloads are one line (a rendered turbo-stream): no split, map
+        # or join, one String (issue #621). Two memchr scans beat the regex
+        # match? (232 vs 388 ns on a 170-byte line, YJIT) and cost a multi-line
+        # payload ~3 % before its split.
+        return "data: #{str}\n" unless str.include?("\n") || str.include?("\r")
+
         lines = str.split(DATA_LINE_BREAK, -1)
         lines = [""] if lines.empty? # "".split → [] — an empty payload still gets its data: line
         lines.map { |line| "data: #{line}\n" }.join

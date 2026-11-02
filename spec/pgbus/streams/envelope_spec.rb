@@ -107,6 +107,58 @@ RSpec.describe Pgbus::Streams::Envelope do
     end
   end
 
+  describe ".message data framing (issue #621 fast path)" do
+    # The pre-#621 implementation, kept as the reference the fast path must match
+    # byte for byte.
+    let(:reference) do
+      lambda do |str|
+        lines = str.split(/\r\n|\r|\n/, -1)
+        lines = [""] if lines.empty?
+        lines.map { |line| "data: #{line}\n" }.join
+      end
+    end
+
+    it "frames 200 random payloads exactly as the split/map/join implementation did" do
+      random = Random.new(621)
+      pieces = ["a", "bc", " ", "\r", "\n", "\r\n", "<p>", "é", "\n\n", ""]
+      payloads = ["", "\n", "\r", "\r\n", "x\n", "\nx", "plain"] +
+                 Array.new(193) { Array.new(random.rand(0..12)) { pieces.sample(random: random) }.join }
+
+      payloads.each do |payload|
+        expected = "id: 1\nevent: msg\n#{reference.call(payload)}\n"
+        expect(described_class.message(id: 1, event: "msg", data: payload)).to eq(expected), payload.inspect
+      end
+    end
+
+    it "does not split a payload with no line break" do
+      payload = +"<turbo-stream>one line</turbo-stream>"
+      allow(payload).to receive(:split).and_call_original
+
+      described_class.message(id: 1, event: "msg", data: payload)
+
+      expect(payload).not_to have_received(:split)
+    end
+  end
+
+  describe ".sse_event_for" do
+    let(:typed) { Struct.new(:event) }
+
+    it "returns the envelope's event when present" do
+      expect(described_class.sse_event_for(typed.new("presence"))).to eq("presence")
+    end
+
+    it "falls back to the default event for a nil or empty event" do
+      expect(described_class.sse_event_for(typed.new(nil))).to eq(Pgbus::Streams::DEFAULT_SSE_EVENT)
+      expect(described_class.sse_event_for(typed.new(""))).to eq(Pgbus::Streams::DEFAULT_SSE_EVENT)
+    end
+
+    it "falls back to the default event for an envelope without an event field" do
+      plain = Pgbus::Client::ReadAfter::Envelope.new(msg_id: 1, enqueued_at: nil, payload: "x", source: "live")
+
+      expect(described_class.sse_event_for(plain)).to eq(Pgbus::Streams::DEFAULT_SSE_EVENT)
+    end
+  end
+
   describe ".comment" do
     it "encodes an SSE comment line" do
       expect(described_class.comment("hello")).to eq(": hello\n\n")
