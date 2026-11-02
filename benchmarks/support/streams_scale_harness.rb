@@ -1,0 +1,231 @@
+# frozen_string_literal: true
+
+require "json"
+
+# Streams scale bench (issue #620): the pure pieces.
+#
+# The bench connects M SSE clients, spread over spawned client processes, to
+# one Puma web process and times the streamer at that size. This module holds
+# what carries no database, Puma or subprocess dependency (the knobs, the child
+# result line, the percentile and fan-out arithmetic, the fd-limit clamp, the
+# wall-time prepend and the table), so spec/benchmarks/streams_scale_bench_spec.rb
+# pins it without a run. The client script (streams_scale_client.rb) requires
+# this file too: it must never load pgbus or ActiveRecord.
+module StreamsScaleHarness
+  CHILD_READY = "STREAMS_SCALE_CHILD_READY"
+  CHILD_RESULT = "STREAMS_SCALE_CHILD_RESULT "
+  # One (M, mode) cell runs in its own subprocess of the bench and prints this.
+  CELL_RESULT = "STREAMS_SCALE_CELL_RESULT "
+  MODES = %i[ephemeral durable].freeze
+  DEFAULTS = {
+    "STREAMS_SCALE_CLIENTS" => "100,1000", "STREAMS_SCALE_CLIENT_PROCESSES" => "4",
+    "STREAMS_SCALE_BROADCASTS" => "20", "STREAMS_SCALE_MODES" => "ephemeral,durable",
+    "STREAMS_SCALE_WRITERS" => "0", "STREAMS_SCALE_SLOW" => "0"
+  }.freeze
+  # Descriptors per client: the server's socket and, counted conservatively,
+  # the client's (the clients live in other processes today).
+  FD_PER_CLIENT = 2
+  # The listener, the Postgres connections, the child pipes, Ruby's own.
+  FD_HEADROOM = 64
+  # macOS: getrlimit reports an infinite hard limit and setrlimit to infinity
+  # raises Errno::EINVAL; OPEN_MAX (sys/syslimits.h) is what it accepts.
+  OPEN_MAX = 10_240
+  # A broadcast a client has not received this long after it was sent is a miss.
+  MISS_DEADLINE_S = 5.0
+  NA = "n/a"
+  COLUMNS = [
+    "M", "connect all (s)", "connect p99 (ms)", "fan-out first p50 (ms)", "fan-out last p50/p99 (ms)",
+    "dispatcher wake p50/p99 (ms)", "heartbeat tick (ms)", "watcher build (ms)", "RSS Δ/conn (KB)",
+    "CPU/wall", "misses / errors / 503s", "retried connects"
+  ].freeze
+
+  module_function
+
+  def knobs(env)
+    value = ->(name) { env.fetch(name, DEFAULTS.fetch(name)) }
+    {
+      clients: parse_counts(value.call("STREAMS_SCALE_CLIENTS"), name: "STREAMS_SCALE_CLIENTS"),
+      client_processes: parse_integer(value.call("STREAMS_SCALE_CLIENT_PROCESSES"),
+                                      name: "STREAMS_SCALE_CLIENT_PROCESSES", min: 1),
+      broadcasts: parse_integer(value.call("STREAMS_SCALE_BROADCASTS"), name: "STREAMS_SCALE_BROADCASTS", min: 1),
+      modes: parse_modes(value.call("STREAMS_SCALE_MODES")),
+      writers: parse_integer(value.call("STREAMS_SCALE_WRITERS"), name: "STREAMS_SCALE_WRITERS", min: 0),
+      slow: parse_integer(value.call("STREAMS_SCALE_SLOW"), name: "STREAMS_SCALE_SLOW", min: 0)
+    }
+  end
+
+  def parse_counts(value, name:)
+    counts = value.to_s.split(",", -1).map(&:strip)
+    raise ArgumentError, "#{name} must list positive integers, like 100,1000 (got #{value.inspect})" if
+      counts.empty? || counts.any? { |c| !c.match?(/\A[1-9]\d*\z/) }
+
+    counts.map { |c| Integer(c, 10) }
+  end
+
+  def parse_integer(value, name:, min:)
+    text = value.to_s.strip
+    raise ArgumentError, "#{name} must be an integer >= #{min} (got #{value.inspect})" unless
+      text.match?(/\A\d+\z/) && Integer(text, 10) >= min
+
+    Integer(text, 10)
+  end
+
+  def parse_modes(value)
+    modes = value.to_s.split(",", -1).map(&:strip)
+    valid = modes.any? && modes.uniq.size == modes.size && modes.all? { |m| MODES.map(&:to_s).include?(m) }
+    raise ArgumentError, "STREAMS_SCALE_MODES must list #{MODES.join(" and/or ")} once each (got #{value.inspect})" unless
+      valid
+
+    modes.map(&:to_sym)
+  end
+
+  # M clients over `processes` children, the remainder on the first ones; a
+  # child with no clients is never spawned.
+  def split_clients(clients, processes)
+    base, extra = clients.divmod(processes)
+    Array.new(processes) { |i| base + (i < extra ? 1 : 0) }.select(&:positive?)
+  end
+
+  # Nearest-rank percentile; nil for no samples.
+  def percentile(values, pct)
+    return nil if values.empty?
+
+    sorted = values.sort
+    sorted[[(pct / 100.0 * sorted.size).ceil - 1, 0].max]
+  end
+
+  def parse_child_result(output, prefix: CHILD_RESULT)
+    line = output.lines.reverse.find { |l| l.start_with?(prefix) }
+    raise "no #{prefix.strip} line in the subprocess's output:\n#{output}" unless line
+
+    JSON.parse(line.delete_prefix(prefix))
+  end
+
+  def fd_needed(clients) = (FD_PER_CLIENT * clients) + FD_HEADROOM
+
+  # The soft limit to set, or nil when the current one already fits `needed`
+  # (a soft limit above OPEN_MAX is never lowered).
+  def fd_target(soft:, hard:, needed:, infinity: Process::RLIM_INFINITY)
+    return nil if soft >= needed
+
+    hard == infinity ? OPEN_MAX : hard
+  end
+
+  # Raises this process's soft fd limit as far as fd_target allows and
+  # returns the soft limit in force afterwards.
+  def raise_fd_limit!(needed)
+    soft, hard = Process.getrlimit(:NOFILE)
+    target = fd_target(soft: soft, hard: hard, needed: needed)
+    Process.setrlimit(:NOFILE, target, hard) if target
+    Process.getrlimit(:NOFILE).first
+  end
+
+  def fd_skip_reason(clients, cap:)
+    needed = fd_needed(clients)
+    return if cap >= needed
+
+    "skipped: M=#{clients} needs #{FD_PER_CLIENT} × #{clients} + #{FD_HEADROOM} = #{needed} file descriptors, " \
+      "the limit is #{cap}; raise it with `ulimit -n #{[needed, OPEN_MAX].max}` " \
+      "(macOS: `sudo launchctl limit maxfiles #{OPEN_MAX} unlimited`, check with `launchctl limit maxfiles`)"
+  end
+
+  # connected_ats: each client's CLOCK_REALTIME stamp of its pgbus:connected
+  # frame; go_at: the parent's stamp just before it released the barrier.
+  def connect_stats(connected_ats, go_at:)
+    ms = connected_ats.map { |t| (t - go_at) * 1000 }
+    { p50_ms: percentile(ms, 50), p99_ms: percentile(ms, 99) }
+  end
+
+  # broadcasts: [{"tag", "at"}], `at` the parent's CLOCK_REALTIME stamp right
+  # before the broadcast call. clients: [{"events" => {tag => received_at}}].
+  # Per broadcast, the time to its first and its last client among those that
+  # received it within the deadline; a (client, broadcast) pair that did not
+  # is a miss.
+  def fanout_stats(broadcasts, clients, deadline_s: MISS_DEADLINE_S)
+    firsts = []
+    lasts = []
+    misses = 0
+    broadcasts.each do |broadcast|
+      latencies = clients.filter_map do |client|
+        received = client.fetch("events")[broadcast.fetch("tag")]
+        latency = received && (received - broadcast.fetch("at"))
+        next latency if latency && latency <= deadline_s
+
+        misses += 1
+        nil
+      end
+      next if latencies.empty?
+
+      firsts << (latencies.min * 1000)
+      lasts << (latencies.max * 1000)
+    end
+    { first_p50_ms: percentile(firsts, 50), last_p50_ms: percentile(lasts, 50),
+      last_p99_ms: percentile(lasts, 99), misses: misses }
+  end
+
+  # The one-minute load from `sysctl -n vm.loadavg` ("{ 6.60 5.95 5.80 }") or
+  # /proc/loadavg ("0.52 0.58 0.59 1/482 12345").
+  def parse_loadavg(text)
+    match = text.to_s.match(/(\d+(?:\.\d+)?)/)
+    match && Float(match[1])
+  end
+
+  def load_average
+    text = if File.readable?("/proc/loadavg")
+             File.read("/proc/loadavg")
+           else
+             IO.popen(%w[sysctl -n vm.loadavg], err: File::NULL, &:read)
+           end
+    parse_loadavg(text)
+  rescue SystemCallError
+    nil
+  end
+
+  # Wraps `method` on this one object (its singleton class, so other instances
+  # and the library's code stay untouched) and pushes each call's wall time in
+  # ms onto `sink` (a Queue: the timed threads and the bench thread share it).
+  # A private method stays private.
+  def time_calls(object, method, sink)
+    was_private = object.private_methods.include?(method)
+    timer = Module.new do
+      define_method(method) do |*args, **kwargs, &block|
+        started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        begin
+          super(*args, **kwargs, &block)
+        ensure
+          sink << ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - started) * 1000)
+        end
+      end
+      private method if was_private
+    end
+    object.singleton_class.prepend(timer)
+  end
+
+  def drain(queue)
+    values = []
+    values << queue.pop until queue.empty?
+    values
+  end
+
+  def table(rows)
+    ["| #{COLUMNS.join(" | ")} |", "|#{"---:|" * COLUMNS.size}"] + rows.map { |row| table_row(row) }
+  end
+
+  def table_row(row)
+    return "| #{row["m"]} | #{row["skip_reason"]} |#{" |" * (COLUMNS.size - 2)}" if row["skip_reason"]
+
+    failures = "#{row["misses"]} / #{row["errors"]} / #{row["over_capacity"]}"
+    failures = "**#{failures}**" if row["misses"].to_i.positive? || row["errors"].to_i.positive?
+    cells = [
+      row["m"], num(row["connect_all_s"], "%.2f"), num(row["connect_p99_ms"], "%.1f"),
+      num(row["fanout_first_p50_ms"], "%.1f"),
+      "#{num(row["fanout_last_p50_ms"], "%.1f")} / #{num(row["fanout_last_p99_ms"], "%.1f")}",
+      "#{num(row["wake_p50_ms"], "%.1f")} / #{num(row["wake_p99_ms"], "%.1f")}",
+      num(row["heartbeat_ms"], "%.1f"), num(row["watcher_ms"], "%.2f"), num(row["rss_kb_per_conn"], "%.1f"),
+      row["cpu_ratio"].nil? ? NA : "#{(row["cpu_ratio"] * 100).round} %", failures, row["retries"]
+    ]
+    "| #{cells.join(" | ")} |"
+  end
+
+  def num(value, fmt) = value.nil? ? NA : format(fmt, value)
+end
