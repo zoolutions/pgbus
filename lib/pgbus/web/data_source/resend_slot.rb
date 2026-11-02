@@ -53,8 +53,10 @@ module Pgbus
         # :acquired, :full, or the id of the BlockedExecution the copy was
         # parked as. The copy is sent right away, so its lease is the
         # duration alone (Adapter#slot_lease with no delay). Parked on the
-        # logical queue at the default priority: promote_next sends it
-        # through Client#send_message, which prefixes the name.
+        # logical queue at the job's own priority (the serialized "priority",
+        # else the default, as Adapter#handle_conflict parks it): promote_next
+        # sends it through Client#send_message, which prefixes the name and
+        # picks the _pN sub-queue by that priority.
         def take_resend_slot(key, limits, lock_queue, payload)
           Pgbus::Semaphore.transaction(requires_new: true) do
             lease = Concurrency.effective_duration(limits[:duration])
@@ -63,7 +65,7 @@ module Pgbus
 
             Concurrency::BlockedExecution.insert(
               concurrency_key: key, queue_name: lock_queue, payload: payload,
-              priority: Pgbus.configuration.default_priority, duration: limits[:duration]
+              priority: payload["priority"] || Pgbus.configuration.default_priority, duration: limits[:duration]
             ).rows.dig(0, 0)
           end
         end

@@ -250,6 +250,12 @@ RSpec.describe Pgbus::Web::DataSource::Resend do
         expect(Pgbus::UniquenessKey).not_to have_received(:release_if_unbound!)
       end
 
+      it "parks the copy at the job's own priority when the payload carries one" do
+        resend(slotted.merge("priority" => 3)) { "17" }
+
+        expect(Pgbus::Concurrency::BlockedExecution).to have_received(:insert).with(hash_including(priority: 3))
+      end
+
       it "withdraws the park and gives the key back when removing the source fails" do
         allow(Pgbus::BlockedExecution).to receive(:where).with(id: 77).and_return(double(delete_all: 1))
 

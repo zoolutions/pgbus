@@ -182,6 +182,23 @@ RSpec.describe "Dashboard re-send of a limits_concurrency payload (integration)"
 
     it_behaves_like "a re-send that takes a slot"
 
+    # The park commits on the bus connection and the DLQ copy is deleted on
+    # PGMQ's, so the two cannot share a transaction: a failed delete withdraws
+    # the park while it still waits, and nothing changes.
+    it "withdraws the park and keeps the DLQ copy when deleting it fails" do
+      define_job(:block, uniqueness: :until_executed)
+      dead_letter_job
+      hold_slot
+      allow(client).to receive(:delete_message).and_raise(StandardError, "delete failed")
+
+      expect(resend).to be(false)
+
+      expect(parked.count).to eq(0)
+      expect(source_still_there?).to be(true)
+      expect(Pgbus::UniquenessKey.find_by(lock_key: "resend-42")).to be_nil
+      expect(slots_held).to eq(1)
+    end
+
     describe "Retry all" do
       it "sends the first copy into the free slot and parks the second behind it" do
         define_job(:block)
@@ -221,6 +238,20 @@ RSpec.describe "Dashboard re-send of a limits_concurrency payload (integration)"
     def source_still_there? = conn.select_value("SELECT COUNT(*) FROM pgbus_failed_events", "spec").to_i == 1
 
     it_behaves_like "a re-send that takes a slot"
+
+    describe "Retry all" do
+      it "counts a copy parked behind a full limit as retried, and deletes its failed row" do
+        define_job(:block)
+        dead_letter_job
+        hold_slot
+
+        expect(data_source.retry_all_failed).to eq(1)
+
+        expect(source_still_there?).to be(false)
+        expect(parked.count).to eq(1)
+        expect(queued_msg_ids).to be_empty
+      end
+    end
 
     # A failed attempt keeps its slot until it succeeds or dead-letters, so a
     # message still queued goes back with the slot it holds: no second one.
