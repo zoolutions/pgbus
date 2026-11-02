@@ -1526,8 +1526,10 @@ changes:
   `remove_listening`, and the listener runs commands in order. When that `ensure_listening` was
   acked, the LISTEN is active; when it timed out (a stuck listener), the LISTEN is still queued
   ahead of any UNLISTEN and runs once the listener recovers, the same window that first connect
-  had. An empty stream, and any connect while the local listener is reconnecting, takes the
-  slow path.
+  had. An empty stream always takes the slow path. A connect while the listener reconnects keeps
+  the fast path: waiting there would cost every connect the ack budget for as long as the
+  database is unreachable, and its exposure is that of every registered connection (a durable
+  stream's next wake re-reads from the min cursor).
 - **B. The listener drains commands on a self-pipe wake.** The listener thread parked in
   `wait_for_notify(health_check_ms)` and drained its command queue only between waits, so a
   stream's first connect, every unlisten and every master-hub sub waited out the current wait.
