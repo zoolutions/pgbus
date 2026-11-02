@@ -1186,7 +1186,7 @@ RSpec.describe Pgbus::ActiveJob::Executor do
           expect_released_once(message)
         end
 
-        it "releases the row on dead-lettering, for a message that never got to start" do
+        it "releases the row this message holds on dead-lettering (a no-op once a start-release ran)" do
           dlq_message = build_message_double(msg_id: 71, message: message_json, read_ct: config.max_retries + 1)
 
           expect(executor.execute(dlq_message, queue_name)).to eq(:dead_lettered)
