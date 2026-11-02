@@ -12,7 +12,7 @@ RSpec.describe "benchmarks/worker_profile_bench.rb knobs" do # rubocop:disable R
   def run_bench(env)
     clean = %w[PGBUS_DATABASE_URL PGBUS_BENCH_PROXY_URL WP_BENCH_ROLE WP_BENCH_PROCESSES WP_BENCH_JOBS
                WP_BENCH_PROFILE_JOBS WP_BENCH_THREADS WP_BENCH_READ_AHEAD WP_BENCH_COMPLETION_BATCHING
-               WP_BENCH_COMPLETED_JOBS WPROF_CHILD WPROF_DRAIN_CHILD].to_h { |k| [k, nil] }
+               WP_BENCH_COMPLETED_JOBS WP_BENCH_COMPLETION_COMMIT WPROF_CHILD WPROF_DRAIN_CHILD].to_h { |k| [k, nil] }
     out, status = Open3.capture2e(clean.merge(env), RbConfig.ruby, script)
     [out, status]
   end
@@ -69,5 +69,20 @@ RSpec.describe "benchmarks/worker_profile_bench.rb knobs" do # rubocop:disable R
     out, = run_bench("WP_BENCH_COMPLETED_JOBS" => "delete")
 
     expect(out).to include("PGBUS_DATABASE_URL not set")
+  end
+
+  it "rejects a WP_BENCH_COMPLETION_COMMIT other than sync or async before it asks for a database" do
+    out, status = run_bench("WP_BENCH_COMPLETION_COMMIT" => "off")
+
+    expect(status).not_to be_success
+    expect(out).to include("WP_BENCH_COMPLETION_COMMIT must be sync or async (got off)")
+  end
+
+  it "accepts WP_BENCH_COMPLETION_COMMIT=async and sync, then asks for a database" do
+    %w[async sync].each do |mode|
+      out, = run_bench("WP_BENCH_COMPLETION_COMMIT" => mode)
+
+      expect(out).to include("PGBUS_DATABASE_URL not set")
+    end
   end
 end

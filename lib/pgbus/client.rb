@@ -18,6 +18,7 @@ module Pgbus
     include EnsureStreamQueue
     include NotifyStream
     include NativeStatements
+    include AsyncCommit
 
     attr_reader :pgmq, :config, :connection_health
 
@@ -174,6 +175,9 @@ module Pgbus
       # Per physical queue: its native statements, or false (issue #605).
       @native_statements = Concurrent::Map.new
       @native_unprepared = config.native_statements && ar_disables_prepared_statements?
+      # Completions commit with synchronous_commit off (issue #619). Native
+      # statements only: the pgmq functions are never wrapped.
+      @async_completion_commit = config.native_statements && !config.completion_synchronous_commit
       # Guards the one-time build of the publisher autoscale trigger (issue #323).
       # NOT @pgmq_mutex — that is nil on the dedicated path (the only path the
       # trigger exists on), so it wouldn't serialize concurrent first-publishers.

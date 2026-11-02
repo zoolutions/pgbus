@@ -2219,7 +2219,7 @@ pgbus help      # Show help
 
 #### pgbus doctor
 
-A single preflight command that answers "is this environment healthy enough to run?" — useful as a deploy or CI gate. It runs 12 checks and never raises; a broken environment turns every probe into a failed/warned check instead of a crash:
+A single preflight command that answers "is this environment healthy enough to run?" — useful as a deploy or CI gate. It runs 13 checks and never raises; a broken environment turns every probe into a failed/warned check instead of a crash:
 
 | Check | Fails (`:fail`) when | Warns (`:warn`) when |
 |---|---|---|
@@ -2235,6 +2235,7 @@ A single preflight command that answers "is this environment healthy enough to r
 | Primary affinity | — | Job connection is on a read-only replica (`pg_is_in_recovery`) — a read/write-splitting pooler may be stalling jobs |
 | Dedicated connections | Streamer LISTEN and/or worker notify dedicated path cannot connect | — |
 | Connection budget | — (informational: prints how many direct LISTEN connections the current config pins — 1 per host under `worker_notify_scope: :supervisor`, one per fork under `:fork`; streams add 1 per web host under `streams_listen_scope: :master` or 1 per web process under `:process`) | — |
+| Completion commit | — (informational: prints whether completions commit synchronously, the default, or with `synchronous_commit` off under `completion_synchronous_commit = false`) | `completion_synchronous_commit = false` with `native_statements = false`, where it has no effect |
 
 ```bash
 pgbus doctor       # prints the report; exit 1 unless every check passed

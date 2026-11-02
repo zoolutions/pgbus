@@ -36,6 +36,8 @@ module Pgbus
     def completion_batch_size=: (untyped) -> untyped
     def completion_batching: () -> bool
     def completion_batching=: (untyped) -> untyped
+    def completion_synchronous_commit: () -> bool
+    def completion_synchronous_commit=: (untyped value) -> bool
     def connection_guc_mode: () -> Symbol
     def connection_guc_mode=: (untyped mode) -> untyped
     def connection_options: () -> untyped

@@ -46,7 +46,9 @@
 # every cell, fleet drain children included, with config.completion_batching
 # on, issue #606; unset or 0 leaves it off), WP_BENCH_COMPLETED_JOBS (archive
 # or delete sets config.completed_jobs in every cell, issue #607; unset leaves
-# the default).
+# the default), WP_BENCH_COMPLETION_COMMIT (sync or async sets
+# config.completion_synchronous_commit to true or false in every cell, issue
+# #619; unset leaves the default).
 # Raw vernier profiles land in tmp/benchmarks/ (open in profiler.firefox.com).
 # Requires PGBUS_DATABASE_URL. Run-and-report, never a CI gate.
 
@@ -72,6 +74,7 @@ abort "WP_BENCH_READ_AHEAD must be a non-negative integer (got #{READ_AHEAD})" i
 begin
   COMPLETION_BATCHING = WorkerProfileHarness.completion_batching?
   COMPLETED_JOBS = WorkerProfileHarness.completed_jobs
+  COMPLETION_COMMIT = WorkerProfileHarness.completion_commit
 rescue ArgumentError => e
   abort e.message
 end
@@ -169,10 +172,14 @@ def print_split(cells, key, title, buckets = BUCKETS)
   end
 end
 
+def completion_commit_label
+  { nil => "default", true => "sync", false => "async" }.fetch(COMPLETION_COMMIT)
+end
+
 def print_fleet_table(cells)
   puts
   puts "Fleet: N worker processes draining one queue (#{JOBS} jobs per process, #{THREADS} threads each, " \
-       "pool_size #{THREADS + 2})"
+       "pool_size #{THREADS + 2}, completion commit #{completion_commit_label})"
   puts FleetProfileHarness.fleet_table(cells)
   puts
   puts "Top statements by total execution + planning time (pg_stat_statements, this database, top-level):"
@@ -238,6 +245,7 @@ puts "  Ruby #{RUBY_VERSION}, #{THREADS} threads, #{JOBS} timed jobs, roles: #{R
 puts "  read_ahead: #{READ_AHEAD.nil? ? "not passed" : READ_AHEAD}"
 puts "  completion_batching: #{COMPLETION_BATCHING ? "on" : "off"}"
 puts "  completed_jobs (workers; consumers always archive): #{COMPLETED_JOBS || "default"}"
+puts "  completion commit: #{completion_commit_label}"
 puts "  proxied cells: #{proxy_url ? "on" : "off (set PGBUS_BENCH_PROXY_URL)"}"
 puts "  fleet processes: #{PROCESSES.join(", ")}" if ROLES.fetch(ROLE).include?("fleet")
 puts "=" * 70

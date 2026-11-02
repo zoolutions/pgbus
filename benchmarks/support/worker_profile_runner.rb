@@ -54,6 +54,9 @@ module WorkerProfileRunner
       # Issue #607, likewise.
       completed_jobs = WorkerProfileHarness.completed_jobs
       c.completed_jobs = completed_jobs if completed_jobs
+      # Issue #619, likewise.
+      synchronous = WorkerProfileHarness.completion_commit
+      c.completion_synchronous_commit = synchronous unless synchronous.nil?
     end
   end
 

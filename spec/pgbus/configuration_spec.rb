@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "pg"
 # Duration examples (10.minutes etc.) must not depend on another spec having
 # loaded ActiveSupport's numeric core_ext first — order-dependent flake.
 require "active_support/core_ext/numeric/time"
@@ -297,6 +298,64 @@ RSpec.describe Pgbus::Configuration do
         expect { config.completed_jobs = value }
           .to raise_error(Pgbus::ConfigurationError, /completed_jobs must be :archive or :delete/)
       end
+    end
+  end
+
+  # Issue #619: completions committed with synchronous_commit off.
+  describe "#completion_synchronous_commit" do
+    it "commits completions synchronously by default" do
+      expect(config.completion_synchronous_commit).to be(true)
+    end
+
+    it "accepts false and true" do
+      config.completion_synchronous_commit = false
+      expect(config.completion_synchronous_commit).to be(false)
+
+      config.completion_synchronous_commit = true
+      expect(config.completion_synchronous_commit).to be(true)
+    end
+
+    it "rejects anything but true or false" do
+      [:off, "false", nil, 0].each do |value|
+        expect { config.completion_synchronous_commit = value }
+          .to raise_error(Pgbus::ConfigurationError, /completion_synchronous_commit must be true or false/)
+      end
+    end
+
+    it "validates false with native_statements off (the doctor warns; validate! does not raise)" do
+      config.completion_synchronous_commit = false
+      config.native_statements = false
+
+      expect { config.validate! }.not_to raise_error
+    end
+
+    it "validates false on a libpq with pipeline mode" do
+      config.completion_synchronous_commit = false
+      allow(PG).to receive(:library_version).and_return(140_000)
+
+      expect { config.validate! }.not_to raise_error
+    end
+
+    it "rejects false on a libpq older than 14, which has no pipeline mode" do
+      config.completion_synchronous_commit = false
+      allow(PG).to receive(:library_version).and_return(130_012)
+
+      expect { config.validate! }
+        .to raise_error(Pgbus::ConfigurationError, /completion_synchronous_commit = false needs libpq 14\+ and pg 1\.5\+/)
+    end
+
+    it "rejects false on a pg gem without pipeline mode" do
+      config.completion_synchronous_commit = false
+      allow(PG::Connection).to receive(:method_defined?).and_call_original
+      allow(PG::Connection).to receive(:method_defined?).with(:enter_pipeline_mode).and_return(false)
+
+      expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /libpq 14\+ and pg 1\.5\+/)
+    end
+
+    it "skips the libpq check while completions stay synchronous" do
+      allow(PG).to receive(:library_version).and_return(130_012)
+
+      expect { config.validate! }.not_to raise_error
     end
   end
 

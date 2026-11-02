@@ -72,7 +72,12 @@ module Pgbus
       # reads as a first prepare, which can delay the switch, never cause it.
       PREPARED_ON_LIMIT = 10_000
 
-      Statement = Data.define(:name, :sql)
+      # The statements config.completion_synchronous_commit = false commits
+      # asynchronously (issue #619, AsyncCommit).
+      COMPLETION_STATEMENTS = %i[archive archive_batch delete delete_batch].freeze
+
+      # completion: whether it is one of COMPLETION_STATEMENTS.
+      Statement = Data.define(:name, :sql, :completion)
 
       # Process-wide, built at load: the pooler is a property of the process's
       # database route, not of one Client instance.
@@ -170,7 +175,8 @@ module Pgbus
         private
 
         def statement(kind, sql)
-          Statement.new(name: "pgbus_#{kind}_#{Digest::SHA256.hexdigest(sql)[0, 12]}", sql: sql.freeze)
+          Statement.new(name: "pgbus_#{kind}_#{Digest::SHA256.hexdigest(sql)[0, 12]}", sql: sql.freeze,
+                        completion: COMPLETION_STATEMENTS.include?(kind))
         end
 
         def read_sql(queue, limit, vt)
@@ -386,10 +392,14 @@ module Pgbus
         end
       end
 
+      # A completion under config.completion_synchronous_commit = false goes
+      # through AsyncCommit, unless it runs inside a caller's transaction.
       def exec_native(conn, statement, params)
-        if @native_unprepared || NativeStatements.unprepared? || inside_caller_transaction?(conn)
-          return conn.exec_params(statement.sql, params)
-        end
+        return conn.exec_params(statement.sql, params) if inside_caller_transaction?(conn)
+
+        unprepared = @native_unprepared || NativeStatements.unprepared?
+        return exec_async_commit(conn, statement, params, !unprepared) if @async_completion_commit && statement.completion
+        return conn.exec_params(statement.sql, params) if unprepared
 
         begin
           result = conn.exec_prepared(statement.name, params)

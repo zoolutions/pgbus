@@ -133,6 +133,17 @@ module WorkerProfileHarness
     raise ArgumentError, "WP_BENCH_COMPLETED_JOBS must be archive or delete (got #{value})"
   end
 
+  # WP_BENCH_COMPLETION_COMMIT (issue #619): "sync" or "async" sets
+  # config.completion_synchronous_commit (true / false) in every cell; unset
+  # leaves the setting alone (nil), so the bench still runs on main.
+  def completion_commit(env = ENV)
+    value = env.fetch("WP_BENCH_COMPLETION_COMMIT", nil)
+    return if value.nil?
+    return value == "sync" if %w[sync async].include?(value)
+
+    raise ArgumentError, "WP_BENCH_COMPLETION_COMMIT must be sync or async (got #{value})"
+  end
+
   def jit_label
     return "yjit" if defined?(RubyVM::YJIT) && RubyVM::YJIT.enabled?
     return "zjit" if defined?(RubyVM::ZJIT) && RubyVM::ZJIT.enabled?
