@@ -33,7 +33,9 @@ module Pgbus
       if data_source.retry_dlq_message(queue_name, params[:id])
         redirect_to dead_letter_index_path, notice: "Message re-enqueued to original queue."
       else
-        redirect_to dead_letter_index_path, alert: "Could not retry message."
+        redirect_to dead_letter_index_path,
+                    alert: "Could not retry message. Another copy of the job may hold its uniqueness key; " \
+                           "the log says why. The message stays in the dead-letter queue."
       end
     end
 

@@ -140,6 +140,16 @@ RSpec.describe "Pgbus::JobsController", type: :request do
       expect(flash[:notice]).to eq("Job re-enqueued.")
       expect(@stub_data_source.calls[:retry_failed_event]).to eq([["7"]])
     end
+
+    # Issue #631: refused while another copy holds the job's uniqueness key.
+    it "says why a retry can fail and that the failed job stays" do
+      allow(@stub_data_source).to receive(:retry_failed_event).and_return(false)
+
+      post "/pgbus/jobs/7/retry"
+
+      expect(flash[:alert]).to eq("Could not retry job. Another copy of the job may hold its uniqueness key; " \
+                                  "the log says why. The failed job stays in the list.")
+    end
   end
 
   describe "POST /pgbus/jobs/:id/discard" do

@@ -70,7 +70,8 @@ module Pgbus
         if data_source.retry_dlq_message(detail[:queue_name], detail[:msg_id])
           puts "Re-enqueued msg_id #{detail[:msg_id]} to #{origin_queue(detail[:queue_name])}."
         else
-          warn "Failed to retry msg_id #{detail[:msg_id]}."
+          warn "Failed to retry msg_id #{detail[:msg_id]}. Another copy of the job may hold its uniqueness key; " \
+               "the log says why. The message stays in the dead-letter queue."
           exit 1
         end
       end
