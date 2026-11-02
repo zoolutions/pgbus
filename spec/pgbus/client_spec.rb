@@ -1583,6 +1583,15 @@ RSpec.describe Pgbus::Client do
   end
 
   describe "#drop_queue" do
+    it "runs the before-drop block ahead of dropping the table" do
+      order = []
+      allow(mock_pgmq).to receive(:drop_queue) { order << :drop }
+
+      client.drop_queue("default") { order << :before }
+
+      expect(order).to eq(%i[before drop])
+    end
+
     it "drops the prefixed queue" do
       client.drop_queue("default")
 

@@ -6,7 +6,6 @@ module Pgbus
     def archive_batch: (untyped queue_name, untyped msg_ids, ?prefixed: untyped, ?job_completion: bool) -> untyped
     def archive_message: (untyped queue_name, untyped msg_id, ?prefixed: untyped, ?job_completion: bool) -> untyped
     def bind_topic: (untyped pattern, untyped queue_name) -> untyped
-    def case_duplicate?: (String name) -> bool
     def close: () -> untyped
     def config: () -> untyped
     def configured_queues: () -> untyped
@@ -17,7 +16,7 @@ module Pgbus
     def dead_letter_physical_name: (untyped queue_name, ?prefixed: untyped) -> untyped
     def delete_batch: (untyped queue_name, untyped msg_ids, ?prefixed: untyped, ?job_completion: bool) -> untyped
     def delete_message: (untyped queue_name, untyped msg_id, ?prefixed: untyped, ?job_completion: bool) -> untyped
-    def drop_queue: (untyped queue_name, ?prefixed: untyped) -> untyped
+    def drop_queue: (untyped queue_name, ?prefixed: untyped) ?{ () -> untyped } -> untyped
     def ensure_all_queues: () -> untyped
     def ensure_dead_letter_queue: (untyped name) -> untyped
     def ensure_fair_index: (untyped queue_name) -> untyped
