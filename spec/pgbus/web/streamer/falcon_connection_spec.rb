@@ -80,6 +80,37 @@ RSpec.describe Pgbus::Web::Streamer::FalconConnection do
       expect(written).to be_empty
       expect(conn).to be_dead
     end
+
+    it "writes the given frame bytes when frames: holds the envelope (issue #621)" do
+      allow(Pgbus::Streams::Envelope).to receive(:message).and_call_original
+
+      conn.enqueue([build_envelope(msg_id: 101)], frames: { 101 => "prebuilt\n\n" })
+
+      expect(body.read).to eq("prebuilt\n\n")
+      expect(Pgbus::Streams::Envelope).not_to have_received(:message)
+      expect(conn.last_msg_id_sent).to eq(101)
+    end
+
+    it "delivers an ephemeral envelope without moving the cursor, as Connection does" do
+      written = conn.enqueue([build_envelope(msg_id: -1, payload: "live")])
+
+      expect(written.map(&:msg_id)).to eq([-1])
+      expect(body.read).to include("id: -1", "data: live")
+      expect(conn.last_msg_id_sent).to eq(100)
+    end
+  end
+
+  describe "#write_raw (issue #621)" do
+    it "writes the bytes and accepts a deadline for parity with Connection" do
+      expect(conn.write_raw(": heartbeat 1\n\n", deadline_ms: 250)).to eq(:ok)
+      expect(body.read).to eq(": heartbeat 1\n\n")
+    end
+
+    it "marks dead when body is closed" do
+      body.close
+      expect(conn.write_raw("x", deadline_ms: 250)).to eq(:closed)
+      expect(conn).to be_dead
+    end
   end
 
   describe "#write_comment" do

@@ -289,6 +289,17 @@ RSpec.describe Pgbus::Web::Streamer::Instance do
     end
   end
 
+  describe "the heartbeat's write deadline (issue #621)" do
+    it "is the configured fan-out write deadline" do
+      config.streams_fanout_write_deadline_ms = 123
+      allow(Pgbus::Web::Streamer::Heartbeat).to receive(:new).and_call_original
+
+      streamer
+
+      expect(Pgbus::Web::Streamer::Heartbeat).to have_received(:new).with(hash_including(fanout_write_deadline_ms: 123))
+    end
+  end
+
   describe "#start" do
     it "starts the listener, dispatcher, and heartbeat threads" do
       streamer.start

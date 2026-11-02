@@ -21,20 +21,23 @@ RSpec.describe Pgbus::Web::Streamer::Heartbeat do
   let(:clock)          { -> { clock_value[0] } }
 
   # Minimal Connection stand-in. Exposes just what Heartbeat touches:
-  # dead? / mark_dead! / idle_for / write_comment. The real Connection
+  # dead? / mark_dead! / idle_for / write_raw. The real Connection
   # object uses CLOCK_MONOTONIC; we inject a fake clock so idle_for
-  # returns deterministic values.
+  # returns deterministic values. `result` scripts what write_raw returns;
+  # a non-:ok result marks it dead, as Connection#write_raw does.
   let(:conn_class) do
     Class.new do
-      attr_reader :id, :stream_name, :comments
+      attr_reader :id, :stream_name, :frames, :deadlines
       attr_accessor :idle_for_value, :presence_member
 
-      def initialize(id:, stream_name:, idle_for: 0, presence_member: nil)
+      def initialize(id:, stream_name:, idle_for: 0, presence_member: nil, result: :ok)
         @id = id
         @stream_name = stream_name
         @idle_for_value = idle_for
         @presence_member = presence_member
-        @comments = []
+        @result = result
+        @frames = []
+        @deadlines = []
         @dead = false
       end
 
@@ -42,15 +45,20 @@ RSpec.describe Pgbus::Web::Streamer::Heartbeat do
       def dead?           = @dead
       def mark_dead!      = @dead = true
 
-      def write_comment(text)
-        @comments << text
-        :ok
+      def comments = @frames.map { |frame| frame.delete_prefix(": ").delete_suffix("\n\n") }
+
+      def write_raw(bytes, deadline_ms:)
+        @frames << bytes
+        @deadlines << deadline_ms
+        mark_dead! unless @result == :ok
+        @result
       end
     end
   end
 
-  def build_conn(id:, stream_name: "chat", idle_for: 0, presence_member: nil)
-    conn_class.new(id: id, stream_name: stream_name, idle_for: idle_for, presence_member: presence_member)
+  def build_conn(id:, stream_name: "chat", idle_for: 0, presence_member: nil, result: :ok)
+    conn_class.new(id: id, stream_name: stream_name, idle_for: idle_for, presence_member: presence_member,
+                   result: result)
   end
 
   describe "#tick" do
@@ -65,6 +73,60 @@ RSpec.describe Pgbus::Web::Streamer::Heartbeat do
 
       expect(c1.comments).to eq(["heartbeat 1700000015"])
       expect(c2.comments).to eq(["heartbeat 1700000015"])
+    end
+
+    context "with one frame per tick on the fan-out deadline (issue #621)" do
+      subject(:heartbeat) do
+        described_class.new(registry: registry, dispatch_queue: dispatch_queue, interval: 15, idle_timeout: 60,
+                            logger: logger, clock: clock, fanout_write_deadline_ms: 250)
+      end
+
+      it "builds the comment once per tick however many connections there are" do
+        conns = Array.new(5) { |i| build_conn(id: "c#{i}") }
+        conns.each { |c| registry.register(c) }
+        allow(Pgbus::Streams::Envelope).to receive(:comment).and_call_original
+
+        heartbeat.tick
+
+        expect(Pgbus::Streams::Envelope).to have_received(:comment).once
+        expect(conns.map { |c| c.frames.first.object_id }.uniq.size).to eq(1)
+        expect(conns.first.frames.first).to be_frozen
+      end
+
+      it "writes the frame with the fan-out write deadline" do
+        c1 = build_conn(id: "a")
+        registry.register(c1)
+
+        heartbeat.tick
+
+        expect(c1.deadlines).to eq([250])
+      end
+
+      it "marks a connection whose write times out dead and posts its disconnect" do
+        slow = build_conn(id: "slow", result: :timeout)
+        fast = build_conn(id: "fast")
+        registry.register(slow)
+        registry.register(fast)
+
+        heartbeat.tick
+
+        expect(slow).to be_dead
+        expect(fast.comments).to eq(["heartbeat 0"])
+        msgs = []
+        msgs << dispatch_queue.pop(true) until dispatch_queue.empty?
+        expect(msgs.map(&:connection)).to eq([slow])
+      end
+
+      it "defaults the deadline to the configured streams_fanout_write_deadline_ms" do
+        default = described_class.new(registry: registry, dispatch_queue: dispatch_queue, interval: 15,
+                                      idle_timeout: 60, logger: logger, clock: clock)
+        c1 = build_conn(id: "a")
+        registry.register(c1)
+
+        default.tick
+
+        expect(c1.deadlines).to eq([Pgbus.configuration.streams_fanout_write_deadline_ms])
+      end
     end
 
     it "skips connections that are already dead" do

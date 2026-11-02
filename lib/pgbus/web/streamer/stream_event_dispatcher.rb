@@ -285,6 +285,7 @@ module Pgbus
 
           envelopes = raw_envelopes.map { |e| unwrap_stream_envelope(e) }
           max_msg_id = envelopes.map(&:msg_id).max
+          frames = frames_for(envelopes) unless registered.empty?
 
           registered.each do |conn|
             visible = visible_envelopes_for(envelopes, conn)
@@ -294,9 +295,9 @@ module Pgbus
               # Post even when `visible` is empty, with batch max, so an
               # audience-filtered-away batch still advances the cursor past the
               # hidden window (issue #321 B2). The pump raises on ephemerals.
-              @pump.post(conn, visible, max_msg_id, deadline_ms: @fanout_write_deadline_ms)
+              @pump.post(conn, visible, max_msg_id, deadline_ms: @fanout_write_deadline_ms, frames: frames)
             else
-              safe_enqueue(conn, visible)
+              safe_enqueue(conn, visible, frames: frames)
               advance_scanned_cursor(conn, max_msg_id)
             end
           end
@@ -336,8 +337,9 @@ module Pgbus
             event: normalize_sse_event(parsed["event"])
           )
 
+          frames = frames_for([envelope]) unless registered.empty?
           registered.each do |conn|
-            safe_enqueue(conn, visible_envelopes_for([envelope], conn))
+            safe_enqueue(conn, visible_envelopes_for([envelope], conn), frames: frames)
           end
           in_flight_pairs.each do |(conn, buffer)|
             buffer.concat(visible_envelopes_for([envelope], conn))
@@ -550,11 +552,32 @@ module Pgbus
         # it implicitly. handle_connect passes @connect_write_deadline_ms
         # explicitly so a new client's initial replay keeps the full window
         # (issue #315 item 3).
-        def safe_enqueue(connection, envelopes_or_buffer, deadline_ms: @fanout_write_deadline_ms)
+        #
+        # frames: the wake's prebuilt frames (frames_for); nil on the connect
+        # replay and the in-flight drain, which frame per connection.
+        def safe_enqueue(connection, envelopes_or_buffer, deadline_ms: @fanout_write_deadline_ms, frames: nil)
           return if connection.dead?
           return if envelopes_or_buffer.empty?
 
-          connection.enqueue(envelopes_or_buffer, deadline_ms: deadline_ms)
+          connection.enqueue(envelopes_or_buffer, deadline_ms: deadline_ms, frames: frames)
+        end
+
+        # One SSE frame per envelope per wake, shared by every connection on
+        # the stream (issue #621): the bytes depend on the envelope alone, so
+        # framing per connection repeated the same work N times. Keyed by the
+        # Integer msg_id, never by the envelope (a StreamEnvelope's #hash walks
+        # its payload, which would cost what the framing saves); msg_id is
+        # unique within a wake. Frozen, values and Hash, so the frames stay
+        # Ractor-shareable across the dispatch seam (issue #527).
+        def frames_for(envelopes)
+          envelopes.to_h do |envelope|
+            frame = Pgbus::Streams::Envelope.message(
+              id: envelope.msg_id,
+              event: Pgbus::Streams::Envelope.sse_event_for(envelope),
+              data: envelope.payload
+            )
+            [envelope.msg_id, frame.freeze]
+          end.freeze
         end
 
         def prune_dead(connections)

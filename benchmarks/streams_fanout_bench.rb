@@ -13,6 +13,11 @@
 # scenario covered by the streams integration bench (rake bench:streams) and
 # bounded deterministically (K * fanout_deadline vs K * write_deadline) by the
 # dispatcher unit specs. No DB or Puma needed here.
+#
+# Issue #621: the dispatcher frames each envelope once per wake and hands every
+# connection the frozen bytes (`frames:`). The last section compares enqueue
+# with the frame given against enqueue building it, the per-connection saving.
+# It is skipped on a tree whose Connection#enqueue has no `frames:` keyword.
 
 require_relative "bench_helper"
 require "stringio"
@@ -90,3 +95,24 @@ end
 
 puts "\nExpected: the two bars are within noise and retained-per-op is 0 — the"
 puts "deadline_ms keyword pass-through adds no measurable cost on the happy path."
+
+if Pgbus::Web::Streamer::Connection.instance_method(:enqueue).parameters.include?(%i[key frames])
+  BenchSupport.header("Connection#enqueue: frame built per connection vs given (issue #621)")
+
+  # One ephemeral envelope (negative msg_id: no cursor dedup), reused, and the
+  # frame the dispatcher built for its wake.
+  live = Pgbus::Client::ReadAfter::Envelope.new(msg_id: -1, enqueued_at: "2026-11-02T00:00:00Z",
+                                                payload: "<turbo-stream>live</turbo-stream>", source: "ephemeral")
+  frames = { -1 => Pgbus::Streams::Envelope.message(id: -1, event: "turbo-stream", data: live.payload).freeze }.freeze
+  frame_conn = build_connection
+
+  BenchSupport.ips(time: 3, warmup: 1) do |x|
+    x.report("enqueue (frame built here)") { frame_conn.enqueue([live], deadline_ms: 250) }
+    x.report("enqueue (frames: given)") { frame_conn.enqueue([live], deadline_ms: 250, frames: frames) }
+  end
+
+  BenchSupport.allocations("enqueue frame built here") { 1_000.times { frame_conn.enqueue([live], deadline_ms: 250) } }
+  BenchSupport.allocations("enqueue frames: given") do
+    1_000.times { frame_conn.enqueue([live], deadline_ms: 250, frames: frames) }
+  end
+end
