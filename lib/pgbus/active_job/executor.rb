@@ -40,7 +40,7 @@ module Pgbus
                                      source_queue: physical_queue(queue_name, source_queue))
           signal_concurrency(payload)
           signal_batch_discarded(payload)
-          release_uniqueness_lock(Uniqueness.extract_key(payload), queue_name, message)
+          release_uniqueness_lock(Uniqueness.extract_key(payload), queue_name, message) if holds_uniqueness_row?(payload)
           record_stat(payload, queue_name, "dead_lettered", execution_start, message: message)
           instrument(
             "pgbus.job_dead_lettered",
@@ -77,6 +77,14 @@ module Pgbus
               Pgbus.logger.info { "[Pgbus] Skipping duplicate execution for #{job_class}" }
               return :skipped
             end
+          when :until_executing
+            # A debounce (issue #628): the row guarded the queued copy, and
+            # goes before perform so an enqueue that arrives while this runs
+            # is accepted. release_held_by! takes only the row this message
+            # holds, never a newer copy's. A redelivery (row already gone)
+            # matches nothing and runs; a failed release is logged and the
+            # job runs anyway — the reaper or the DLQ release takes the row.
+            release_uniqueness_lock(uniqueness_key, queue_name, message) if holds_uniqueness_row?(payload)
           end
         end
 
@@ -132,7 +140,9 @@ module Pgbus
           end
           Pgbus.logger.debug { "[Pgbus::Executor] #{@completed_word} #{log_tag(message, queue_name)} job_class=#{job_class}" }
           job_succeeded = true
-          release_uniqueness_lock(uniqueness_key, queue_name, message)
+          # :until_executing released its row before perform; a newer copy's
+          # row is not this message's to take.
+          release_uniqueness_lock(uniqueness_key, queue_name, message) unless uniqueness_strategy == :until_executing
           # Only FailedEventRecorder.record! writes this table, and only after a
           # failed attempt, so a first delivery has no row: skip the per-job
           # DELETE round trip (issue #484). A stale row from a dropped-and-
@@ -226,6 +236,15 @@ module Pgbus
                                             msg_id: message.msg_id.to_i, enqueued_at: message.enqueued_at)
       rescue StandardError => e
         Pgbus.logger.warn { "[Pgbus] Uniqueness release failed: #{e.message}" }
+      end
+
+      # False for an :until_executing retry_on re-enqueue (executions > 0): it
+      # went out through the free key without acquiring a row (the attempt's
+      # was released at its start), so the unbound clause of release_held_by!
+      # could only match a newer copy's row — one parked behind its
+      # concurrency limit before this retry was sent (issue #628).
+      def holds_uniqueness_row?(payload)
+        Uniqueness.extract_strategy(payload) != :until_executing || payload["executions"].to_i.zero?
       end
 
       # Keep the message invisible while perform runs (see VisibilityHeartbeat).

@@ -13,7 +13,8 @@ module Pgbus
   #   1. Enqueue: INSERT INTO pgbus_uniqueness_keys ON CONFLICT DO NOTHING
   #      (logical queue, msg_id=0). After send_message, bind! writes the
   #      real msg_id. The lock row lives as long as the job is in the queue
-  #      or executing.
+  #      or executing (:until_executing: only while it is queued — the
+  #      executor releases it before perform).
   #   2. Execution: PGMQ's visibility timeout is the execution lock —
   #      no separate claim_for_execution step needed.
   #   3. Retry: a retry_job / retry_on re-enqueue passes through the key the
@@ -30,6 +31,13 @@ module Pgbus
   # Strategies:
   #   :until_executed  — Lock acquired at enqueue, held through execution, released on
   #                      completion or DLQ. Prevents duplicate enqueue AND duplicate execution.
+  #
+  #   :until_executing — Lock acquired at enqueue, released when execution starts
+  #                      (a debounce). Further enqueues are dropped while a copy is
+  #                      queued; one that arrives while a copy runs is accepted, so a
+  #                      trailing run observes what was written during the current one.
+  #                      Two runs can overlap; compose with limits_concurrency to: 1,
+  #                      on_conflict: :block for "debounce and no overlap".
   #
   #   :while_executing — Lock acquired at execution start, released on completion.
   #                      Allows duplicate enqueue (multiple copies in queue) but only one
@@ -55,7 +63,9 @@ module Pgbus
     # pgmq.q_<prefix>_pending for these rows (issue #418).
     PLACEHOLDER_QUEUE = "pending"
 
-    VALID_STRATEGIES = %i[until_executed while_executing].freeze
+    VALID_STRATEGIES = %i[until_executed until_executing while_executing].freeze
+    # The strategies that take the lock at enqueue, before the message exists.
+    ENQUEUE_LOCK_STRATEGIES = %i[until_executed until_executing].freeze
     VALID_CONFLICTS = %i[reject discard log].freeze
 
     # Class-body macro: it runs while the job class loads (at boot, or under the
@@ -129,7 +139,8 @@ module Pgbus
       end
 
       # Guards the class-name default key against the per-record collapse
-      # footgun (#333). When an :until_executed job was declared with NO explicit
+      # footgun (#333). When an enqueue-locked job (:until_executed, or
+      # :until_executing, issue #628) was declared with NO explicit
       # key (so the key is the class name) AND is enqueued WITH arguments, every
       # distinct argument set would resolve to the same class-name key and
       # collapse into one per-class singleton — almost never what the caller
@@ -139,11 +150,11 @@ module Pgbus
       # per-invocation at execution start, not by class-name identity at enqueue).
       def guard_class_name_default!(active_job, config, args)
         return if config[:explicit_key]
-        return unless config[:strategy] == :until_executed
+        return unless ENQUEUE_LOCK_STRATEGIES.include?(config[:strategy])
         return if args.nil? || args.empty?
 
         raise ArgumentError,
-              "#{active_job.class.name} uses ensures_uniqueness strategy: :until_executed with no key: " \
+              "#{active_job.class.name} uses ensures_uniqueness strategy: #{config[:strategy].inspect} with no key: " \
               "but is enqueued with arguments — the default key is the class name, which would collapse " \
               "every distinct argument set into one per-class singleton. Pass an explicit " \
               "key: ->(*args) { ... } that includes the arguments. See https://pgbus.dev/docs/upgrading-pgbus"
@@ -176,13 +187,14 @@ module Pgbus
         active_job.class.pgbus_uniqueness
       end
 
-      # Acquire the uniqueness lock at enqueue time (:until_executed only).
+      # Acquire the uniqueness lock at enqueue time (:until_executed and
+      # :until_executing).
       # Uses pg_advisory_xact_lock to serialize concurrent attempts.
       # Returns :acquired, :locked, or :no_lock.
       def acquire_enqueue_lock(key, active_job, queue_name: nil, msg_id: nil)
         config = uniqueness_config(active_job)
         return :no_lock unless config
-        return :no_lock unless config[:strategy] == :until_executed
+        return :no_lock unless ENQUEUE_LOCK_STRATEGIES.include?(config[:strategy])
 
         acquired = if msg_id && queue_name
                      UniquenessKey.acquire!(key, queue_name: lock_queue_name(queue_name), msg_id: msg_id)

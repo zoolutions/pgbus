@@ -1117,6 +1117,109 @@ RSpec.describe Pgbus::ActiveJob::Executor do
         end
       end
 
+      # Issue #628: a debounce. The row is released before perform so an
+      # enqueue that arrives while the job runs is accepted, and only the row
+      # this message holds goes (release_held_by!), never a newer copy's.
+      context "with the until_executing strategy" do
+        let(:order) { [] }
+
+        before do
+          allow(Pgbus::Uniqueness).to receive(:extract_strategy).and_return(:until_executing)
+          allow(Pgbus::UniquenessKey).to receive(:release_held_by!) do
+            order << :release
+            1
+          end
+          allow(job_double).to receive(:perform_now) { order << :perform }
+          allow(mock_client).to receive(:archive_message) do
+            order << :archive
+            true
+          end
+        end
+
+        it "releases the lock this message holds before perform runs, and not again after archive" do
+          expect(executor.execute(message, queue_name)).to eq(:success)
+
+          expect(order).to eq(%i[release perform archive])
+          expect_released_once(message)
+        end
+
+        it "releases before the pgbus.executor.execute span opens" do
+          allow(ActiveSupport::Notifications).to receive(:instrument).and_wrap_original do |method, *args, **kw, &block|
+            order << :instrument if args.first == "pgbus.executor.execute"
+            method.call(*args, **kw, &block)
+          end
+
+          executor.execute(message, queue_name)
+
+          expect(order).to include(:instrument)
+          expect(order.index(:release)).to be < order.index(:instrument)
+        end
+
+        it "still performs when the start-release raises, and logs it" do
+          allow(Pgbus::UniquenessKey).to receive(:release_held_by!).and_raise(StandardError, "pooler timeout")
+          warnings = []
+          allow(Pgbus.logger).to receive(:warn) { |&block| warnings << block.call }
+
+          expect(executor.execute(message, queue_name)).to eq(:success)
+
+          expect(order).to eq(%i[perform archive])
+          expect(warnings).to include(a_string_including("Uniqueness release failed: pooler timeout"))
+        end
+
+        it "performs a redelivered message whose row is already gone" do
+          allow(Pgbus::UniquenessKey).to receive(:release_held_by!) do
+            order << :release
+            0
+          end
+          redelivered = build_message_double(msg_id: 70, message: message_json, read_ct: 2)
+
+          expect(executor.execute(redelivered, queue_name)).to eq(:success)
+
+          expect(order).to eq(%i[release perform archive])
+        end
+
+        it "does not release again when perform raises: the row went at start" do
+          allow(job_double).to receive(:perform_now).and_raise(StandardError, "boom")
+
+          expect(executor.execute(message, queue_name)).to eq(:failed)
+
+          expect_released_once(message)
+        end
+
+        it "releases the row on dead-lettering, for a message that never got to start" do
+          dlq_message = build_message_double(msg_id: 71, message: message_json, read_ct: config.max_retries + 1)
+
+          expect(executor.execute(dlq_message, queue_name)).to eq(:dead_lettered)
+
+          expect_released_once(dlq_message)
+        end
+
+        # A retry_on re-enqueue (executions > 0) never acquired a row
+        # (uniqueness_rejected? lets it through), so the unbound clause of
+        # release_held_by! could only match a newer copy's row: a parked one
+        # acquired before this retry was sent.
+        def retry_message(msg_id:, read_ct:)
+          retry_payload = uniqueness_payload.merge("executions" => 1)
+          allow(ActiveJob::Base).to receive(:deserialize).with(retry_payload).and_return(job_double)
+          build_message_double(msg_id: msg_id, message: JSON.generate(retry_payload), read_ct: read_ct)
+        end
+
+        it "performs a retry_on re-enqueue without releasing anything" do
+          expect(executor.execute(retry_message(msg_id: 72, read_ct: 1), queue_name)).to eq(:success)
+
+          expect(order).to eq(%i[perform archive])
+          expect(Pgbus::UniquenessKey).not_to have_received(:release_held_by!)
+        end
+
+        it "dead-letters a retry_on re-enqueue without releasing anything" do
+          dlq_message = retry_message(msg_id: 73, read_ct: config.max_retries + 1)
+
+          expect(executor.execute(dlq_message, queue_name)).to eq(:dead_lettered)
+
+          expect(Pgbus::UniquenessKey).not_to have_received(:release_held_by!)
+        end
+      end
+
       context "with the while_executing strategy" do
         before do
           allow(Pgbus::Uniqueness).to receive_messages(extract_strategy: :while_executing, acquire_execution_lock: true)

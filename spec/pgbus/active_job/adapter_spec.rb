@@ -814,6 +814,94 @@ RSpec.describe Pgbus::ActiveJob::Adapter do
     end
   end
 
+  # Issue #628: a debounce. The lock is taken at enqueue exactly as for
+  # :until_executed, so while a copy for the key is queued every further
+  # enqueue follows on_conflict; the executor frees it when the copy starts.
+  describe "with the :until_executing strategy (issue #628)" do
+    let(:held_keys) { Set.new }
+    let(:sent) { [] }
+
+    def rollup_job_class(on_conflict: :reject)
+      Class.new(ActiveJob::Base) do
+        include Pgbus::Uniqueness
+
+        ensures_uniqueness strategy: :until_executing, key: ->(id) { "rollup-#{id}" }, on_conflict: on_conflict
+
+        def perform(_parent_id); end
+      end
+    end
+
+    before do
+      allow(Pgbus::Serializer).to receive(:serialize_job_hash).and_call_original
+      allow(Pgbus::UniquenessKey).to receive(:acquire!) { |key, **| !held_keys.add?(key).nil? }
+      allow(Pgbus::UniquenessKey).to receive(:bind!)
+      allow(mock_client).to receive(:send_message) do |queue, payload, **opts|
+        sent << [queue, payload, opts]
+        sent.size
+      end
+    end
+
+    after { Thread.current[:pgbus_acquired_uniqueness_key] = nil }
+
+    it "takes the lock at enqueue and carries key + strategy in the payload" do
+      stub_const("RollupJob", rollup_job_class)
+
+      adapter.enqueue(RollupJob.new(42))
+
+      expect(held_keys).to eq(Set["rollup-42"])
+      _queue, payload, = sent.sole
+      expect(payload).to include("pgbus_uniqueness_key" => "rollup-42", "pgbus_uniqueness_strategy" => "until_executing")
+      expect(Pgbus::UniquenessKey).to have_received(:bind!).with("rollup-42", queue_name: "default", msg_id: 1)
+    end
+
+    it "raises JobNotUnique for a second enqueue while the first is queued (on_conflict: :reject)" do
+      stub_const("RollupJob", rollup_job_class)
+      adapter.enqueue(RollupJob.new(42))
+
+      expect { adapter.enqueue(RollupJob.new(42)) }.to raise_error(Pgbus::JobNotUnique, /RollupJob/)
+      expect(sent.size).to eq(1)
+    end
+
+    it "drops a second enqueue without a send under on_conflict: :discard and :log" do
+      stub_const("DiscardRollupJob", rollup_job_class(on_conflict: :discard))
+      stub_const("LogRollupJob", rollup_job_class(on_conflict: :log))
+
+      2.times { adapter.enqueue(DiscardRollupJob.new(42)) }
+      2.times { adapter.enqueue(LogRollupJob.new(7)) }
+
+      expect(sent.map { |_, payload, _| payload["job_class"] }).to eq(%w[DiscardRollupJob LogRollupJob])
+    end
+
+    it "keeps a distinct key apart" do
+      stub_const("RollupJob", rollup_job_class)
+
+      adapter.enqueue(RollupJob.new(1))
+      adapter.enqueue(RollupJob.new(2))
+
+      expect(sent.size).to eq(2)
+    end
+
+    it "holds the lock for a scheduled copy's whole wait (enqueue_at)" do
+      stub_const("RollupJob", rollup_job_class(on_conflict: :discard))
+
+      adapter.enqueue_at(RollupJob.new(42), Time.now.to_f + 300)
+      adapter.enqueue(RollupJob.new(42))
+      adapter.enqueue_at(RollupJob.new(42), Time.now.to_f + 60)
+
+      expect(sent.size).to eq(1)
+      expect(sent.sole.last[:delay]).to be_within(1).of(300)
+    end
+
+    it "sends one message for three same-key jobs in one perform_all_later bulk (enqueue_all)" do
+      stub_const("RollupJob", rollup_job_class(on_conflict: :discard))
+
+      adapter.enqueue_all(Array.new(3) { RollupJob.new(42) })
+
+      expect(sent.size).to eq(1)
+      expect(mock_client).not_to have_received(:send_batch)
+    end
+  end
+
   describe "#enqueue_all" do
     let(:second_job_id) { SecureRandom.uuid }
     let(:job2) { build_job_double(job_class: "OtherJob", queue_name: "default", job_id: second_job_id) }

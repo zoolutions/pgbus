@@ -138,7 +138,7 @@ module Pgbus
 
         config = job_class.pgbus_uniqueness
         return nil unless config
-        return nil unless config[:strategy] == :until_executed
+        return nil unless Uniqueness::ENQUEUE_LOCK_STRATEGIES.include?(config[:strategy])
 
         key = resolve_uniqueness_key(job_class, config, task)
         return nil unless key
@@ -216,9 +216,9 @@ module Pgbus
       end
 
       # Inject uniqueness metadata into the payload so the executor releases
-      # the lock after the job completes.
-      # Only inject for :until_executed strategy — :while_executing locks are
-      # acquired at execution time by the executor, not by the scheduler.
+      # the lock: after the job completes (:until_executed) or when it starts
+      # (:until_executing, issue #628). Not for :while_executing — its locks
+      # are acquired at execution time by the executor, not by the scheduler.
       def inject_uniqueness_metadata(task, payload)
         return payload unless task.class_name
 
@@ -227,7 +227,7 @@ module Pgbus
 
         config = job_class.pgbus_uniqueness
         return payload unless config
-        return payload unless config[:strategy] == :until_executed
+        return payload unless Uniqueness::ENQUEUE_LOCK_STRATEGIES.include?(config[:strategy])
 
         key = resolve_uniqueness_key(job_class, config, task)
         return payload unless key

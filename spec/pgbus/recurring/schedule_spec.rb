@@ -400,6 +400,43 @@ RSpec.describe Pgbus::Recurring::Schedule do
       end
     end
 
+    # Issue #628: a recurring tick of a debounced job takes the lock (it is
+    # skipped while the previous tick's copy is still queued) and the payload
+    # carries key + strategy for the executor's start-release.
+    context "when job class declares :until_executing" do
+      before do
+        stub_const("CleanupJob", Class.new do
+          include Pgbus::Uniqueness
+
+          def self.name
+            "CleanupJob"
+          end
+
+          ensures_uniqueness strategy: :until_executing, on_conflict: :discard
+        end)
+      end
+
+      it "takes and binds the lock, and carries key + strategy in the payload" do
+        schedule.enqueue_task(task, run_at: run_at)
+
+        expect(Pgbus::UniquenessKey).to have_received(:acquire!).with("CleanupJob", queue_name: "maintenance", msg_id: 0)
+        expect(Pgbus::UniquenessKey).to have_received(:bind!).with("CleanupJob", queue_name: "maintenance", msg_id: 77)
+        expect(mock_client).to have_received(:send_message).with(
+          anything,
+          hash_including(Pgbus::Uniqueness::METADATA_KEY => "CleanupJob", Pgbus::Uniqueness::STRATEGY_KEY => "until_executing"),
+          headers: anything
+        )
+      end
+
+      it "skips the tick while the previous copy is still queued" do
+        allow(Pgbus::UniquenessKey).to receive(:acquire!).and_return(false)
+
+        schedule.enqueue_task(task, run_at: run_at)
+
+        expect(mock_client).not_to have_received(:send_message)
+      end
+    end
+
     context "when job class does not have ensures_uniqueness" do
       before do
         plain_job = Class.new do
