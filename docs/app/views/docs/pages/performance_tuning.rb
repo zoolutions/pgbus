@@ -95,16 +95,17 @@ class Views::Docs::Pages::PerformanceTuning < DocsUI::Page
            The single call did not get slower.
            *Costs:* with `completion_synchronous_commit = false`, a completion is
            acknowledged before its WAL record reaches disk. A Postgres server crash
-           (not a client crash, not a normal failover) within about three times
+           (not a client crash, not a planned switchover), or a failover to a
+           standby that has not yet received that WAL, within about three times
            `wal_writer_delay` (default 200 ms) can lose completions committed in
            that window. Each lost completion redelivers its job after the
            visibility timeout, so the job runs again. Under synchronous
            replication it also stops waiting for the standby for that
-           transaction. Sends, retries and dead-letter moves keep full
-           durability. A job that writes anything durable after its completion
-           (a concurrency signal, a batch counter, its own ActiveRecord writes)
-           flushes its completion with it. Not for jobs that cannot run twice
-           after a database crash. Untested behind PgBouncer in transaction mode:
+           transaction, which is what lets a failover lose it. Sends, retries
+           and dead-letter moves keep full durability. A durable write after the
+           completion (a concurrency signal, a batch counter) flushes it too; the
+           job's own ActiveRecord writes run before it and do not. Not for jobs
+           that cannot run twice after a database crash or failover. Untested behind PgBouncer in transaction mode:
            use session mode or leave it on.
            [`docs/performance.md`](https://github.com/zoolutions/pgbus/blob/main/docs/performance.md#async-completion-commit-issue-619).
         6. **Read-ahead, for a database on another host.** `read_ahead = threads`

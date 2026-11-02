@@ -888,8 +888,9 @@ ends with the transaction, and a transaction-mode pooler sees one explicit
 transaction. A failed query leaves the explicit `BEGIN` open in a failed state
 after the sync, so pgbus leaves pipeline mode, rolls it back and raises; a
 statement the session lost is prepared and run outside the pipeline for that
-call. A completion inside a caller's transaction is left to that transaction.
-Only callers passing `job_completion: true` (the executor and the completer)
+call (so the first completion of a queue on a new connection prepares its
+statement and commits synchronously once). A completion inside a caller's
+transaction is left to that transaction. Only callers passing `job_completion: true` (the executor and the completer)
 get it: the EventBus consumer's archive (its replay reads the archive) and the
 dashboard's archives and deletes stay durable. Native statements on pgbus's own
 connections only: with `native_statements = false`, or on ActiveRecord's shared
@@ -898,25 +899,27 @@ connection (a `connection_params` Proc), the option has no effect and
 
 **Semantics.** With `completion_synchronous_commit = false`, a completion is
 acknowledged before its WAL record reaches disk. A Postgres server crash (not a
-client crash, not a normal failover) within about three times
-`wal_writer_delay` (default 200 ms) can lose completions committed in that
-window. Each lost completion redelivers its job after the visibility timeout,
-so the job runs again. Under synchronous replication it also stops waiting for
-the standby for that transaction. Sends, retries and dead-letter moves keep
-full durability.
+client crash, not a planned switchover), or a failover to a standby that has
+not yet received that WAL, within about three times `wal_writer_delay`
+(default 200 ms) can lose completions committed in that window. Each lost
+completion redelivers its job after the visibility timeout, so the job runs
+again. Under synchronous replication it also stops waiting for the standby for
+that transaction, which is what lets a failover lose it. Sends, retries and
+dead-letter moves keep full durability.
 
 The precise exposure is smaller than that window. A durable commit on *any*
-connection flushes WAL up to its LSN, including an earlier asynchronous
-completion record, so a job that follows its completion with a synchronous
-write (a concurrency signal, a batch completion, a uniqueness release, the stat
-buffer's flush, its own ActiveRecord writes) closes its own window within
-microseconds. The exposure is a plain job with no follow-up write, whose re-run
+connection to the same server flushes WAL up to its LSN, including an earlier
+asynchronous completion record, so a job whose completion is followed by a
+synchronous write (a concurrency signal, a batch completion, a uniqueness
+release, the stat buffer's flush) closes its own window within microseconds.
+The job's own ActiveRecord writes run in `perform`, before the completion, so
+they do not close it. The exposure is a plain job with no follow-up write, whose re-run
 is the consequence above. That also answers "can a lost archive double-signal a
 semaphore?": the signal's own commit makes the archive durable first.
 
 Turn it on for a fleet on one Postgres whose fleet bench shows `WALWrite`
 waits. Leave it on (`true`) for jobs that are not idempotent and cannot
-tolerate one extra run after a database crash. `commit_delay` (with
+tolerate one extra run after a database crash or failover. `commit_delay` (with
 `commit_siblings`) on the server is the alternative that keeps every commit
 durable: it groups concurrent commits into one flush.
 

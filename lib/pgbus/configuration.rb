@@ -58,10 +58,11 @@ module Pgbus
     # in one libpq pipeline: BEGIN, the SET LOCAL, the prepared statement and
     # COMMIT go out with one sync, so the job stops waiting for its WAL flush.
     # A completion is then acknowledged before its WAL record reaches disk: a
-    # Postgres server crash (not a client crash, not a normal failover) within
-    # about three times wal_writer_delay can lose completions committed in that
-    # window, and each lost completion redelivers its job after
-    # visibility_timeout. Sends, retries, dead-letter moves, the EventBus
+    # Postgres server crash (not a client crash, not a planned switchover), or a
+    # failover to a standby that has not yet received that WAL (it also stops
+    # waiting for a synchronous standby), within about three times
+    # wal_writer_delay can lose completions committed in that window, and each
+    # lost completion redelivers its job after visibility_timeout. Sends, retries, dead-letter moves, the EventBus
     # consumer's archive and dashboard actions keep full durability, and a
     # completion inside a caller's transaction is left to that transaction.
     # Native statements on pgbus's own connections only: with

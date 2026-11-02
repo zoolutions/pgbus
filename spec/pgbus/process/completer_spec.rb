@@ -247,8 +247,10 @@ RSpec.describe Pgbus::Process::Completer do
     subject(:completer) { described_class.new(client: client, batch_size: batch_size, completed_jobs: :delete) }
 
     def delete_all(missing: [])
-      allow(client).to receive(:delete_batch) do |queue, ids, prefixed:, **|
+      allow(client).to receive(:delete_batch) do |queue, ids, prefixed:, job_completion:|
         raise ArgumentError, "expected prefixed: false" unless prefixed == false
+        # A job's completion: config.completion_synchronous_commit applies (#619).
+        raise ArgumentError, "expected job_completion: true" unless job_completion == true
 
         calls << [queue, ids]
         (ids - missing).map(&:to_s)

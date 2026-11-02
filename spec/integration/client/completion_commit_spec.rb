@@ -142,6 +142,7 @@ RSpec.describe "Async completion commit (integration)", :integration do
     state = on_connection { |conn| [conn.backend_pid == pid, conn.pipeline_status, conn.transaction_status] }
     expect(state).to eq([false, PG::PQ_PIPELINE_OFF, PG::PQTRANS_IDLE])
   ensure
+    completion&.kill
     locker&.close
     killer&.close
   end

@@ -322,23 +322,32 @@ RSpec.describe Pgbus::Configuration do
       end
     end
 
+    # Both pipeline capabilities stubbed present, so each example depends on
+    # the code under test, not on the pg gem and libpq of the host.
+    def stub_pipeline_capability(library_version: 140_000, pipeline_api: true)
+      allow(PG).to receive(:library_version).and_return(library_version)
+      allow(PG::Connection).to receive(:method_defined?).and_call_original
+      allow(PG::Connection).to receive(:method_defined?).with(:enter_pipeline_mode).and_return(pipeline_api)
+    end
+
     it "validates false with native_statements off (the doctor warns; validate! does not raise)" do
       config.completion_synchronous_commit = false
       config.native_statements = false
+      stub_pipeline_capability
 
       expect { config.validate! }.not_to raise_error
     end
 
     it "validates false on a libpq with pipeline mode" do
       config.completion_synchronous_commit = false
-      allow(PG).to receive(:library_version).and_return(140_000)
+      stub_pipeline_capability
 
       expect { config.validate! }.not_to raise_error
     end
 
     it "rejects false on a libpq older than 14, which has no pipeline mode" do
       config.completion_synchronous_commit = false
-      allow(PG).to receive(:library_version).and_return(130_012)
+      stub_pipeline_capability(library_version: 130_012)
 
       expect { config.validate! }
         .to raise_error(Pgbus::ConfigurationError, /completion_synchronous_commit = false needs libpq 14\+ and pg 1\.5\+/)
@@ -346,8 +355,7 @@ RSpec.describe Pgbus::Configuration do
 
     it "rejects false on a pg gem without pipeline mode" do
       config.completion_synchronous_commit = false
-      allow(PG::Connection).to receive(:method_defined?).and_call_original
-      allow(PG::Connection).to receive(:method_defined?).with(:enter_pipeline_mode).and_return(false)
+      stub_pipeline_capability(pipeline_api: false)
 
       expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /libpq 14\+ and pg 1\.5\+/)
     end
