@@ -597,12 +597,11 @@ module Pgbus
       @streams_idle_timeout = 3_600 # 1 hour
       # 250ms — this value plays two roles: (1) the TCP keepalive
       # interval for the streamer's PG LISTEN connection, and (2) the
-      # upper bound on how long Dispatcher#handle_connect waits for
-      # the Listener to acknowledge a synchronous ensure_listening
-      # call. 5s was unbounded enough to drop messages on a
-      # realistic subscribe burst; 250ms keeps the connect-path race
-      # window tight while still leaving headroom over a typical
-      # PG keepalive interval.
+      # budget (plus 1s) a stream's first connect waits for a stuck
+      # Listener to acknowledge its ensure_listening. A live listener
+      # is woken through a pipe and acks within a thread hop, and a
+      # connect on a stream that already has a subscriber does not
+      # wait at all (issue #630), so connects no longer pay this cycle.
       @streams_listen_health_check_ms = 250
       @streams_write_deadline_ms = 5_000
       # Deadline (ms) for a socket write made INSIDE the dispatcher's
