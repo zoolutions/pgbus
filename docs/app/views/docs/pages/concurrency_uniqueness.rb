@@ -91,8 +91,10 @@ class Views::Docs::Pages::ConcurrencyUniqueness < DocsUI::Page
         finishes. While one copy is **queued**, further enqueues for the key get
         the conflict policy: the queued copy has not run yet and will see their
         state. The lock is released before `perform`, so an enqueue that
-        arrives while the copy **runs** is accepted, and exactly one trailing
-        run sees what was written during the current one.
+        arrives while the copy **runs** is accepted and queues the trailing
+        copy. At most one copy for the key is queued at a time, and every
+        write made before an accepted or dropped enqueue is seen by a run that
+        starts after it.
       MD
       DocsUI::Code(<<~'RUBY', filename: "app/jobs/rollup_job.rb")
         class RollupJob < ApplicationJob
@@ -127,8 +129,9 @@ class Views::Docs::Pages::ConcurrencyUniqueness < DocsUI::Page
         bulk, same-key jobs yield one message (`on_conflict: :reject` raises
         `Pgbus::JobNotUnique` at the second, as for `:until_executed`). A
         `retry_on` re-enqueue goes out without a lock (the attempt released
-        its own at start), so it can sit beside one fresh copy: both run, and
-        the later one sees everything. Without a `key:`, a job enqueued with
+        its own at start), so it can sit beside one fresh copy. Both run, in
+        no guaranteed order and possibly at once; each sees the state written
+        before it started. Without a `key:`, a job enqueued with
         arguments raises, as for `:until_executed`.
       MD
       md <<~'MD'

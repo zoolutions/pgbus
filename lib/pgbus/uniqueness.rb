@@ -17,10 +17,11 @@ module Pgbus
   #      executor releases it before perform).
   #   2. Execution: PGMQ's visibility timeout is the execution lock —
   #      no separate claim_for_execution step needed.
-  #   3. Retry: a retry_job / retry_on re-enqueue passes through the key the
-  #      running attempt holds, and the row is handed to the retry: unbound
-  #      and re-stamped before the retry is sent or parked (unbind!), bound
-  #      to it once sent (bind!).
+  #   3. Retry (:until_executed): a retry_job / retry_on re-enqueue passes
+  #      through the key the running attempt holds, and the row is handed to
+  #      the retry: unbound and re-stamped before the retry is sent or parked
+  #      (unbind!), bound to it once sent (bind!). An :until_executing
+  #      attempt released its row at start, so its retry goes out with none.
   #   4. Completion/DLQ: the finishing message deletes the row only while it
   #      holds it (release_held_by!), so a row handed to a retry, or a
   #      successor's, stays. The dashboard's discards do the same.
@@ -35,7 +36,8 @@ module Pgbus
   #   :until_executing — Lock acquired at enqueue, released when execution starts
   #                      (a debounce). Further enqueues are dropped while a copy is
   #                      queued; one that arrives while a copy runs is accepted, so a
-  #                      trailing run observes what was written during the current one.
+  #                      run starting after it observes the state written before that
+  #                      enqueue. At most one copy is queued at a time.
   #                      Two runs can overlap; compose with limits_concurrency to: 1,
   #                      on_conflict: :block for "debounce and no overlap".
   #

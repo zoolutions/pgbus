@@ -435,6 +435,29 @@ RSpec.describe Pgbus::Recurring::Schedule do
 
         expect(mock_client).not_to have_received(:send_message)
       end
+
+      # The payload must carry the key the row was acquired under: a key proc
+      # resolved a second time could answer differently, and the executor
+      # would then release a key nobody holds and orphan the acquired row.
+      it "carries the acquired key in the payload, resolving the key proc once" do
+        calls = 0
+        stub_const("CleanupJob", Class.new do
+          include Pgbus::Uniqueness
+
+          def self.name
+            "CleanupJob"
+          end
+
+          ensures_uniqueness strategy: :until_executing, key: -> { "cleanup-#{calls += 1}" }
+        end)
+
+        schedule.enqueue_task(task, run_at: run_at)
+
+        expect(Pgbus::UniquenessKey).to have_received(:acquire!).with("cleanup-1", queue_name: "maintenance", msg_id: 0)
+        expect(mock_client).to have_received(:send_message)
+          .with(anything, hash_including(Pgbus::Uniqueness::METADATA_KEY => "cleanup-1"), headers: anything)
+        expect(calls).to eq(1)
+      end
     end
 
     context "when job class does not have ensures_uniqueness" do

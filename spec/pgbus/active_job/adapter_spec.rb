@@ -849,6 +849,7 @@ RSpec.describe Pgbus::ActiveJob::Adapter do
       adapter.enqueue(RollupJob.new(42))
 
       expect(held_keys).to eq(Set["rollup-42"])
+      expect(Pgbus::UniquenessKey).to have_received(:acquire!).with("rollup-42", queue_name: "default", msg_id: 0)
       _queue, payload, = sent.sole
       expect(payload).to include("pgbus_uniqueness_key" => "rollup-42", "pgbus_uniqueness_strategy" => "until_executing")
       expect(Pgbus::UniquenessKey).to have_received(:bind!).with("rollup-42", queue_name: "default", msg_id: 1)
