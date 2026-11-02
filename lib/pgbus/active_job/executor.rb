@@ -81,9 +81,8 @@ module Pgbus
             # A debounce (issue #628): the row guarded the queued copy, and
             # goes before perform so an enqueue that arrives while this runs
             # is accepted. release_held_by! takes only the row this message
-            # holds, never a newer copy's (except a message the dashboard
-            # re-sent without acquiring the key, #631). A redelivery (row already gone)
-            # matches nothing and runs; a failed release is logged and the
+            # holds, never a newer copy's (a dashboard re-send holds its own,
+            # #631). A redelivery (row already gone) matches nothing and runs; a failed release is logged and the
             # job runs anyway — the reaper or the DLQ release takes the row.
             release_uniqueness_lock(uniqueness_key, queue_name, message) if holds_uniqueness_row?(payload)
           end

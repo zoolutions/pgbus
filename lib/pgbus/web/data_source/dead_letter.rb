@@ -80,12 +80,17 @@ module Pgbus
           )
           return false unless row
 
-          @client.transaction do |txn|
-            # A live message must not claim to be dead: strip the block, count the trip.
-            txn.produce(original_queue, row["message"], headers: DeadLetterHeader.strip_for_retry(row["headers"]))
-            txn.delete(queue_name, msg_id.to_i)
+          payload = row["message"].is_a?(String) ? JSON.parse(row["message"]) : row["message"]
+          # The row Discard would release is the one the copy takes over.
+          holder = lock_holder(queue_name, row["msg_id"], row["headers"], row["enqueued_at"])
+          resend_holding_uniqueness(payload, lock_queue: lock_queue_for_table(original_queue), holder: holder) do
+            @client.transaction do |txn|
+              # A live message must not claim to be dead: strip the block, count the trip.
+              sent = txn.produce(original_queue, row["message"], headers: DeadLetterHeader.strip_for_retry(row["headers"]))
+              txn.delete(queue_name, msg_id.to_i)
+              sent
+            end
           end
-          true
         rescue StandardError => e
           Pgbus.logger.debug { "[Pgbus::Web] Error retrying DLQ message #{msg_id}: #{e.message}" }
           false

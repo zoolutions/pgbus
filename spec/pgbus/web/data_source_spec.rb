@@ -959,7 +959,7 @@ RSpec.describe Pgbus::Web::DataSource do
 
       expect(data_source.retry_all_failed).to eq(0)
       expect(sqls.first).to eq(["SELECT * FROM pgbus_failed_events WHERE NOT (queue_name = ANY($1::text[])) " \
-                                "ORDER BY id LIMIT 100", ["{orders_handler,pgbus_orders_handler}"]])
+                                "AND id > $2 ORDER BY id LIMIT 100", ["{orders_handler,pgbus_orders_handler}", 0]])
     end
   end
 
