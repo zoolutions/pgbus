@@ -1,0 +1,67 @@
+spec/pgbus/web/streamer/shareable_payload_spec.rb
+  s_f7f0f606932d66::t_b1297e3afc1be8 57-59,62,65-68,91-101
+spec/pgbus/web/streamer/outbound_pump_spec.rb
+  s_f7f0f606932d66::t_728c67eda16726 31,39,45,48,109-133,262
+spec/pgbus/web/streamer/heartbeat_spec.rb
+  s_f7f0f606932d66::t_65c91569058a17 24,26-27,30,33,38-40,48-54,59-61,78-129
+spec/pgbus/web/streamer/instance_spec.rb
+  s_f7f0f606932d66::t_811efe9c7bdcc2 292-302
+spec/pgbus/web/streamer/falcon_connection_spec.rb
+  s_f7f0f606932d66::t_22a2c60895cc8e 83-113
+spec/pgbus/streams/envelope_spec.rb
+  s_f7f0f606932d66::t_5d65b303042b16 110-161
+spec/pgbus/web/streamer/stream_event_dispatcher_spec.rb
+  s_f7f0f606932d66::t_e4f0572c43acc1 406-410,480
+  s_f7f0f606932d66::t_af10d60249108e 51,63-65,79,81,209,279-281,383-405,411-479,481-502
+benchmarks/streams_frame_bench.rb
+  s_f7f0f606932d66::t_96590e7b13f430 41
+  s_f7f0f606932d66::t_5cf097546300d4 11-18,63-95,112-127,141-151
+lib/pgbus/web/streamer/connection.rb
+  s_f7f0f606932d66::t_ef798198133e0e 65-71,74-76,78,82,94-109,113,121,164-169
+lib/pgbus/web/streamer/falcon_connection.rb
+  s_f7f0f606932d66::t_ef798198133e0e 52-54,57-59,61,65,77,82-94,98,127-132
+spec/pgbus/web/streamer/registry_spec.rb
+  s_f7f0f606932d66::t_bcaecbed402227 114,118-149,152,154,165,168-172,203-228
+lib/pgbus/streams/envelope.rb
+  s_f7f0f606932d66::t_9b728db12247ee 73-82,95,100
+  s_f7f0f606932d66::t_5dfab76ef5411f 96-99
+spec/pgbus/web/streamer/connection_spec.rb
+  s_f7f0f606932d66::t_22a2c60895cc8e 261-343,407-420
+lib/pgbus/web/streamer/stream_event_dispatcher.rb
+  s_f7f0f606932d66::t_85fffd1680f481 288,298,300,340,342,555-558,562-580
+lib/pgbus/web/streamer/registry.rb
+  s_f7f0f606932d66::t_4fecb23fbb1f3d 7,9-20,22-23,26-29,45,48,63,72-73,75,78,80,84,88,92-93,95,100-104,107,109-112,114-121
+  s_f7f0f606932d66::t_e4f0572c43acc1 105
+spec/pgbus/web/streamer/fanout_allocation_budget_spec.rb
+  s_f7f0f606932d66::t_e033a506736fdd 73-77,82
+  s_f7f0f606932d66::t_f5b422b9af8a11 1-72,78-81,83-84
+lib/pgbus/web/streamer/outbound_pump.rb
+  s_f7f0f606932d66::t_d3bed0a8a47aaa 39,88-90,99,154
+benchmarks/streams_writer_offload_bench.rb
+  s_f7f0f606932d66::t_96590e7b13f430 40,62
+benchmarks/streams_fanout_bench.rb
+  s_f7f0f606932d66::t_c59fee09fb3607 102-107,110-112,114-117
+  s_f7f0f606932d66::t_5cf097546300d4 16-20,98-101,108-109,113,118
+lib/pgbus/web/streamer/heartbeat.rb
+  s_f7f0f606932d66::t_8c655579d5b62b 13-19,39-40,42,87,103
+lib/pgbus/web/streamer/instance.rb
+  s_f7f0f606932d66::t_8c655579d5b62b 79-80
+benchmarks/writer_burst_bench.rb
+  s_f7f0f606932d66::t_96590e7b13f430 49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "a34a814cefdc8504841d119d33512f70817860c5",
+  "prompts": {},
+  "sessions": {
+    "s_f7f0f606932d66": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f21615f0-ca1d-43df-80e0-f58672e7ea31",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
