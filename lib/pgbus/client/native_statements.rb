@@ -72,12 +72,7 @@ module Pgbus
       # reads as a first prepare, which can delay the switch, never cause it.
       PREPARED_ON_LIMIT = 10_000
 
-      # The statements config.completion_synchronous_commit = false commits
-      # asynchronously (issue #619, AsyncCommit).
-      COMPLETION_STATEMENTS = %i[archive archive_batch delete delete_batch].freeze
-
-      # completion: whether it is one of COMPLETION_STATEMENTS.
-      Statement = Data.define(:name, :sql, :completion)
+      Statement = Data.define(:name, :sql)
 
       # Process-wide, built at load: the pooler is a property of the process's
       # database route, not of one Client instance.
@@ -175,8 +170,7 @@ module Pgbus
         private
 
         def statement(kind, sql)
-          Statement.new(name: "pgbus_#{kind}_#{Digest::SHA256.hexdigest(sql)[0, 12]}", sql: sql.freeze,
-                        completion: COMPLETION_STATEMENTS.include?(kind))
+          Statement.new(name: "pgbus_#{kind}_#{Digest::SHA256.hexdigest(sql)[0, 12]}", sql: sql.freeze)
         end
 
         def read_sql(queue, limit, vt)
@@ -334,32 +328,37 @@ module Pgbus
         result.map { |row| PGMQ::Message.new(row) }
       end
 
-      def exec_archive(name, msg_id)
+      # async: commit with synchronous_commit off (AsyncCommit, issue #619);
+      # true only for a job's completion under completion_synchronous_commit
+      # = false.
+      def exec_archive(name, msg_id, async: false)
         statements = native_statements_for(name)
         return @pgmq.archive(name, msg_id) unless statements
 
-        run_native(statements[:archive], [msg_id], rows: 1).ntuples.positive?
+        run_native(statements[:archive], [msg_id], rows: 1, async: async).ntuples.positive?
       end
 
-      def exec_archive_batch(name, msg_ids)
+      def exec_archive_batch(name, msg_ids, async: false)
         statements = msg_ids.any? && native_statements_for(name)
         return @pgmq.archive_batch(name, msg_ids) unless statements
 
-        run_native(statements[:archive_batch], [PG::TextEncoder::Array.new.encode(msg_ids)], rows: msg_ids).map { |row| row["msg_id"] }
+        params = [PG::TextEncoder::Array.new.encode(msg_ids)]
+        run_native(statements[:archive_batch], params, rows: msg_ids, async: async).map { |row| row["msg_id"] }
       end
 
-      def exec_delete(name, msg_id)
+      def exec_delete(name, msg_id, async: false)
         statements = native_statements_for(name)
         return @pgmq.delete(name, msg_id) unless statements
 
-        run_native(statements[:delete], [msg_id], rows: 1).ntuples.positive?
+        run_native(statements[:delete], [msg_id], rows: 1, async: async).ntuples.positive?
       end
 
-      def exec_delete_batch(name, msg_ids)
+      def exec_delete_batch(name, msg_ids, async: false)
         statements = msg_ids.any? && native_statements_for(name)
         return @pgmq.delete_batch(name, msg_ids) unless statements
 
-        run_native(statements[:delete_batch], [PG::TextEncoder::Array.new.encode(msg_ids)], rows: msg_ids).map { |row| row["msg_id"] }
+        params = [PG::TextEncoder::Array.new.encode(msg_ids)]
+        run_native(statements[:delete_batch], params, rows: msg_ids, async: async).map { |row| row["msg_id"] }
       end
 
       # rows: the rows an archive or delete returns when every id was still
@@ -375,12 +374,12 @@ module Pgbus
       # id another worker had already taken also makes a re-run come back
       # short; every waiter of that batch then claims :ambiguous, the side the
       # executor already errs on.
-      def run_native(statement, params, rows: nil)
+      def run_native(statement, params, rows: nil, async: false)
         attempt = 0
         lost = nil
         @pgmq.with_connection do |conn|
           attempt += 1
-          result = exec_native(conn, statement, params)
+          result = exec_native(conn, statement, params, async)
           if rows && attempt > 1 && result.ntuples < (rows.is_a?(Array) ? rows.uniq.size : rows)
             raise PGMQ::Errors::ConnectionError, "#{COMPLETION_NOT_RESENT}: #{lost}"
           end
@@ -392,13 +391,13 @@ module Pgbus
         end
       end
 
-      # A completion under config.completion_synchronous_commit = false goes
-      # through AsyncCommit, unless it runs inside a caller's transaction.
-      def exec_native(conn, statement, params)
+      # async (a job's completion under completion_synchronous_commit = false)
+      # goes through AsyncCommit, unless it runs inside a caller's transaction.
+      def exec_native(conn, statement, params, async)
         return conn.exec_params(statement.sql, params) if inside_caller_transaction?(conn)
 
         unprepared = @native_unprepared || NativeStatements.unprepared?
-        return exec_async_commit(conn, statement, params, !unprepared) if @async_completion_commit && statement.completion
+        return exec_async_commit(conn, statement, params, !unprepared) if async
         return conn.exec_params(statement.sql, params) if unprepared
 
         begin

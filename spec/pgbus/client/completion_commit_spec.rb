@@ -19,7 +19,7 @@ RSpec.describe Pgbus::Client::AsyncCommit do
   # result, then nil, then the sync).
   let(:fake_connection_class) do
     Class.new do
-      attr_reader :calls, :pipeline_status
+      attr_reader :calls, :pipeline_status, :status
       attr_accessor :transaction_status, :completion_result, :exec_prepared_result
       attr_writer :failing
 
@@ -30,10 +30,24 @@ RSpec.describe Pgbus::Client::AsyncCommit do
         @pipeline_status = PG::PQ_PIPELINE_OFF
         @queued = []
         @failing = nil
+        @status = PG::CONNECTION_OK
+        @lose_connection = false
+      end
+
+      # The next pipeline's first get_result finds the socket closed, as a
+      # backend killed mid-call does.
+      def lose_connection! = (@lose_connection = true)
+
+      def finished? = false
+
+      # PG::Connection#reset: a new session, out of pipeline mode.
+      def reset
+        @calls << [:reset]
+        @status = PG::CONNECTION_OK
+        @pipeline_status = PG::PQ_PIPELINE_OFF
       end
 
       def backend_pid = 101
-      def status = PG::CONNECTION_OK
 
       def exec_params(sql, params)
         @calls << [:exec_params, sql, params]
@@ -82,6 +96,12 @@ RSpec.describe Pgbus::Client::AsyncCommit do
       end
 
       def get_result # rubocop:disable Naming/AccessorMethodName -- PG::Connection#get_result's name
+        if @lose_connection
+          @lose_connection = false
+          @status = PG::CONNECTION_BAD
+          raise PG::ConnectionBad, "server closed the connection unexpectedly"
+        end
+
         @replies.shift
       end
 
@@ -192,7 +212,7 @@ RSpec.describe Pgbus::Client::AsyncCommit do
     delete_batch: [:delete_batch, [[9, 10]], "{9,10}", %w[9]]
   }.each do |method, (op, args, param, expected)|
     it "pipelines #{op} as BEGIN, SET LOCAL, the prepared statement, COMMIT, one sync" do
-      result = client.public_send(method, "default", *args)
+      result = client.public_send(method, "default", *args, job_completion: true)
 
       expect(result).to eq(expected)
       expect(calls_after_detection).to eq(pipeline_calls([:send_query_prepared, statements[op].name, [param]]))
@@ -202,8 +222,20 @@ RSpec.describe Pgbus::Client::AsyncCommit do
   it "returns false for a completion whose row is already gone, the shape the executor reads" do
     conn.completion_result = rows
 
-    expect(client.archive_message("default", 9)).to be(false)
-    expect(client.delete_batch("default", [9])).to eq([])
+    expect(client.archive_message("default", 9, job_completion: true)).to be(false)
+    expect(client.delete_batch("default", [9], job_completion: true)).to eq([])
+  end
+
+  {
+    archive_message: [:archive, [9], [9], true],
+    delete_message: [:delete, [9], [9], true],
+    archive_batch: [:archive_batch, [[9, 10]], ["{9,10}"], %w[9]],
+    delete_batch: [:delete_batch, [[9, 10]], ["{9,10}"], %w[9]]
+  }.each do |method, (op, args, params, expected)|
+    it "keeps #{method} durable for a caller that is not completing a job (the event consumer, the dashboard)" do
+      expect(client.public_send(method, "default", *args)).to eq(expected)
+      expect(calls_after_detection).to eq([[:exec_prepared, statements[op].name, params]])
+    end
   end
 
   it "never pipelines a send, a batch send or a read" do
@@ -220,21 +252,21 @@ RSpec.describe Pgbus::Client::AsyncCommit do
   it "leaves a completion inside a caller's transaction to that transaction" do
     conn.transaction_status = PG::PQTRANS_INTRANS
 
-    expect(client.archive_message("default", 9)).to be(true)
+    expect(client.archive_message("default", 9, job_completion: true)).to be(true)
     expect(calls_after_detection).to eq([[:exec_params, statements[:archive].sql, [9]]])
   end
 
   it "pipelines the SQL unprepared once the process has switched to unprepared statements" do
     Pgbus::Client::NativeStatements.unprepare!("test")
 
-    expect(client.delete_message("default", 9)).to be(true)
+    expect(client.delete_message("default", 9, job_completion: true)).to be(true)
     expect(calls_after_detection).to eq(pipeline_calls([:send_query_params, statements[:delete].sql, [9]]))
   end
 
   it "raises the statement's error, rolls the open transaction back and leaves pipeline mode" do
     conn.failing = [:completion, PG::LockNotAvailable.new("lock timeout")]
 
-    expect { client.archive_message("default", 9) }.to raise_error(PG::LockNotAvailable, /lock timeout/)
+    expect { client.archive_message("default", 9, job_completion: true) }.to raise_error(PG::LockNotAvailable, /lock timeout/)
     expect(conn.pipeline_status).to eq(PG::PQ_PIPELINE_OFF)
     expect(conn.transaction_status).to eq(PG::PQTRANS_IDLE)
     expect(calls_after_detection.last(2)).to eq([[:exit_pipeline_mode], [:exec, "ROLLBACK"]])
@@ -243,7 +275,7 @@ RSpec.describe Pgbus::Client::AsyncCommit do
   it "raises a failing COMMIT's error too, with nothing left to roll back" do
     conn.failing = ["COMMIT", PG::TRSerializationFailure.new("could not serialize")]
 
-    expect { client.delete_message("default", 9) }.to raise_error(PG::TRSerializationFailure, /could not serialize/)
+    expect { client.delete_message("default", 9, job_completion: true) }.to raise_error(PG::TRSerializationFailure, /could not serialize/)
     expect(conn.pipeline_status).to eq(PG::PQ_PIPELINE_OFF)
     expect(conn.calls).not_to include([:exec, "ROLLBACK"])
   end
@@ -251,7 +283,7 @@ RSpec.describe Pgbus::Client::AsyncCommit do
   it "falls back to prepare_and_exec outside the pipeline when the statement is not prepared on this session" do
     conn.failing = [:completion, PG::InvalidSqlStatementName.new("prepared statement does not exist")]
 
-    expect(client.archive_message("default", 9)).to be(true)
+    expect(client.archive_message("default", 9, job_completion: true)).to be(true)
     expect(calls_after_detection.last(4)).to eq(
       [
         [:exit_pipeline_mode],
@@ -264,20 +296,52 @@ RSpec.describe Pgbus::Client::AsyncCommit do
 
   it "pipelines again on the next call after a fallback" do
     conn.failing = [:completion, PG::InvalidSqlStatementName.new("prepared statement does not exist")]
-    client.archive_message("default", 9)
+    client.archive_message("default", 9, job_completion: true)
     conn.failing = nil
     conn.calls.clear
 
-    client.archive_message("default", 9)
+    client.archive_message("default", 9, job_completion: true)
 
     expect(conn.calls).to eq(pipeline_calls([:send_query_prepared, statements[:archive].name, [9]]))
+  end
+
+  # run_native's re-run and short-row checks hold through the pipeline: a lost
+  # connection is re-run by pgmq-ruby, and a re-run that finds the id gone may
+  # follow a commit whose reply was lost (issue #607 review).
+  context "when the connection is lost mid-pipeline" do
+    before(:all) { real_pgmq_connection_class } # rubocop:disable RSpec/BeforeAfterAll
+
+    let(:real_connection) { PGMQ::Connection.new(-> { conn }, pool_size: 1, pool_timeout: 1) }
+
+    before do
+      allow(mock_pgmq).to receive(:with_connection) { |&blk| real_connection.with_connection(&blk) }
+      client.native_ready?(queue)
+      allow(client).to receive(:sleep)
+      conn.lose_connection!
+    end
+
+    it "leaves the dead connection for pgmq-ruby to reset, and returns the re-run when it finds the id" do
+      expect(client.archive_message("default", 9, job_completion: true)).to be(true)
+
+      first_attempt = conn.calls.take_while { |call| call != [:reset] }
+      expect(first_attempt).not_to include([:exit_pipeline_mode])
+      expect(conn.calls).to include([:reset])
+      expect(conn.pipeline_status).to eq(PG::PQ_PIPELINE_OFF)
+    end
+
+    it "raises COMPLETION_NOT_RESENT when the re-run finds the id gone: the first may have committed" do
+      conn.completion_result = rows
+
+      expect { client.delete_message("default", 9, job_completion: true) }
+        .to raise_error(PGMQ::Errors::ConnectionError, /it may have committed: server closed the connection/)
+    end
   end
 
   context "with completion_synchronous_commit true (the default)" do
     before { config.completion_synchronous_commit = true }
 
     it "runs the completion as one exec_prepared, as before" do
-      expect(client.archive_message("default", 9)).to be(true)
+      expect(client.archive_message("default", 9, job_completion: true)).to be(true)
       expect(calls_after_detection).to eq([[:exec_prepared, statements[:archive].name, [9]]])
     end
   end
@@ -288,7 +352,7 @@ RSpec.describe Pgbus::Client::AsyncCommit do
     it "has no effect: the completion goes through pgmq-ruby" do
       allow(mock_pgmq).to receive(:archive).and_return(true)
 
-      expect(client.archive_message("default", 9)).to be(true)
+      expect(client.archive_message("default", 9, job_completion: true)).to be(true)
       expect(conn.calls).to be_empty
     end
   end

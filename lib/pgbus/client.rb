@@ -175,8 +175,8 @@ module Pgbus
       # Per physical queue: its native statements, or false (issue #605).
       @native_statements = Concurrent::Map.new
       @native_unprepared = config.native_statements && ar_disables_prepared_statements?
-      # Completions commit with synchronous_commit off (issue #619). Native
-      # statements only: the pgmq functions are never wrapped.
+      # Job completions commit with synchronous_commit off (issue #619).
+      # Native statements only: the pgmq functions are never wrapped.
       @async_completion_commit = config.native_statements && !config.completion_synchronous_commit
       # Guards the one-time build of the publisher autoscale trigger (issue #323).
       # NOT @pgmq_mutex — that is nil on the dedicated path (the only path the
@@ -555,35 +555,45 @@ module Pgbus
 
     # Delete a message. Pass prefixed: false when queue_name is already
     # the full PGMQ queue name (e.g. from priority sub-queues or dashboard).
-    def delete_message(queue_name, msg_id, prefixed: true)
+    #
+    # job_completion: true marks the call as a job's completion (the executor
+    # and the completer pass it). Under config.completion_synchronous_commit =
+    # false only those commit with synchronous_commit off (issue #619); every
+    # other caller (the event consumer, whose replay reads the archive, and the
+    # dashboard) keeps the durable commit. The same holds for the three below.
+    def delete_message(queue_name, msg_id, prefixed: true, job_completion: false)
       name = prefixed ? config.queue_name(queue_name) : queue_name
+      async = job_completion && @async_completion_commit
       with_stale_connection_retry do
-        synchronized { exec_delete(name, msg_id) }
+        synchronized { exec_delete(name, msg_id, async: async) }
       end
     end
 
     # Archive a message. Pass prefixed: false when queue_name is already
     # the full PGMQ queue name.
-    def archive_message(queue_name, msg_id, prefixed: true)
+    def archive_message(queue_name, msg_id, prefixed: true, job_completion: false)
       name = prefixed ? config.queue_name(queue_name) : queue_name
+      async = job_completion && @async_completion_commit
       with_stale_connection_retry do
-        synchronized { exec_archive(name, msg_id) }
+        synchronized { exec_archive(name, msg_id, async: async) }
       end
     end
 
     # Batch archive — moves multiple messages to the archive table in one call.
-    def archive_batch(queue_name, msg_ids, prefixed: true)
+    def archive_batch(queue_name, msg_ids, prefixed: true, job_completion: false)
       name = prefixed ? config.queue_name(queue_name) : queue_name
+      async = job_completion && @async_completion_commit
       with_stale_connection_retry do
-        synchronized { exec_archive_batch(name, msg_ids) }
+        synchronized { exec_archive_batch(name, msg_ids, async: async) }
       end
     end
 
     # Batch delete — permanently removes multiple messages in one call.
-    def delete_batch(queue_name, msg_ids, prefixed: true)
+    def delete_batch(queue_name, msg_ids, prefixed: true, job_completion: false)
       name = prefixed ? config.queue_name(queue_name) : queue_name
+      async = job_completion && @async_completion_commit
       with_stale_connection_retry do
-        synchronized { exec_delete_batch(name, msg_ids) }
+        synchronized { exec_delete_batch(name, msg_ids, async: async) }
       end
     end
 

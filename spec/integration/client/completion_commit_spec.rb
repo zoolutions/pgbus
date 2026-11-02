@@ -22,6 +22,9 @@ RSpec.describe "Async completion commit (integration)", :integration do
 
   def on_connection(&) = pgmq.with_connection(&)
 
+  # What the executor and the completer call; the event consumer and the
+  # dashboard leave job_completion off and keep the durable commit.
+
   # The archive table outlives an example: read only the ids it sent.
   def archived(ids) = present("a", ids)
   def queued(ids) = present("q", ids)
@@ -48,10 +51,10 @@ RSpec.describe "Async completion commit (integration)", :integration do
   it "archives and deletes, one and in batches, returning what the synchronous commit returns" do
     ids = send_messages(6)
 
-    expect(client.archive_message(queue, ids[0])).to be(true)
-    expect(client.delete_message(queue, ids[1])).to be(true)
-    expect(client.archive_batch(queue, ids[2, 2])).to eq(ids[2, 2])
-    expect(client.delete_batch(queue, ids[4, 2])).to eq(ids[4, 2])
+    expect(client.archive_message(queue, ids[0], job_completion: true)).to be(true)
+    expect(client.delete_message(queue, ids[1], job_completion: true)).to be(true)
+    expect(client.archive_batch(queue, ids[2, 2], job_completion: true)).to eq(ids[2, 2])
+    expect(client.delete_batch(queue, ids[4, 2], job_completion: true)).to eq(ids[4, 2])
 
     expect(archived(ids)).to eq([ids[0], *ids[2, 2]])
     expect(queued(ids)).to be_empty
@@ -59,24 +62,26 @@ RSpec.describe "Async completion commit (integration)", :integration do
 
   it "reports an already-gone message the way the synchronous commit does" do
     ids = send_messages(2)
-    client.archive_message(queue, ids[0])
-    client.delete_message(queue, ids[1])
+    client.archive_message(queue, ids[0], job_completion: true)
+    client.delete_message(queue, ids[1], job_completion: true)
 
-    expect([client.archive_message(queue, ids[0]), client.delete_message(queue, ids[1])])
-      .to eq([sync_client.archive_message(queue, ids[0]), sync_client.delete_message(queue, ids[1])])
-    expect([client.archive_message(queue, ids[0]), client.archive_batch(queue, ids), client.delete_batch(queue, ids)])
-      .to eq([false, [], []])
+    again = [client.archive_message(queue, ids[0], job_completion: true),
+             client.delete_message(queue, ids[1], job_completion: true)]
+    expect(again).to eq([sync_client.archive_message(queue, ids[0]), sync_client.delete_message(queue, ids[1])])
+    expect(again).to eq([false, false])
+    expect([client.archive_batch(queue, ids, job_completion: true), client.delete_batch(queue, ids, job_completion: true)])
+      .to eq([[], []])
   end
 
   it "runs the completion as the prepared statement" do
-    client.archive_message(queue, send_messages(1).first)
+    client.archive_message(queue, send_messages(1).first, job_completion: true)
 
     names = on_connection { |conn| conn.exec("SELECT name FROM pg_prepared_statements").map { |r| r["name"] } }
     expect(names.grep(/\Apgbus_archive_\h{12}\z/).size).to eq(1)
   end
 
   it "leaves the pooled connection with synchronous_commit on, out of pipeline mode and idle" do
-    client.archive_message(queue, send_messages(1).first)
+    client.archive_message(queue, send_messages(1).first, job_completion: true)
 
     state = on_connection do |conn|
       [conn.exec("SHOW synchronous_commit").getvalue(0, 0), conn.pipeline_status, conn.transaction_status]
@@ -88,7 +93,7 @@ RSpec.describe "Async completion commit (integration)", :integration do
     id = send_messages(1).first
     on_connection { |conn| conn.exec("BEGIN") }
 
-    expect(client.archive_message(queue, id)).to be(true)
+    expect(client.archive_message(queue, id, job_completion: true)).to be(true)
     on_connection { |conn| conn.exec("ROLLBACK") }
 
     expect(queued([id])).to eq([id])
@@ -102,22 +107,22 @@ RSpec.describe "Async completion commit (integration)", :integration do
     locker.exec("SELECT 1 FROM pgmq.q_#{full} WHERE msg_id = #{Integer(id)} FOR UPDATE")
     on_connection { |conn| conn.exec("SET lock_timeout = '50ms'") }
 
-    expect { client.archive_message(queue, id) }.to raise_error(/lock timeout/)
+    expect { client.archive_message(queue, id, job_completion: true) }.to raise_error(/lock timeout/)
 
     locker.exec("ROLLBACK")
     state = on_connection { |conn| [conn.pipeline_status, conn.transaction_status] }
     expect(state).to eq([PG::PQ_PIPELINE_OFF, PG::PQTRANS_IDLE])
-    expect(client.archive_message(queue, id)).to be(true)
+    expect(client.archive_message(queue, id, job_completion: true)).to be(true)
   ensure
     locker&.close
   end
 
   it "prepares and runs a statement the session lost, then pipelines it again" do
     ids = send_messages(2)
-    client.archive_message(queue, ids[0])
+    client.archive_message(queue, ids[0], job_completion: true)
     on_connection { |conn| conn.exec("DEALLOCATE ALL") }
 
-    expect(client.archive_message(queue, ids[1])).to be(true)
+    expect(client.archive_message(queue, ids[1], job_completion: true)).to be(true)
     expect(archived(ids)).to eq(ids)
     state = on_connection { |conn| [conn.pipeline_status, conn.transaction_status] }
     expect(state).to eq([PG::PQ_PIPELINE_OFF, PG::PQTRANS_IDLE])

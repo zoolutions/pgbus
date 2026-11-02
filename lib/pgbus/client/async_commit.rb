@@ -16,8 +16,11 @@ module Pgbus
     #
     # SET LOCAL ends with the transaction, so the pooled connection never
     # keeps the setting, and the statement stays prepared (no planning cost
-    # back, issue #605). NativeStatements#exec_native calls this only outside a
-    # caller's transaction: a completion inside one is the caller's to commit.
+    # back, issue #605). Only a job's completion asks for it (the executor and
+    # the completer pass job_completion: true; the event consumer and the
+    # dashboard keep the durable commit), and NativeStatements#exec_native
+    # calls it only outside a caller's transaction: a completion inside one is
+    # the caller's to commit.
     #
     # A failed query aborts the rest of the pipeline and leaves the explicit
     # BEGIN open in a failed state: the connection leaves pipeline mode, the
