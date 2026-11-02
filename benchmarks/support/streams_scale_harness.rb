@@ -20,7 +20,8 @@ module StreamsScaleHarness
   DEFAULTS = {
     "STREAMS_SCALE_CLIENTS" => "100,1000", "STREAMS_SCALE_CLIENT_PROCESSES" => "4",
     "STREAMS_SCALE_BROADCASTS" => "20", "STREAMS_SCALE_MODES" => "ephemeral,durable",
-    "STREAMS_SCALE_WRITERS" => "0", "STREAMS_SCALE_SLOW" => "0", "STREAMS_SCALE_PROFILE" => ""
+    "STREAMS_SCALE_WRITERS" => "0", "STREAMS_SCALE_SLOW" => "0", "STREAMS_SCALE_PROFILE" => "",
+    "STREAMS_SCALE_STREAMS" => "1"
   }.freeze
   # The frames the #617 Ractor gate asks about, plus the rest of a wake's
   # per-connection work (issue #621): each is the share of the profiled
@@ -48,7 +49,7 @@ module StreamsScaleHarness
   MISS_DEADLINE_S = 5.0
   NA = "n/a"
   COLUMNS = [
-    "M", "connect all (s)", "connect p99 (ms)", "fan-out first p50 (ms)", "fan-out last p50/p99 (ms)",
+    "M", "streams", "connect all (s)", "connect p99 (ms)", "fan-out first p50 (ms)", "fan-out last p50/p99 (ms)",
     "dispatcher wake p50/p99 (ms)", "heartbeat tick (ms)", "watcher build (ms)", "RSS Δ/conn (KB)",
     "CPU/wall", "misses / errors / 503s", "retried connects"
   ].freeze
@@ -65,7 +66,8 @@ module StreamsScaleHarness
       modes: parse_modes(value.call("STREAMS_SCALE_MODES")),
       writers: parse_integer(value.call("STREAMS_SCALE_WRITERS"), name: "STREAMS_SCALE_WRITERS", min: 0),
       slow: parse_integer(value.call("STREAMS_SCALE_SLOW"), name: "STREAMS_SCALE_SLOW", min: 0),
-      profile: value.call("STREAMS_SCALE_PROFILE").to_s.strip.then { |dir| dir.empty? ? nil : dir }
+      profile: value.call("STREAMS_SCALE_PROFILE").to_s.strip.then { |dir| dir.empty? ? nil : dir },
+      streams: parse_integer(value.call("STREAMS_SCALE_STREAMS"), name: "STREAMS_SCALE_STREAMS", min: 1)
     }
   end
 
@@ -100,6 +102,16 @@ module StreamsScaleHarness
     base, extra = clients.divmod(processes)
     Array.new(processes) { |i| base + (i < extra ? 1 : 0) }.select(&:positive?)
   end
+
+  # Each child's first global client index, so its slots continue the
+  # round-robin where the previous child's ended (issue #630).
+  def client_offsets(counts)
+    counts.each_index.map { |i| counts.first(i).sum }
+  end
+
+  # The stream a child's client at `slot` joins: clients are dealt over the
+  # streams round-robin by global index (issue #630).
+  def stream_index(slot, offset:, streams:) = (offset + slot) % streams
 
   # Nearest-rank percentile; nil for no samples.
   def percentile(values, pct)
@@ -243,7 +255,7 @@ module StreamsScaleHarness
     failures = "#{row["misses"]} / #{row["errors"]} / #{row["over_capacity"]}"
     failures = "**#{failures}**" if row["misses"].to_i.positive? || row["errors"].to_i.positive?
     cells = [
-      row["m"], num(row["connect_all_s"], "%.2f"), num(row["connect_p99_ms"], "%.1f"),
+      row["m"], row.fetch("streams", 1), num(row["connect_all_s"], "%.2f"), num(row["connect_p99_ms"], "%.1f"),
       num(row["fanout_first_p50_ms"], "%.1f"),
       "#{num(row["fanout_last_p50_ms"], "%.1f")} / #{num(row["fanout_last_p99_ms"], "%.1f")}",
       "#{num(row["wake_p50_ms"], "%.1f")} / #{num(row["wake_p99_ms"], "%.1f")}",

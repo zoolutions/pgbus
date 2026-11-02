@@ -59,7 +59,7 @@ RSpec.describe StreamsScaleHarness do
     it "has the documented defaults" do
       expect(described_class.knobs({})).to eq(
         clients: [100, 1000], client_processes: 4, broadcasts: 20,
-        modes: %i[ephemeral durable], writers: 0, slow: 0, profile: nil
+        modes: %i[ephemeral durable], writers: 0, slow: 0, profile: nil, streams: 1
       )
     end
 
@@ -67,13 +67,39 @@ RSpec.describe StreamsScaleHarness do
       env = {
         "STREAMS_SCALE_CLIENTS" => "2000", "STREAMS_SCALE_CLIENT_PROCESSES" => "8",
         "STREAMS_SCALE_BROADCASTS" => "5", "STREAMS_SCALE_MODES" => "durable",
-        "STREAMS_SCALE_WRITERS" => "2", "STREAMS_SCALE_SLOW" => "3", "STREAMS_SCALE_PROFILE" => " tmp/prof "
+        "STREAMS_SCALE_WRITERS" => "2", "STREAMS_SCALE_SLOW" => "3", "STREAMS_SCALE_PROFILE" => " tmp/prof ",
+        "STREAMS_SCALE_STREAMS" => "100"
       }
 
       expect(described_class.knobs(env)).to eq(
         clients: [2000], client_processes: 8, broadcasts: 5, modes: %i[durable], writers: 2, slow: 3,
-        profile: "tmp/prof"
+        profile: "tmp/prof", streams: 100
       )
+    end
+
+    it "rejects a stream count of 0 or a non-integer (issue #630)" do
+      %w[0 -1 x 1.5].each do |value|
+        expect { described_class.knobs("STREAMS_SCALE_STREAMS" => value) }
+          .to raise_error(ArgumentError, /STREAMS_SCALE_STREAMS must be an integer >= 1/)
+      end
+    end
+  end
+
+  describe ".stream_index (issue #630)" do
+    it "assigns a child's clients to the streams round-robin, continuing from the child's offset" do
+      expect(Array.new(5) { |slot| described_class.stream_index(slot, offset: 0, streams: 3) }).to eq([0, 1, 2, 0, 1])
+      expect(Array.new(3) { |slot| described_class.stream_index(slot, offset: 250, streams: 100) }).to eq([50, 51, 52])
+    end
+
+    it "puts every client on stream 0 when there is one stream" do
+      expect(Array.new(4) { |slot| described_class.stream_index(slot, offset: 7, streams: 1) }).to eq([0, 0, 0, 0])
+    end
+  end
+
+  describe ".client_offsets (issue #630)" do
+    it "is each child's first global client index" do
+      expect(described_class.client_offsets([3, 3, 2, 2])).to eq([0, 3, 6, 8])
+      expect(described_class.client_offsets([])).to eq([])
     end
   end
 
@@ -306,7 +332,7 @@ RSpec.describe StreamsScaleHarness do
   describe ".table" do
     let(:row) do
       {
-        "m" => 1000, "connect_all_s" => 2.346, "connect_p99_ms" => 1890.4,
+        "m" => 1000, "streams" => 100, "connect_all_s" => 2.346, "connect_p99_ms" => 1890.4,
         "fanout_first_p50_ms" => 3.21, "fanout_last_p50_ms" => 41.5, "fanout_last_p99_ms" => 77.26,
         "wake_p50_ms" => 38.1, "wake_p99_ms" => 70.9, "heartbeat_ms" => 45.6, "watcher_ms" => 0.81,
         "rss_kb_per_conn" => 23.4, "cpu_ratio" => 0.42, "misses" => 0, "errors" => 0, "over_capacity" => 0, "retries" => 412
@@ -317,13 +343,13 @@ RSpec.describe StreamsScaleHarness do
       lines = described_class.table([row])
 
       expect(lines[0]).to eq(
-        "| M | connect all (s) | connect p99 (ms) | fan-out first p50 (ms) | fan-out last p50/p99 (ms) | " \
+        "| M | streams | connect all (s) | connect p99 (ms) | fan-out first p50 (ms) | fan-out last p50/p99 (ms) | " \
         "dispatcher wake p50/p99 (ms) | heartbeat tick (ms) | watcher build (ms) | RSS Δ/conn (KB) | CPU/wall | " \
         "misses / errors / 503s | retried connects |"
       )
       expect(lines[1]).to start_with("|---:|")
       expect(lines[2]).to eq(
-        "| 1000 | 2.35 | 1890.4 | 3.2 | 41.5 / 77.3 | 38.1 / 70.9 | 45.6 | 0.81 | 23.4 | 42 % | 0 / 0 / 0 | 412 |"
+        "| 1000 | 100 | 2.35 | 1890.4 | 3.2 | 41.5 / 77.3 | 38.1 / 70.9 | 45.6 | 0.81 | 23.4 | 42 % | 0 / 0 / 0 | 412 |"
       )
     end
 
@@ -336,7 +362,13 @@ RSpec.describe StreamsScaleHarness do
     it "prints a skipped row with its reason" do
       line = described_class.table([{ "m" => 2000, "skip_reason" => "skipped: M=2000 needs more" }]).last
 
-      expect(line).to eq("| 2000 | skipped: M=2000 needs more | | | | | | | | | | |")
+      expect(line).to eq("| 2000 | skipped: M=2000 needs more | | | | | | | | | | | |")
+    end
+
+    it "prints 1 for a row from before the streams knob" do
+      line = described_class.table([row.except("streams")]).last
+
+      expect(line).to start_with("| 1000 | 1 | 2.35 |")
     end
 
     it "prints n/a for a value the cell did not measure" do
