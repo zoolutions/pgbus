@@ -1775,6 +1775,23 @@ RSpec.describe Pgbus::Configuration do
       expect { config.native_statements = nil }.to raise_error(Pgbus::ConfigurationError, /native_statements/)
     end
 
+    it "keeps ActiveJob's per-job log lines by default (issue #618)" do
+      expect(config.quiet_active_job_logs).to be(false)
+    end
+
+    it "accepts true and false for quiet_active_job_logs" do
+      config.quiet_active_job_logs = true
+      expect(config.quiet_active_job_logs).to be(true)
+      config.quiet_active_job_logs = false
+      expect(config.quiet_active_job_logs).to be(false)
+    end
+
+    it "rejects a non-boolean quiet_active_job_logs at assignment" do
+      expect { config.quiet_active_job_logs = "yes" }
+        .to raise_error(Pgbus::ConfigurationError, "quiet_active_job_logs must be true or false (got \"yes\")")
+      expect { config.quiet_active_job_logs = nil }.to raise_error(Pgbus::ConfigurationError, /quiet_active_job_logs/)
+    end
+
     it "rejects a non-boolean require_primary" do
       config.require_primary = "yes"
       expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /require_primary/)

@@ -26,6 +26,17 @@ require "json"
 #   rails      running inside ActiveJob / ActiveSupport / ActiveRecord / GlobalID
 #   ruby       running in stdlib, concurrent-ruby or the bench's own job
 #
+# Issue #618 splits the on-CPU `rails` bucket by who owns the work (the
+# "inside rails" table). The leaf rails frame names it when it is specific
+# (ActiveJob's log subscriber and loggers: aj_log; argument deserialization
+# and GlobalID: aj_arguments). Otherwise the nearest owner frame, leaf first,
+# names it: Rails.application.executor's wrap (executor_wrap, its hooks
+# included); ActiveJob (aj_callbacks for a callbacks leaf, notif:activejob for
+# a notifications leaf, aj_other for its own code and a job's own ActiveRecord
+# work); pgbus (notif:pgbus for a notifications leaf, pgbus_rails for the Rails
+# code pgbus itself calls: the stat buffer's insert_all, the heartbeat's
+# process row). A leaf with no owner is aj_other.
+#
 # The pure pieces (classification, share math, JIT label) carry no DB or
 # profiler dependency and are pinned by spec/benchmarks/worker_profile_harness_spec.rb.
 module WorkerProfileHarness
@@ -44,6 +55,23 @@ module WorkerProfileHarness
   DRIVER_LABEL_PREFIX = "PG::"
   POOL_WAIT_LABELS = ["ConnectionPool::TimedStack#pop", "ConnectionPool::Queue#wait_poll"].freeze
 
+  RAILS_SUB_BUCKETS = %w[aj_log aj_arguments aj_callbacks notif:activejob notif:pgbus executor_wrap pgbus_rails
+                         aj_other].freeze
+  AJ_LOG_LEAF = Regexp.union(%r{/active_job/log(?:_subscriber|ging)\.rb},
+                             %r{/active_support/(?:log_subscriber|tagged_logging|broadcast_logger|logger[^/]*)\.rb})
+  AJ_ARGUMENTS_LEAF = %r{/active_job/(?:arguments\.rb|serializers)|/globalid-}
+  GENERIC_LEAVES = {
+    callbacks: %r{/active_support/callbacks\.rb},
+    notifications: %r{/active_support/notifications}
+  }.freeze
+  WRAP_OWNER = %r{/active_support/execution_wrapper\.rb}
+  ACTIVEJOB_OWNER = "/activejob-"
+  OWNED_SUB_BUCKETS = {
+    executor: Hash.new("executor_wrap").freeze,
+    active_job: Hash.new("aj_other").merge(callbacks: "aj_callbacks", notifications: "notif:activejob").freeze,
+    pgbus: Hash.new("pgbus_rails").merge(notifications: "notif:pgbus").freeze
+  }.freeze
+
   # vernier's per-sample category ids (Vernier::Output::Firefox::Thread::SAMPLE_CATEGORY_NAMES).
   SAMPLE_CATEGORIES = { 1 => :idle, 2 => :stalled }.freeze
 
@@ -55,7 +83,7 @@ module WorkerProfileHarness
   # The fleet cell (issue #602) also fills processes, start_skew_ms, the pg_*
   # cost fields and skip_reason; the worker and consumer cells leave them nil.
   Cell = Struct.new(:role, :location, :jit, :jobs, :wall_s, :cpu_s, :gc_s, :jobs_per_s, :pool_shares, :loop_shares,
-                    :cpu_shares, :profile_path, :processes, :start_skew_ms, :pg_ms_per_job, :pg_statements_per_job,
+                    :cpu_shares, :rails_sub_shares, :profile_path, :processes, :start_skew_ms, :pg_ms_per_job, :pg_statements_per_job,
                     :pg_busy_backends, :pg_top, :pg_waits, :pg_unavailable_reason, :peak_connections,
                     :budgeted_connections, :skip_reason, keyword_init: true) do
     def to_h = super.transform_keys(&:to_s)
@@ -91,6 +119,57 @@ module WorkerProfileHarness
       :ruby
     end
   end
+
+  # frames: a running sample's stack, leaf first, whose bucket is :rails.
+  # Returns one of RAILS_SUB_BUCKETS.
+  def classify_rails_frame(frames)
+    index = frames.index { |f| classify_frame(f) == :rails }
+    return "aj_other" unless index
+
+    leaf = frames[index].filename.to_s
+    return "aj_log" if AJ_LOG_LEAF.match?(leaf)
+    return "aj_arguments" if AJ_ARGUMENTS_LEAF.match?(leaf)
+
+    owner = rails_owner(frames.drop(index))
+    return "aj_other" unless owner
+
+    kind, = GENERIC_LEAVES.find { |_, pattern| pattern.match?(leaf) }
+    OWNED_SUB_BUCKETS.fetch(owner)[kind]
+  end
+
+  # The nearest frame, leaf first, that says whose work a rails leaf is
+  # doing; nil when none does.
+  def rails_owner(frames)
+    frames.each do |f|
+      filename = f.filename.to_s
+      return :pgbus if filename.include?(PGBUS_PATTERN)
+      return :executor if WRAP_OWNER.match?(filename)
+      return :active_job if filename.include?(ACTIVEJOB_OWNER)
+    end
+    nil
+  end
+
+  # [sub_bucket, weight] for a running sample in the rails bucket, else nil.
+  def rails_sub_pair(frames, category, weight)
+    return unless category == :running && classify_sample(frames, category: :running) == :rails
+
+    [classify_rails_frame(frames), weight]
+  end
+
+  # The "inside rails" table: each sub-bucket as a share of the rails bucket
+  # and of all on-CPU time. Cells without sub-shares (consumer, fleet) are skipped.
+  def rails_sub_table(cells)
+    lines = ["| cell | #{RAILS_SUB_BUCKETS.join(" | ")} |", "|---|#{RAILS_SUB_BUCKETS.map { "---:" }.join("|")}|"]
+    cells.each do |c|
+      subs = c["rails_sub_shares"] or next
+      rails = c["cpu_shares"]["rails"]
+      shares = RAILS_SUB_BUCKETS.map { |b| "#{percent(subs[b])} / #{percent(subs[b] * rails)}" }
+      lines << "| #{c["role"]} / #{c["location"]} / #{c["jit"]} | #{shares.join(" | ")} |"
+    end
+    lines
+  end
+
+  def percent(share) = format("%.1f%%", share * 100)
 
   def pool_wait_frame?(frame)
     label = frame.label.to_s
@@ -133,6 +212,32 @@ module WorkerProfileHarness
     raise ArgumentError, "WP_BENCH_COMPLETED_JOBS must be archive or delete (got #{value})"
   end
 
+  # WP_BENCH_AJ_LOGS (issue #618): how ActiveJob's per-job log lines are
+  # handled in every worker cell. default keeps the bench's ActiveJob logger
+  # (a plain Logger to IO::NULL: lines formatted, never written); warn gives
+  # ActiveJob a TaggedLogging logger at warn (the throughput checklist's
+  # recipe); quiet sets config.quiet_active_job_logs.
+  AJ_LOGS_MODES = %w[default warn quiet].freeze
+
+  def aj_logs(env = ENV)
+    value = env.fetch("WP_BENCH_AJ_LOGS", "default")
+    return value if AJ_LOGS_MODES.include?(value)
+
+    raise ArgumentError, "WP_BENCH_AJ_LOGS must be default, warn or quiet (got #{value})"
+  end
+
+  # WP_BENCH_RAILS_APP (issue #618): "1" boots a minimal Rails::Application in
+  # each cell so the executor runs jobs inside Rails.application.executor.wrap,
+  # as it does in a host app; unset or "0" leaves Rails out and the job runs
+  # bare (the shape #484 measured).
+  def rails_app?(env = ENV)
+    value = env.fetch("WP_BENCH_RAILS_APP", nil)
+    return false if value.nil? || value == "0"
+    return true if value == "1"
+
+    raise ArgumentError, "WP_BENCH_RAILS_APP must be 0 or 1 (got #{value})"
+  end
+
   def jit_label
     return "yjit" if defined?(RubyVM::YJIT) && RubyVM::YJIT.enabled?
     return "zjit" if defined?(RubyVM::ZJIT) && RubyVM::ZJIT.enabled?
@@ -145,13 +250,29 @@ module WorkerProfileHarness
   def bucket_pairs(result, thread_name)
     return enum_for(__method__, result, thread_name) unless block_given?
 
+    each_sample(result, thread_name) do |frames, category, weight|
+      yield classify_sample(frames, category: category), weight
+    end
+  end
+
+  # [sub_bucket, weight] for every running rails sample on any thread (issue #618).
+  def rails_sub_pairs(result)
+    return enum_for(__method__, result) unless block_given?
+
+    each_sample(result, ANY_THREAD) do |frames, category, weight|
+      pair = rails_sub_pair(frames, category, weight)
+      yield pair if pair
+    end
+  end
+
+  # Yields [frames, category, weight] for every sample on a matching thread.
+  def each_sample(result, thread_name)
     result.threads.each_value do |thread|
       next unless thread_name === thread[:name].to_s # rubocop:disable Style/CaseEquality
 
       categories = thread[:sample_categories] || []
       thread[:samples].each_with_index do |stack_idx, i|
-        frames = result.stack(stack_idx).frames
-        yield classify_sample(frames, category: sample_category(categories[i])), thread[:weights][i]
+        yield result.stack(stack_idx).frames, sample_category(categories[i]), thread[:weights][i]
       end
     end
   end
@@ -159,4 +280,5 @@ module WorkerProfileHarness
   def pool_shares(result) = shares(bucket_pairs(result, POOL_THREAD_NAME))
   def loop_shares(result) = shares(bucket_pairs(result, LOOP_THREAD_NAME))
   def cpu_shares(result) = shares(bucket_pairs(result, ANY_THREAD), buckets: CPU_BUCKETS)
+  def rails_sub_shares(result) = shares(rails_sub_pairs(result), buckets: RAILS_SUB_BUCKETS)
 end

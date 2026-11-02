@@ -194,6 +194,7 @@ module Pgbus
       POOL_TERMINATION_WAIT = 5
 
       def run
+        quiet_active_job_logs
         setup_signals
         start_heartbeat
         resolve_wildcard_queues
@@ -281,6 +282,16 @@ module Pgbus
       RESTORE_COOLDOWN_MAX = 300
 
       private
+
+      # config.quiet_active_job_logs (issue #618): only worker processes perform
+      # jobs, so only they drop the per-job "Performing …" / "Performed …"
+      # lines. The supervisor eager-loads the app, so ActiveJob::LogSubscriber
+      # is attached by the time a worker runs.
+      def quiet_active_job_logs
+        return unless config.quiet_active_job_logs && defined?(::ActiveJob::LogSubscriber)
+
+        Pgbus::ActiveJob::QuietLogs.apply!
+      end
 
       # One loop step (issue #486): feed buffered claims to free slots, read
       # the deficit (free slots + read_ahead - buffered, capped by

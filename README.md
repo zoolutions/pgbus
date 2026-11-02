@@ -2496,6 +2496,7 @@ Curated headline options for the README. The full operator reference (with types
 | `worker_notify_wakeup` | `nil` (follows `listen_notify`) | Dedicated LISTEN connection for worker wake-up. `nil` follows `listen_notify`; set `false` to force polling. |
 | `worker_notify_host` / `worker_notify_port` / `worker_notify_database_url` | `nil` | Override host/port/URL for the worker notify LISTEN connection (e.g. direct primary port when jobs go through PgBouncer) |
 | `prefetch_limit` | `nil` | Max in-flight messages per worker (nil = unlimited) |
+| `quiet_active_job_logs` | `false` | Worker processes drop ActiveJob's per-job `Performing …` / `Performed …` info lines (only those two events are unsubscribed); every other ActiveJob line, a failed job's error line and the web process stay as they are |
 | `dispatch_interval` | `1.0` | Seconds between dispatcher maintenance ticks |
 | `circuit_breaker_enabled` | `true` | Enable auto-pause on consecutive failures (threshold and backoff are tuned via `Pgbus::CircuitBreaker` constants) |
 | `zombie_detection` | `true` | Detect and reclaim work from crashed workers |

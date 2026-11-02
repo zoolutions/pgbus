@@ -178,6 +178,139 @@ RSpec.describe WorkerProfileHarness do
     end
   end
 
+  # Issue #618: the rails bucket split by who owns the work. The leaf rails
+  # frame names it; a generic leaf (callbacks, notifications, the executor
+  # wrap, ActiveRecord) takes the nearest owner frame toward the root.
+  describe ".classify_rails_frame" do
+    let(:aj) { "/gems/activejob-8.1.4/lib/active_job" }
+    let(:as) { "/gems/activesupport-8.1.4/lib/active_support" }
+    let(:ar) { "/gems/activerecord-8.1.4/lib/active_record" }
+    let(:executor_frame) { frame("/src/pgbus/lib/pgbus/active_job/executor.rb") }
+
+    def classify(*frames) = described_class.classify_rails_frame(frames)
+
+    it "names ActiveJob's log subscriber and the loggers aj_log" do
+      expect(classify(frame("<internal:kernel>"), frame("#{aj}/log_subscriber.rb"), executor_frame)).to eq("aj_log")
+      expect(classify(frame("#{aj}/logging.rb"))).to eq("aj_log")
+      expect(classify(frame("#{as}/log_subscriber.rb"))).to eq("aj_log")
+      expect(classify(frame("#{as}/tagged_logging.rb"))).to eq("aj_log")
+      expect(classify(frame("#{as}/logger_thread_safe_level.rb"))).to eq("aj_log")
+      expect(classify(frame("#{as}/broadcast_logger.rb"))).to eq("aj_log")
+    end
+
+    it "names argument deserialization and GlobalID aj_arguments" do
+      expect(classify(frame("#{aj}/arguments.rb"), executor_frame)).to eq("aj_arguments")
+      expect(classify(frame("#{aj}/serializers/object_serializer.rb"))).to eq("aj_arguments")
+      expect(classify(frame("/gems/globalid-1.2.1/lib/global_id/locator.rb"))).to eq("aj_arguments")
+    end
+
+    it "names a callbacks leaf owned by ActiveJob aj_callbacks" do
+      expect(classify(frame("#{as}/callbacks.rb"), frame("#{aj}/execution.rb"), executor_frame)).to eq("aj_callbacks")
+    end
+
+    it "names a notifications leaf by its nearest owner" do
+      activejob_nearer = [frame("#{as}/notifications/instrumenter.rb"), frame("#{aj}/instrumentation.rb"),
+                          frame("/src/pgbus/lib/pgbus/instrumentation.rb")]
+      pgbus_nearer = [frame("#{as}/notifications/fanout.rb"), frame("#{as}/notifications.rb"),
+                      frame("/src/pgbus/lib/pgbus/instrumentation.rb"), frame("#{aj}/execution.rb")]
+
+      expect(classify(*activejob_nearer)).to eq("notif:activejob")
+      expect(classify(*pgbus_nearer)).to eq("notif:pgbus")
+    end
+
+    it "names the executor wrap's own frames and the hooks it runs executor_wrap" do
+      wrapper = frame("#{as}/execution_wrapper.rb")
+
+      expect(classify(wrapper, executor_frame)).to eq("executor_wrap")
+      expect(classify(frame("#{as}/current_attributes.rb"), wrapper, executor_frame)).to eq("executor_wrap")
+      expect(classify(frame("#{ar}/query_cache.rb"), wrapper, executor_frame)).to eq("executor_wrap")
+      expect(classify(frame("#{as}/callbacks.rb"), wrapper, executor_frame)).to eq("executor_wrap")
+    end
+
+    # A job's own ActiveRecord work runs inside perform_now, inside the wrap:
+    # ActiveJob is the nearer owner, and it is not the wrap's cost.
+    it "names an ActiveRecord leaf with ActiveJob nearer than the wrap aj_other" do
+      stack = [frame("#{ar}/relation.rb"), frame("#{aj}/execution.rb"), frame("#{as}/execution_wrapper.rb"), executor_frame]
+
+      expect(classify(*stack)).to eq("aj_other")
+    end
+
+    # pgbus's own calls into Rails (the stat buffer's insert_all, the
+    # heartbeat's process row) are pgbus's cost, not ActiveJob's.
+    it "names a rails leaf whose nearest owner is pgbus, outside notifications, pgbus_rails" do
+      stat_flush = frame("/src/pgbus/lib/pgbus/stat_buffer.rb", "Pgbus::StatBuffer#write_to_database")
+
+      expect(classify(frame("#{ar}/insert_all.rb"), stat_flush)).to eq("pgbus_rails")
+      expect(classify(frame("#{as}/core_ext/hash/keys.rb"), stat_flush)).to eq("pgbus_rails")
+      expect(classify(frame("#{as}/callbacks.rb"), frame("#{ar}/base.rb"), stat_flush)).to eq("pgbus_rails")
+    end
+
+    it "names any other rails leaf, or a generic leaf with no owner, aj_other" do
+      expect(classify(frame("#{aj}/core.rb"), executor_frame)).to eq("aj_other")
+      expect(classify(frame("#{as}/callbacks.rb"), frame("<internal:kernel>"))).to eq("aj_other")
+    end
+  end
+
+  describe ".rails_sub_pair" do
+    it "yields a sub-bucket for running rails samples only" do
+      rails_stack = [frame("/gems/activejob-8.1.4/lib/active_job/log_subscriber.rb")]
+      pgbus_stack = [frame("/src/lib/pgbus/client.rb")]
+      samples = [[rails_stack, :running, 3], [rails_stack, :idle, 5], [pgbus_stack, :running, 7]]
+
+      pairs = samples.filter_map { |frames, category, weight| described_class.rails_sub_pair(frames, category, weight) }
+
+      expect(pairs).to eq([["aj_log", 3]])
+    end
+  end
+
+  describe ".rails_sub_table" do
+    let(:cell) do
+      { "role" => "worker", "location" => "local", "jit" => "yjit",
+        "cpu_shares" => { "pgbus" => 0.35, "driver" => 0.25, "rails" => 0.4, "ruby" => 0.0 },
+        "rails_sub_shares" => described_class::RAILS_SUB_BUCKETS.to_h { |b| [b, 0.0] }
+                                                                .merge("aj_log" => 0.25, "aj_other" => 0.75) }
+    end
+
+    it "renders each sub-bucket as a share of rails and of on-CPU" do
+      lines = described_class.rails_sub_table([cell])
+
+      expect(lines.first).to eq("| cell | #{described_class::RAILS_SUB_BUCKETS.join(" | ")} |")
+      expect(lines.last).to start_with("| worker / local / yjit | 25.0% / 10.0% |")
+      expect(lines.last).to include("| 75.0% / 30.0% |")
+    end
+
+    it "skips a cell without sub-shares (a consumer, or a fleet row)" do
+      expect(described_class.rails_sub_table([cell.merge("rails_sub_shares" => nil)]).size).to eq(2)
+    end
+  end
+
+  describe ".aj_logs" do
+    it "is default when unset, else the mode" do
+      expect(described_class.aj_logs({})).to eq("default")
+      %w[default warn quiet].each do |mode|
+        expect(described_class.aj_logs("WP_BENCH_AJ_LOGS" => mode)).to eq(mode)
+      end
+    end
+
+    it "rejects anything else" do
+      expect { described_class.aj_logs("WP_BENCH_AJ_LOGS" => "off") }
+        .to raise_error(ArgumentError, /WP_BENCH_AJ_LOGS must be default, warn or quiet \(got off\)/)
+    end
+  end
+
+  describe ".rails_app?" do
+    it "is on for 1 and off when unset or 0" do
+      expect(described_class.rails_app?("WP_BENCH_RAILS_APP" => "1")).to be(true)
+      expect(described_class.rails_app?("WP_BENCH_RAILS_APP" => "0")).to be(false)
+      expect(described_class.rails_app?({})).to be(false)
+    end
+
+    it "rejects anything else" do
+      expect { described_class.rails_app?("WP_BENCH_RAILS_APP" => "yes") }
+        .to raise_error(ArgumentError, /WP_BENCH_RAILS_APP must be 0 or 1/)
+    end
+  end
+
   describe ".jit_label" do
     it "reports yjit when YJIT is enabled" do
       stub_const("RubyVM::YJIT", Module.new { def self.enabled? = true })

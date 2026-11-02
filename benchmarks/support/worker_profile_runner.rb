@@ -6,6 +6,7 @@ require "active_record"
 require "active_job"
 require "pgbus"
 require_relative "worker_profile_harness"
+require_relative "bench_rails_app"
 
 # Drives one matrix cell of the worker profiling bench (issue #484) inside the
 # current process. Pgbus is configured GLOBALLY (Pgbus.configure) because the
@@ -36,7 +37,7 @@ module WorkerProfileRunner
   # queue its siblings are draining. A nil pool_size keeps pgbus's default;
   # ar_pool caps the ActiveRecord pool (a fleet child budgets it exactly).
   def configure!(database_url, threads:, pool_size: nil, ar_pool: threads + 8)
-    ActiveJob::Base.logger = Logger.new(IO::NULL)
+    aj_logs = WorkerProfileHarness.aj_logs
     ActiveRecord::Base.establish_connection(with_pool(database_url, ar_pool))
 
     Pgbus.configure do |c|
@@ -54,7 +55,22 @@ module WorkerProfileRunner
       # Issue #607, likewise.
       completed_jobs = WorkerProfileHarness.completed_jobs
       c.completed_jobs = completed_jobs if completed_jobs
+      # Issue #618, likewise.
+      c.quiet_active_job_logs = true if aj_logs == "quiet"
     end
+    # Issue #618: after Pgbus.configure, so the app's boot leaves it alone.
+    BenchRailsApp.boot!(with_pool(database_url, ar_pool)) if WorkerProfileHarness.rails_app?
+    # After the boot: ActiveJob's railtie sets ActiveJob::Base.logger to Rails.logger.
+    ActiveJob::Base.logger = active_job_logger(aj_logs)
+  end
+
+  # default: the bench's logger since #484 (a plain Logger to IO::NULL at
+  # debug: every line formatted, none written). warn: the throughput
+  # checklist's recipe, ActiveJob's own TaggedLogging logger at warn.
+  def active_job_logger(aj_logs)
+    return Logger.new(IO::NULL) unless aj_logs == "warn"
+
+    ActiveSupport::TaggedLogging.new(ActiveSupport::Logger.new(IO::NULL, level: :warn))
   end
 
   def reset!
@@ -113,6 +129,7 @@ module WorkerProfileRunner
       measurement[:pool_shares] = WorkerProfileHarness.pool_shares(vernier_result)
       measurement[:loop_shares] = WorkerProfileHarness.loop_shares(vernier_result)
       measurement[:cpu_shares] = WorkerProfileHarness.cpu_shares(vernier_result)
+      measurement[:rails_sub_shares] = WorkerProfileHarness.rails_sub_shares(vernier_result)
     else
       run.call
     end
