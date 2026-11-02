@@ -343,11 +343,11 @@ Two runs can overlap: the trailing copy can start while the first is still runni
 
 | Policy | At enqueue (`:until_executed`, `:until_executing`) | At execution (`:while_executing`) |
 |--------|----------|----------|
-| `:reject` (default) | Raise `Pgbus::JobNotUnique` | Leave the copy queued; it runs once the holder is done |
+| `:reject` (default) | Raise `Pgbus::JobNotUnique` | Leave the copy queued for a backed-off redelivery: it runs once the holder is done, or dead-letters as `uniqueness_conflict` if skipped past `max_retries` |
 | `:discard` | Silently drop the duplicate | Complete the copy without running it (`pgbus.job_discarded`) |
 | `:log` | Log a warning and drop | As `:reject`, and log the skip at warn |
 
-A `:while_executing` copy left queued comes back after `visibility_timeout × 2^(read_ct − 1)` (jittered, capped at `retry_backoff_max`, never below `visibility_timeout`), so repeated skips stretch over a long holder's run, and each skip emits `pgbus.job_skipped`. PGMQ counts every read toward `max_retries`, so a copy skipped on every read still dead-letters: its DLQ headers say `reason: uniqueness_conflict`, not `max_retries_exceeded` with no error. A recurring `:while_executing` task carries its key, so a run that outlasts its interval is not overlapped by the next. For "every enqueue after a run starts gets a run that sees its state", use `:until_executing`.
+A `:while_executing` copy left queued comes back after `visibility_timeout × 2^(read_ct − 1)` (jittered, capped at `retry_backoff_max`, never below `visibility_timeout`), so repeated skips stretch over a long holder's run, and each skip emits `pgbus.job_skipped`. PGMQ counts every read toward `max_retries`, so a copy skipped past it still dead-letters; when none of its attempts failed, its DLQ headers say `reason: uniqueness_conflict`, not `max_retries_exceeded` with no error. A recurring `:while_executing` task carries its key, so a run that outlasts its interval is not overlapped by the next. For a trailing run that sees writes enqueued while the current run executes, use `:until_executing`.
 
 #### Lock lifecycle
 

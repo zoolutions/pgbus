@@ -77,7 +77,9 @@ RSpec.describe "Recurring scheduler with :while_executing strategy (integration)
     first, second = client.read_batch("default", qty: 10, vt: 30).sort_by { |m| m.msg_id.to_i }
 
     holder = Thread.new { executor.execute(first, "default") }
-    started.pop
+    # Bounded: an execute that fails before perform never signals, and the
+    # example must fail rather than hang the run.
+    expect(started.pop(timeout: 30)).to be(true), "first run never started (holder: #{holder.join(0)&.value.inspect})"
 
     expect(Pgbus::UniquenessKey.locked?("WhileExecutingJob")).to be(true)
     expect(executor.execute(second, "default")).to eq(:skipped)

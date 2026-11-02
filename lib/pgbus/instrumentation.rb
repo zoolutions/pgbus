@@ -18,8 +18,10 @@ module Pgbus
   #   pgbus.job_dead_lettered      — job exceeded max_retries and was DLQ-routed;
   #                                  :error is the last recorded error class (or nil);
   #                                  :reason is max_retries_exceeded, or uniqueness_conflict
-  #                                  for a :while_executing copy skipped on every read
-  #                                  while another message held its key
+  #                                  for a :while_executing copy with no failed attempt whose
+  #                                  key's row is not its own (skipped while another message
+  #                                  held the key); also uniqueness_conflict when that row
+  #                                  lookup itself fails
   #   pgbus.job_skipped            — a :while_executing copy was read while another
   #                                  message held its key and left for a later delivery
   #                                  (on_conflict :reject or :log)

@@ -42,7 +42,7 @@ RSpec.describe "Dashboard words", type: :system do
           expect(card("/pgbus/jobs?state=retrying")).to have_text("2")
           expect(card("/pgbus/jobs?state=retrying")).to have_text("next attempt in 40s (12:00)")
           expect(card("/pgbus/jobs?state=retrying")).to have_text("newest error Net::ReadTimeout")
-          expect(card("/pgbus/dlq")).to have_text("4")
+          expect(card("/pgbus/dlq")).to have_text("5")
           expect(card("/pgbus/dlq")).to have_text("newest: orders.created 15m ago — no error recorded")
           expect(card("/pgbus/insights")).to have_text("38.2").and have_text("jobs/min over the last 5 min")
           expect(card("/pgbus/locks")).to have_text("Parked jobs")

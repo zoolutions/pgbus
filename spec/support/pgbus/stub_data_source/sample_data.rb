@@ -124,7 +124,7 @@ module Pgbus
         end
 
         def sample_stats
-          { total_queues: 8, total_depth: 145, total_visible: 115, active_processes: 10, failed_count: 5, dlq_depth: 4,
+          { total_queues: 8, total_depth: 146, total_visible: 116, active_processes: 10, failed_count: 5, dlq_depth: 5,
             recurring_count: PAGED_ROWS, throughput_rate: 42.7, total_dead_tuples: 1_250, tables_needing_vacuum: 1,
             oldest_transaction_age_sec: 8, parked_total: 5, oldest_parked_age_sec: 300, slots_held: 3,
             keys_at_limit: 1 }
@@ -146,8 +146,8 @@ module Pgbus
               oldest_msg_age_sec: 90, oldest_claimable_age_sec: 80, newest_msg_age_sec: 3, total_messages: 2_100 },
             { name: "pgbus_default_p1", queue_length: 9, queue_visible_length: 9, parked_length: 0,
               oldest_msg_age_sec: 420, oldest_claimable_age_sec: 420, newest_msg_age_sec: 12, total_messages: 3_900 },
-            { name: "pgbus_default_dlq", queue_length: 3, queue_visible_length: 3, parked_length: 0,
-              oldest_msg_age_sec: 18_000, oldest_claimable_age_sec: 18_000, newest_msg_age_sec: 3600, total_messages: 47 },
+            { name: "pgbus_default_dlq", queue_length: 4, queue_visible_length: 4, parked_length: 0,
+              oldest_msg_age_sec: 18_000, oldest_claimable_age_sec: 18_000, newest_msg_age_sec: 1800, total_messages: 47 },
             { name: "pgbus_events_dlq", queue_length: 1, queue_visible_length: 1, parked_length: 0,
               oldest_msg_age_sec: 900, oldest_claimable_age_sec: 900, newest_msg_age_sec: 900, total_messages: 4 }
           ]

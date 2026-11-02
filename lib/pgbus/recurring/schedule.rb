@@ -198,12 +198,15 @@ module Pgbus
         args = task.arguments || []
         return default_uniqueness_key(job_class, args) unless key_proc
 
-        begin
+        key = begin
           args.empty? ? key_proc.call : key_proc.call(*args)
         rescue StandardError => e
           Pgbus.logger.warn { "[Pgbus] Could not resolve uniqueness key for #{task.key}: #{e.message}" }
           raise
         end
+        # As Uniqueness.resolve_key does for an ordinary enqueue: a record
+        # becomes its GlobalID, so both paths key one record the same way.
+        key.respond_to?(:to_global_id) ? key.to_global_id.to_s : key
       end
 
       # Class-name default for the scheduler path, args-qualified so distinct

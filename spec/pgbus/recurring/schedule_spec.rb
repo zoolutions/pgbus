@@ -491,6 +491,24 @@ RSpec.describe Pgbus::Recurring::Schedule do
         )
       end
 
+      it "keys a record the key proc returns by its GlobalID, as an ordinary enqueue does" do
+        record = Struct.new(:id) { def to_global_id = "gid://app/Order/#{id}" }.new(42)
+        stub_const("CleanupJob", Class.new do
+          include Pgbus::Uniqueness
+
+          def self.name
+            "CleanupJob"
+          end
+
+          ensures_uniqueness strategy: :while_executing, key: -> { record }
+        end)
+
+        schedule.enqueue_task(task, run_at: run_at)
+
+        expect(mock_client).to have_received(:send_message)
+          .with(anything, hash_including(Pgbus::Uniqueness::METADATA_KEY => "gid://app/Order/42"), headers: anything)
+      end
+
       # Fail closed, as for the enqueue-locked strategies: a broken key proc
       # must not enqueue the run without the protection it configures.
       it "enqueues nothing when the key proc raises" do

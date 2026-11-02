@@ -347,8 +347,10 @@ class Views::Docs::Pages::UpgradingPgbus < DocsUI::Page
           backed off from `visibility_timeout` instead of on the flat timeout,
           so a long holder no longer dead-letters every queued copy within
           `max_retries × visibility_timeout`. A copy that is skipped past
-          `max_retries` still dead-letters, now with `reason:
-          uniqueness_conflict`. `:log` logs each skip at warn.
+          `max_retries` still dead-letters; when none of its attempts failed
+          and the key's row is not its own crashed attempt's, the reason is
+          `uniqueness_conflict` instead of an empty `max_retries_exceeded`.
+          `:log` logs each skip at warn.
         - **A recurring `:while_executing` task is protected.** The scheduler
           now carries its key, so the next run waits for a run that outlasts
           its interval (or, under `:discard`, is dropped) instead of

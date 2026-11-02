@@ -88,7 +88,7 @@ RSpec.describe Pgbus::Metrics::Subscriber do
   # Issue #629: a :while_executing duplicate that met another message holding
   # the key, and the dead-letter reason that says why a job died.
   describe "pgbus.job_skipped" do
-    it "increments queue_job_count as skipped, tagged with the on_conflict policy" do
+    it "increments queue_job_count as skipped, tagged reason: uniqueness" do
       ActiveSupport::Notifications.instrument("pgbus.job_skipped", queue: "default", job_class: "TestJob",
                                                                    on_conflict: :reject)
 

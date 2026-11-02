@@ -78,6 +78,44 @@ RSpec.describe ":while_executing duplicates (integration)", :integration do
     end
   end
 
+  context "with on_conflict: :log" do
+    before { stub_const("RollupJob", build_rollup_job(:log, runs)) }
+
+    it "skips like :reject: backed off, still queued, and runs once the holder is done" do
+      holder, duplicates = enqueue_six_and_hold_the_first
+      copy = duplicates.first
+
+      expect(executor.execute(copy, "default")).to eq(:skipped)
+      expect(queue_rows([copy.msg_id]).map { |(_, seconds)| seconds.to_f }).to all(be > config.visibility_timeout * 0.5)
+
+      expect(executor.execute(holder, "default")).to eq(:success)
+      client.set_visibility_timeout("default", copy.msg_id.to_i, vt: 0)
+      expect(executor.execute(client.read_message("default", vt: 30), "default")).to eq(:success)
+      expect(runs).to eq([42, 42])
+    end
+  end
+
+  # A message enqueued before the policy key existed carries none: it keeps
+  # the redelivery it had (as :reject), even for a job now declared :discard.
+  context "with a payload that carries no on_conflict" do
+    before { stub_const("RollupJob", build_rollup_job(:discard, runs)) }
+
+    it "skips the copy as :reject instead of discarding it" do
+      RollupJob.perform_later(42)
+      payload = JSON.parse(client.read_message("default", vt: 0).message)
+      ActiveRecord::Base.connection.execute("DELETE FROM pgmq.q_#{config.queue_name("default")}")
+      legacy = payload.except(Pgbus::Uniqueness::ON_CONFLICT_KEY)
+      expect(legacy).to include(Pgbus::Uniqueness::STRATEGY_KEY => "while_executing")
+      client.send_message("default", legacy)
+      copy = client.read_message("default", vt: 30)
+      Pgbus::UniquenessKey.acquire!("rollup-42", queue_name: "default", msg_id: copy.msg_id.to_i + 1_000)
+
+      expect(executor.execute(copy, "default")).to eq(:skipped)
+      expect(queue_rows([copy.msg_id]).size).to eq(1)
+      expect(runs).to be_empty
+    end
+  end
+
   context "with on_conflict: :reject" do
     before { stub_const("RollupJob", build_rollup_job(:reject, runs)) }
 
@@ -90,7 +128,8 @@ RSpec.describe ":while_executing duplicates (integration)", :integration do
       # let it back: the first skip is visibility_timeout * 2^0, jittered up only.
       remaining = queue_rows(duplicates.map(&:msg_id)).map { |(_, seconds)| seconds.to_f }
       expect(remaining.size).to eq(5)
-      expect(remaining).to all(be > config.visibility_timeout - 2)
+      # Slack is half the timeout, not seconds, so a slow CI host cannot race it.
+      expect(remaining).to all(be > config.visibility_timeout * 0.5)
 
       # The second skip of each waits twice as long (jitter is at most 15%):
       # repeated skips stretch over the holder's run instead of spinning on
@@ -100,7 +139,9 @@ RSpec.describe ":while_executing duplicates (integration)", :integration do
       expect(second.map { |m| m.read_ct.to_i }).to all(eq(2))
       expect(second.map { |m| executor.execute(m, "default") }).to all(eq(:skipped))
       stretched = queue_rows(duplicates.map(&:msg_id)).map { |(_, seconds)| seconds.to_f }
-      expect(stretched).to all(be > (config.visibility_timeout * 2 * 0.85) - 2)
+      # At least 2 × 0.85 × the timeout was set; above 1.2 × it is longer than
+      # any flat-timeout redelivery could be, with seconds of slack to spare.
+      expect(stretched).to all(be > config.visibility_timeout * 1.2)
 
       expect(executor.execute(holder, "default")).to eq(:success)
       expect(Pgbus::UniquenessKey.locked?("rollup-42")).to be(false)

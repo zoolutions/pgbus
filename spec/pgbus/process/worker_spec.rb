@@ -1205,6 +1205,8 @@ RSpec.describe Pgbus::Process::Worker do
       allow(executor).to receive(:execute).and_return(:skipped, :discarded)
       allow(worker.rate_counter).to receive(:increment).and_call_original
       worker.send(:process_message, message, "default")
+      expect(worker.rate_counter).not_to have_received(:increment).with(:processed)
+
       worker.send(:process_message, message, "default")
       expect(worker.rate_counter).to have_received(:increment).with(:processed).once
     end
