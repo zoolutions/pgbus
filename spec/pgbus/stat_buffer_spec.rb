@@ -219,6 +219,35 @@ RSpec.describe Pgbus::StatBuffer do
                                   "VALUES ('TestJob', 'default', 'success', 42)")
     end
 
+    it "retries on PostgreSQL's own wording for the missing column" do
+      allow(conn).to receive(:execute) do |sql, *|
+        statements << sql
+        if sql.include?("enqueue_latency_ms")
+          raise ActiveRecord::StatementInvalid,
+                'PG::UndefinedColumn: ERROR:  column "retry_count" of relation "pgbus_job_stats" does not exist'
+        end
+      end
+
+      buffer.push(stat_attrs)
+      buffer.flush
+
+      expect(statements.size).to eq(2)
+    end
+
+    it "does not retry an error whose statement excerpt merely contains the latency columns" do
+      allow(conn).to receive(:execute).and_raise(
+        ActiveRecord::StatementInvalid,
+        "PG::NumericValueOutOfRange: ERROR:  integer out of range\n" \
+        "LINE 1: ...ration_ms, enqueue_latency_ms, retry_count) VALUES ('TestJob', ..."
+      )
+
+      buffer.push(stat_attrs)
+      buffer.flush
+
+      expect(conn).to have_received(:execute).once
+      expect(Pgbus.logger).to have_received(:warn) { |&block| expect(block.call).to include("integer out of range") }
+    end
+
     it "warns about the missing columns once, not on every flush" do
       2.times do
         buffer.push(stat_attrs)

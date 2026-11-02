@@ -165,7 +165,7 @@ class Views::Docs::Pages::PerformanceTuning < DocsUI::Page
             *Measured:* in the mocked executor bench, execute 65.8k / 66.4k i/s and
             execute + stat recording 60.1k / 59.4k i/s (39.9k / 40.5k before #604).
             The real worker's stats flush (one multi-row INSERT per 100 jobs) costs
-            1.2–2.0 µs of Ruby CPU per job, down from 9.4 µs with `insert_all`
+            1–2.3 µs of Ruby CPU per job, down from 9–20 µs with `insert_all`
             (12–15 % of a no-op job's on-CPU time before #622).
             *Costs:* turning it off empties Insights, which under `completed_jobs =
             :delete` is the only record of a success.

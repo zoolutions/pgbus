@@ -9,6 +9,10 @@ module Pgbus
     DEFAULT_FLUSH_INTERVAL = 5 # seconds
     BASE_COLUMNS = "job_class, queue_name, status, duration_ms"
     ALL_COLUMNS = "#{BASE_COLUMNS}, enqueue_latency_ms, retry_count".freeze
+    # PostgreSQL's error for a latency column the migration has not added. The
+    # column names are quoted only in the error text, never in the statement
+    # excerpt ("LINE 1: …") an unrelated error carries.
+    MISSING_LATENCY_COLUMN = /column "(?:enqueue_latency_ms|retry_count)"(?: of relation "[^"]*")? does not exist/
 
     attr_reader :flush_size, :flush_interval
 
@@ -84,7 +88,7 @@ module Pgbus
       JobStat.connection_pool.with_connection do |conn|
         conn.execute(insert_sql(conn, entries, latency: true), "Pgbus::JobStat Bulk Insert")
       rescue ActiveRecord::StatementInvalid => e
-        raise unless e.message.include?("enqueue_latency_ms") || e.message.include?("retry_count")
+        raise unless MISSING_LATENCY_COLUMN.match?(e.message)
 
         write_base_columns(conn, entries)
       end

@@ -38,6 +38,14 @@ conn.execute(<<~SQL)
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, enqueue_latency_ms BIGINT, retry_count INTEGER DEFAULT 0
   )
 SQL
+# The migration's indexes (add_job_stats, add_job_stats_latency), so the
+# INSERT's wall time includes their upkeep as on a real install.
+conn.execute(<<~SQL)
+  CREATE INDEX IF NOT EXISTS idx_pgbus_job_stats_time ON pgbus_job_stats (created_at);
+  CREATE INDEX IF NOT EXISTS idx_pgbus_job_stats_class_time ON pgbus_job_stats (job_class, created_at);
+  CREATE INDEX IF NOT EXISTS idx_pgbus_job_stats_status_time ON pgbus_job_stats (status, created_at);
+  CREATE INDEX IF NOT EXISTS idx_pgbus_job_stats_queue_time ON pgbus_job_stats (queue_name, created_at);
+SQL
 conn.execute("TRUNCATE pgbus_job_stats")
 
 classes = %w[OrderMailerJob ChargeCardJob Reports::NightlyJob].freeze

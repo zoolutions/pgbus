@@ -1145,8 +1145,11 @@ through the connection's own quoting, memoized per flush, so 100 rows of three
 job classes and two queues cost about seven `quote` calls. `pgbus_job_stats`
 has no unique index besides the primary key, so dropping `ON CONFLICT DO
 NOTHING` changes no outcome. The missing-latency-columns fallback is the same:
-the six-column statement first, and on a `StatementInvalid` naming
-`enqueue_latency_ms` or `retry_count` the four-column one, warned once.
+the six-column statement first, and when PostgreSQL reports `column
+"enqueue_latency_ms"` or `column "retry_count"` … `does not exist`, the
+four-column one, warned once. That error is now matched exactly: main retried
+on any message containing a column name, which an unrelated error's `LINE 1:`
+excerpt of the statement can do.
 
 A constant `INSERT … SELECT * FROM unnest($1::varchar[], …)` with six array
 binds (`PG::TextEncoder::Array`) was the other candidate. One scratch run, same
@@ -1157,23 +1160,29 @@ but that time is spent in libpq with the GVL released; a local worker is
 GVL-bound, so Ruby CPU picked `VALUES`.
 
 Measured 2026-11-02 on the M-series laptop, local PostgreSQL 18, Ruby 3.4.2,
-ActiveRecord 8.1.4, two rounds each alternated (main, branch, main, branch),
-load 0.63–0.77× cores before and after every invocation with three other
-worktrees' agents on the same machine. `rake bench:one[stat_flush_bench]`
-(new, real database, YJIT): push 100 worker-shaped entries and flush:
+YJIT, with three other worktrees' agents on the same machine; load is recorded
+before and after every invocation. `rake bench:one[stat_flush_bench]` (new,
+real database) pushes 100 worker-shaped entries and flushes. Ranges are rounds,
+main and branch alternated. ActiveRecord 8.1.4, four rounds: two on a bare
+table (load 0.63–0.92×) and two after the bench gained the migration's four
+indexes (load 0.39–0.56×); ActiveRecord 7.1.6 (`gemfiles/rails_7_1.gemfile`),
+one round with the indexes (load 0.39–0.42×):
 
-| | main | branch |
-|---|---:|---:|
-| Ruby CPU per flush | 936–947 µs | 120–200 µs |
-| Ruby CPU per job (÷ 100) | 9.4 µs | 1.2–2.0 µs |
-| objects per flush | 3 161 | 518 |
-| bytes per flush | 265 KB | 50 KB |
-| wall i/s (INSERT round trip included) | 282–483 | 954–1 449 |
+| | main 8.1 | branch 8.1 | main 7.1 | branch 7.1 |
+|---|---:|---:|---:|---:|
+| Ruby CPU per flush | 936–1 999 µs | 120–229 µs | 1 440 µs | 101 µs |
+| Ruby CPU per job (÷ 100) | 9.4–20 µs | 1.2–2.3 µs | 14 µs | 1.0 µs |
+| objects per flush | 3 161 | 518 | 2 850 | 521 |
+| bytes per flush | 265 KB | 50 KB | 252 KB | 50 KB |
+| wall i/s, bare table | 282–483 | 954–1 449 | — | — |
+| wall i/s, indexed table | 254–289 | 513–696 | 207 | 866 |
 
-On ActiveRecord 7.1.6 (`gemfiles/rails_7_1.gemfile`) the branch measures
-104 µs and 521 objects per flush.
+Ruby CPU per flush moves with machine load (main's four rounds spread 2×);
+the objects per flush do not move at all, and every round has the branch at
+least 4.7× below main.
 
-`WP_BENCH_ROLE=worker rake bench:worker_profile`, same rounds:
+`WP_BENCH_ROLE=worker rake bench:worker_profile`, two rounds alternated
+(main, branch, main, branch), load 0.63–0.73×:
 
 | cell | jobs/s main | jobs/s branch | `pgbus_rails` share of on-CPU, main | branch |
 |---|---:|---:|---:|---:|
@@ -1182,8 +1191,8 @@ On ActiveRecord 7.1.6 (`gemfiles/rails_7_1.gemfile`) the branch measures
 
 What the numbers say:
 
-- **The flush costs 5–8× less Ruby CPU and allocates a sixth of the
-  objects.** Per job that is ~9.4 → 1.2–2.0 µs.
+- **The flush costs 5–12× less Ruby CPU and allocates a sixth of the
+  objects**, on ActiveRecord 8.1 and 7.1 alike. Per job that is ~9–20 → 1–2.3 µs.
 - **`pgbus_rails` is no longer a meaningful share of a worker's on-CPU time.**
   What remains is `Heartbeat#register_process` / `#deregister_process`, which
   run once per drain (each drain builds a new Worker: a bench artefact), and a
