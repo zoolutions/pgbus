@@ -16,7 +16,8 @@
 # Per M and per broadcast mode (ephemeral: the NOTIFY payload is the data;
 # durable: read_after from the stream queue) it prints:
 #
-#   connect all     barrier → registry.size == M (every client registered)
+#   connect all     barrier → registry.size == M (every client registered); with
+#                   slow clients, barrier → the last fast client's pgbus:connected
 #   connect p99     barrier → a client's pgbus:connected frame, p99 over clients
 #   fan-out         broadcast call → the first / the last client's receipt,
 #                   p50/p99 over STREAMS_SCALE_BROADCASTS broadcasts, 250 ms apart
@@ -243,7 +244,7 @@ def run_cell(clients, mode)
   go_at = realtime
   signal(children, "go")
   registered = wait_for_registry(streamer, expected)
-  connect_all_s = realtime - go_at
+  registered_s = realtime - go_at
   rss_connected = rss_kb
 
   connects = StreamsScaleHarness.drain(sinks[:connect])
@@ -267,7 +268,11 @@ def run_cell(clients, mode)
   raise "clients reported #{every.size} of #{expected}" unless every.size == expected
 
   over, errors = client_failures(every)
-  connect = StreamsScaleHarness.connect_stats(fast.filter_map { |c| c["connected_at"] }, go_at: go_at)
+  fast_connected = fast.filter_map { |c| c["connected_at"] }
+  connect = StreamsScaleHarness.connect_stats(fast_connected, go_at: go_at)
+  # Slow clients are left out of the connect columns: with any, "connect all"
+  # is the last fast client's pgbus:connected; without, the registry wait.
+  connect_all_s = KNOBS[:slow].positive? && fast_connected.any? ? fast_connected.max - go_at : registered_s
   fanout = StreamsScaleHarness.fanout_stats(broadcasts, fast)
   wakes = timings[:wake]
 
@@ -293,6 +298,8 @@ def run_cell(clients, mode)
 ensure
   streamer&.shutdown!
   harness&.shutdown
+  # A fresh queue per cell; dropping it keeps repeated runs from piling up.
+  Pgbus.client.drop_queue(stream_name) if stream_name
 end
 
 def print_cell_notes(mode, row)

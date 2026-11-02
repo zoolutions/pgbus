@@ -158,8 +158,8 @@ module SseTestSupport
       end
     rescue IOError, Errno::EPIPE, Errno::ECONNRESET, Net::ReadTimeout => e
       # Expected during clean shutdown or server-side close — swallow, but
-      # keep it for a caller that counts failed connects.
-      @error = "#{e.class}: #{e.message}"
+      # keep it (unless #close caused it) for a caller that counts failed connects.
+      @error = "#{e.class}: #{e.message}" unless @closed
       # EOFError is intentionally NOT listed because it's a subclass of
       # IOError and rubocop's ShadowedException cop flags the duplicate.
     rescue StandardError => e

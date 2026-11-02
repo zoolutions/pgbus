@@ -35,9 +35,11 @@ require_relative "streams_scale_harness"
 class SlowSseTestClient < SseTestSupport::SseTestClient
   private
 
+  # Only a block with an SSE field is an event; comments (the opening line,
+  # heartbeats) pass at full speed.
   def process_block(block)
     super
-    sleep 1 unless block.empty?
+    sleep 1 if block.lines.any? { |line| line.match?(/\A(?:id|event|data):/) }
   end
 end
 
@@ -67,7 +69,10 @@ $stdout.flush
 $stderr = StringIO.new
 at_exit do
   error = $ERROR_INFO
-  $stdout.puts("streams scale client crashed: #{error.class}: #{error.message}") if error && !error.is_a?(SystemExit)
+  if error && !error.is_a?(SystemExit)
+    $stdout.puts("streams scale client crashed: #{error.class}: #{error.message}",
+                 *Array(error.backtrace).first(10).map { |frame| "  #{frame}" })
+  end
 end
 signal = $stdin.gets
 fail! "streams scale client: no start signal (got #{signal.inspect})" unless signal&.chomp == "go"

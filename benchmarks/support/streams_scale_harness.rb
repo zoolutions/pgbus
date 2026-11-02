@@ -30,6 +30,7 @@ module StreamsScaleHarness
   # macOS: getrlimit reports an infinite hard limit and setrlimit to infinity
   # raises Errno::EINVAL; OPEN_MAX (sys/syslimits.h) is what it accepts.
   OPEN_MAX = 10_240
+  DARWIN = RUBY_PLATFORM.include?("darwin")
   # A broadcast a client has not received this long after it was sent is a miss.
   MISS_DEADLINE_S = 5.0
   NA = "n/a"
@@ -104,11 +105,15 @@ module StreamsScaleHarness
   def fd_needed(clients) = (FD_PER_CLIENT * clients) + FD_HEADROOM
 
   # The soft limit to set, or nil when the current one already fits `needed`
-  # or the cap would not raise it (a soft limit is never lowered).
-  def fd_target(soft:, hard:, needed:, infinity: Process::RLIM_INFINITY)
+  # or the cap would not raise it (a soft limit is never lowered). An infinite
+  # hard limit caps at OPEN_MAX on macOS only; elsewhere it allows `needed`.
+  def fd_target(soft:, hard:, needed:, infinity: Process::RLIM_INFINITY, darwin: DARWIN)
     return nil if soft >= needed
 
-    target = hard == infinity ? OPEN_MAX : hard
+    target = if hard != infinity then hard
+             elsif darwin then OPEN_MAX
+             else needed
+             end
     target > soft ? target : nil
   end
 

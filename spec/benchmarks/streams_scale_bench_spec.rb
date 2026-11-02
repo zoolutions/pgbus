@@ -134,13 +134,19 @@ RSpec.describe StreamsScaleHarness do
       expect(described_class.fd_target(soft: 256, hard: 65_536, needed: 2_064, infinity: infinity)).to eq(65_536)
     end
 
-    it "raises it to OPEN_MAX when the hard limit is infinite (macOS refuses setrlimit to infinity)" do
-      expect(described_class.fd_target(soft: 256, hard: infinity, needed: 2_064, infinity: infinity))
+    it "raises it to OPEN_MAX when the hard limit is infinite on macOS (it refuses setrlimit to infinity)" do
+      expect(described_class.fd_target(soft: 256, hard: infinity, needed: 2_064, infinity: infinity, darwin: true))
         .to eq(described_class::OPEN_MAX)
     end
 
+    it "raises it to what is needed when the hard limit is infinite elsewhere, past OPEN_MAX" do
+      expect(described_class.fd_target(soft: 256, hard: infinity, needed: 20_064, infinity: infinity, darwin: false))
+        .to eq(20_064)
+    end
+
     it "never lowers a soft limit above OPEN_MAX that still falls short" do
-      expect(described_class.fd_target(soft: 20_000, hard: infinity, needed: 20_064, infinity: infinity)).to be_nil
+      expect(described_class.fd_target(soft: 20_000, hard: infinity, needed: 20_064, infinity: infinity, darwin: true))
+        .to be_nil
     end
   end
 
