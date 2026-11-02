@@ -50,6 +50,7 @@ bundle exec rake bench:one[client_bench]  # Single benchmark by name
 bundle exec rake bench:memory             # Detailed memory profiling
 bundle exec rake bench:integration        # Real DB benchmarks (requires PGBUS_DATABASE_URL)
 bundle exec rake bench:streams            # SSE streaming benchmarks (requires PGBUS_DATABASE_URL)
+bundle exec rake bench:streams_scale      # 100 / 1 000 SSE clients on one Puma process (requires PGBUS_DATABASE_URL)
 bundle exec rake bench:worker_profile     # Real Worker: jobs/s + where a job's time goes (requires PGBUS_DATABASE_URL)
 bundle exec rake frontend:css             # Rebuild app/frontend/pgbus/style.css after adding a Tailwind class to a view
 bundle exec rake frontend:js              # Rebuild the committed .min.js + .min.js.map after editing app/frontend/pgbus/**/*.js or the stream element

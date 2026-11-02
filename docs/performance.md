@@ -30,6 +30,7 @@ measured it and what it costs, is the docs site's
 | Connection pool checkout | every PGMQ operation under concurrency | `connection_pool_bench.rb` |
 | Execution pool dispatch | every job dispatched to thread/async pool | `execution_pool_bench.rb` |
 | SSE streaming | every Turbo Stream broadcast | `streams_bench.rb` |
+| Streamer at scale | connect storm, fan-out, dispatcher wake, heartbeat tick and RSS at 100–1 000 SSE clients on one web process (issue #620) | `streams_scale_bench.rb` |
 | Streamer replay read | every durable-stream wake + SSE connect (`Client#read_after`) | `streams_read_pool_bench.rb` |
 | Streams-pool hot-swap | elastic resize under load (issue #323) | `pool_swap_bench.rb` |
 | Streams-pool autoscaler | per-tick decision cost + grow-under-load (issue #323) | `pool_autoscale_bench.rb` |
@@ -51,6 +52,7 @@ rake bench:one[name]    # a single benchmark by name (e.g. client_bench)
 rake bench:memory       # detailed memory profiling with allocation breakdown
 rake bench:integration  # real PostgreSQL + PGMQ (requires PGBUS_DATABASE_URL)
 rake bench:streams      # real Puma + SSE fan-out (requires PGBUS_DATABASE_URL)
+rake bench:streams_scale    # 100 / 1 000 SSE clients on one Puma process: connect storm, fan-out p99, wake, heartbeat, RSS (requires PGBUS_DATABASE_URL)
 rake bench:one[streams_read_pool_bench]  # streamer replay-read pool (requires PGBUS_DATABASE_URL)
 rake bench:execution_modes  # threads vs async DB-connection consumption (requires PGBUS_DATABASE_URL)
 rake bench:notify_wake      # NOTIFY wake latency + LISTEN census (requires PGBUS_DATABASE_URL)
@@ -1142,6 +1144,103 @@ unbounded) caps a connection's outbound buffer, dropping its **oldest** durable
 frame on overflow — safe because durable frames are re-read from the archive on
 reconnect; it's an OOM guard for a pathologically slow-but-alive client, not a
 delivery guarantee.
+
+### Streamer at scale (issue #620)
+
+Nothing measured the streamer above 50 clients until `benchmarks/streams_scale_bench.rb`
+(`rake bench:streams_scale`). It connects M SSE clients to **one** Puma web process
+(an in-process `Puma::Server`, `streams_listen_scope = :process`: no master hub) over real
+PGMQ and real LISTEN/NOTIFY, then sends 20 broadcasts 250 ms apart, in ephemeral mode
+(the NOTIFY payload is the data) and in durable mode (`read_after` from the stream queue).
+
+- Each (M, mode) cell is its own subprocess, so no cell inherits another's heap growth or
+  YJIT warm-up. The clients run in 4 spawned client processes (never forked, never in the
+  server's process: 1 000 SSE-parsing threads under the server's GVL would time the bench).
+  A client process waits at a start barrier, then starts every client at once.
+- The server is timed by prepending wall-time wrappers on the instances the cell owns
+  (the dispatcher's `handle_connect`, `handle_ephemeral_wake` and `handle_durable_wake`,
+  `Heartbeat#tick`, `PeerCloseWatcher#watched_sockets`); nothing under `lib/` changes.
+  "Connected" is the client's receipt of its `pgbus:connected` frame, written when the
+  dispatcher registers it. Fan-out is the bench's `CLOCK_REALTIME` stamp just before the
+  broadcast call to each client's receipt, first and last client per broadcast. One
+  heartbeat tick is forced after the broadcasts. RSS and CPU are the cell process's.
+- A client whose connect the kernel resets reconnects after 2 s, the `retry:` the
+  streamer sends and an EventSource would wait; the "retried connects" column counts
+  those. They are macOS's accept queue: `somaxconn` is 128 and caps Puma's backlog of
+  1 024, so a burst of 1 000 connects overflows it (0 retries at M = 100, 583–724 at
+  1 000). Linux's default is 4 096.
+- The fd soft limit is raised in every process (to the hard limit, or `OPEN_MAX` = 10 240
+  when that is infinite, as on macOS); an M whose `2 × M + 64` descriptors do not fit is
+  skipped with the cap and the `ulimit -n` / `launchctl limit maxfiles` hint.
+  `STREAMS_SCALE_SLOW=K` adds K clients that sleep 1 s after each event, for #621.
+
+Measured 2026-11-02 on an Apple M2 Max (12 cores), PostgreSQL on the same machine, Ruby 3.4.2
+with YJIT, Puma 8.0.2 (`max_threads` 8), every streams setting at its default
+(`streams_heartbeat_interval` 15 s, `streams_peer_close_interval` 1 s,
+`streams_listen_health_check_ms` 250, `streams_writer_threads` 0). Two rounds; load average
+8.3–11.7 on 12 cores from other sessions' benches and suites. Ranges are those two rounds.
+Every row: 0 missed broadcasts, 0 failed clients, 0 503s. Every 1 000-client cell also logged
+2–29 Puma `Socket timeout writing data` thread-pool errors: Puma writing to connections the
+kernel had reset, which those clients retried.
+
+| mode | M | connect all (s) | fan-out first p50 (ms) | fan-out last p50 / p99 (ms) | dispatcher wake p50 / p99 (ms) | heartbeat tick (ms) | watcher build (ms) | RSS Δ / conn (KB) | CPU / wall |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| ephemeral | 100 | 25.3–25.6 | 0.8 | 2.8–2.9 / 8.5–63.6 | 3.4–3.6 / 7.7–172.6 | 0.7–0.8 | 0.06 | 42.4–42.7 | 1 % |
+| ephemeral | 1 000 | 254.5–256.7 | 0.6–1.3 | 16.8–24.4 / 32.6–57.2 | 17.4–23.0 / 20.1–42.1 | 5.7–21.6 | 0.38–1.06 | 26.7–26.8 | 5–8 % |
+| durable | 100 | 25.2–25.6 | 1.5–2.4 | 3.4–4.5 / 7.8–9.8 | 1.2 / 5.8–6.2 | 0.7–0.8 | 0.06–0.09 | 40.3–41.9 | 1 % |
+| durable | 1 000 | 253.9–256.6 | 1.8–4.2 | 15.5–21.7 / 28.9–35.4 | 9.2–9.3 / 11.1–19.6 | 6.7 | 0.39–0.43 | 26.6–27.4 | 4 % |
+
+`STREAMS_SCALE_CLIENTS=2000` once (load 8.9 rising to 33.7): connect all 515 s (ephemeral) and
+542 s (durable), fan-out last p50 / p99 34.8 / 73.5 and 78.5 / 150.9 ms, wake p50 31.7 and
+25.8 ms, heartbeat tick 12.7 and 12.1 ms, 21–22 KB per connection, 0 misses. Calibration: 8
+client processes instead of 4 at M = 1 000 left fan-out last p50 in the range above (13.4 ms
+ephemeral, 21.7 ms durable) and made p99 worse (83 and 130 ms), so 4 client processes do not
+cap these numbers.
+
+What the numbers say:
+
+- **The connect storm is the ceiling, and it is not fan-out.** Every connect costs one
+  `streams_listen_health_check_ms` cycle on the single dispatcher thread: `handle_connect`
+  p50 is 254–257 ms in every cell, so 1 000 clients take ~255 s to register and 2 000 take
+  ~515 s. The dispatcher calls `Listener#ensure_listening` for each connect, and the listener
+  acks the command only after its current `wait_for_notify(health_check_ms)` returns, even
+  for a channel it already LISTENs on. Confirmed by the knob: 100 connects take 27.2 s at
+  250 ms and 6.0 s at 50 ms. Until a client registers it gets no byte (not even a heartbeat),
+  so a client with a read timeout under the queue wait gives up: the bench's client needed
+  a 30-minute read timeout. A Puma restart behind 1 000 open EventSources is that storm.
+- **Fan-out is linear and cheap per connection: ~10–20 µs.** The span from the first to the
+  last client is ~2 ms at M = 100 and ~15–23 ms at 1 000, in both modes. Durable's wake
+  (one `read_after`, then 1 000 filter + frame + write) is 9.2–9.3 ms; ephemeral's is
+  17.4–23.0 ms in both rounds, about twice durable's for the same per-connection code. This
+  bench does not explain that gap; #621's profile should.
+- **Framing is a small share.** `Envelope.message` builds a 146-byte frame in ~1.07 µs
+  (YJIT, best of 5 × 1 M), so building 1 000 frames per wake is ~1.1 ms: 5–12 % of the
+  wake. The rest is the per-connection write (`IoWriter`, `write_nonblock`, the connection
+  mutex) and the audience filter.
+- **The heartbeat tick is 6–7 ms at 1 000 fast clients** (12 ms at 2 000; one 21.6 ms tick
+  under load), serial on its own thread. Slow clients are #621's case.
+- **The peer-close watcher's O(M) part is under 1.3 ms** per pass at 2 000 (the socket-set
+  build; its `IO.select` wait is not counted).
+- **A connection costs ~25 KB of server RSS.** The row figure carries a fixed ~1.7 MB
+  (first-connection allocations), so the marginal number is (Δ at 1 000 − Δ at 100) / 900 =
+  25.0–25.8 KB. 1 000 connections are ~27 MB on the web process; at the default
+  `streams_max_connections` of 2 000 the bench measured 43–44 MB.
+
+**Target for #621 (frame once per wake, one heartbeat frame per tick, copy-free registry
+snapshots), derived from this baseline.** Framing is ~1.1 ms of the durable wake's 9.2–9.3 ms
+at M = 1 000 and the heartbeat builds one comment String per connection per tick, so those
+changes can remove about a ninth of the wake and part of the tick, not more. Measured
+against this bench on the same machine at M = 1 000, durable: dispatcher wake p50
+≤ 8.2 ms (baseline 9.2–9.3 minus the ~1.1 ms of framing); heartbeat tick ≤ 6.0 ms (baseline
+6.7); fan-out last-client p99 no worse than the baseline's 35.4 ms (its 29–35 ms spread is
+wider than the gain, so it gates regressions only). Ephemeral rows (wake spread 17–23 ms)
+gate regressions only, and the profile explains the ephemeral/durable gap. The connect storm
+(~255 ms per connect) is outside #621's scope and the largest number here. Skipping the
+listener's ack for a channel already in `listening_to` (or waking the listener when a
+command arrives) would bring 1 000 connects from ~255 s down to the dispatcher's own
+per-connect cost: the step this baseline recommends next. Ractor-gate pre-read (#617: wake wall time above half the fan-out p99 at
+1 000): durable 9.2 vs 14.5–17.7 ms, not met; ephemeral 17.4 vs 16.3 (round 1, met) and 23.0
+vs 28.6 (round 2, not met); this bench does not profile, which is the gate's other half.
 
 ### Execution mode and DB pool sizing (threads vs async)
 

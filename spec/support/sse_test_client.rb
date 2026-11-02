@@ -25,21 +25,30 @@ module SseTestSupport
   # automatic reconnect because the tests need deterministic control
   # over when reconnects happen.
   class SseTestClient
-    Event = Struct.new(:id, :event, :data)
+    # received_at: CLOCK_REALTIME seconds when the event's block was parsed,
+    # so a bench in another process on the same machine can time a broadcast
+    # to its delivery (issue #620).
+    Event = Struct.new(:id, :event, :data, :received_at)
 
-    attr_reader :events, :control_events
+    # status: the HTTP status code of the response (a String, as Net::HTTP
+    # gives it), nil until the response headers arrive. error: "Class: message"
+    # of an unexpected failure that ended the reader thread, else nil.
+    attr_reader :events, :control_events, :status, :error
 
-    def self.connect(url:, headers: {}, timeout: 5)
-      client = new(url: url, headers: headers, timeout: timeout)
+    def self.connect(url:, headers: {}, timeout: 5, read_timeout: 30)
+      client = new(url: url, headers: headers, timeout: timeout, read_timeout: read_timeout)
       client.start
       client
     end
 
-    def initialize(url:, headers: {}, timeout: 5)
+    # read_timeout: how long the reader waits for the next byte before giving
+    # up; the default outlasts the streamer's heartbeats.
+    def initialize(url:, headers: {}, timeout: 5, read_timeout: 30)
       @uri     = URI.parse(url)
       @headers = headers
       @timeout = timeout
-      @events  = []
+      @read_timeout = read_timeout
+      @events = []
       # pgbus control frames (event: pgbus:*) are kept separate from data
       # events so broadcast-delivery assertions (events.first / count:) are
       # not perturbed by the pgbus:connected handshake frame (issue #165).
@@ -49,11 +58,23 @@ module SseTestSupport
       @http    = nil
       @closed  = false
       @open_at = nil
+      @status  = nil
+      @error   = nil
     end
 
     def start
-      @thread = Thread.new { run }
+      start_nowait
       wait_until_open(@timeout)
+      self
+    end
+
+    # Starts the reader thread without waiting for the response headers, so
+    # a process holding hundreds of clients does not also run hundreds of
+    # threads polling for them (the streams scale bench, issue #620). #status
+    # stays nil until the headers arrive; a failure to connect ends the
+    # thread and leaves it nil.
+    def start_nowait
+      @thread = Thread.new { run }
       self
     end
 
@@ -121,7 +142,7 @@ module SseTestSupport
     def run
       @http = Net::HTTP.new(@uri.host, @uri.port)
       @http.open_timeout = @timeout
-      @http.read_timeout = 30 # long enough to outlast heartbeats in tests
+      @http.read_timeout = @read_timeout
 
       request = Net::HTTP::Get.new(@uri.request_uri)
       request["Accept"] = "text/event-stream"
@@ -130,16 +151,20 @@ module SseTestSupport
 
       @http.start do |http|
         http.request(request) do |response|
+          @status = response.code
           @open_at = monotonic
           parse_stream(response)
         end
       end
-    rescue IOError, Errno::EPIPE, Errno::ECONNRESET, Net::ReadTimeout
-      # Expected during clean shutdown or server-side close — swallow.
+    rescue IOError, Errno::EPIPE, Errno::ECONNRESET, Net::ReadTimeout => e
+      # Expected during clean shutdown or server-side close — swallow, but
+      # keep it (unless #close caused it) for a caller that counts failed connects.
+      @error = "#{e.class}: #{e.message}" unless @closed
       # EOFError is intentionally NOT listed because it's a subclass of
       # IOError and rubocop's ShadowedException cop flags the duplicate.
     rescue StandardError => e
-      warn "[SseTestClient] #{e.class}: #{e.message}" unless @closed
+      @error = "#{e.class}: #{e.message}"
+      warn "[SseTestClient] #{@error}" unless @closed
     ensure
       @closed = true
     end
@@ -163,7 +188,8 @@ module SseTestSupport
       return if block.empty?
       return if block.lines.all? { |line| line.start_with?(":") }
 
-      event = Event.new(id: nil, event: "message", data: "")
+      event = Event.new(id: nil, event: "message", data: "",
+                        received_at: ::Process.clock_gettime(::Process::CLOCK_REALTIME))
       recognized = false
       block.each_line do |raw|
         line = raw.chomp
