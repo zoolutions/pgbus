@@ -165,6 +165,19 @@ RSpec.describe WorkerProfileHarness do
     end
   end
 
+  describe ".completion_commit" do
+    it "maps sync and async to config.completion_synchronous_commit, nil when unset" do
+      expect(described_class.completion_commit({})).to be_nil
+      expect(described_class.completion_commit("WP_BENCH_COMPLETION_COMMIT" => "sync")).to be(true)
+      expect(described_class.completion_commit("WP_BENCH_COMPLETION_COMMIT" => "async")).to be(false)
+    end
+
+    it "rejects anything else" do
+      expect { described_class.completion_commit("WP_BENCH_COMPLETION_COMMIT" => "off") }
+        .to raise_error(ArgumentError, /WP_BENCH_COMPLETION_COMMIT must be sync or async/)
+    end
+  end
+
   describe ".completed_jobs" do
     it "is nil (not set) when unset, else the Symbol" do
       expect(described_class.completed_jobs({})).to be_nil

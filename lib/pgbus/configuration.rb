@@ -52,6 +52,25 @@ module Pgbus
     # Batch::Sweep then cannot tell a deleted batch job from one whose message
     # vanished another way (a purged queue): both count as completed, silently.
     attr_reader :completed_jobs
+    # completion_synchronous_commit (issue #619, opt-in): false commits a job's
+    # completion (the executor's archive or delete, the completer's
+    # archive_batch or delete_batch) with `SET LOCAL synchronous_commit TO off`,
+    # in one libpq pipeline: BEGIN, the SET LOCAL, the prepared statement and
+    # COMMIT go out with one sync, so the job stops waiting for its WAL flush.
+    # A completion is then acknowledged before its WAL record reaches disk: a
+    # Postgres server crash (not a client crash, not a planned switchover), or a
+    # failover to a standby that has not yet received that WAL (it also stops
+    # waiting for a synchronous standby), within about three times
+    # wal_writer_delay can lose completions committed in that window, and each
+    # lost completion redelivers its job after visibility_timeout. Sends, retries, dead-letter moves, the EventBus
+    # consumer's archive and dashboard actions keep full durability, and a
+    # completion inside a caller's transaction is left to that transaction.
+    # Native statements on pgbus's own connections only: with
+    # native_statements = false, or on ActiveRecord's shared connection (a
+    # connection_params Proc), it has no effect (pgbus doctor warns). Needs
+    # libpq 14+ and pg 1.5+ (pipeline mode), checked by validate!. true
+    # (default) commits as before.
+    attr_reader :completion_synchronous_commit
     # quiet_active_job_logs (issue #618): true makes each worker process
     # unsubscribe ActiveJob's LogSubscriber from perform_start.active_job and
     # perform.active_job (Pgbus::ActiveJob::QuietLogs), so the per-job
@@ -379,6 +398,7 @@ module Pgbus
       @completion_batching = false
       @completion_batch_size = 100
       @completed_jobs = :archive
+      @completion_synchronous_commit = true
       @quiet_active_job_logs = false
       @execution_mode = :threads
 
@@ -869,6 +889,14 @@ module Pgbus
       @completed_jobs = mode
     end
 
+    def completion_synchronous_commit=(value)
+      unless [true, false].include?(value)
+        raise Pgbus::ConfigurationError, "completion_synchronous_commit must be true or false (got #{value.inspect})"
+      end
+
+      @completion_synchronous_commit = value
+    end
+
     def quiet_active_job_logs=(value)
       unless [true, false].include?(value)
         raise Pgbus::ConfigurationError, "quiet_active_job_logs must be true or false (got #{value.inspect})"
@@ -1073,6 +1101,7 @@ module Pgbus
 
       validate_read_ahead!
       validate_completion_batching!
+      validate_completion_synchronous_commit!
       validate_capsule_processes!
 
       if priority_levels && !(priority_levels.is_a?(Integer) && priority_levels >= 1 && priority_levels <= 10)
@@ -1862,6 +1891,20 @@ module Pgbus
       raise Pgbus::ConfigurationError,
             "completion_batching supports execution_mode :threads only; turn it off for a global or capsule " \
             "execution_mode :async"
+    end
+
+    # The asynchronous completion commit runs in libpq pipeline mode (issue
+    # #619): libpq 14+ and a pg gem that wraps it (1.5+). Checked here, once,
+    # rather than on every completion.
+    def validate_completion_synchronous_commit!
+      return if completion_synchronous_commit
+
+      require "pg" unless defined?(::PG::Connection)
+      return if ::PG::Connection.method_defined?(:enter_pipeline_mode) && ::PG.library_version >= 140_000
+
+      raise Pgbus::ConfigurationError,
+            "completion_synchronous_commit = false needs libpq 14+ and pg 1.5+ (pipeline mode); " \
+            "this process has libpq #{::PG.library_version} and pg #{::PG::VERSION}"
     end
 
     # Shared resolver for a dedicated connection (streamer LISTEN / worker

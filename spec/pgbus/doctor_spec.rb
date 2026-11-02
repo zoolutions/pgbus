@@ -48,8 +48,8 @@ RSpec.describe Pgbus::Doctor do
   end
 
   describe "#run" do
-    it "runs twelve checks" do
-      expect(doctor.run.size).to eq(12)
+    it "runs thirteen checks" do
+      expect(doctor.run.size).to eq(13)
     end
 
     it "returns hashes with :name, :status, :detail keys" do
@@ -524,6 +524,43 @@ RSpec.describe Pgbus::Doctor do
     end
   end
 
+  describe "the completion-commit check (issue #619)" do
+    def commit_check
+      doctor.run.find { |c| c[:name] == "Completion commit" }
+    end
+
+    it "reports synchronous commits by default" do
+      expect(commit_check).to include(status: :ok, detail: /synchronous \(default\)/)
+    end
+
+    it "reports the asynchronous commit and its cost when completion_synchronous_commit is false" do
+      config.completion_synchronous_commit = false
+
+      expect(commit_check).to include(status: :ok, detail: /synchronous_commit off/)
+      expect(commit_check[:detail]).to include("server crash can lose the last completions")
+    end
+
+    it "warns that it has no effect with native_statements off" do
+      config.completion_synchronous_commit = false
+      config.native_statements = false
+
+      expect(commit_check).to include(status: :warn, detail: /has no effect: completions run through pgmq's functions/)
+    end
+
+    it "warns that it has no effect when pgbus shares ActiveRecord's connection" do
+      config.completion_synchronous_commit = false
+      allow(client).to receive(:shared_connection?).and_return(true)
+
+      expect(commit_check).to include(status: :warn, detail: /has no effect: pgbus shares ActiveRecord's connection/)
+    end
+
+    it "prints the setting in the configuration summary" do
+      config.completion_synchronous_commit = false
+
+      expect(doctor.report).to match(/completion_commit\s+async/)
+    end
+  end
+
   describe "the connection-budget check (issue #381)" do
     # Informational, config-only, always :ok — it exists so operators can do
     # direct-connection capacity math from the doctor output alone.
@@ -692,8 +729,8 @@ RSpec.describe Pgbus::Doctor do
       expect(names).not_to include(a_string_matching(/process|liveness/i))
     end
 
-    it "runs the other eleven checks" do
-      expect(doctor.boot_checks.size).to eq(11)
+    it "runs the other twelve checks" do
+      expect(doctor.boot_checks.size).to eq(12)
     end
 
     it "never invokes the HealthAnalyzer — the excluded check does zero work" do

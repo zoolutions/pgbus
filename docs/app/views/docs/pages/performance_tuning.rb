@@ -84,7 +84,31 @@ class Views::Docs::Pages::PerformanceTuning < DocsUI::Page
            job whose message is in neither the queue nor the DLQ as completed, so a
            purged queue's batch jobs count as completed too. ActiveJob only.
            [Archive retention](#archive-retention).
-        5. **Read-ahead, for a database on another host.** `read_ahead = threads`
+        5. **Asynchronous completion commit.** `completion_synchronous_commit = false`
+           (default `true`), native statements on pgbus's own connections only.
+           *Measured:* on a shared local machine the WAL-flush wait
+           (`LWLock:WALWrite`) fell from 12–23 % of sampled waits to 2 % at four
+           processes, and Postgres time per job fell in five of six rows (0.417 →
+           0.331 ms at four YJIT processes, 0.223 → 0.138 batched with delete);
+           jobs/s stayed inside the run-to-run noise (median 9 550 → 10 620 at four
+           YJIT processes, 10 692 → 15 302 batched with delete, overlapping ranges).
+           The single call did not get slower.
+           *Costs:* with `completion_synchronous_commit = false`, a completion is
+           acknowledged before its WAL record reaches disk. A Postgres server crash
+           (not a client crash, not a planned switchover), or a failover to a
+           standby that has not yet received that WAL, within about three times
+           `wal_writer_delay` (default 200 ms) can lose completions committed in
+           that window. Each lost completion redelivers its job after the
+           visibility timeout, so the job runs again. Under synchronous
+           replication it also stops waiting for the standby for that
+           transaction, which is what lets a failover lose it. Sends, retries
+           and dead-letter moves keep full durability. A durable write after the
+           completion (a concurrency signal, a batch counter) flushes it too; the
+           job's own ActiveRecord writes run before it and do not. Not for jobs
+           that cannot run twice after a database crash or failover. Untested behind PgBouncer in transaction mode:
+           use session mode or leave it on.
+           [`docs/performance.md`](https://github.com/zoolutions/pgbus/blob/main/docs/performance.md#async-completion-commit-issue-619).
+        6. **Read-ahead, for a database on another host.** `read_ahead = threads`
            (default 0), per capsule and per event consumer too.
            *Measured:* proxied, 1.4–1.9× jobs/s for workers and event consumers;
            locally within noise.
@@ -92,7 +116,7 @@ class Views::Docs::Pages::PerformanceTuning < DocsUI::Page
            on drain, recycle or shutdown they go back with `read_ct` already
            counted; the hold needs `visibility_heartbeat` (default `true`).
            [Read-ahead](#database-on-another-host-turn-on-read-ahead).
-        6. **The pool, sized with read-ahead.** `pool_size` (default `nil`: sized
+        7. **The pool, sized with read-ahead.** `pool_size` (default `nil`: sized
            from the thread counts).
            *Measured:* with `read_ahead` 12, job threads spent 14–15 % of their time
            waiting to check out a pgmq connection from the default pool (~7 for 12
@@ -100,44 +124,44 @@ class Views::Docs::Pages::PerformanceTuning < DocsUI::Page
            *Costs:* connections. Budget `resolved_pool_size + streams_pool_size` per
            process against `max_connections`.
            [Job bursts](#job-bursts-raise-threads-and-the-pool-together).
-        7. **LISTEN/NOTIFY.** `listen_notify` (default `true`): keep it on; polling
+        8. **LISTEN/NOTIFY.** `listen_notify` (default `true`): keep it on; polling
            every `polling_interval` is the fallback.
            *Measured:* not as a throughput lever; a wake-up's p50 latency is
            1.66ms through the supervisor's shared listener.
            *Costs:* one direct LISTEN connection per host under the default
            `worker_notify_scope: :supervisor`.
-        8. **YJIT.** `RUBY_YJIT_ENABLE=1`, or `config.yjit` on Rails 7.2+; pgbus never
+        9. **YJIT.** `RUBY_YJIT_ENABLE=1`, or `config.yjit` on Rails 7.2+; pgbus never
            turns a JIT on, and `pgbus doctor` reports which one runs.
            *Measured:* ~14–20 % locally (the single-worker profile); nothing
            measurable proxied.
            *Costs:* the memory of YJIT's compiled code (not measured here).
-        9. **ActiveJob's per-job log lines.** At `info`, ActiveJob formats and writes
-           `Performing …` and `Performed …` for every job.
-           `config.quiet_active_job_logs = true` (default `false`) drops those two
-           lines in worker processes only: it unsubscribes ActiveJob's log
-           subscriber from `perform_start` and `perform`. `Enqueued`, `Retrying`,
-           `Stopped retrying` and `Discarded` still log, and the web process and
-           `Rails.logger` are untouched. To quiet every ActiveJob line instead,
-           give ActiveJob its own logger at `warn` in
-           `config/environments/production.rb`:
-           `config.active_job.logger = ActiveSupport::TaggedLogging.new(ActiveSupport::Logger.new($stdout, level: :warn))`.
-           Not `ActiveJob::Base.logger.level = :warn`: by default that logger is
-           `Rails.logger`, and the line silences the whole app.
-           *Measured:* the two lines are 5 % (YJIT) and 9–10 % (no JIT) of a
-           worker's on-CPU time; without a JIT the knob and the `warn` logger
-           each buy +6–10 % jobs/s, equal within noise, and with YJIT neither
-           moves jobs/s measurably.
-           *Costs:* no per-job lines in the log. The knob also drops
-           ActiveJob's `Error performing …` line, which the same `perform`
-           listener writes: an exception that escapes ActiveJob's handlers
-           is still logged by pgbus (class and message at `error`) and kept
-           in `pgbus_failed_events` with its backtrace, one `retry_on`
-           catches still logs ActiveJob's `Retrying …` line, and a job a
-           `before_perform` callback halted logs nothing. The `warn` logger keeps the `error` lines but also
-           silences `Enqueued` and `Retrying` in every process, keeps the job
-           tags only when wrapped in `TaggedLogging`, and writes where you
-           point it, not where `Rails.logger` goes.
-        10. **Job stats.** `stats_enabled` (default `true`): keep it on.
+        10. **ActiveJob's per-job log lines.** At `info`, ActiveJob formats and writes
+            `Performing …` and `Performed …` for every job.
+            `config.quiet_active_job_logs = true` (default `false`) drops those two
+            lines in worker processes only: it unsubscribes ActiveJob's log
+            subscriber from `perform_start` and `perform`. `Enqueued`, `Retrying`,
+            `Stopped retrying` and `Discarded` still log, and the web process and
+            `Rails.logger` are untouched. To quiet every ActiveJob line instead,
+            give ActiveJob its own logger at `warn` in
+            `config/environments/production.rb`:
+            `config.active_job.logger = ActiveSupport::TaggedLogging.new(ActiveSupport::Logger.new($stdout, level: :warn))`.
+            Not `ActiveJob::Base.logger.level = :warn`: by default that logger is
+            `Rails.logger`, and the line silences the whole app.
+            *Measured:* the two lines are 5 % (YJIT) and 9–10 % (no JIT) of a
+            worker's on-CPU time; without a JIT the knob and the `warn` logger
+            each buy +6–10 % jobs/s, equal within noise, and with YJIT neither
+            moves jobs/s measurably.
+            *Costs:* no per-job lines in the log. The knob also drops
+            ActiveJob's `Error performing …` line, which the same `perform`
+            listener writes: an exception that escapes ActiveJob's handlers
+            is still logged by pgbus (class and message at `error`) and kept
+            in `pgbus_failed_events` with its backtrace, one `retry_on`
+            catches still logs ActiveJob's `Retrying …` line, and a job a
+            `before_perform` callback halted logs nothing. The `warn` logger keeps the `error` lines but also
+            silences `Enqueued` and `Retrying` in every process, keeps the job
+            tags only when wrapped in `TaggedLogging`, and writes where you
+            point it, not where `Rails.logger` goes.
+        11. **Job stats.** `stats_enabled` (default `true`): keep it on.
             *Measured:* in the mocked executor bench, execute 65.8k / 66.4k i/s and
             execute + stat recording 60.1k / 59.4k i/s (39.9k / 40.5k before #604).
             The real worker's stats flush (`insert_all`, 100 rows at a time) is
@@ -145,13 +169,16 @@ class Views::Docs::Pages::PerformanceTuning < DocsUI::Page
             cheaper.
             *Costs:* turning it off empties Insights, which under `completed_jobs =
             :delete` is the only record of a success.
-        11. **Already in the default path, no knob:** the enqueue no longer runs a
+        12. **Already in the default path, no knob:** the enqueue no longer runs a
             `pgbus_batch_executions` UPDATE for a job in no batch ("adapter: plain
             job" 4 579 / 4 563 → 7 401 / 7 983 i/s), and the executor reads
             `enqueued_at` with `Time.new` (+5 % jobs/s without a JIT). Upgrade to get them.
-        12. **The Postgres side.** Fillfactor (`rails generate pgbus:tune_fillfactor`),
+        13. **The Postgres side.** Fillfactor (`rails generate pgbus:tune_fillfactor`),
             [autovacuum](#autovacuum-tuning) (`rails generate pgbus:tune_autovacuum`),
             `archive_retention` (default `7.days`) and the `max_connections` budget.
+            `commit_delay` (with `commit_siblings`) groups concurrent commits into
+            one WAL flush and keeps every commit durable: the server-side
+            alternative to `completion_synchronous_commit = false`.
             *Measured:* not measured as throughput levers; they keep the queue
             tables from bloating as volume grows.
       MD

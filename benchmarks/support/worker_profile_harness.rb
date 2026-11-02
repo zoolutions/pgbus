@@ -213,6 +213,17 @@ module WorkerProfileHarness
     raise ArgumentError, "WP_BENCH_COMPLETED_JOBS must be archive or delete (got #{value})"
   end
 
+  # WP_BENCH_COMPLETION_COMMIT (issue #619): "sync" or "async" sets
+  # config.completion_synchronous_commit (true / false) in every cell; unset
+  # leaves the setting alone (nil), so the bench still runs on main.
+  def completion_commit(env = ENV)
+    value = env.fetch("WP_BENCH_COMPLETION_COMMIT", nil)
+    return if value.nil?
+    return value == "sync" if %w[sync async].include?(value)
+
+    raise ArgumentError, "WP_BENCH_COMPLETION_COMMIT must be sync or async (got #{value})"
+  end
+
   # WP_BENCH_AJ_LOGS (issue #618): how ActiveJob's per-job log lines are
   # handled in every worker cell. default keeps the bench's ActiveJob logger
   # (a plain Logger to IO::NULL: lines formatted, never written); warn gives

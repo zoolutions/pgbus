@@ -85,7 +85,7 @@ RSpec.describe Pgbus::ActiveJob::Executor do
 
         expect(ActiveJob::Base).to have_received(:deserialize).with(context_payload)
         expect(job_double).to have_received(:perform_now)
-        expect(mock_client).to have_received(:archive_message).with(queue_name, 5)
+        expect(mock_client).to have_received(:archive_message).with(queue_name, 5, job_completion: true)
         expect(result).to eq(:success)
       end
     end
@@ -103,7 +103,7 @@ RSpec.describe Pgbus::ActiveJob::Executor do
 
         expect(ActiveJob::Base).to have_received(:deserialize).with(tagged_payload)
         expect(job_double).to have_received(:perform_now)
-        expect(mock_client).to have_received(:archive_message).with(queue_name, 5)
+        expect(mock_client).to have_received(:archive_message).with(queue_name, 5, job_completion: true)
         expect(result).to eq(:success)
       end
     end
@@ -116,7 +116,7 @@ RSpec.describe Pgbus::ActiveJob::Executor do
 
         expect(ActiveJob::Base).to have_received(:deserialize).with(job_payload)
         expect(job_double).to have_received(:perform_now)
-        expect(mock_client).to have_received(:archive_message).with(queue_name, 5)
+        expect(mock_client).to have_received(:archive_message).with(queue_name, 5, job_completion: true)
         expect(ActiveSupport::Notifications).to have_received(:instrument).with("pgbus.job_completed", queue: queue_name,
                                                                                                        job_class: "TestJob")
         expect(result).to eq(:success)
@@ -386,7 +386,7 @@ RSpec.describe Pgbus::ActiveJob::Executor do
 
         result = executor.execute(message, queue_name)
 
-        expect(mock_client).to have_received(:archive_message).with(queue_name, 9).twice
+        expect(mock_client).to have_received(:archive_message).with(queue_name, 9, job_completion: true).twice
         expect(result).to eq(:success)
       end
 
@@ -420,7 +420,7 @@ RSpec.describe Pgbus::ActiveJob::Executor do
 
         result = executor.execute(message, queue_name, source_queue: "pgbus_default_p0")
 
-        expect(mock_client).to have_received(:archive_message).with("pgbus_default_p0", 9, prefixed: false).twice
+        expect(mock_client).to have_received(:archive_message).with("pgbus_default_p0", 9, prefixed: false, job_completion: true).twice
         expect(result).to eq(:success)
       end
     end
@@ -533,7 +533,7 @@ RSpec.describe Pgbus::ActiveJob::Executor do
       it "deletes the message instead of archiving it, then signals" do
         expect(executor.execute(message, queue_name)).to eq(:success)
 
-        expect(mock_client).to have_received(:delete_message).with(queue_name, 9)
+        expect(mock_client).to have_received(:delete_message).with(queue_name, 9, job_completion: true)
         expect(mock_client).not_to have_received(:archive_message)
         expect(Pgbus::Concurrency::Semaphore).to have_received(:signal).with("TestJob-42", client: mock_client)
       end
@@ -541,7 +541,7 @@ RSpec.describe Pgbus::ActiveJob::Executor do
       it "deletes from the priority sub-queue a message was read from" do
         executor.execute(message, queue_name, source_queue: "pgbus_default_p0")
 
-        expect(mock_client).to have_received(:delete_message).with("pgbus_default_p0", 9, prefixed: false)
+        expect(mock_client).to have_received(:delete_message).with("pgbus_default_p0", 9, prefixed: false, job_completion: true)
       end
 
       it "takes the duplicate path, without signals, when the message was already gone" do
@@ -673,7 +673,7 @@ RSpec.describe Pgbus::ActiveJob::Executor do
       it "rescues the subscriber error and still returns :success" do
         result = executor.execute(message, queue_name)
 
-        expect(mock_client).to have_received(:archive_message).with(queue_name, 11)
+        expect(mock_client).to have_received(:archive_message).with(queue_name, 11, job_completion: true)
         expect(result).to eq(:success)
       end
     end

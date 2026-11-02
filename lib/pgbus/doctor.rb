@@ -5,7 +5,7 @@ require "pgbus/mcp/health_analyzer"
 
 module Pgbus
   # Preflight diagnostics for a pgbus deployment — the single command that
-  # answers "is this environment healthy enough to run?". Runs twelve checks and
+  # answers "is this environment healthy enough to run?". Runs thirteen checks and
   # returns a machine-readable result plus a human report, so `pgbus doctor`
   # and `rake pgbus:doctor` can gate a deploy or CI run (exit 0 on success,
   # 1 on any failure).
@@ -42,7 +42,8 @@ module Pgbus
       "Broadcast queue" => :check_broadcast_queue,
       "Primary affinity" => :check_primary,
       "Dedicated connections" => :check_dedicated_connections,
-      "Connection budget" => :check_connection_budget
+      "Connection budget" => :check_connection_budget,
+      "Completion commit" => :check_completion_commit
     }.freeze
 
     # Process liveness reads the pgbus_processes table (via HealthAnalyzer), so
@@ -128,6 +129,7 @@ module Pgbus
         resolved_pool_size: safe { @config.resolved_pool_size },
         listen_notify: @config.listen_notify,
         roles: @config.roles || "all",
+        completion_commit: @config.completion_synchronous_commit ? "sync" : "async",
         capsules: capsule_summary,
         database_url: redacted_database_url,
         connection_params: redacted_connection_params
@@ -393,6 +395,32 @@ module Pgbus
       end
     rescue StandardError => e
       Check.new(name: "Dedicated connections", status: :fail, detail: "#{e.class}: #{e.message}")
+    end
+
+    # config.completion_synchronous_commit (issue #619): informational, except
+    # that false does nothing with native_statements off or on ActiveRecord's
+    # shared connection, which warns.
+    def check_completion_commit
+      return Check.new(name: "Completion commit", status: :ok, detail: "synchronous (default)") if
+        @config.completion_synchronous_commit
+
+      unless @config.native_statements
+        return Check.new(name: "Completion commit", status: :warn,
+                         detail: "completion_synchronous_commit = false has no effect: completions run through " \
+                                 "pgmq's functions (native_statements = false)")
+      end
+
+      if @client.respond_to?(:shared_connection?) && @client.shared_connection?
+        return Check.new(name: "Completion commit", status: :warn,
+                         detail: "completion_synchronous_commit = false has no effect: pgbus shares ActiveRecord's " \
+                                 "connection (connection_params Proc); give pgbus its own connections to use it")
+      end
+
+      Check.new(name: "Completion commit", status: :ok,
+                detail: "asynchronous: completions commit with synchronous_commit off; a Postgres server crash can " \
+                        "lose the last completions, whose jobs run again after visibility_timeout")
+    rescue StandardError => e
+      Check.new(name: "Completion commit", status: :warn, detail: "#{e.class}: #{e.message}")
     end
 
     # How many direct LISTEN connections this config pins at steady state

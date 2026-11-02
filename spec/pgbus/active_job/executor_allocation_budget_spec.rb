@@ -44,7 +44,10 @@ RSpec.describe Pgbus::ActiveJob::Executor do
   before do
     ActiveJob::Base.logger = Logger.new(IO::NULL)
     stub_const("ExecutorAllocationBudgetJob", job_class)
-    allow(client).to receive(:archive_message).and_return(true)
+    # Client#archive_message's own signature, not an RSpec stub: a stub takes
+    # **kwargs, so the executor's `job_completion: true` (issue #619) would
+    # allocate a Hash here that the real method's explicit keywords never do.
+    client.define_singleton_method(:archive_message) { |_queue, _msg_id, prefixed: true, job_completion: false| true } # rubocop:disable Lint/UnusedBlockArgument -- the real keywords, which allocate nothing
   end
 
   def pgbus_allocations(&)
