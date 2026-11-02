@@ -366,6 +366,14 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
       expect(result).to be_nil
     end
 
+    it "answers at once after a stop that came before any start" do
+      listener.stop
+
+      started = monotonic
+      expect(listener.ensure_listening("chat")).to be_nil
+      expect(monotonic - started).to be < 0.5
+    end
+
     it "answers at once when stop lands between its stopped check and its push" do
       stopping = listener
       racing_queue = Class.new(Queue) do

@@ -162,7 +162,12 @@ module Pgbus
         end
 
         def stop
-          return unless @running
+          unless @running
+            # Never started (or already stopped): nothing to join, but no
+            # thread will serve a command either.
+            @stopped = true
+            return
+          end
 
           # @stopped before @running: the thread exits (and releases what is
           # queued) only after it sees @running false, so by then @stopped is
