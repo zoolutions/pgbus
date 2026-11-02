@@ -20,6 +20,9 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
   before do
     stub_const("PG", Module.new) unless defined?(PG)
     stub_const("PG::Error", Class.new(StandardError)) unless defined?(PG::Error)
+    stub_const("PG::ConnectionBad", Class.new(PG::Error)) unless defined?(PG::ConnectionBad)
+    stub_const("PG::CONNECTION_OK", 0) unless defined?(PG::CONNECTION_OK)
+    stub_const("PG::CONNECTION_BAD", 1) unless defined?(PG::CONNECTION_BAD)
     # reconnect! validates the connection is a primary via pg_is_in_recovery().
     # The fake_pg's #exec returns nil, so neutralize the validator by default
     # (it passes the connection through). The replica-rejection describe re-stubs
@@ -27,23 +30,31 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
     allow(Pgbus::Process::PrimaryValidator).to receive(:validate_primary!) { |conn| conn }
   end
 
-  # A scripted stand-in for PG::Connection. The real PG::Connection blocks on
-  # wait_for_notify until a NOTIFY arrives or the timeout fires; we simulate
-  # that by pulling from an internal Queue. The listener thread sees real
-  # blocking semantics without needing a real Postgres.
-  let(:fake_pg) do
+  # A scripted stand-in for PG::Connection, with the surface the listener's
+  # select loop uses (issue #630): socket_io (the read end of a pipe this fake
+  # owns), consume_input (reads the pending bytes and applies the queued
+  # events), notifies (libpq's buffered-notification list) and status. Every
+  # push_* writes a byte, so the listener's IO.select sees a readable socket
+  # exactly as it would when Postgres sends something. A timeout is the real
+  # select timeout: these examples use a small health_check_ms.
+  let(:fake_pg_class) do
     Class.new do
-      attr_reader :executed, :reset_count, :close_count, :close_threads, :exec_after_close
+      attr_reader :executed, :reset_count, :close_count, :close_threads, :exec_after_close, :socket_io
 
       def initialize
         @executed = []
         @events = Queue.new
+        @notifies = Queue.new
         @reset_count = 0
         @close_count = 0
         @close_threads = []
         @exec_after_close = []
         @raise_on_next_listen = false
-        @block_next_wait = false
+        @buffer_on_exec = Queue.new
+        @gated_sql = nil
+        @exec_gate = Queue.new
+        @bad = false
+        @socket_io, @socket_writer = IO.pipe
       end
 
       # Real pg is inside PQsendQuery here with the GVL released. If another
@@ -54,39 +65,41 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
       def exec(sql)
         @exec_after_close << sql if @close_count.positive?
         @executed << sql
+        @exec_gate.pop if sql == @gated_sql
         if sql.start_with?("LISTEN") && @raise_on_next_listen
           @raise_on_next_listen = false
           raise PG::Error, "listen failed mid-rebuild"
         end
+        # A NOTIFY that arrived with this statement's reply: libpq buffers it
+        # while reading the result and the socket has nothing left to read.
+        @notifies << @buffer_on_exec.pop unless @buffer_on_exec.empty?
         nil
       end
 
-      # Mirrors PG::Connection#wait_for_notify(timeout) { |channel, pid, payload| ... }
-      #   - yields on notify and returns the channel
-      #   - returns nil once the timeout elapses, so a listener whose stop
-      #     signal is a cleared flag (not a socket close) gets to observe it
-      #   - raises on scripted error
-      def wait_for_notify(timeout)
-        event = @block_next_wait ? blocking_pop : @events.pop(timeout: timeout)
-        case event&.first
-        when nil, :timeout
-          nil
-        when :notify
-          yield event[1], 0, nil
-          event[1]
-        when :raise
-          raise event[1]
-        when :close
-          raise PG::Error, "connection closed"
+      # PQconsumeInput: read what the socket has, apply what it carried.
+      def consume_input
+        @socket_io.read_nonblock(4096, exception: false)
+        until @events.empty?
+          kind, arg = @events.pop
+          case kind
+          when :notify then @notifies << arg
+          when :raise then raise arg
+          when :peer_close then @bad = true
+          end
         end
+        true
       end
 
-      # Pin the listener thread inside its NEXT wait_for_notify — ignoring the
-      # timeout — until an event is pushed. One-shot, so a test can hold the
-      # thread still to observe pre-ack state without making #stop wait.
-      def block_next_wait!
-        @block_next_wait = true
+      # PQnotifies, as pg returns it: extra is "" for a NOTIFY without a
+      # payload (wait_for_notify yields nil for the same notification).
+      def notifies
+        return nil if @notifies.empty?
+
+        channel, payload = @notifies.pop
+        { relname: channel, be_pid: 0, extra: payload || "" }
       end
+
+      def status = @bad ? PG::CONNECTION_BAD : PG::CONNECTION_OK
 
       def reset
         @reset_count += 1
@@ -99,7 +112,7 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
       def close
         @close_count += 1
         @close_threads << Thread.current
-        @events << [:close]
+        [@socket_io, @socket_writer].each { |io| io.close unless io.closed? }
       end
 
       def exec_params(sql, _params)
@@ -107,17 +120,22 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
         nil
       end
 
-      def push_notify(channel)
-        @events << [:notify, channel]
-      end
+      def push_notify(channel, payload = nil) = deliver([:notify, [channel, payload]])
+      def push_error(error) = deliver([:raise, error])
 
-      def push_timeout
-        @events << [:timeout]
-      end
+      # The server went away: the socket turns readable (EOF) and the status
+      # goes bad once consume_input has looked.
+      def peer_close! = deliver([:peer_close])
 
-      def push_error(error)
-        @events << [:raise, error]
-      end
+      # The next exec buffers a NOTIFY without writing to the socket.
+      def buffer_notify_on_next_exec(channel) = @buffer_on_exec << [channel, nil]
+
+      # IO.select on a closed IO raises IOError, as on a socket closed under it.
+      def break_socket! = @socket_io.close
+
+      # Park the next exec of `sql` until release_exec!.
+      def gate_exec!(sql) = (@gated_sql = sql)
+      def release_exec! = @exec_gate << true
 
       # Arm the connection so its next LISTEN raises PG::Error once — used to
       # simulate a partially-built reconnect connection.
@@ -127,12 +145,16 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
 
       private
 
-      def blocking_pop
-        @block_next_wait = false
-        @events.pop
+      def deliver(event)
+        @events << event
+        @socket_writer.write_nonblock(".", exception: false)
+      rescue IOError
+        nil
       end
-    end.new
+    end
   end
+
+  let(:fake_pg) { fake_pg_class.new }
 
   let(:dispatch_queue) { Queue.new }
   let(:logger)         { Logger.new(IO::NULL) }
@@ -149,19 +171,28 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
     end
   end
 
+  def build_listener(pg_connection: fake_pg, health_check_ms: 50, **opts)
+    described_class.new(
+      pg_connection: pg_connection, dispatch_queue: dispatch_queue, health_check_ms: health_check_ms,
+      logger: logger, connection_factory: -> { factory_conns.shift }, **opts
+    )
+  end
+
+  def monotonic = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+
+  def listens(conn) = conn.executed.count { |sql| sql.start_with?("LISTEN") }
+
   describe "#start and #stop" do
     it "exposes its thread via #threads while running and none after stop (issue #443)" do
       expect(listener.threads).to eq([])
       listener.start
       expect(listener.threads.size).to eq(1)
-      fake_pg.push_timeout
       listener.stop
       expect(listener.threads).to eq([])
     end
 
     it "spawns a thread on start and joins it on stop" do
       listener.start
-      fake_pg.push_timeout # unblock the wait_for_notify so stop can proceed
       listener.stop
       expect(listener.listening_to).to be_empty
     end
@@ -223,24 +254,111 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
     end
   end
 
+  # The listener thread parks in IO.select on the LISTEN socket and a wake
+  # pipe; ensure_listening, remove_listening and stop write to the pipe, so a
+  # command runs within a thread hop instead of at the end of the current
+  # health-check wait (issue #630). Every example here uses a health check far
+  # longer than its assertion window: only the pipe can have woken the thread.
+  describe "wake pipe (issue #630)" do
+    subject(:listener) { build_listener(health_check_ms: 5_000) }
+
+    it "acks a LISTEN queued while the thread is parked in select within 50 ms" do
+      listener.start
+      wait_until { listener.instance_variable_get(:@thread)&.status == "sleep" }
+
+      started = monotonic
+      listener.ensure_listening("chat")
+      elapsed = monotonic - started
+
+      expect(fake_pg.executed).to include(%(LISTEN "pgmq.q_chat.INSERT"))
+      expect(elapsed).to be < 0.05
+    end
+
+    it "runs an UNLISTEN within 50 ms" do
+      listener.start
+      listener.ensure_listening("chat")
+
+      started = monotonic
+      listener.remove_listening("chat")
+      wait_until(timeout: 1) { fake_pg.executed.include?(%(UNLISTEN "pgmq.q_chat.INSERT")) }
+
+      expect(monotonic - started).to be < 0.05
+      expect(listener.listening_to).to be_empty
+    end
+
+    it "returns from stop in well under a second with a 30 s health check" do
+      slow = build_listener(health_check_ms: 30_000)
+      slow.start
+      slow.ensure_listening("chat")
+      thread = slow.threads.first
+
+      started = monotonic
+      slow.stop
+
+      expect(monotonic - started).to be < 1.0
+      expect(thread).not_to be_alive
+    end
+
+    it "closes both pipe ends after a clean stop" do
+      listener.start
+      reader = listener.instance_variable_get(:@wake_reader)
+      writer = listener.instance_variable_get(:@wake_writer)
+
+      listener.stop
+
+      expect([reader, writer]).to all(be_closed)
+    end
+
+    it "recreates the pipe when started again after a stop closed it" do
+      listener.start
+      listener.stop
+      closed_reader = listener.instance_variable_get(:@wake_reader)
+
+      listener.start
+
+      expect(closed_reader).to be_closed
+      expect(listener.instance_variable_get(:@wake_reader)).not_to be_closed
+      expect(listener.instance_variable_get(:@wake_writer)).not_to be_closed
+    end
+
+    it "leaves the pipe open, and says so, when the thread outlives the join budget" do
+      stub_const("#{described_class}::STOP_JOIN_GRACE_SECONDS", 0.05)
+      log = StringIO.new
+      stuck = described_class.new(
+        pg_connection: fake_pg, dispatch_queue: dispatch_queue, health_check_ms: 20,
+        logger: Logger.new(log), connection_factory: -> {}
+      )
+      fake_pg.gate_exec!("SELECT 1")
+      stuck.start
+      wait_until { fake_pg.executed.include?("SELECT 1") }
+      thread = stuck.threads.first
+      reader = stuck.instance_variable_get(:@wake_reader)
+
+      stuck.stop
+
+      expect(reader).not_to be_closed
+      expect(log.string).to include("did not stop")
+    ensure
+      fake_pg.release_exec!
+      thread&.join(2)
+      reader&.close
+      stuck&.instance_variable_get(:@wake_writer)&.close
+    end
+  end
+
   describe "channel naming" do
     it "LISTENs on pgmq.q_<queue>.INSERT for ensure_listening" do
       listener.start
       listener.ensure_listening("pgbus_stream_chat")
-      fake_pg.push_timeout
 
-      wait_until { fake_pg.executed.include?(%(LISTEN "pgmq.q_pgbus_stream_chat.INSERT")) }
       expect(fake_pg.executed).to include(%(LISTEN "pgmq.q_pgbus_stream_chat.INSERT"))
     end
 
     it "UNLISTENs on remove_listening" do
       listener.start
       listener.ensure_listening("pgbus_stream_chat")
-      fake_pg.push_timeout
-      wait_until { fake_pg.executed.include?(%(LISTEN "pgmq.q_pgbus_stream_chat.INSERT")) }
 
       listener.remove_listening("pgbus_stream_chat")
-      fake_pg.push_timeout
       wait_until { fake_pg.executed.include?(%(UNLISTEN "pgmq.q_pgbus_stream_chat.INSERT")) }
       expect(fake_pg.executed).to include(%(UNLISTEN "pgmq.q_pgbus_stream_chat.INSERT"))
     end
@@ -248,8 +366,6 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
     it "records the channel in listening_to" do
       listener.start
       listener.ensure_listening("chat")
-      fake_pg.push_timeout
-      wait_until { listener.listening_to.include?("pgmq.q_chat.INSERT") }
       expect(listener.listening_to).to include("pgmq.q_chat.INSERT")
     end
 
@@ -257,32 +373,62 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
       listener.start
       listener.ensure_listening("chat")
       listener.ensure_listening("chat")
-      fake_pg.push_timeout
-      wait_until { listener.listening_to.size == 1 }
 
-      listen_count = fake_pg.executed.count { |sql| sql.start_with?("LISTEN") }
-      expect(listen_count).to eq(1)
+      expect(listens(fake_pg)).to eq(1)
+      expect(listener.listening_to.size).to eq(1)
     end
   end
 
   describe "NOTIFY handling" do
-    it "posts a WakeMessage with the queue name extracted from the channel" do
+    it "posts a durable WakeMessage (no payload) with the queue name extracted from the channel" do
       listener.start
       listener.ensure_listening("chat")
-      fake_pg.push_timeout
-      wait_until { listener.listening_to.include?("pgmq.q_chat.INSERT") }
 
       fake_pg.push_notify("pgmq.q_chat.INSERT")
 
-      msg = dispatch_queue.pop
+      msg = dispatch_queue.pop(timeout: 2)
       expect(msg).to be_a(described_class::WakeMessage)
       expect(msg.queue_name).to eq("chat")
+      # pg's notifies reports a payload-less NOTIFY as extra: ""; a durable
+      # wake carries nil, as wait_for_notify used to yield.
+      expect(msg.payload).to be_nil
+    end
+
+    it "carries an ephemeral NOTIFY's payload" do
+      listener.start
+      listener.ensure_listening("chat")
+
+      fake_pg.push_notify("pgmq.q_chat.INSERT", '{"html":"<x/>"}')
+
+      expect(dispatch_queue.pop(timeout: 2).payload).to eq('{"html":"<x/>"}')
+    end
+
+    it "dispatches every notification one socket read carried" do
+      listener.start
+      listener.ensure_listening("chat")
+
+      3.times { fake_pg.push_notify("pgmq.q_chat.INSERT") }
+
+      wait_until { dispatch_queue.size == 3 }
+      expect(dispatch_queue.size).to eq(3)
+    end
+
+    it "dispatches a NOTIFY an exec buffered without the socket turning readable" do
+      slow = build_listener(health_check_ms: 5_000)
+      fake_pg.buffer_notify_on_next_exec("pgmq.q_chat.INSERT")
+      slow.start
+
+      slow.ensure_listening("chat")
+
+      msg = dispatch_queue.pop(timeout: 1)
+      expect(msg&.queue_name).to eq("chat")
+    ensure
+      slow&.stop
     end
 
     it "ignores notifications on channels that don't match the pgmq pattern" do
       listener.start
       fake_pg.push_notify("random_channel")
-      fake_pg.push_timeout
 
       sleep 0.1
       expect(dispatch_queue).to be_empty
@@ -291,18 +437,7 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
 
   describe "bounded dispatch queue drop (issue #315 item 3)" do
     # handle_notify is exercised directly: the drop decision is pure and does
-    # not need the wait_for_notify thread machinery.
-    def build_listener(dispatch_queue_limit:)
-      described_class.new(
-        pg_connection: fake_pg,
-        dispatch_queue: dispatch_queue,
-        health_check_ms: 50,
-        logger: logger,
-        connection_factory: -> { factory_conns.shift },
-        dispatch_queue_limit: dispatch_queue_limit
-      )
-    end
-
+    # not need the listener thread.
     it "enqueues every wake when the limit is 0 (unbounded, the default)" do
       l = build_listener(dispatch_queue_limit: 0)
       10.times { l.send(:handle_notify, "pgmq.q_chat.INSERT") }
@@ -343,119 +478,41 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
   end
 
   describe "health check" do
-    it "runs SELECT 1 when wait_for_notify times out" do
+    it "runs SELECT 1 when a full cycle passes with nothing to read" do
       listener.start
-      fake_pg.push_timeout
       wait_until { fake_pg.executed.include?("SELECT 1") }
       expect(fake_pg.executed).to include("SELECT 1")
     end
-  end
 
-  describe "reconnect on PG::Error" do
-    # A fake PG connection that can be told to fail the next LISTEN call.
-    # Used by the reconnect-preservation test below to prove that a
-    # mid-loop failure inside reconnect! does not drop the canonical
-    # subscription set.
-    let(:raising_pg) do
-      Class.new do
-        attr_reader :reset_count, :executed
+    it "runs one SELECT 1 per idle cycle, not one per select return" do
+      idle = build_listener(health_check_ms: 300)
+      idle.start
+      wait_until { fake_pg.executed.include?("SELECT 1") }
 
-        def initialize
-          @executed = []
-          @events = Queue.new
-          @reset_count = 0
-          @raise_on_next_listen = false
-        end
+      sleep 0.1
 
-        def exec(sql)
-          @executed << sql
-          if sql.start_with?("LISTEN") && @raise_on_next_listen
-            @raise_on_next_listen = false
-            raise PG::Error, "boom"
-          end
-          nil
-        end
-
-        def wait_for_notify(timeout)
-          event = @events.pop(timeout: timeout)
-          case event&.first
-          when nil, :timeout then nil
-          when :raise then raise event[1]
-          when :close then raise PG::Error, "closed"
-          end
-        end
-
-        def reset = (@reset_count += 1)
-        def close = (@events << [:close])
-        def push_timeout = @events << [:timeout]
-        def push_error(error) = @events << [:raise, error]
-        def fail_next_listen! = (@raise_on_next_listen = true)
-      end.new
+      expect(fake_pg.executed.count("SELECT 1")).to eq(1)
+    ensure
+      idle&.stop
     end
 
+    it "still runs the keepalive under a stream of wakes shorter than a cycle" do
+      busy = build_listener(health_check_ms: 100)
+      busy.start
+      stop_at = monotonic + 0.5
+      # Each remove_listening wakes the thread (an UNLISTEN of a channel it
+      # never LISTENed is a no-op); without a deadline the wait would restart
+      # at a full cycle on every wake and the keepalive would never run.
+      busy.remove_listening("idle") while monotonic < stop_at && sleep(0.01)
+
+      expect(fake_pg.executed.count("SELECT 1")).to be >= 2
+    ensure
+      busy&.stop
+    end
+  end
+
+  describe "reconnect" do
     before { stub_const("#{described_class}::RECONNECT_BACKOFF_SECONDS", 0.01) }
-
-    it "rebuilds a fresh connection and re-LISTENs every previously-known channel" do
-      new_pg = fake_pg.class.new
-      factory_conns << new_pg
-      listener.start
-      listener.ensure_listening("chat")
-      listener.ensure_listening("presence")
-      fake_pg.push_timeout
-      wait_until { listener.listening_to.size == 2 }
-
-      fake_pg.push_error(PG::Error.new("connection reset"))
-      new_pg.push_timeout # keep the fresh connection's loop alive
-
-      # LISTEN is re-issued for both channels on the FRESH factory connection.
-      wait_until { new_pg.executed.count { |s| s.start_with?("LISTEN") } >= 2 }
-      expect(new_pg.executed).to include(%(LISTEN "pgmq.q_chat.INSERT"), %(LISTEN "pgmq.q_presence.INSERT"))
-      # The old connection is discarded, never reset — a fresh connect was used.
-      expect(fake_pg.reset_count).to eq(0)
-      expect(listener.listening_to).to contain_exactly("pgmq.q_chat.INSERT", "pgmq.q_presence.INSERT")
-    end
-
-    it "preserves the canonical subscription set when a re-LISTEN raises mid-loop" do
-      # First factory conn fails its LISTEN mid-rebuild; the loop discards it,
-      # backs off, and rebuilds from the second (good) conn.
-      partial = fake_pg.class.new.tap(&:fail_next_listen!)
-      good = fake_pg.class.new
-      raising_conns = [partial, good]
-      factory = -> { raising_conns.shift }
-      raising_listener = described_class.new(
-        pg_connection: raising_pg, dispatch_queue: dispatch_queue,
-        health_check_ms: 50, logger: logger, connection_factory: factory
-      )
-      raising_listener.start
-      raising_listener.ensure_listening("chat")
-      raising_listener.ensure_listening("presence")
-      raising_pg.push_timeout
-      wait_until { raising_listener.listening_to.size == 2 }
-
-      raising_pg.push_error(PG::Error.new("network blip"))
-      good.push_timeout # keep the good conn's loop alive
-      wait_until { good.executed.count { |s| s.start_with?("LISTEN") } >= 2 }
-
-      # Both channels survive a transient mid-reconnect failure — the earlier
-      # version cleared @listening_to before the loop and permanently forgot them.
-      expect(raising_listener.listening_to).to contain_exactly("pgmq.q_chat.INSERT", "pgmq.q_presence.INSERT")
-      expect(raising_pg.reset_count).to eq(0) # old conn discarded, never reset
-      raising_listener.stop
-    end
-  end
-
-  describe "reconnect via connection_factory (NotifyListener loop)" do
-    subject(:listener) do
-      described_class.new(
-        pg_connection: fake_pg,
-        dispatch_queue: dispatch_queue,
-        health_check_ms: 50,
-        logger: logger,
-        connection_factory: -> { factory_conns.shift }
-      )
-    end
-
-    let(:factory_conns) { [] }
 
     # A connection whose LISTEN always raises — used to prove the reconnect
     # loop spins on failure and only exits when stop() flips @running.
@@ -476,74 +533,100 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
       end
     end
 
-    before { stub_const("#{described_class}::RECONNECT_BACKOFF_SECONDS", 0.01) }
-
-    it "rebuilds via the factory and re-LISTENs every channel on the fresh connection" do
-      new_pg = fake_pg.class.new
-      factory_conns << new_pg
-
+    def listen_to_chat_and_presence
       listener.start
       listener.ensure_listening("chat")
       listener.ensure_listening("presence")
-      fake_pg.push_timeout
-      wait_until { listener.listening_to.size == 2 }
-
-      fake_pg.push_error(PG::Error.new("connection reset"))
-      new_pg.push_timeout
-
-      wait_until do
-        new_pg.executed.count { |s| s.start_with?("LISTEN") } >= 2
-      end
-
-      expect(new_pg.executed).to include(
-        %(LISTEN "pgmq.q_chat.INSERT"),
-        %(LISTEN "pgmq.q_presence.INSERT")
-      )
-      # The original connection must NOT have been reset — a fresh connect
-      # was used instead (the whole point of the factory path).
-      expect(fake_pg.reset_count).to eq(0)
-      expect(listener.listening_to).to contain_exactly(
-        "pgmq.q_chat.INSERT", "pgmq.q_presence.INSERT"
-      )
     end
 
-    it "retries with a fresh factory connection until one succeeds" do
-      # The first factory connection fails its first LISTEN (partially built);
-      # the loop closes it, backs off, and rebuilds from the successor.
-      first = fake_pg.class.new
-      second = fake_pg.class.new
-      first.fail_next_listen! if first.respond_to?(:fail_next_listen!)
-      factory_conns.push(first, second)
-
-      listener.start
-      listener.ensure_listening("chat")
-      fake_pg.push_timeout
-      wait_until { listener.listening_to.size == 1 }
+    it "rebuilds via the factory and re-LISTENs every channel when consume_input raises PG::Error" do
+      new_pg = fake_pg_class.new
+      factory_conns << new_pg
+      listen_to_chat_and_presence
 
       fake_pg.push_error(PG::Error.new("connection reset"))
-      second.push_timeout
 
-      wait_until do
-        second.executed.count { |s| s == %(LISTEN "pgmq.q_chat.INSERT") } >= 1
-      end
+      wait_until { listens(new_pg) >= 2 }
+      expect(new_pg.executed).to include(%(LISTEN "pgmq.q_chat.INSERT"), %(LISTEN "pgmq.q_presence.INSERT"))
+      # The old connection is discarded, never reset — a fresh connect was used.
+      expect(fake_pg.reset_count).to eq(0)
+      expect(listener.listening_to).to contain_exactly("pgmq.q_chat.INSERT", "pgmq.q_presence.INSERT")
+    end
 
+    it "reconnects when the socket turns readable but the connection went bad" do
+      new_pg = fake_pg_class.new
+      factory_conns << new_pg
+      listen_to_chat_and_presence
+
+      fake_pg.peer_close!
+
+      wait_until { listens(new_pg) >= 2 }
+      expect(listener.listening_to).to contain_exactly("pgmq.q_chat.INSERT", "pgmq.q_presence.INSERT")
+    end
+
+    it "reconnects when IO.select raises IOError on a socket closed under it" do
+      new_pg = fake_pg_class.new
+      factory_conns << new_pg
+      listen_to_chat_and_presence
+
+      fake_pg.break_socket!
+      listener.remove_listening("idle") # wake the thread so it selects on the closed socket
+
+      wait_until { listens(new_pg) >= 2 }
+      expect(listener.listening_to).to contain_exactly("pgmq.q_chat.INSERT", "pgmq.q_presence.INSERT")
+    end
+
+    it "keeps listening on the fresh connection after a reconnect" do
+      new_pg = fake_pg_class.new
+      factory_conns << new_pg
+      listen_to_chat_and_presence
+      fake_pg.push_error(PG::Error.new("connection reset"))
+      wait_until { listens(new_pg) >= 2 }
+
+      new_pg.push_notify("pgmq.q_chat.INSERT")
+
+      expect(dispatch_queue.pop(timeout: 2)&.queue_name).to eq("chat")
+    end
+
+    it "reconnects, and re-LISTENs the channel, when a LISTEN itself raises" do
+      new_pg = fake_pg_class.new
+      factory_conns << new_pg
+      listener.start
+      fake_pg.fail_next_listen!
+
+      listener.ensure_listening("chat")
+
+      wait_until { new_pg.executed.include?(%(LISTEN "pgmq.q_chat.INSERT")) }
       expect(listener.listening_to).to contain_exactly("pgmq.q_chat.INSERT")
+      expect(listener.threads.first).to be_alive
+    end
+
+    it "preserves the canonical subscription set when a re-LISTEN raises mid-loop" do
+      # First factory conn fails its LISTEN mid-rebuild; the loop discards it,
+      # backs off, and rebuilds from the second (good) conn.
+      partial = fake_pg_class.new.tap(&:fail_next_listen!)
+      good = fake_pg_class.new
+      factory_conns.push(partial, good)
+      listen_to_chat_and_presence
+
+      fake_pg.push_error(PG::Error.new("network blip"))
+      wait_until { listens(good) >= 2 }
+
+      # Both channels survive a transient mid-reconnect failure — the earlier
+      # version cleared @listening_to before the loop and permanently forgot them.
+      expect(listener.listening_to).to contain_exactly("pgmq.q_chat.INSERT", "pgmq.q_presence.INSERT")
+      expect(fake_pg.reset_count).to eq(0) # old conn discarded, never reset
+      expect(partial.close_count).to be >= 1 # the half-built conn is closed, no leak
     end
 
     it "reports reconnect failures through ErrorReporter so APM handlers see them (issue #352)" do
       reported = []
       Pgbus.configuration.error_reporters << ->(ex, ctx) { reported << [ex, ctx] }
-      first = always_failing_conn.new
-      second = fake_pg.class.new
-      factory_conns.push(first, second)
-
+      factory_conns.push(always_failing_conn.new, fake_pg_class.new)
       listener.start
       listener.ensure_listening("chat")
-      fake_pg.push_timeout
-      wait_until { listener.listening_to.size == 1 }
 
       fake_pg.push_error(PG::Error.new("connection reset"))
-      second.push_timeout
       wait_until { reported.any? }
 
       expect(reported.first[0].message).to eq("always fails")
@@ -556,7 +639,7 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
       # build_raw_pg_connection can raise Pgbus::ConfigurationError (e.g. a
       # pooled AR connection in streams_connection_options). The reconnect loop
       # must catch it, back off, and retry rather than let it kill the thread.
-      good = fake_pg.class.new
+      good = fake_pg_class.new
       calls = 0
       config_error_factory = lambda do
         calls += 1
@@ -568,36 +651,15 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
         pg_connection: fake_pg, dispatch_queue: dispatch_queue, health_check_ms: 50,
         logger: logger, connection_factory: config_error_factory
       )
-
       failing_listener.start
       failing_listener.ensure_listening("chat")
-      fake_pg.push_timeout
-      wait_until { failing_listener.listening_to.size == 1 }
 
       fake_pg.push_error(PG::Error.new("connection reset"))
-      good.push_timeout
 
-      wait_until { good.executed.count { |s| s == %(LISTEN "pgmq.q_chat.INSERT") } >= 1 }
+      wait_until { good.executed.include?(%(LISTEN "pgmq.q_chat.INSERT")) }
       expect(failing_listener.listening_to).to contain_exactly("pgmq.q_chat.INSERT")
-      failing_listener.stop
-    end
-
-    it "closes the partially-built connection before retrying (no leak)" do
-      half_built = fake_pg.class.new
-      good = fake_pg.class.new
-      half_built.fail_next_listen!
-      factory_conns.push(half_built, good)
-
-      listener.start
-      listener.ensure_listening("chat")
-      fake_pg.push_timeout
-      wait_until { listener.listening_to.size == 1 }
-
-      fake_pg.push_error(PG::Error.new("connection reset"))
-      good.push_timeout
-
-      wait_until { half_built.close_count >= 1 }
-      expect(half_built.close_count).to be >= 1
+    ensure
+      failing_listener&.stop
     end
 
     it "exits the reconnect loop promptly when stop is called mid-retry" do
@@ -610,12 +672,10 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
       )
       infinite_listener.start
       infinite_listener.ensure_listening("chat")
-      fake_pg.push_timeout
-      wait_until { infinite_listener.listening_to.size == 1 }
 
       fake_pg.push_error(PG::Error.new("connection reset"))
       sleep 0.05 # let the loop spin through several failing attempts
-      thread = infinite_listener.instance_variable_get(:@thread)
+      thread = infinite_listener.threads.first
       infinite_listener.stop
       expect(thread.alive?).to be false
     end
@@ -628,13 +688,11 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
       # First factory conn is a replica (validate raises); the next is the
       # promoted primary (validate passes). reconnect! loops internally on
       # validation failure, backing off between cycles.
-      replica = fake_pg.class.new
-      primary = fake_pg.class.new
+      replica = fake_pg_class.new
+      primary = fake_pg_class.new
       factory_conns.push(replica, primary)
       listener.start
       listener.ensure_listening("chat")
-      fake_pg.push_timeout
-      wait_until { listener.listening_to.size == 1 }
 
       calls = 0
       allow(Pgbus::Process::PrimaryValidator).to receive(:validate_primary!) do |conn|
@@ -642,10 +700,8 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
       end
 
       fake_pg.push_error(PG::Error.new("connection reset"))
-      primary.push_timeout # keep the primary conn's loop alive
-      wait_until(timeout: 3) { primary.executed.count { |s| s == %(LISTEN "pgmq.q_chat.INSERT") } >= 1 }
+      wait_until(timeout: 3) { primary.executed.include?(%(LISTEN "pgmq.q_chat.INSERT")) }
 
-      expect(primary.executed).to include(%(LISTEN "pgmq.q_chat.INSERT"))
       expect(fake_pg.reset_count).to eq(0) # old conn discarded, never reset
       expect(listener.listening_to).to contain_exactly("pgmq.q_chat.INSERT")
     end
@@ -653,13 +709,10 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
     it "does not re-LISTEN channels while still on a replica" do
       # Every reconnect attempt lands on the same replica; validate_primary!
       # always raises, so the loop spins without ever re-LISTENing.
-      replica = fake_pg.class.new
-      factory_conns.push(replica)
+      replica = fake_pg_class.new
       allow(factory_conns).to receive(:shift).and_return(replica)
       listener.start
       listener.ensure_listening("chat")
-      fake_pg.push_timeout
-      wait_until { listener.listening_to.size == 1 }
 
       allow(Pgbus::Process::PrimaryValidator).to receive(:validate_primary!)
         .and_raise(Pgbus::Process::ReplicaConnectionError.new("on a replica"))
@@ -677,30 +730,18 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
 
   describe "ensure_listening synchronous handshake" do
     it "blocks until the listener thread has actually executed the LISTEN" do
-      # Hold the listener thread inside its first wait_for_notify so the
-      # observation window below is deterministic: without this the wait would
-      # time out after health_check_ms and ack while we're still asserting.
-      fake_pg.block_next_wait!
-      listener.start
-
-      # Run ensure_listening on a separate thread so we can observe
-      # whether it's still waiting on the ack while wait_for_notify
-      # is still blocking the listener thread.
+      # Not started yet: the command queues and nothing can ack it.
       acked = false
       caller_thread = Thread.new do
         listener.ensure_listening("chat")
         acked = true
       end
 
-      # Give the caller thread a chance to push and start blocking on
-      # the ack queue. With the old async behavior `acked` would
-      # already be true here.
       sleep 0.05
       expect(acked).to be false
-      expect(fake_pg.executed.any? { |s| s.include?("LISTEN") }).to be false
+      expect(fake_pg.executed).to be_empty
 
-      # Unblock the listener thread; it will run drain_commands → do_listen → ack.
-      fake_pg.push_timeout
+      listener.start
       caller_thread.join(2)
 
       expect(acked).to be true
@@ -710,11 +751,7 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
 
   describe "periodic maintenance on the idle connection (issue #323)" do
     subject(:listener) do
-      described_class.new(
-        pg_connection: fake_pg, dispatch_queue: dispatch_queue, health_check_ms: 50,
-        maintenance: maintenance, logger: logger, clock: -> { fake_clock[0] },
-        connection_factory: -> { factory_conns.shift }
-      )
+      build_listener(maintenance: maintenance, clock: -> { fake_clock[0] })
     end
 
     let(:fake_clock) { [0.0] }
@@ -732,19 +769,15 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
       listener.start
 
       # First idle window → maintenance runs (never run before).
-      fake_pg.push_timeout
       wait_until { runs.size >= 1 }
       expect(runs.first).to eq(fake_pg)
 
-      # Second idle window still inside the interval → NOT run again.
-      fake_pg.push_timeout
-      fake_pg.push_timeout
-      sleep 0.05
+      # Later idle windows still inside the interval → NOT run again.
+      wait_until { fake_pg.executed.count("SELECT 1") >= 3 }
       expect(runs.size).to eq(1)
 
       # Advance past the interval → runs again on the next window.
       fake_clock[0] += 301
-      fake_pg.push_timeout
       wait_until { runs.size >= 2 }
       expect(runs.size).to eq(2)
     end
@@ -752,7 +785,7 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
     it "does not disturb the listen loop when maintenance raises" do
       allow(maintenance).to receive(:run).and_raise(StandardError, "boom")
       listener.start
-      fake_pg.push_timeout
+      wait_until { fake_pg.executed.include?("SELECT 1") }
       fake_pg.push_notify("pgmq.q_chat.INSERT") # loop must still be alive
       wait_until { dispatch_queue.size >= 1 }
       expect(dispatch_queue.size).to be >= 1
