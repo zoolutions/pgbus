@@ -1,0 +1,19 @@
+spec/integration/until_executing_spec.rb
+  s_d5d42878c040f1::t_30f00b976171a0 1-218
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "c50bed5b7691a38ffccd864aae2792003ed4826c",
+  "prompts": {},
+  "sessions": {
+    "s_d5d42878c040f1": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9ee80594-8816-47d9-87c5-099462cd8212",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
