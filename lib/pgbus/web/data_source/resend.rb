@@ -87,7 +87,7 @@ module Pgbus
         # its own). The delete comes after the key is bound: PGMQ sends on its
         # own connection, so a failed delete cannot undo the send, and must
         # not give back the key of a live copy.
-        def resend_failed_event(event)
+        def resend_failed_event(event) # rubocop:disable Naming/PredicateMethod
           payload = JSON.parse(event["payload"])
           headers = event["headers"]
           headers = JSON.parse(headers) if headers.is_a?(String)
