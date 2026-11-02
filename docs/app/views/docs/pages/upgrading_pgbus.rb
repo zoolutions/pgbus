@@ -403,9 +403,11 @@ class Views::Docs::Pages::UpgradingPgbus < DocsUI::Page
 
         Until the fold runs, the dashboard lists such a queue under both
         spellings. Dropping the mixed-case entry (from the dashboard, or the
-        orphan stream sweep) removes only its `pgmq.meta` row; the table and
-        its messages stay with the lower-case queue. Dropping the lower-case
-        entry drops the queue, and both rows with it.
+        orphan stream sweep) removes only its `pgmq.meta` row; the table, its
+        messages and their uniqueness locks stay with the lower-case queue.
+        Dropping the lower-case entry drops the queue, and both rows with it.
+        Purging either entry purges the one shared table: both list the same
+        messages.
 
         Until the last old process stops, an old web process LISTENs on the
         mixed-case channel, so its SSE clients miss broadcasts until they

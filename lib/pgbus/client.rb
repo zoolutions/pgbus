@@ -743,6 +743,18 @@ module Pgbus
       end
     end
 
+    # A mixed-case pgmq.meta row from before issue #633 whose lower-case
+    # spelling is registered too: both name one table, the lower-case row is
+    # the queue every current process uses. Dropping the duplicate (the
+    # dashboard lists both until pgbus:fold_queue_name_case runs, and the
+    # orphan stream sweep sees both) must not drop that table.
+    # Public: the dashboard asks before it releases a dropped queue's locks.
+    def case_duplicate?(name)
+      return false if name == name.downcase
+
+      synchronized { queue_registered?(name) && queue_registered?(name.downcase) }
+    end
+
     def drop_queue(queue_name, prefixed: true)
       name = prefixed ? config.queue_name(queue_name) : queue_name
       if case_duplicate?(name)
@@ -1649,17 +1661,6 @@ module Pgbus
     # duplicate as its cause automatically.
     def duplicate_relation_error?(error)
       duplicate_install_error?(error) || duplicate_install_error?(error.cause)
-    end
-
-    # A mixed-case pgmq.meta row from before issue #633 whose lower-case
-    # spelling is registered too: both name one table, the lower-case row is
-    # the queue every current process uses. Dropping the duplicate (the
-    # dashboard lists both until pgbus:fold_queue_name_case runs, and the
-    # orphan stream sweep sees both) must not drop that table.
-    def case_duplicate?(name)
-      return false if name == name.downcase
-
-      synchronized { queue_registered?(name) && queue_registered?(name.downcase) }
     end
 
     # Removes only the duplicate's pgmq.meta row (its throttle and topic

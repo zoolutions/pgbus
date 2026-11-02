@@ -289,13 +289,25 @@ RSpec.describe Pgbus::Web::DataSource do
   end
 
   describe "#drop_queue" do
+    before { allow(mock_client).to receive_messages(drop_queue: true, case_duplicate?: false) }
+
     it "passes the queue name directly without re-prefixing" do
-      allow(mock_client).to receive(:drop_queue)
       allow(mock_connection).to receive(:select_all).and_return([])
 
       data_source.drop_queue("pgbus_default")
 
       expect(mock_client).to have_received(:drop_queue).with("pgbus_default", prefixed: false)
+    end
+
+    # Issue #633: the duplicate's table stays with the lower-case queue.
+    it "keeps the messages' uniqueness locks when the queue is a case duplicate" do
+      allow(mock_client).to receive(:case_duplicate?).with("pgbus_Default").and_return(true)
+      allow(mock_connection).to receive(:select_all)
+
+      data_source.drop_queue("pgbus_Default")
+
+      expect(mock_connection).not_to have_received(:select_all)
+      expect(mock_client).to have_received(:drop_queue).with("pgbus_Default", prefixed: false)
     end
   end
 

@@ -177,8 +177,11 @@ module Pgbus
         @client.purge_queue(name, prefixed: false)
       end
 
+      # A mixed-case duplicate from before issue #633 shares its table with
+      # the lower-case queue: dropping it keeps the table and its messages,
+      # so their uniqueness locks stay too.
       def drop_queue(name)
-        release_uniqueness_keys_for_queue(name)
+        release_uniqueness_keys_for_queue(name) unless @client.case_duplicate?(name)
         @client.drop_queue(name, prefixed: false)
       end
 

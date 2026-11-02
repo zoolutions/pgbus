@@ -159,6 +159,23 @@ RSpec.describe "Queue names in lower case (integration)", :integration do
       expect(meta_rows("pgbus_int_caseonly")).to be_empty
     end
 
+    # The dashboard releases a dropped queue's uniqueness locks first; for a
+    # duplicate the messages stay with the lower-case queue, and so must their
+    # locks.
+    it "keeps the live messages' uniqueness locks when the dashboard drops the duplicate" do
+      client.ensure_queue("caselock")
+      msg_id = client.send_message("caselock", { "job_class" => "CaseLockJob", "pgbus_uniqueness_key" => "case-lock" })
+      conn.execute("INSERT INTO pgbus_uniqueness_keys (lock_key, queue_name, msg_id) VALUES ('case-lock', 'CaseLock', #{msg_id.to_i})")
+      conn.execute("SELECT pgmq.create('pgbus_int_CaseLock')")
+
+      Pgbus::Web::DataSource.new(client: client).drop_queue("pgbus_int_CaseLock")
+
+      expect(conn.select_value("SELECT count(*) FROM pgbus_uniqueness_keys WHERE lock_key = 'case-lock'").to_i).to eq(1)
+      expect(client.read_batch("caselock", qty: 5, vt: 0).size).to eq(1)
+    ensure
+      client.drop_queue("caselock")
+    end
+
     it "removes every spelling's pgmq.meta row with the table" do
       client.ensure_queue("casegone")
       conn.execute("SELECT pgmq.create('pgbus_int_CaseGone')")
