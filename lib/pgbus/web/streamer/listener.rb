@@ -18,7 +18,8 @@ module Pgbus
       #     the pipe, drains the command at once instead of at the end of its
       #     current wait (issue #630)
       #   - #stop clears @running, wakes the thread through the pipe and joins;
-      #     it never touches the connection
+      #     it never touches the connection, and the thread closes the pipe
+      #     itself on its way out
       #   - the connection is SINGLE-OWNER: the listener thread is the only
       #     thread that may exec, wait, or close on it, from construction
       #     through teardown. PG::Connection is not thread-safe and #close is
@@ -147,8 +148,8 @@ module Pgbus
         end
 
         # Snapshot of this component's live thread(s). Instance#shutdown! captures
-        # it BEFORE calling #stop so a join that timed out is still observable
-        # after #stop has cleared the reference (issue #443).
+        # it BEFORE calling #stop (issue #443). #stop clears the reference only
+        # when its join returned; a thread past its budget stays listed.
         def threads
           [@thread].compact
         end
@@ -170,9 +171,15 @@ module Pgbus
           wake
           joined = @thread.nil? || @thread.join(stop_join_timeout)
           # A thread past its budget stays referenced, so #start refuses to
-          # run a second loop beside it.
-          @thread = nil if joined
-          close_wake_pipe(joined)
+          # run a second loop beside it; it closes its own pipe when it exits.
+          if joined
+            @thread = nil
+          else
+            @logger.warn do
+              "[Pgbus::Streamer::Listener] listener thread did not stop within #{stop_join_timeout}s; " \
+                "it closes its wake pipe when it exits"
+            end
+          end
           self
         end
 
@@ -233,6 +240,11 @@ module Pgbus
             end
           end
         ensure
+          release_pending_acks
+          # The thread that selects on the pipe is the one that closes it, so
+          # no IO is ever closed under a live select (the cross-thread
+          # teardown #375 removed), whether #stop's join returned or not.
+          close_wake_pipe
           # Bookkeeping only — no UNLISTEN round-trip. We close the connection
           # on the next line and closing the session deregisters every LISTEN
           # server-side, so the exec bought nothing while being the statement
@@ -305,22 +317,23 @@ module Pgbus
           @wake_reader.read_nonblock(64, exception: false)
         end
 
-        # Close the pipe only once the thread has exited: it selects on the
-        # reader, and closing an IO under a live select is the cross-thread
-        # teardown #375 removed. A thread past its budget keeps its pipe.
-        def close_wake_pipe(joined)
-          unless joined
-            @logger.warn do
-              "[Pgbus::Streamer::Listener] listener thread did not stop within #{stop_join_timeout}s; " \
-                "leaving its wake pipe open"
-            end
-            return
-          end
-
+        def close_wake_pipe
           # Writer first: a late wake then meets a closed writer (IOError), not
-          # a writer whose reader is gone.
+          # a writer whose reader is gone (EPIPE). Both are rescued in #wake.
           @wake_writer.close unless @wake_writer.closed?
           @wake_reader.close unless @wake_reader.closed?
+        end
+
+        # Commands #stop left in the queue: release every ensure_listening
+        # caller now rather than at its ack timeout. Nothing is LISTENed: the
+        # connection closes right after this.
+        def release_pending_acks
+          loop do
+            cmd = @commands.pop(true)
+            cmd[2]&.push(:done) if cmd[0] == :listen
+          end
+        rescue ThreadError
+          nil
         end
 
         def schedule_health_check

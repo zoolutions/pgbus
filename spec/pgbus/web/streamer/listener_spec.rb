@@ -335,6 +335,26 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
       expect(listener.instance_variable_get(:@wake_writer)).not_to be_closed
     end
 
+    it "releases an ensure_listening caller still waiting when stop lands, instead of at its ack timeout" do
+      fake_pg.gate_exec!("SELECT 1")
+      gated = build_listener(health_check_ms: 20)
+      gated.start
+      wait_until { fake_pg.executed.include?("SELECT 1") } # the thread is parked inside the keepalive
+      result = :pending
+      caller_thread = Thread.new { result = gated.ensure_listening("chat") }
+      wait_until { caller_thread.status == "sleep" }
+      stopper = Thread.new { gated.stop }
+      wait_until { !gated.instance_variable_get(:@running) }
+
+      fake_pg.release_exec!
+      [caller_thread, stopper].each { |t| t.join(2) }
+
+      expect(result).to eq(:done) # an ack, not the nil of a timeout
+      expect(fake_pg.executed).not_to include(%(LISTEN "pgmq.q_chat.INSERT"))
+    end
+
+    # Production never restarts a Listener (FailoverListener builds a fresh
+    # one); this pins only that nothing left in the queue ends a second run.
     it "serves commands again when started after a clean stop" do
       listener.start
       listener.stop
@@ -393,6 +413,13 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
       it "leaves the pipe open and says so" do
         expect(held[:pipe]).to all(satisfy { |io| !io.closed? })
         expect(log.string).to include("did not stop")
+      end
+
+      it "closes the pipe itself once that thread finally exits" do
+        fake_pg.release_exec!
+        held[:thread].join(2)
+
+        expect(held[:pipe]).to all(be_closed)
       end
 
       it "refuses to start a second loop beside it" do

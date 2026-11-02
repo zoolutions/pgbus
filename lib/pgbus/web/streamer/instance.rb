@@ -244,8 +244,10 @@ module Pgbus
           @logger.warn { "[Pgbus::Streamer::Instance] component stop raised: #{e.class}: #{e.message}" }
         end
 
-        # Captured BEFORE the stops: every component nils its thread
-        # reference in #stop whether or not the join succeeded.
+        # Captured BEFORE the stops: the other components nil their thread
+        # reference in #stop whether or not the join succeeded (the Listener
+        # keeps a thread that outlived its budget, so it cannot be restarted
+        # beside it).
         def component_threads
           {
             "heartbeat" => @heartbeat.threads,
