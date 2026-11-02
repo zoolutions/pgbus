@@ -395,6 +395,25 @@ RSpec.describe Pgbus::Client::AsyncCommit do
     end
   end
 
+  # connection_guc_mode :session applies database.yml variables with SET after
+  # connect; PG::Connection#reset reconnects without them, so a reset session
+  # gets them again.
+  context "with database.yml variables applied per session" do
+    before do
+      config.database_url = nil
+      config.connection_guc_mode = :session
+      config.connection_params = { host: "localhost", dbname: "pgbus_test", variables: { "lock_timeout" => "5s" } }
+    end
+
+    it "sets them again on a session it had to reset" do
+      conn.interrupt_read!
+      allow(Pgbus.logger).to receive(:warn)
+
+      expect { client.archive_message("default", 9, job_completion: true) }.to raise_error(Interrupt)
+      expect(conn.calls.last(3)).to eq([[:exit_pipeline_mode], [:reset], [:exec, "SET lock_timeout = '5s'"]])
+    end
+  end
+
   # The Proc connection_params path hands pgbus ActiveRecord's own connection:
   # pgbus never pipelines on it, nor resets it behind ActiveRecord's back.
   context "when pgbus shares ActiveRecord's connection" do

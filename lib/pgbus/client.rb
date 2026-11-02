@@ -131,7 +131,11 @@ module Pgbus
         # Both raise clean PG errors — no Ruby Timeout, no Thread#raise. Only
         # safe on this dedicated-connection branch — never on the shared-AR Proc
         # path, where statement_timeout would leak into application queries.
-        conn_opts = wrap_session_gucs(apply_connection_bounds(conn_opts))
+        conn_opts = apply_connection_bounds(conn_opts)
+        # What the connect lambda SETs per session (:session GUC mode), kept so
+        # a session reset after a failed completion pipeline gets it again.
+        @session_gucs = session_gucs(conn_opts)
+        conn_opts = wrap_session_gucs(conn_opts)
         @pgmq = PGMQ::Client.new(conn_opts, pool_size: config.resolved_pool_size, pool_timeout: config.pool_timeout)
         @pgmq_mutex = nil
         # Dedicated streams pool (issue #315): isolates the durable-stream
@@ -2048,18 +2052,28 @@ module Pgbus
     # unchanged, as does :options mode (where forward_connection_variables
     # already baked the GUCs into `options`). See issue #332.
     def wrap_session_gucs(conn_opts)
-      return conn_opts unless config.connection_guc_mode == :session
-      return conn_opts unless conn_opts.is_a?(Hash)
-
-      variables = conn_opts[:variables]
-      return conn_opts if variables.nil? || variables.empty?
+      variables = session_gucs(conn_opts)
+      return conn_opts unless variables
 
       pg_opts = conn_opts.except(:variables)
       lambda do
         conn = PG.connect(pg_opts)
-        variables.each { |name, value| conn.exec("SET #{name} = '#{value}'") }
+        apply_session_gucs(conn, variables)
         conn
       end
+    end
+
+    # The database.yml variables :session GUC mode applies with SET after
+    # connect, or nil when nothing is applied that way.
+    def session_gucs(conn_opts)
+      return unless config.connection_guc_mode == :session && conn_opts.is_a?(Hash)
+
+      variables = conn_opts[:variables]
+      variables unless variables.nil? || variables.empty?
+    end
+
+    def apply_session_gucs(conn, variables)
+      variables.each { |name, value| conn.exec("SET #{name} = '#{value}'") }
     end
 
     def apply_connection_bounds(conn_opts)

@@ -116,9 +116,13 @@ module Pgbus
       # fails (the server is gone) is logged and left there, so the error the
       # caller is already raising is the one that surfaces; pgmq-ruby resets a
       # bad connection at its next checkout.
+      # A reset reconnects with the same conninfo (the read bounds ride in it)
+      # but does not re-run the connect lambda, so the :session-mode SETs are
+      # applied again here.
       def discard_session(conn, reason)
         Pgbus.logger.warn { "[Pgbus::Client] #{reason}, resetting the connection" }
         conn.reset
+        apply_session_gucs(conn, @session_gucs) if @session_gucs
       rescue PG::Error => e
         Pgbus.logger.warn { "[Pgbus::Client] Resetting the connection failed: #{e.message}" }
       end
