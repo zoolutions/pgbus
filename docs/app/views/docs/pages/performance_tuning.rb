@@ -85,7 +85,7 @@ class Views::Docs::Pages::PerformanceTuning < DocsUI::Page
            purged queue's batch jobs count as completed too. ActiveJob only.
            [Archive retention](#archive-retention).
         5. **Asynchronous completion commit.** `completion_synchronous_commit = false`
-           (default `true`), native statements only.
+           (default `true`), native statements on pgbus's own connections only.
            *Measured:* on a shared local machine the WAL-flush wait
            (`LWLock:WALWrite`) fell from 12–23 % of sampled waits to 2 % at four
            processes, and Postgres time per job fell in five of six rows (0.417 →

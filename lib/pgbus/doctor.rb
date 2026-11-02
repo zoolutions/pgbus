@@ -398,7 +398,8 @@ module Pgbus
     end
 
     # config.completion_synchronous_commit (issue #619): informational, except
-    # that false does nothing with native_statements off, which warns.
+    # that false does nothing with native_statements off or on ActiveRecord's
+    # shared connection, which warns.
     def check_completion_commit
       return Check.new(name: "Completion commit", status: :ok, detail: "synchronous (default)") if
         @config.completion_synchronous_commit
@@ -407,6 +408,12 @@ module Pgbus
         return Check.new(name: "Completion commit", status: :warn,
                          detail: "completion_synchronous_commit = false has no effect: completions run through " \
                                  "pgmq's functions (native_statements = false)")
+      end
+
+      if @client.respond_to?(:shared_connection?) && @client.shared_connection?
+        return Check.new(name: "Completion commit", status: :warn,
+                         detail: "completion_synchronous_commit = false has no effect: pgbus shares ActiveRecord's " \
+                                 "connection (connection_params Proc); give pgbus its own connections to use it")
       end
 
       Check.new(name: "Completion commit", status: :ok,

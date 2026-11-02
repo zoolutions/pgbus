@@ -395,6 +395,21 @@ RSpec.describe Pgbus::Client::AsyncCommit do
     end
   end
 
+  # The Proc connection_params path hands pgbus ActiveRecord's own connection:
+  # pgbus never pipelines on it, nor resets it behind ActiveRecord's back.
+  context "when pgbus shares ActiveRecord's connection" do
+    before do
+      config.database_url = nil
+      config.connection_params = -> { conn }
+    end
+
+    it "has no effect: the completion runs as one exec_prepared" do
+      expect(client).to be_shared_connection
+      expect(client.archive_message("default", 9, job_completion: true)).to be(true)
+      expect(calls_after_detection).to eq([[:exec_prepared, statements[:archive].name, [9]]])
+    end
+  end
+
   context "with native_statements false" do
     before { config.native_statements = false }
 

@@ -176,8 +176,11 @@ module Pgbus
       @native_statements = Concurrent::Map.new
       @native_unprepared = config.native_statements && ar_disables_prepared_statements?
       # Job completions commit with synchronous_commit off (issue #619).
-      # Native statements only: the pgmq functions are never wrapped.
-      @async_completion_commit = config.native_statements && !config.completion_synchronous_commit
+      # Native statements only: the pgmq functions are never wrapped. Never on
+      # ActiveRecord's own connection (the Proc path): pgbus does not pipeline
+      # on, or reset, a connection it does not own.
+      @async_completion_commit = config.native_statements && !config.completion_synchronous_commit &&
+                                 !@shared_connection
       # Guards the one-time build of the publisher autoscale trigger (issue #323).
       # NOT @pgmq_mutex — that is nil on the dedicated path (the only path the
       # trigger exists on), so it wouldn't serialize concurrent first-publishers.

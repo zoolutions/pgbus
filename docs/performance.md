@@ -872,7 +872,10 @@ statement the session lost is prepared and run outside the pipeline for that
 call. A completion inside a caller's transaction is left to that transaction.
 Only callers passing `job_completion: true` (the executor and the completer)
 get it: the EventBus consumer's archive (its replay reads the archive) and the
-dashboard's archives and deletes stay durable. Native statements only.
+dashboard's archives and deletes stay durable. Native statements on pgbus's own
+connections only: with `native_statements = false`, or on ActiveRecord's shared
+connection (a `connection_params` Proc), the option has no effect and
+`pgbus doctor` warns.
 
 **Semantics.** With `completion_synchronous_commit = false`, a completion is
 acknowledged before its WAL record reaches disk. A Postgres server crash (not a

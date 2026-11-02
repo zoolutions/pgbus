@@ -547,6 +547,13 @@ RSpec.describe Pgbus::Doctor do
       expect(commit_check).to include(status: :warn, detail: /has no effect: completions run through pgmq's functions/)
     end
 
+    it "warns that it has no effect when pgbus shares ActiveRecord's connection" do
+      config.completion_synchronous_commit = false
+      allow(client).to receive(:shared_connection?).and_return(true)
+
+      expect(commit_check).to include(status: :warn, detail: /has no effect: pgbus shares ActiveRecord's connection/)
+    end
+
     it "prints the setting in the configuration summary" do
       config.completion_synchronous_commit = false
 

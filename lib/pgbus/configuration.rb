@@ -52,18 +52,21 @@ module Pgbus
     # Batch::Sweep then cannot tell a deleted batch job from one whose message
     # vanished another way (a purged queue): both count as completed, silently.
     attr_reader :completed_jobs
-    # completion_synchronous_commit (issue #619, opt-in): false commits every
-    # completion (archive, delete, archive_batch, delete_batch) with
-    # `SET LOCAL synchronous_commit TO off`, in one libpq pipeline: BEGIN, the
-    # SET LOCAL, the prepared statement and COMMIT go out with one sync, so the
-    # job stops waiting for its WAL flush. A completion is then acknowledged
-    # before its WAL record reaches disk: a Postgres server crash (not a client
-    # crash, not a normal failover) within about three times wal_writer_delay
-    # can lose completions committed in that window, and each lost completion
-    # redelivers its job after visibility_timeout. Sends, retries and
-    # dead-letter moves keep full durability, and a completion inside a caller's
-    # transaction is left to that transaction. Native statements only: with
-    # native_statements = false it has no effect (pgbus doctor warns). Needs
+    # completion_synchronous_commit (issue #619, opt-in): false commits a job's
+    # completion (the executor's archive or delete, the completer's
+    # archive_batch or delete_batch) with `SET LOCAL synchronous_commit TO off`,
+    # in one libpq pipeline: BEGIN, the SET LOCAL, the prepared statement and
+    # COMMIT go out with one sync, so the job stops waiting for its WAL flush.
+    # A completion is then acknowledged before its WAL record reaches disk: a
+    # Postgres server crash (not a client crash, not a normal failover) within
+    # about three times wal_writer_delay can lose completions committed in that
+    # window, and each lost completion redelivers its job after
+    # visibility_timeout. Sends, retries, dead-letter moves, the EventBus
+    # consumer's archive and dashboard actions keep full durability, and a
+    # completion inside a caller's transaction is left to that transaction.
+    # Native statements on pgbus's own connections only: with
+    # native_statements = false, or on ActiveRecord's shared connection (a
+    # connection_params Proc), it has no effect (pgbus doctor warns). Needs
     # libpq 14+ and pg 1.5+ (pipeline mode), checked by validate!. true
     # (default) commits as before.
     attr_reader :completion_synchronous_commit
