@@ -1652,7 +1652,7 @@ module Pgbus
     # dashboard lists both until pgbus:fold_queue_name_case runs, and the
     # orphan stream sweep sees both) must not drop that table.
     def case_duplicate?(name)
-      name != name.downcase && queue_registered?(name.downcase)
+      name != name.downcase && synchronized { queue_registered?(name.downcase) }
     end
 
     # Removes only the duplicate's pgmq.meta row (its throttle and topic

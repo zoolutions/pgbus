@@ -92,6 +92,22 @@ RSpec.describe "Queue names in lower case (integration)", :integration do
     conn.execute("SELECT pgmq.drop_queue('pgbus_int_CaseList')")
   end
 
+  it "folds mixed-case queues with rake pgbus:queues:fold_case" do
+    require "rake"
+    rake = Rake::Application.new
+    original = Rake.application
+    Rake.application = rake
+    Rake::Task.define_task(:environment)
+    load File.expand_path("../../lib/tasks/pgbus_queues.rake", __dir__)
+    conn.execute("SELECT pgmq.create('pgbus_int_CaseRake')")
+
+    expect { Rake::Task["pgbus:queues:fold_case"].invoke }.to output(/Folded: pgbus_int_CaseRake/).to_stdout
+    expect(meta_rows("pgbus_int_caserake")).to eq(["pgbus_int_caserake"])
+  ensure
+    Rake.application = original
+    conn.execute("SELECT pgmq.drop_queue('pgbus_int_caserake')") if meta_rows("pgbus_int_caserake").any?
+  end
+
   describe Pgbus::QueueState do
     # The dashboard names a queue from its pgmq.meta row (now lower case); a
     # worker from its configuration ("Critical").
