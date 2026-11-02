@@ -39,6 +39,12 @@ main_only:
   - name: Pgbus.@stream_cache
     reason: >-
       the process's cache of Stream handles, each holding the PGMQ client and its connection pools; streams broadcast from the main Ractor
+  - name: Pgbus::ActiveJob::QuietLogs.@applied
+    reason: >-
+      the notifiers quiet_active_job_logs has already applied to (a Hash built at load), read and written only under @mutex by Worker#run on the main Ractor
+  - name: Pgbus::ActiveJob::QuietLogs.@mutex
+    reason: >-
+      guards the applied-notifiers table; taken once by Worker#run on the main Ractor, where ActiveSupport::Notifications lives
   - name: Pgbus::Batch.@schema_lock
     reason: >-
       guards the batch schema-probe memos and their warn-once flag; taken by job code on the main Ractor

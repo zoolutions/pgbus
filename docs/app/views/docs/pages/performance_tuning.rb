@@ -112,18 +112,37 @@ class Views::Docs::Pages::PerformanceTuning < DocsUI::Page
            measurable proxied.
            *Costs:* the memory of YJIT's compiled code (not measured here).
         9. **ActiveJob's per-job log lines.** At `info`, ActiveJob formats and writes
-           `Performing …` and `Performed …` for every job. Give ActiveJob its own
-           logger at `warn` in `config/environments/production.rb`:
+           `Performing …` and `Performed …` for every job.
+           `config.quiet_active_job_logs = true` (default `false`) drops those two
+           lines in worker processes only: it unsubscribes ActiveJob's log
+           subscriber from `perform_start` and `perform`. `Enqueued`, `Retrying`,
+           `Stopped retrying` and `Discarded` still log, and the web process and
+           `Rails.logger` are untouched. To quiet every ActiveJob line instead,
+           give ActiveJob its own logger at `warn` in
+           `config/environments/production.rb`:
            `config.active_job.logger = ActiveSupport::TaggedLogging.new(ActiveSupport::Logger.new($stdout, level: :warn))`.
            Not `ActiveJob::Base.logger.level = :warn`: by default that logger is
            `Rails.logger`, and the line silences the whole app.
-           *Measured:* not measured in `docs/performance.md`.
-           *Costs:* no per-job lines in the log; a failing job still logs at `error`,
-           with its job tags as long as the logger is wrapped in `TaggedLogging`. The
-           new logger writes where you point it, not where `Rails.logger` goes.
+           *Measured:* the two lines are 5 % (YJIT) and 9–10 % (no JIT) of a
+           worker's on-CPU time; without a JIT the knob and the `warn` logger
+           each buy +6–10 % jobs/s, equal within noise, and with YJIT neither
+           moves jobs/s measurably.
+           *Costs:* no per-job lines in the log. The knob also drops
+           ActiveJob's `Error performing …` line, which the same `perform`
+           listener writes: an exception that escapes ActiveJob's handlers
+           is still logged by pgbus (class and message at `error`) and kept
+           in `pgbus_failed_events` with its backtrace, one `retry_on`
+           catches still logs ActiveJob's `Retrying …` line, and a job a
+           `before_perform` callback halted logs nothing. The `warn` logger keeps the `error` lines but also
+           silences `Enqueued` and `Retrying` in every process, keeps the job
+           tags only when wrapped in `TaggedLogging`, and writes where you
+           point it, not where `Rails.logger` goes.
         10. **Job stats.** `stats_enabled` (default `true`): keep it on.
             *Measured:* in the mocked executor bench, execute 65.8k / 66.4k i/s and
             execute + stat recording 60.1k / 59.4k i/s (39.9k / 40.5k before #604).
+            The real worker's stats flush (`insert_all`, 100 rows at a time) is
+            about 12–15 % of its on-CPU time on no-op jobs; #622 tracks making it
+            cheaper.
             *Costs:* turning it off empties Insights, which under `completed_jobs =
             :delete` is the only record of a success.
         11. **Already in the default path, no knob:** the enqueue no longer runs a

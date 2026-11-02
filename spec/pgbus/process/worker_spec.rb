@@ -1,6 +1,9 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+# The quiet_active_job_logs examples need the subscriber a booted app has loaded.
+require "active_job"
+require "active_job/log_subscriber"
 
 RSpec.describe Pgbus::Process::Worker do
   let(:heartbeat) { instance_double(Pgbus::Process::Heartbeat, start: true, stop: true) }
@@ -69,6 +72,50 @@ RSpec.describe Pgbus::Process::Worker do
       expect do
         described_class.new(queues: %w[default], threads: 5, group_mode: :nope)
       end.to raise_error(ArgumentError, /group_mode/)
+    end
+  end
+
+  # Issue #618: config.quiet_active_job_logs is applied by the worker process,
+  # first thing in #run (the web process never runs one).
+  describe "#run and config.quiet_active_job_logs" do
+    let(:config) { Pgbus::Configuration.new }
+    let(:worker) { described_class.new(queues: %w[default], threads: 5, config: config) }
+    let(:stop_run) { Class.new(StandardError) }
+
+    before do
+      allow(Pgbus::ActiveJob::QuietLogs).to receive(:apply!)
+      allow(worker).to receive(:setup_signals).and_raise(stop_run)
+    end
+
+    it "quiets ActiveJob's per-job log lines when the option is on" do
+      config.quiet_active_job_logs = true
+
+      expect { worker.run }.to raise_error(stop_run)
+      expect(Pgbus::ActiveJob::QuietLogs).to have_received(:apply!).with(no_args)
+    end
+
+    it "leaves them alone when the option is off" do
+      expect { worker.run }.to raise_error(stop_run)
+      expect(Pgbus::ActiveJob::QuietLogs).not_to have_received(:apply!)
+    end
+
+    # ActiveJob::LogSubscriber attaches when active_job/base loads; a worker
+    # whose app eager-loaded no job class would find nothing to unsubscribe.
+    it "loads ActiveJob::Base before it quiets the lines" do
+      config.quiet_active_job_logs = true
+      allow(worker).to receive(:require).and_call_original
+
+      expect { worker.run }.to raise_error(stop_run)
+      expect(worker).to have_received(:require).with("active_job/base").ordered
+      expect(Pgbus::ActiveJob::QuietLogs).to have_received(:apply!).ordered
+    end
+
+    it "does nothing without ActiveJob" do
+      config.quiet_active_job_logs = true
+      hide_const("ActiveJob::Base")
+
+      expect { worker.run }.to raise_error(stop_run)
+      expect(Pgbus::ActiveJob::QuietLogs).not_to have_received(:apply!)
     end
   end
 
