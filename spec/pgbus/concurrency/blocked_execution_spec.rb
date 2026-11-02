@@ -66,6 +66,21 @@ RSpec.describe Pgbus::Concurrency::BlockedExecution do
       expect(mock_client).to have_received(:send_message).with("default", released[:payload], delay: 0, priority: nil)
     end
 
+    # Issue #636: a dashboard retry parked behind its limit carries the
+    # headers it would have been sent with in its payload.
+    it "sends the headers a parked payload carries as headers, without the key" do
+      parked = released.merge(payload: released[:payload].merge(described_class::HEADERS_KEY => { "pgbus_dlq_retries" => 2 }))
+      allow(Pgbus::BlockedExecution).to receive(:release_next!).and_return(parked)
+      allow(mock_client).to receive(:send_message).and_return(42)
+
+      described_class.promote_next("TestJob-42", client: mock_client)
+
+      expect(mock_client).to have_received(:send_message).with(
+        "default", { "job_class" => "TestJob", "job_id" => "j1" }, delay: 0, priority: nil,
+                                                                   headers: { "pgbus_dlq_retries" => 2 }
+      )
+    end
+
     # A backfill failure must not poison the transaction the caller may have
     # opened around promote_next (Semaphore.signal does): a poisoned
     # transaction fails to commit, un-deletes the parked row and un-takes the

@@ -71,7 +71,7 @@ module Pgbus
           puts "Re-enqueued msg_id #{detail[:msg_id]} to #{origin_queue(detail[:queue_name])}."
         else
           warn "Failed to retry msg_id #{detail[:msg_id]}: it is gone, the retry failed, " \
-               "or another copy of the job holds its uniqueness key."
+               "another copy of the job holds its uniqueness key, or its concurrency limit is full."
           exit 1
         end
       end
