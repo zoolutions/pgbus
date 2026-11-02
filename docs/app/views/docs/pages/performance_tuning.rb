@@ -93,16 +93,19 @@ class Views::Docs::Pages::PerformanceTuning < DocsUI::Page
            jobs/s stayed inside the run-to-run noise (median 9 550 → 10 620 at four
            YJIT processes, 10 692 → 15 302 batched with delete, overlapping ranges).
            The single call did not get slower.
-           *Costs:* a completion is acknowledged before its WAL record reaches disk.
-           A Postgres server crash (not a client crash, not a normal failover)
-           within about three times `wal_writer_delay` (default 200 ms) can lose
-           the completions committed in that window; each lost one redelivers its
-           job after `visibility_timeout`, which runs again. Sends, retries and
-           dead-letter moves keep full durability, and a job that writes anything
-           durable after its completion (a concurrency signal, a batch counter,
-           its own ActiveRecord writes) flushes its completion with it. Not for
-           jobs that cannot run twice after a database crash. Untested behind
-           PgBouncer in transaction mode: use session mode or leave it on.
+           *Costs:* with `completion_synchronous_commit = false`, a completion is
+           acknowledged before its WAL record reaches disk. A Postgres server crash
+           (not a client crash, not a normal failover) within about three times
+           `wal_writer_delay` (default 200 ms) can lose completions committed in
+           that window. Each lost completion redelivers its job after the
+           visibility timeout, so the job runs again. Under synchronous
+           replication it also stops waiting for the standby for that
+           transaction. Sends, retries and dead-letter moves keep full
+           durability. A job that writes anything durable after its completion
+           (a concurrency signal, a batch counter, its own ActiveRecord writes)
+           flushes its completion with it. Not for jobs that cannot run twice
+           after a database crash. Untested behind PgBouncer in transaction mode:
+           use session mode or leave it on.
            [`docs/performance.md`](https://github.com/zoolutions/pgbus/blob/main/docs/performance.md#async-completion-commit-issue-619).
         6. **Read-ahead, for a database on another host.** `read_ahead = threads`
            (default 0), per capsule and per event consumer too.

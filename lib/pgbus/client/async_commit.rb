@@ -7,7 +7,8 @@ module Pgbus
     # (archive, delete and their batches) runs in its own transaction with
     # synchronous_commit off, so the job is acknowledged without waiting for
     # its WAL flush. The four queries go out in one libpq pipeline with one
-    # sync, so it is still one round trip:
+    # sync, so it is still one round trip (pg writes each query to the socket
+    # as it is sent, but waits for a reply only once, after the sync):
     #
     #   BEGIN
     #   SET LOCAL synchronous_commit TO off
@@ -81,8 +82,12 @@ module Pgbus
           result = conn.get_result
           if result.nil?
             # One nil closes each query's results; two in a row means libpq
-            # has nothing more, so the sync will not come.
-            raise PG::ConnectionBad, "pipeline ended before its sync" if ended
+            # has nothing more, so the sync will not come. That session's
+            # state cannot be trusted: pgmq-ruby re-runs on a fresh one.
+            if ended
+              discard_session(conn, "A completion pipeline ended before its sync")
+              raise PG::ConnectionBad, "pipeline ended before its sync"
+            end
 
             ended = true
             next
@@ -104,8 +109,18 @@ module Pgbus
 
         conn.exit_pipeline_mode
       rescue PG::Error => e
-        Pgbus.logger.warn { "[Pgbus::Client] Could not leave pipeline mode after a completion, resetting the connection: #{e.message}" }
+        discard_session(conn, "Could not leave pipeline mode after a completion (#{e.message})")
+      end
+
+      # Resets a session whose pipeline state cannot be trusted. A reset that
+      # fails (the server is gone) is logged and left there, so the error the
+      # caller is already raising is the one that surfaces; pgmq-ruby resets a
+      # bad connection at its next checkout.
+      def discard_session(conn, reason)
+        Pgbus.logger.warn { "[Pgbus::Client] #{reason}, resetting the connection" }
         conn.reset
+      rescue PG::Error => e
+        Pgbus.logger.warn { "[Pgbus::Client] Resetting the connection failed: #{e.message}" }
       end
 
       # The failed BEGIN block (INERROR) is still open after the sync. A failed

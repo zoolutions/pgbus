@@ -47,9 +47,14 @@ RSpec.describe Pgbus::Client::AsyncCommit do
 
       def finished? = false
 
+      # The next reset finds the server unreachable.
+      def fail_reset! = (@fail_reset = true)
+
       # PG::Connection#reset: a new session, out of pipeline mode.
       def reset
         @calls << [:reset]
+        raise PG::ConnectionBad, "could not connect to server" if @fail_reset
+
         @status = PG::CONNECTION_OK
         @pipeline_status = PG::PQ_PIPELINE_OFF
       end
@@ -296,11 +301,13 @@ RSpec.describe Pgbus::Client::AsyncCommit do
     expect(conn.calls).not_to include([:exec, "ROLLBACK"])
   end
 
-  it "raises instead of waiting for a sync libpq will not deliver" do
+  it "raises instead of waiting for a sync libpq will not deliver, and resets that session for the re-run" do
     conn.drop_sync!
 
     expect { client.archive_message("default", 9, job_completion: true) }
       .to raise_error(PG::ConnectionBad, /pipeline ended before its sync/)
+    expect(conn.calls).to include([:reset])
+    expect(conn.pipeline_status).to eq(PG::PQ_PIPELINE_OFF)
   end
 
   it "resets a connection that cannot leave pipeline mode, so the pool never hands it out in it" do
@@ -311,6 +318,15 @@ RSpec.describe Pgbus::Client::AsyncCommit do
     expect(conn.calls.last(2)).to eq([[:exit_pipeline_mode], [:reset]])
     expect(conn.pipeline_status).to eq(PG::PQ_PIPELINE_OFF)
     expect(Pgbus.logger).to have_received(:warn)
+  end
+
+  it "keeps the original error when the reset fails too" do
+    conn.interrupt_read!
+    conn.fail_reset!
+    allow(Pgbus.logger).to receive(:warn)
+
+    expect { client.archive_message("default", 9, job_completion: true) }.to raise_error(Interrupt)
+    expect(Pgbus.logger).to have_received(:warn).with(no_args).twice
   end
 
   it "falls back to prepare_and_exec outside the pipeline when the statement is not prepared on this session" do

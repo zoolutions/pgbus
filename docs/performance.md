@@ -917,7 +917,11 @@ the 12 cores and no other database had an active backend (waiting at most
 120 s); load 0.64–1.55× the cores across the runs. Other sessions benched the
 same Postgres during the rounds, so single runs dropped 3–6× at random:
 `main` and the branch at `sync` run the same code and still differ by up to 2×
-by median. Read the jobs/s columns as the noise floor, not as the effect.
+by median in jobs/s, and the branch at `sync` trails `main` in PG ms/job in all
+six rows, which server-side time cannot owe to a Ruby keyword (the default path
+is the same `exec_prepared` call, pinned by the unchanged
+`spec/pgbus/client/native_statements_spec.rb`). Read the jobs/s columns as the
+noise floor, not as the effect.
 Medians, with the five-round range:
 
 | cell | processes | jobs/s main | jobs/s branch, sync | jobs/s branch, async | PG ms/job main → sync → async |

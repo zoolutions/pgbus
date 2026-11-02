@@ -117,6 +117,35 @@ RSpec.describe "Async completion commit (integration)", :integration do
     locker&.close
   end
 
+  # The backend dies while the pipeline waits for its results (after the sync):
+  # nothing committed, so pgmq-ruby's re-run on a fresh session archives it.
+  it "re-runs a completion whose backend was killed mid-read, on a fresh session" do
+    id = send_messages(1).first
+    pid = on_connection(&:backend_pid)
+    locker = PG.connect(PGBUS_DATABASE_URL)
+    locker.exec("BEGIN")
+    locker.exec("SELECT 1 FROM pgmq.q_#{full} WHERE msg_id = #{Integer(id)} FOR UPDATE")
+    completion = Thread.new { client.archive_message(queue, id, job_completion: true) } # rubocop:disable ThreadSafety/NewThread -- joined below
+
+    killer = PG.connect(PGBUS_DATABASE_URL)
+    waiting = Array.new(100) do
+      break true if killer.exec("SELECT 1 FROM pg_stat_activity WHERE pid = #{pid} AND wait_event_type = 'Lock'").ntuples.positive?
+
+      sleep 0.05
+    end
+    expect(waiting).to be(true)
+    killer.exec("SELECT pg_terminate_backend(#{pid})")
+    locker.exec("ROLLBACK")
+
+    expect(completion.value).to be(true)
+    expect(archived([id])).to eq([id])
+    state = on_connection { |conn| [conn.backend_pid == pid, conn.pipeline_status, conn.transaction_status] }
+    expect(state).to eq([false, PG::PQ_PIPELINE_OFF, PG::PQTRANS_IDLE])
+  ensure
+    locker&.close
+    killer&.close
+  end
+
   it "prepares and runs a statement the session lost, then pipelines it again" do
     ids = send_messages(2)
     client.archive_message(queue, ids[0], job_completion: true)
