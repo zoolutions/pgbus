@@ -51,7 +51,7 @@
 # sets config.quiet_active_job_logs), WP_BENCH_RAILS_APP (1 boots a minimal
 # Rails app in every cell so jobs run inside Rails.application.executor.wrap,
 # issue #618; unset or 0 leaves Rails out, the shape #484 measured).
-# Worker cells also print an "inside rails" table: the on-CPU rails bucket
+# Worker and consumer cells also print an "inside rails" table: the on-CPU rails bucket
 # split by owner (benchmarks/support/worker_profile_harness.rb).
 # Raw vernier profiles land in tmp/benchmarks/ (open in profiler.firefox.com).
 # Requires PGBUS_DATABASE_URL. Run-and-report, never a CI gate.

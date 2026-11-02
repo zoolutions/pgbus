@@ -22,6 +22,9 @@ RSpec.describe Pgbus::ActiveJob::QuietLogs do
   end
 
   it "unsubscribes ActiveJob's log subscriber from perform_start and perform" do
+    expect(log_listener?("perform_start.active_job")).to be(true)
+    expect(log_listener?("perform.active_job")).to be(true)
+
     described_class.apply!(notifier: fanout)
 
     expect(log_listener?("perform_start.active_job")).to be(false)

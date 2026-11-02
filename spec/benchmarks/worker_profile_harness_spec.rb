@@ -279,7 +279,7 @@ RSpec.describe WorkerProfileHarness do
       expect(lines.last).to include("| 75.0% / 30.0% |")
     end
 
-    it "skips a cell without sub-shares (a consumer, or a fleet row)" do
+    it "skips a cell without sub-shares (a fleet row)" do
       expect(described_class.rails_sub_table([cell.merge("rails_sub_shares" => nil)]).size).to eq(2)
     end
   end

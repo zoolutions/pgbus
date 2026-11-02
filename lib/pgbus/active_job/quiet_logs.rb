@@ -7,9 +7,12 @@ module Pgbus
     # unsubscribing ActiveJob::LogSubscriber from perform_start.active_job and
     # perform.active_job. The perform listener also writes ActiveJob's
     # "Error performing …" error line, for a job that raised (with its
-    # backtrace) and for one a before_perform callback halted, so those go too:
-    # a raised job is still logged by ErrorReporter (class and message at
-    # error) and recorded in pgbus_failed_events; a halted job logs nothing.
+    # backtrace) and for one a before_perform callback halted, so those go too.
+    # An exception that escapes ActiveJob's handlers is still logged by
+    # ErrorReporter (class and message at error) and recorded in
+    # pgbus_failed_events; one retry_on catches still logs ActiveJob's
+    # "Retrying …" line (and "Stopped retrying …" at error when it gives up);
+    # a halted job logs nothing.
     # The other ActiveJob events (Enqueued, Retrying, Stopped retrying,
     # Discarded) still log as the host configured them, and the web process is
     # untouched. Swapping

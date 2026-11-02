@@ -158,7 +158,7 @@ module WorkerProfileHarness
   end
 
   # The "inside rails" table: each sub-bucket as a share of the rails bucket
-  # and of all on-CPU time. Cells without sub-shares (consumer, fleet) are skipped.
+  # and of all on-CPU time. Cells without sub-shares (fleet rows) are skipped.
   def rails_sub_table(cells)
     lines = ["| cell | #{RAILS_SUB_BUCKETS.join(" | ")} |", "|---|#{RAILS_SUB_BUCKETS.map { "---:" }.join("|")}|"]
     cells.each do |c|

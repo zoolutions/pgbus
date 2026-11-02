@@ -32,9 +32,11 @@ module WorkerProfileRunner
     reset!
   end
 
-  # The global configuration alone: no table bootstrap, no purge. A fleet drain
-  # child (issue #602) configures this way, because reset! would purge the
-  # queue its siblings are draining. A nil pool_size keeps pgbus's default;
+  # The process's configuration, with no table bootstrap and no purge: the
+  # ActiveRecord connection, Pgbus.configure, with WP_BENCH_RAILS_APP=1 the
+  # minimal Rails app's boot (issue #618), then ActiveJob::Base.logger for
+  # WP_BENCH_AJ_LOGS. A fleet drain child (issue #602) configures this way,
+  # because reset! would purge the queue its siblings are draining. A nil pool_size keeps pgbus's default;
   # ar_pool caps the ActiveRecord pool (a fleet child budgets it exactly).
   def configure!(database_url, threads:, pool_size: nil, ar_pool: threads + 8)
     aj_logs = WorkerProfileHarness.aj_logs

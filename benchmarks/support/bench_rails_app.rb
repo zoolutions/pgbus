@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "fileutils"
 require "tmpdir"
 
 # A minimal Rails application for the worker profile bench (issue #618),
@@ -22,9 +23,11 @@ module BenchRailsApp
     # Rails reads the connection from DATABASE_URL when the app has no
     # config/database.yml; the root is an empty directory for that reason.
     ENV["DATABASE_URL"] = database_url
+    root = Dir.mktmpdir("pgbus-wprof-app")
+    at_exit { FileUtils.remove_entry(root, true) }
     app = Class.new(::Rails::Application) do
       config.load_defaults ::Rails::VERSION::STRING.to_f
-      config.root = Dir.mktmpdir("pgbus-wprof-app")
+      config.root = root
       config.eager_load = false
       config.enable_reloading = false if config.respond_to?(:enable_reloading=)
       config.cache_classes = true

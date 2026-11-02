@@ -538,7 +538,7 @@ Ractors and a C extension, evaluated 2026-10-29 for issue #602:
 
 Campfire on Ractors, evaluated 2026-11-02 for #617:
 [tobi/campfire-once-ruby-ractor](https://github.com/tobi/campfire-once-ruby-ractor)
-serves a Rails app's workload 27× faster than Rails by running Falcon in worker
+serves a Rails app's pages up to 27× faster than its Rails version (the room page; less on other routes) by running Falcon in worker
 Ractors over plain modules and SQLite (through a vendored Extralite), with
 Rails, Rack and ActiveRecord gone. It got there by deleting the framework, not
 by shimming it: `rails_compat/` holds wire formats only (cookies,
@@ -949,9 +949,10 @@ What the numbers say:
   case is scope, not speed: it acts in worker processes only, keeps `Enqueued`,
   `Retrying`, `Stopped retrying` and `Discarded`, and leaves the web process and
   `Rails.logger` alone. It also drops ActiveJob's `Error performing …` line
-  (the same `perform` listener writes it): a job that raised is still logged by
-  pgbus's `ErrorReporter` and kept in `pgbus_failed_events`, and a job a
-  `before_perform` callback halted logs nothing.
+  (the same `perform` listener writes it): an exception that escapes
+  ActiveJob's handlers is still logged by pgbus's `ErrorReporter` and kept in
+  `pgbus_failed_events`, one `retry_on` catches still logs ActiveJob's
+  `Retrying …` line, and a job a `before_perform` callback halted logs nothing.
 - **The executor wrap: 13–18 % of on-CPU time, kept.** Its hooks are
   ActiveRecord's async-query tracker, the query cache's enable/clear, the
   connection pool's return, and the callbacks that run them. The Rails app
@@ -960,7 +961,7 @@ What the numbers say:
   with YJIT. It stays: the wrap is what returns the job's ActiveRecord
   connections, clears the query cache and lets development reload code, and
   SolidQueue wraps every job the same way.
-- **`notif:pgbus` is 0–3 % of the bucket (at most 1.2 % of on-CPU time)**, far under the 10 %
+- **`notif:pgbus` is 0–3 % of the bucket across all eight runs (at most 1.2 % of on-CPU time, the quiet / YJIT cell of round 2; the table above shows the default cells only)**, far under the 10 %
   that would justify touching pgbus's three `instrument` calls per job.
 
 `config.quiet_active_job_logs` (default `false`) unsubscribes

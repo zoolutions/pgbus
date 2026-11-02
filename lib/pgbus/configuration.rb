@@ -56,9 +56,11 @@ module Pgbus
     # unsubscribe ActiveJob's LogSubscriber from perform_start.active_job and
     # perform.active_job (Pgbus::ActiveJob::QuietLogs), so the per-job
     # "Performing …" / "Performed …" info lines stop, and with them ActiveJob's
-    # "Error performing …" line (the same perform listener writes it): a job
-    # that raised is still logged by ErrorReporter and recorded in
-    # pgbus_failed_events, a job a before_perform callback halted logs nothing.
+    # "Error performing …" line (the same perform listener writes it): an
+    # exception that escapes ActiveJob's handlers is still logged by
+    # ErrorReporter and recorded in pgbus_failed_events, one retry_on catches
+    # still logs ActiveJob's "Retrying …" line, and a job a before_perform
+    # callback halted logs nothing.
     # Enqueued, Retrying, Stopped retrying and Discarded still log, and the web
     # process is untouched. Without ActiveJob it does nothing.
     attr_reader :quiet_active_job_logs

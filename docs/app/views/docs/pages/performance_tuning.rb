@@ -129,10 +129,11 @@ class Views::Docs::Pages::PerformanceTuning < DocsUI::Page
            moves jobs/s measurably.
            *Costs:* no per-job lines in the log. The knob also drops
            ActiveJob's `Error performing …` line, which the same `perform`
-           listener writes: a job that raised is still logged by pgbus
-           (class and message at `error`) and kept in `pgbus_failed_events`
-           with its backtrace, and a job a `before_perform` callback halted
-           logs nothing. The `warn` logger keeps the `error` lines but also
+           listener writes: an exception that escapes ActiveJob's handlers
+           is still logged by pgbus (class and message at `error`) and kept
+           in `pgbus_failed_events` with its backtrace, one `retry_on`
+           catches still logs ActiveJob's `Retrying …` line, and a job a
+           `before_perform` callback halted logs nothing. The `warn` logger keeps the `error` lines but also
            silences `Enqueued` and `Retrying` in every process, keeps the job
            tags only when wrapped in `TaggedLogging`, and writes where you
            point it, not where `Rails.logger` goes.
