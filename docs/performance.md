@@ -1139,8 +1139,8 @@ values are Strings and Integers pgbus produced itself.
 The flush now builds the one multi-row `INSERT` itself and runs it with
 `execute` on a connection from `JobStat.connection_pool.with_connection`
 (the model's database, `connects_to` included). The integer columns go through
-`Integer()` (anything else raises and the flush is logged and dropped, as
-before), `NULL` for nil; the strings (`job_class` comes from the message) go
+`Integer()`, `NULL` for nil; an entry with a value `Integer()` refuses is
+logged and dropped alone, and the rest of the flush is written; the strings (`job_class` comes from the message) go
 through the connection's own quoting, memoized per flush, so 100 rows of three
 job classes and two queues cost about seven `quote` calls. `pgbus_job_stats`
 has no unique index besides the primary key, so dropping `ON CONFLICT DO
@@ -1164,10 +1164,13 @@ Measured 2026-11-02 on the M-series laptop, local PostgreSQL 18, Ruby 3.4.2,
 YJIT, with three other worktrees' agents on the same machine; load is recorded
 before and after every invocation. `rake bench:one[stat_flush_bench]` (new,
 real database) pushes 100 worker-shaped entries and flushes. Ranges are rounds,
-main and branch alternated. ActiveRecord 8.1.4, four rounds: two on a bare
-table (load 0.63–0.92×) and two after the bench gained the migration's four
-indexes (load 0.39–0.56×); ActiveRecord 7.1.6 (`gemfiles/rails_7_1.gemfile`),
-one round with the indexes (load 0.39–0.42×):
+main and branch alternated. ActiveRecord 8.1.4, four rounds: two (load
+0.63–0.92×) with an earlier version of the bench that created the table
+without indexes (historical: the committed bench always creates the
+migration's four indexes, so the "bare table" row cannot be reproduced with
+it) and two with the committed bench (load 0.39–0.56×); ActiveRecord 7.1.6
+(`gemfiles/rails_7_1.gemfile`), one round with the committed bench (load
+0.39–0.42×):
 
 | | main 8.1 | branch 8.1 | main 7.1 | branch 7.1 |
 |---|---:|---:|---:|---:|
@@ -1175,12 +1178,11 @@ one round with the indexes (load 0.39–0.42×):
 | Ruby CPU per job (÷ 100) | 9.4–20 µs | 1.2–2.3 µs | 14 µs | 1.0 µs |
 | objects per flush | 3 161 | 518 | 2 850 | 521 |
 | bytes per flush | 265 KB | 50 KB | 252 KB | 50 KB |
-| wall i/s, bare table | 282–483 | 954–1 449 | — | — |
+| wall i/s, bare table (historical bench) | 282–483 | 954–1 449 | — | — |
 | wall i/s, indexed table | 254–289 | 513–696 | 207 | 866 |
 
 Ruby CPU per flush moves with machine load (main's four rounds spread 2×);
-the objects per flush do not move at all, and every round has the branch at
-least 4.7× below main.
+the objects per flush do not move at all.
 
 `WP_BENCH_ROLE=worker rake bench:worker_profile`, two rounds alternated
 (main, branch, main, branch), load 0.63–0.73×:
@@ -1192,8 +1194,10 @@ least 4.7× below main.
 
 What the numbers say:
 
-- **The flush costs 5–12× less Ruby CPU and allocates a sixth of the
-  objects**, on ActiveRecord 8.1 and 7.1 alike. Per job that is ~9–20 → 1–2.3 µs.
+- **The flush costs 4.7–14× less Ruby CPU and allocates a sixth of the
+  objects**, on ActiveRecord 8.1 and 7.1 alike. The ratio is per main/branch
+  pair, run back to back: 947/120 and 936/200 on the bare table, 1 999/161
+  and 1 118/229 indexed, 1 440/101 on 7.1. Per job that is ~9–20 → 1–2.3 µs.
 - **`pgbus_rails` is no longer a meaningful share of a worker's on-CPU time.**
   What remains is `Heartbeat#register_process` / `#deregister_process`, which
   run once per drain (each drain builds a new Worker: a bench artefact), and a

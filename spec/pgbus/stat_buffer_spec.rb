@@ -118,13 +118,26 @@ RSpec.describe Pgbus::StatBuffer do
       expect(conn).to have_received(:quote).with("default").once
     end
 
-    it "writes nothing and logs when an integer column holds a non-integer" do
+    it "drops only the entry whose integer column holds a non-integer, and logs it" do
       allow(Pgbus.logger).to receive(:warn)
       buffer.push(stat_attrs.merge(duration_ms: "1); DROP TABLE pgbus_job_stats; --"))
+      buffer.push(stat_attrs.merge(job_class: "GoodJob"))
+      buffer.flush
+
+      expect(statements).to eq([
+                                 'INSERT INTO "pgbus_job_stats" ' \
+                                 "(job_class, queue_name, status, duration_ms, enqueue_latency_ms, retry_count) " \
+                                 "VALUES ('GoodJob', 'default', 'success', 42, 10, 0)"
+                               ])
+      expect(Pgbus.logger).to have_received(:warn) { |&block| expect(block.call).to include("dropped a TestJob stat") }
+    end
+
+    it "sends no statement when every entry is malformed" do
+      allow(Pgbus.logger).to receive(:warn)
+      buffer.push(stat_attrs.merge(retry_count: "many"))
       buffer.flush
 
       expect(statements).to be_empty
-      expect(Pgbus.logger).to have_received(:warn) { |&block| expect(block.call).to include("Stat buffer flush failed") }
     end
 
     it "is a no-op when buffer is empty" do

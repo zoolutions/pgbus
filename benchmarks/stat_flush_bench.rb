@@ -46,6 +46,8 @@ conn.execute(<<~SQL)
   CREATE INDEX IF NOT EXISTS idx_pgbus_job_stats_status_time ON pgbus_job_stats (status, created_at);
   CREATE INDEX IF NOT EXISTS idx_pgbus_job_stats_queue_time ON pgbus_job_stats (queue_name, created_at);
 SQL
+missing = %w[enqueue_latency_ms retry_count].reject { |column| conn.column_exists?(:pgbus_job_stats, column) }
+abort "[bench] pgbus_job_stats lacks #{missing.join(", ")}: the bench would time the base-column fallback" if missing.any?
 conn.execute("TRUNCATE pgbus_job_stats")
 
 classes = %w[OrderMailerJob ChargeCardJob Reports::NightlyJob].freeze

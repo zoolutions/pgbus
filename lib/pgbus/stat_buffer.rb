@@ -82,7 +82,8 @@ module Pgbus
       return unless JobStat.table_exists?
 
       JobStat.connection_pool.with_connection do |conn|
-        conn.execute(insert_sql(conn, entries, latency: true), "Pgbus::JobStat Bulk Insert")
+        sql = insert_sql(conn, entries, latency: true)
+        conn.execute(sql, "Pgbus::JobStat Bulk Insert") if sql
       rescue ActiveRecord::StatementInvalid => e
         raise unless missing_latency_column?(e)
 
@@ -108,7 +109,8 @@ module Pgbus
     def write_base_columns(conn, entries)
       Pgbus.logger.warn { "[Pgbus] Latency columns missing — recording stats without latency data" } unless @degraded_warned
       @degraded_warned = true
-      conn.execute(insert_sql(conn, entries, latency: false), "Pgbus::JobStat Bulk Insert")
+      sql = insert_sql(conn, entries, latency: false)
+      conn.execute(sql, "Pgbus::JobStat Bulk Insert") if sql
     rescue StandardError => e
       Pgbus.logger.warn { "[Pgbus] Stat buffer fallback flush failed: #{e.message}" }
     end
@@ -116,12 +118,22 @@ module Pgbus
     def insert_sql(conn, entries, latency:)
       quoted = Hash.new { |memo, value| memo[value] = conn.quote(value) }
       columns = latency ? ALL_COLUMNS : BASE_COLUMNS
-      values = entries.map do |e|
-        row = "(#{quoted[e[:job_class]]}, #{quoted[e[:queue_name]]}, #{quoted[e[:status]]}, #{sql_integer(e[:duration_ms])}"
-        row << ", #{sql_integer(e[:enqueue_latency_ms])}, #{sql_integer(e[:retry_count])}" if latency
-        row << ")"
-      end
+      values = entries.filter_map { |entry| sql_row(entry, quoted, latency) }
+      return if values.empty?
+
       "INSERT INTO #{JobStat.quoted_table_name} (#{columns}) VALUES #{values.join(", ")}"
+    end
+
+    # One entry's tuple, or nil (logged) when an integer column holds
+    # something Integer() refuses: that entry is dropped, the rest of the
+    # flush is still written.
+    def sql_row(entry, quoted, latency)
+      row = "(#{quoted[entry[:job_class]]}, #{quoted[entry[:queue_name]]}, #{quoted[entry[:status]]}, #{sql_integer(entry[:duration_ms])}"
+      row << ", #{sql_integer(entry[:enqueue_latency_ms])}, #{sql_integer(entry[:retry_count])}" if latency
+      row << ")"
+    rescue ArgumentError, TypeError => e
+      Pgbus.logger.warn { "[Pgbus] Stat buffer dropped a #{entry[:job_class]} stat: #{e.message}" }
+      nil
     end
 
     def sql_integer(value)
