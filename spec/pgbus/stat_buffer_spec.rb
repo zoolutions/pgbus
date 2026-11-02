@@ -294,6 +294,17 @@ RSpec.describe Pgbus::StatBuffer do
       expect(statements.size).to eq(1)
     end
 
+    it "logs a malformed entry once, not again on the base-column retry" do
+      warnings = []
+      allow(Pgbus.logger).to receive(:warn) { |&block| warnings << block.call }
+      buffer.push(stat_attrs.merge(duration_ms: "soon"))
+      buffer.push(stat_attrs)
+      buffer.flush
+
+      expect(statements.size).to eq(2)
+      expect(warnings.grep(/dropped a TestJob stat/).size).to eq(1)
+    end
+
     it "warns about the missing columns once, not on every flush" do
       2.times do
         buffer.push(stat_attrs)

@@ -124,15 +124,16 @@ module Pgbus
       "INSERT INTO #{JobStat.quoted_table_name} (#{columns}) VALUES #{values.join(", ")}"
     end
 
-    # One entry's tuple, or nil (logged) when an integer column holds
-    # something Integer() refuses: that entry is dropped, the rest of the
-    # flush is still written.
+    # One entry's tuple, or nil when an integer column holds something
+    # Integer() refuses: that entry is dropped, the rest of the flush is still
+    # written. Logged on the six-column pass only: the base-column retry runs
+    # on the same entries, so anything it drops was dropped and logged already.
     def sql_row(entry, quoted, latency)
       row = "(#{quoted[entry[:job_class]]}, #{quoted[entry[:queue_name]]}, #{quoted[entry[:status]]}, #{sql_integer(entry[:duration_ms])}"
       row << ", #{sql_integer(entry[:enqueue_latency_ms])}, #{sql_integer(entry[:retry_count])}" if latency
       row << ")"
     rescue ArgumentError, TypeError => e
-      Pgbus.logger.warn { "[Pgbus] Stat buffer dropped a #{entry[:job_class]} stat: #{e.message}" }
+      Pgbus.logger.warn { "[Pgbus] Stat buffer dropped a #{entry[:job_class]} stat: #{e.message}" } if latency
       nil
     end
 
