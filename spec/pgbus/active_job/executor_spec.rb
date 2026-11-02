@@ -238,7 +238,9 @@ RSpec.describe Pgbus::ActiveJob::Executor do
 
       # Issue #629: PGMQ's read_ct counts every read, so a :while_executing
       # duplicate skipped on each read while another copy runs reaches the
-      # limit without ever failing. Say so instead of "no error recorded".
+      # limit without ever failing. Say so instead of "no error recorded" —
+      # whether or not the holder still holds the key at the last read (the
+      # backed-off skips span minutes; the holder may finish inside the last).
       context "when the message is a :while_executing duplicate" do
         let(:job_payload) do
           { "job_class" => "TestJob", "job_id" => job_id, "queue_name" => queue_name, "arguments" => [],
@@ -246,21 +248,21 @@ RSpec.describe Pgbus::ActiveJob::Executor do
         end
 
         before do
-          allow(Pgbus::UniquenessKey).to receive_messages(held_by_other?: true, release_held_by!: 0)
+          allow(Pgbus::UniquenessKey).to receive_messages(bound_to?: false, release_held_by!: 0)
         end
 
-        it "names the uniqueness conflict when another message holds the key and no attempt failed" do
+        it "names the uniqueness conflict when no attempt failed" do
           executor.execute(message, queue_name)
 
           expect(dead_letter_block).to include("reason" => "uniqueness_conflict", "attempts" => config.max_retries + 1)
-          expect(Pgbus::UniquenessKey).to have_received(:held_by_other?)
+          expect(Pgbus::UniquenessKey).to have_received(:bound_to?)
             .with("TestJob:7", queue_name: queue_name, msg_id: 7)
           expect(ActiveSupport::Notifications).to have_received(:instrument)
             .with("pgbus.job_dead_lettered", hash_including(reason: "uniqueness_conflict", error: nil))
         end
 
-        it "keeps max_retries_exceeded when nobody else holds the key (a crashed attempt)" do
-          allow(Pgbus::UniquenessKey).to receive(:held_by_other?).and_return(false)
+        it "keeps max_retries_exceeded when the key's row is this message's own (its attempts crashed)" do
+          allow(Pgbus::UniquenessKey).to receive(:bound_to?).and_return(true)
 
           executor.execute(message, queue_name)
 
@@ -273,23 +275,26 @@ RSpec.describe Pgbus::ActiveJob::Executor do
           executor.execute(message, queue_name)
 
           expect(dead_letter_block).to include("reason" => "max_retries_exceeded", "error_class" => "Stripe::CardError")
-          expect(Pgbus::UniquenessKey).not_to have_received(:held_by_other?)
+          expect(Pgbus::UniquenessKey).not_to have_received(:bound_to?)
         end
 
-        it "still dead-letters when the holder lookup raises" do
-          allow(Pgbus::UniquenessKey).to receive(:held_by_other?).and_raise(StandardError, "pooler timeout")
+        # No failed-event row is the stronger signal; the lookup only rules
+        # out this message's own crashed attempt.
+        it "names the uniqueness conflict when the row lookup raises" do
+          allow(Pgbus::UniquenessKey).to receive(:bound_to?).and_raise(StandardError, "pooler timeout")
 
           expect(executor.execute(message, queue_name)).to eq(:dead_lettered)
-          expect(dead_letter_block["reason"]).to eq("max_retries_exceeded")
+          expect(dead_letter_block["reason"]).to eq("uniqueness_conflict")
         end
       end
 
-      it "does not look up a holder for a message without a :while_executing key" do
-        allow(Pgbus::UniquenessKey).to receive(:held_by_other?)
+      it "does not look up the key's row for a message without a :while_executing key" do
+        allow(Pgbus::UniquenessKey).to receive(:bound_to?)
 
         executor.execute(message, queue_name)
 
-        expect(Pgbus::UniquenessKey).not_to have_received(:held_by_other?)
+        expect(Pgbus::UniquenessKey).not_to have_received(:bound_to?)
+        expect(dead_letter_block["reason"]).to eq("max_retries_exceeded")
       end
 
       context "when the worker read from a priority sub-queue" do

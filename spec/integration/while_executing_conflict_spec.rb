@@ -119,8 +119,7 @@ RSpec.describe ":while_executing duplicates (integration)", :integration do
 
     # read_ct cannot be decremented, so a copy skipped on every read still
     # dead-letters once it passes max_retries — but says why.
-    it "dead-letters a copy skipped past max_retries as a uniqueness conflict" do
-      _holder, duplicates = enqueue_six_and_hold_the_first
+    def skip_until_last_read(duplicates)
       copy = duplicates.first
       config.max_retries.times do |i|
         message = i.zero? ? copy : client.read_message("default", vt: 30)
@@ -129,17 +128,58 @@ RSpec.describe ":while_executing duplicates (integration)", :integration do
         duplicates.drop(1).each { |m| client.set_visibility_timeout("default", m.msg_id.to_i, vt: 3600) }
         client.set_visibility_timeout("default", copy.msg_id.to_i, vt: 0)
       end
-
       last = client.read_message("default", vt: 30)
       expect(last.read_ct.to_i).to eq(config.max_retries + 1)
-      expect(executor.execute(last, "default")).to eq(:dead_lettered)
+      last
+    end
 
+    def dead_letter_block
       dead = client.read_message(config.dead_letter_queue_name("default").delete_prefix("#{config.queue_prefix}_"),
                                  vt: 30)
-      expect(Pgbus::DeadLetterHeader.parse(dead.headers)).to include(
-        "reason" => "uniqueness_conflict", "attempts" => config.max_retries + 1
-      )
+      Pgbus::DeadLetterHeader.parse(dead.headers)
+    end
+
+    it "dead-letters a copy skipped past max_retries as a uniqueness conflict" do
+      _holder, duplicates = enqueue_six_and_hold_the_first
+      last = skip_until_last_read(duplicates)
+
+      expect(executor.execute(last, "default")).to eq(:dead_lettered)
+
+      expect(dead_letter_block).to include("reason" => "uniqueness_conflict", "attempts" => config.max_retries + 1)
       expect(Pgbus::UniquenessKey.locked?("rollup-42")).to be(true)
+    end
+
+    # The skips back off for minutes, so the holder can finish inside the
+    # last one: the key is free at the dead-lettering read, and the copy still
+    # died of skips, not of a crash.
+    it "still names the uniqueness conflict when the holder finished before the last read" do
+      holder, duplicates = enqueue_six_and_hold_the_first
+      last = skip_until_last_read(duplicates)
+      expect(executor.execute(holder, "default")).to eq(:success)
+      expect(Pgbus::UniquenessKey.locked?("rollup-42")).to be(false)
+
+      expect(executor.execute(last, "default")).to eq(:dead_lettered)
+
+      expect(dead_letter_block).to include("reason" => "uniqueness_conflict")
+    end
+
+    # A crash loop also records no error, but each crashed attempt leaves the
+    # key's row bound to its own message.
+    it "keeps max_retries_exceeded for a copy whose own crashed attempt holds the key" do
+      6.times { RollupJob.perform_later(42) }
+      copy = client.read_batch("default", qty: 10, vt: 3600).min_by { |m| m.msg_id.to_i }
+      Pgbus::UniquenessKey.acquire!("rollup-42", queue_name: "default", msg_id: copy.msg_id.to_i)
+      last = copy
+      config.max_retries.times do
+        client.set_visibility_timeout("default", copy.msg_id.to_i, vt: 0)
+        last = client.read_message("default", vt: 3600)
+      end
+      expect(last.msg_id).to eq(copy.msg_id)
+      expect(last.read_ct.to_i).to eq(config.max_retries + 1)
+
+      expect(executor.execute(last, "default")).to eq(:dead_lettered)
+
+      expect(dead_letter_block).to include("reason" => "max_retries_exceeded")
     end
   end
 end

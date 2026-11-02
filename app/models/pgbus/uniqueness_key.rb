@@ -191,13 +191,14 @@ module Pgbus
       )
     end
 
-    # True when a row for the key exists that is not bound to this message
-    # (queue + msg_id): another message holds it. The executor asks this when
-    # it dead-letters a :while_executing message that never failed (#629).
-    def self.held_by_other?(lock_key, queue_name:, msg_id:)
+    # True when the key's row is bound to this message (queue + msg_id): its
+    # own attempt holds it, as a crashed attempt leaves it. The executor asks
+    # this when it dead-letters a :while_executing message that never failed
+    # (issue #629): a crash loop, not a uniqueness conflict.
+    def self.bound_to?(lock_key, queue_name:, msg_id:)
       !connection.select_value(
-        "SELECT 1 FROM #{table_name} WHERE lock_key = $1 AND NOT (queue_name = $2 AND msg_id = $3) LIMIT 1",
-        "UniquenessKey Held By Other", [lock_key, queue_name.to_s, msg_id.to_i]
+        "SELECT 1 FROM #{table_name} WHERE lock_key = $1 AND queue_name = $2 AND msg_id = $3 LIMIT 1",
+        "UniquenessKey Bound To", [lock_key, queue_name.to_s, msg_id.to_i]
       ).nil?
     end
 

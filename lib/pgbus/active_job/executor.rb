@@ -592,21 +592,25 @@ module Pgbus
       end
 
       # uniqueness_conflict for a :while_executing message no attempt of
-      # which failed while another message holds its key: it was skipped on
-      # every read until read_ct passed max_retries (issue #629). A crashed
-      # attempt also records no error, but leaves the key free or its own.
+      # which failed: it was skipped on every read until read_ct passed
+      # max_retries (issue #629). Not whether the key is held at this read:
+      # the backed-off skips span minutes and the holder may have finished
+      # inside the last one. The one other way to die without a failed-event
+      # row is a crash loop, and a crashed attempt leaves the key's row bound
+      # to this message: that keeps max_retries_exceeded. A failed lookup
+      # keeps the stronger signal, the missing failed-event row.
       def dead_letter_reason(message, queue_name, payload, last_error)
         return DeadLetterHeader::REASON_MAX_RETRIES if last_error
 
         key = Uniqueness.extract_key(payload)
         return DeadLetterHeader::REASON_MAX_RETRIES unless key && Uniqueness.extract_strategy(payload) == :while_executing
 
-        held = UniquenessKey.held_by_other?(key, queue_name: Uniqueness.lock_queue_name(queue_name, config: config),
-                                                 msg_id: message.msg_id.to_i)
-        held ? DeadLetterHeader::REASON_UNIQUENESS_CONFLICT : DeadLetterHeader::REASON_MAX_RETRIES
+        own = UniquenessKey.bound_to?(key, queue_name: Uniqueness.lock_queue_name(queue_name, config: config),
+                                           msg_id: message.msg_id.to_i)
+        own ? DeadLetterHeader::REASON_MAX_RETRIES : DeadLetterHeader::REASON_UNIQUENESS_CONFLICT
       rescue StandardError => e
-        Pgbus.logger.warn { "[Pgbus] Uniqueness holder lookup failed, dead-lettering as max_retries_exceeded: #{e.message}" }
-        DeadLetterHeader::REASON_MAX_RETRIES
+        Pgbus.logger.warn { "[Pgbus] Uniqueness row lookup failed, dead-lettering as uniqueness_conflict: #{e.message}" }
+        DeadLetterHeader::REASON_UNIQUENESS_CONFLICT
       end
 
       def handle_dead_letter(message, queue_name, payload, source_queue: nil, last_error: nil,

@@ -377,29 +377,30 @@ RSpec.describe "Job uniqueness (integration)", :integration do
     end
   end
 
-  # Issue #629: the dead-letter path asks whether another message holds a
-  # :while_executing key before it names the reason.
-  describe "UniquenessKey held_by_other?" do
-    it "is true when the row is bound to another message" do
-      Pgbus::UniquenessKey.acquire!("rollup-1", queue_name: "default", msg_id: 99)
-
-      expect(Pgbus::UniquenessKey.held_by_other?("rollup-1", queue_name: "default", msg_id: 7)).to be(true)
-    end
-
-    it "is true when the row is bound to the same msg_id on another queue" do
-      Pgbus::UniquenessKey.acquire!("rollup-1", queue_name: "critical", msg_id: 7)
-
-      expect(Pgbus::UniquenessKey.held_by_other?("rollup-1", queue_name: "default", msg_id: 7)).to be(true)
-    end
-
-    it "is false when the row is this message's own (a crashed attempt)" do
+  # Issue #629: the dead-letter path asks whether a :while_executing key's row
+  # is the dying message's own (its crashed attempt) before it names the
+  # reason.
+  describe "UniquenessKey bound_to?" do
+    it "is true when the row is bound to this message" do
       Pgbus::UniquenessKey.acquire!("rollup-1", queue_name: "default", msg_id: 7)
 
-      expect(Pgbus::UniquenessKey.held_by_other?("rollup-1", queue_name: "default", msg_id: 7)).to be(false)
+      expect(Pgbus::UniquenessKey.bound_to?("rollup-1", queue_name: "default", msg_id: 7)).to be(true)
+    end
+
+    it "is false when the row is bound to another message" do
+      Pgbus::UniquenessKey.acquire!("rollup-1", queue_name: "default", msg_id: 99)
+
+      expect(Pgbus::UniquenessKey.bound_to?("rollup-1", queue_name: "default", msg_id: 7)).to be(false)
+    end
+
+    it "is false when the row is bound to the same msg_id on another queue" do
+      Pgbus::UniquenessKey.acquire!("rollup-1", queue_name: "critical", msg_id: 7)
+
+      expect(Pgbus::UniquenessKey.bound_to?("rollup-1", queue_name: "default", msg_id: 7)).to be(false)
     end
 
     it "is false when nobody holds the key" do
-      expect(Pgbus::UniquenessKey.held_by_other?("rollup-1", queue_name: "default", msg_id: 7)).to be(false)
+      expect(Pgbus::UniquenessKey.bound_to?("rollup-1", queue_name: "default", msg_id: 7)).to be(false)
     end
   end
 
