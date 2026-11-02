@@ -366,6 +366,23 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
       expect(result).to be_nil
     end
 
+    it "answers at once when stop lands between its stopped check and its push" do
+      stopping = listener
+      racing_queue = Class.new(Queue) do
+        define_method(:<<) do |cmd|
+          super(cmd)
+          stopping.instance_variable_set(:@stopped, true) # stop, and the thread's last release, came first
+        end
+      end.new
+      listener.instance_variable_set(:@commands, racing_queue)
+
+      started = monotonic
+      result = listener.ensure_listening("chat")
+
+      expect(monotonic - started).to be < 0.5 # the ack budget is 6 s here
+      expect(result).to be_nil
+    end
+
     it "serves commands again when started after a clean stop" do
       listener.start
       listener.stop
