@@ -16,7 +16,20 @@ module Pgbus
   #   pgbus.job_completed          — job archived successfully
   #   pgbus.job_failed             — job raised; carries :exception_object
   #   pgbus.job_dead_lettered      — job exceeded max_retries and was DLQ-routed;
-  #                                  :error is the last recorded error class (or nil)
+  #                                  :error is the last recorded error class (or nil);
+  #                                  :reason is max_retries_exceeded, or uniqueness_conflict
+  #                                  for a :while_executing copy skipped on every read
+  #                                  while another message held its key
+  #   pgbus.job_skipped            — a :while_executing copy was read while another
+  #                                  message held its key and left for a later delivery
+  #                                  (on_conflict :reject or :log)
+  #                                  payload: queue, job_class, job_id, provider_job_id,
+  #                                  msg_id, read_ct, on_conflict, vt (seconds until it
+  #                                  is delivered again)
+  #   pgbus.job_discarded          — a copy was completed without running
+  #                                  payload: queue, job_class, job_id, provider_job_id,
+  #                                  msg_id, reason ("uniqueness": a :while_executing copy
+  #                                  under on_conflict: :discard)
   #   pgbus.job_visibility_extended — heartbeat re-armed a running job's visibility timeout
   #                                  payload: queue, job_class, msg_id, vt, extensions
   #   pgbus.event_processed        — event handler succeeded

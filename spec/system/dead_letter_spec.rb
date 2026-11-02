@@ -115,7 +115,11 @@ RSpec.describe "Dead Letter Queue", type: :system do
           message: { job_class: "SyncInventoryJob", job_id: "j-303", arguments: [] }.to_json },
         { msg_id: 304, queue_name: "pgbus_default_dlq", read_ct: 0, enqueued_at: now - 1200,
           headers: dead(source: "worker", existing: '{"pgbus_dlq_retries":1}'),
-          message: { job_class: "GenerateReportJob", job_id: "j-304", arguments: [] }.to_json }
+          message: { job_class: "GenerateReportJob", job_id: "j-304", arguments: [] }.to_json },
+        { msg_id: 305, queue_name: "pgbus_default_dlq", read_ct: 0, enqueued_at: now - 1500,
+          headers: Pgbus::DeadLetterHeader.build(existing: nil, reason: "uniqueness_conflict", source: "worker",
+                                                 source_queue: "pgbus_default", attempts: 6, max_retries: 5, now: now),
+          message: { job_class: "RollupJob", job_id: "j-305", arguments: [42] }.to_json }
       ]
     end
 
@@ -169,6 +173,18 @@ RSpec.describe "Dead Letter Queue", type: :system do
       within(row_for(303)) do
         expect(page).to have_text("Reason not recorded (dead-lettered before pgbus #{Pgbus::DeadLetterHeader::SINCE})")
         expect(find("td[data-label='Attempts']")).to have_text("—")
+      end
+    end
+
+    # Issue #629: a :while_executing copy skipped on every read never ran.
+    it "says a uniqueness conflict skipped a copy on every read, not that it crashed" do
+      visit "/pgbus/dlq"
+
+      within(row_for(305)) do
+        expect(page).to have_css("[data-testid='dlq-reason']",
+                                 text: "Skipped on all 6 reads (max 5) while another copy of the job held its " \
+                                       "uniqueness key — no attempt ran")
+        expect(page).to have_no_text("crashed")
       end
     end
 

@@ -339,11 +339,15 @@ Two runs can overlap: the trailing copy can start while the first is still runni
 
 #### Conflict policies
 
-| Policy | Behavior |
-|--------|----------|
-| `:reject` | Raise `Pgbus::JobNotUnique` (default) |
-| `:discard` | Silently drop the duplicate |
-| `:log` | Log a warning and drop |
+`:until_executed` and `:until_executing` meet a duplicate at enqueue; `:while_executing` meets it when a worker reads a copy while another copy holds the key.
+
+| Policy | At enqueue (`:until_executed`, `:until_executing`) | At execution (`:while_executing`) |
+|--------|----------|----------|
+| `:reject` (default) | Raise `Pgbus::JobNotUnique` | Leave the copy queued; it runs once the holder is done |
+| `:discard` | Silently drop the duplicate | Complete the copy without running it (`pgbus.job_discarded`) |
+| `:log` | Log a warning and drop | As `:reject`, and log the skip at warn |
+
+A `:while_executing` copy left queued comes back after `visibility_timeout × 2^(read_ct − 1)` (jittered, capped at `retry_backoff_max`, never below `visibility_timeout`), so repeated skips stretch over a long holder's run, and each skip emits `pgbus.job_skipped`. PGMQ counts every read toward `max_retries`, so a copy skipped on every read still dead-letters: its DLQ headers say `reason: uniqueness_conflict`, not `max_retries_exceeded` with no error. A recurring `:while_executing` task carries its key, so a run that outlasts its interval is not overlapped by the next. For "every enqueue after a run starts gets a run that sees its state", use `:until_executing`.
 
 #### Lock lifecycle
 
@@ -1070,7 +1074,7 @@ c.metrics_backend = MyOpenTelemetryBackend.new
 
 | Metric | Type | Tags |
 |--------|------|------|
-| `pgbus_queue_job_count` | counter | `queue`, `job_class`, `status` (`processed`/`failed`/`dead_lettered`) |
+| `pgbus_queue_job_count` | counter | `queue`, `job_class`, `status` (`processed`/`failed`/`skipped`/`discarded`/`dead_lettered`), `reason` (skips, discards and dead letters) |
 | `pgbus_visibility_extended` | counter | `queue`, `job_class` — one per re-armed visibility timeout; a class listed here outlives `visibility_timeout` |
 | `pgbus_job_duration_ms` | histogram | `queue`, `job_class` |
 | `pgbus_event_count` | counter | `handler`, `routing_key`, `status` (`processed`/`failed`/`skipped`/`dead_lettered`), plus `reason` on `skipped` only (`completed`/`cached`/`owned`) |
@@ -1116,7 +1120,7 @@ ActiveSupport::Notifications.subscribe(/^pgbus\./) do |name, start, finish, _id,
 end
 ```
 
-Metrics-relevant events emitted (the subset the metrics subscriber maps; see `lib/pgbus/instrumentation.rb` for the full `pgbus.*` catalog): `pgbus.executor.execute`, `pgbus.job_completed`, `pgbus.job_failed`, `pgbus.job_dead_lettered`, `pgbus.event_processed`, `pgbus.event_failed`, `pgbus.event_dead_lettered`, `pgbus.event_skipped`, `pgbus.job_visibility_extended`, `pgbus.client.send_message`, `pgbus.client.send_batch`, `pgbus.client.read_batch`, `pgbus.client.pool`, `pgbus.stream.broadcast`, `pgbus.outbox.publish`, `pgbus.recurring.enqueue`, `pgbus.worker.recycle`, `pgbus.consumer.recycle`, `pgbus.workflow.step`, `pgbus.workflow_finished`, `pgbus.workflow_paused`, `pgbus.workflow_cancelled`, `pgbus.workflow.stall_detected`, `pgbus.workflow.wait_timed_out`, `pgbus.workflow.gauge`. Payload keys are documented in `lib/pgbus/instrumentation.rb`.
+Metrics-relevant events emitted (the subset the metrics subscriber maps; see `lib/pgbus/instrumentation.rb` for the full `pgbus.*` catalog): `pgbus.executor.execute`, `pgbus.job_completed`, `pgbus.job_failed`, `pgbus.job_dead_lettered`, `pgbus.job_skipped`, `pgbus.job_discarded`, `pgbus.event_processed`, `pgbus.event_failed`, `pgbus.event_dead_lettered`, `pgbus.event_skipped`, `pgbus.job_visibility_extended`, `pgbus.client.send_message`, `pgbus.client.send_batch`, `pgbus.client.read_batch`, `pgbus.client.pool`, `pgbus.stream.broadcast`, `pgbus.outbox.publish`, `pgbus.recurring.enqueue`, `pgbus.worker.recycle`, `pgbus.consumer.recycle`, `pgbus.workflow.step`, `pgbus.workflow_finished`, `pgbus.workflow_paused`, `pgbus.workflow_cancelled`, `pgbus.workflow.stall_detected`, `pgbus.workflow.wait_timed_out`, `pgbus.workflow.gauge`. Payload keys are documented in `lib/pgbus/instrumentation.rb`.
 
 ### Connection pool metrics
 

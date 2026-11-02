@@ -224,6 +224,7 @@ nl:
         retried_before:
           one: Al eens eerder vanuit de DLQ opnieuw geprobeerd.
           other: Al %{count} keer eerder vanuit de DLQ opnieuw geprobeerd.
+        uniqueness_conflict_html: Bij alle %{attempts} keer lezen overgeslagen (max %{max}) omdat een andere kopie van de job de uniciteitssleutel had — geen poging uitgevoerd
       show:
         back: Terug naar DLQ
         context: Context

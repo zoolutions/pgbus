@@ -163,6 +163,7 @@ ThreadSafety/NewThread:
     - spec/integration/job_uniqueness_spec.rb
     - spec/integration/read_ahead_spec.rb
     - spec/integration/recurring_scheduler_uniqueness_spec.rb
+    - spec/integration/recurring_scheduler_while_executing_spec.rb
     - spec/integration/streams_pool_autoscale_spec.rb
     - spec/integration/streams_pool_publisher_autoscale_spec.rb
     - spec/integration/streams_pool_swap_spec.rb

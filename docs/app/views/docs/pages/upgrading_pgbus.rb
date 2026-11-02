@@ -318,6 +318,45 @@ class Views::Docs::Pages::UpgradingPgbus < DocsUI::Page
         An `:extension` install gets the same changes from
         `ALTER EXTENSION pgmq UPDATE TO '1.13.1'` once the server has 1.13.1
         packaged, not from this migration.
+
+        ### `:while_executing` now honours `on_conflict:`
+
+        `ensures_uniqueness strategy: :while_executing` accepted `on_conflict:`
+        and never read it: a copy read while another copy held the key was
+        skipped and redelivered, whatever the policy. Now the policy decides
+        (issue [#629](https://github.com/zoolutions/pgbus/issues/629)):
+
+        - **`on_conflict: :discard` drops the copy.** It is completed without
+          running. A job that relied on the trailing run — "a run that starts
+          after the current one sees the latest state" — got it by accident
+          and loses it. Move such a job to `strategy: :until_executing`, which
+          gives that guarantee by design (add `limits_concurrency to: 1,
+          on_conflict: :block` if two runs must not overlap):
+      MD
+      DocsUI::Code(<<~'RUBY', filename: "app/jobs/rollup_job.rb")
+        # Before: the trailing run came from the skip-and-redeliver path.
+        ensures_uniqueness strategy: :while_executing,
+                           key: ->(parent_id) { "rollup-#{parent_id}" }, on_conflict: :discard
+
+        # After: a debounce, with the trailing run by design.
+        ensures_uniqueness strategy: :until_executing,
+                           key: ->(parent_id) { "rollup-#{parent_id}" }, on_conflict: :discard
+      RUBY
+      md <<~'MD'
+        - **`:reject` (the default) and `:log` keep the redelivery,** now
+          backed off from `visibility_timeout` instead of on the flat timeout,
+          so a long holder no longer dead-letters every queued copy within
+          `max_retries × visibility_timeout`. A copy that is skipped past
+          `max_retries` still dead-letters, now with `reason:
+          uniqueness_conflict`. `:log` logs each skip at warn.
+        - **A recurring `:while_executing` task is protected.** The scheduler
+          now carries its key, so the next run waits for a run that outlasts
+          its interval (or, under `:discard`, is dropped) instead of
+          overlapping it.
+
+        Messages already queued when you deploy carry no policy and keep the
+        old redelivery (as `:reject`, with the backoff). A skip or a discard
+        no longer counts as a success for the circuit breaker.
       MD
     end
   end

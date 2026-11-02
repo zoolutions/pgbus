@@ -224,6 +224,7 @@ fi:
         retried_before:
           one: Yritetty uudelleen DLQ:sta kerran aiemmin.
           other: Yritetty uudelleen DLQ:sta %{count} kertaa aiemmin.
+        uniqueness_conflict_html: Ohitettu kaikilla %{attempts} lukukerralla (enint. %{max}), koska työn toinen kopio piti sen yksilöllisyysavainta — yhtään yritystä ei ajettu
       show:
         back: Takaisin DLQ:hon
         context: Konteksti

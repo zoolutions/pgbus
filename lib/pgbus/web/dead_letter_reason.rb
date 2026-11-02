@@ -45,6 +45,12 @@ module Pgbus
 
       def reason_for(block, attempts, max)
         error_class = block["error_class"]
+        # A :while_executing copy skipped on every read (issue #629): no
+        # attempt ran, so "crashed before it could report" would mislead.
+        if block["reason"] == DeadLetterHeader::REASON_UNIQUENESS_CONFLICT && !error_class
+          return ["uniqueness_conflict", { attempts: attempts, max: max }]
+        end
+
         unless error_class
           key = block["source"] == "consumer" ? "event_no_error" : "no_error_recorded"
           return [key, { attempts: attempts, max: max }]

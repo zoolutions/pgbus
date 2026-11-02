@@ -224,6 +224,7 @@ da:
         retried_before:
           one: Genforsøgt fra DLQ én gang før.
           other: Genforsøgt fra DLQ %{count} gange før.
+        uniqueness_conflict_html: Sprunget over ved alle %{attempts} læsninger (maks. %{max}), mens en anden kopi af jobbet holdt dets unikhedsnøgle — intet forsøg kørte
       show:
         back: Tilbage til DLQ
         context: Kontekst

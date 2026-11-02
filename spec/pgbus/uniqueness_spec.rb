@@ -275,6 +275,32 @@ RSpec.describe Pgbus::Uniqueness do
       expect(result[described_class::STRATEGY_KEY]).to eq("while_executing")
     end
 
+    # Issue #629: the executor reads the policy at the skip point from the
+    # payload, so it need not constantize the job class.
+    it "carries on_conflict for :while_executing" do
+      job_class = Class.new(ActiveJob::Base) do
+        include Pgbus::Uniqueness
+
+        ensures_uniqueness strategy: :while_executing, key: ->(*) { "test-key" }, on_conflict: :discard
+      end
+
+      result = described_class.inject_metadata(job_class.new, { "job_class" => "Test" })
+
+      expect(result[described_class::ON_CONFLICT_KEY]).to eq("discard")
+    end
+
+    it "does not carry on_conflict for an enqueue-locked strategy" do
+      job_class = Class.new(ActiveJob::Base) do
+        include Pgbus::Uniqueness
+
+        ensures_uniqueness strategy: :until_executed, key: ->(*) { "test-key" }, on_conflict: :discard
+      end
+
+      result = described_class.inject_metadata(job_class.new, { "job_class" => "Test" })
+
+      expect(result).not_to have_key(described_class::ON_CONFLICT_KEY)
+    end
+
     it "returns payload unchanged for jobs without uniqueness" do
       job_class = Class.new(ActiveJob::Base)
       job = job_class.new
@@ -282,6 +308,23 @@ RSpec.describe Pgbus::Uniqueness do
 
       result = described_class.inject_metadata(job, payload)
       expect(result).to eq(payload)
+    end
+  end
+
+  describe ".extract_on_conflict" do
+    it "reads the policy the payload carries" do
+      expect(described_class.extract_on_conflict(described_class::ON_CONFLICT_KEY => "discard")).to eq(:discard)
+      expect(described_class.extract_on_conflict(described_class::ON_CONFLICT_KEY => "log")).to eq(:log)
+    end
+
+    # A message enqueued before the key existed keeps the redelivery it had.
+    it "falls back to :reject when the payload carries none" do
+      expect(described_class.extract_on_conflict({ "job_class" => "Test" })).to eq(:reject)
+      expect(described_class.extract_on_conflict(nil)).to eq(:reject)
+    end
+
+    it "falls back to :reject for a value it does not know" do
+      expect(described_class.extract_on_conflict(described_class::ON_CONFLICT_KEY => "explode")).to eq(:reject)
     end
   end
 

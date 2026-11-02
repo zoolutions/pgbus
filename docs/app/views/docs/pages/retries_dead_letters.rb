@@ -112,7 +112,7 @@ class Views::Docs::Pages::RetriesDeadLetters < DocsUI::Page
         [ "Key", "Value" ],
         [
           [ [ :code, "version" ], [ :md, "1 — bumped when a field changes meaning or goes away; an optional field added later (`source_msg_id`, `source_enqueued_at`) does not bump it." ] ],
-          [ [ :code, "reason" ], [ :md, "`max_retries_exceeded`, the only reason today." ] ],
+          [ [ :code, "reason" ], [ :md, "`max_retries_exceeded`, or `uniqueness_conflict` for a `:while_executing` copy skipped on every read while another copy held its key (no attempt ran)." ] ],
           [ [ :code, "source" ], [ :md, "`worker` (ActiveJob) or `consumer` (event bus)." ] ],
           [ [ :code, "source_queue" ], [ :md, "The physical queue it was deleted from, a priority sub-queue (`…_p2`) included." ] ],
           [ [ :code, "source_msg_id" ], [ :md, "Its `msg_id` in `source_queue` (the copy gets a new one in the DLQ). Absent on copies dead-lettered by earlier releases." ] ],

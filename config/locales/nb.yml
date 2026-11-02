@@ -224,6 +224,7 @@ nb:
         retried_before:
           one: Forsøkt på nytt fra DLQ én gang før.
           other: Forsøkt på nytt fra DLQ %{count} ganger før.
+        uniqueness_conflict_html: Hoppet over ved alle %{attempts} lesinger (maks. %{max}) mens en annen kopi av jobben holdt unikhetsnøkkelen — ingen forsøk kjørte
       show:
         back: Tilbake til DLQ
         context: Kontekst

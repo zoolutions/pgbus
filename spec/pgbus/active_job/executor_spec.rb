@@ -233,7 +233,63 @@ RSpec.describe Pgbus::ActiveJob::Executor do
         executor.execute(message, queue_name)
 
         expect(ActiveSupport::Notifications).to have_received(:instrument)
-          .with("pgbus.job_dead_lettered", hash_including(error: nil))
+          .with("pgbus.job_dead_lettered", hash_including(error: nil, reason: "max_retries_exceeded"))
+      end
+
+      # Issue #629: PGMQ's read_ct counts every read, so a :while_executing
+      # duplicate skipped on each read while another copy runs reaches the
+      # limit without ever failing. Say so instead of "no error recorded".
+      context "when the message is a :while_executing duplicate" do
+        let(:job_payload) do
+          { "job_class" => "TestJob", "job_id" => job_id, "queue_name" => queue_name, "arguments" => [],
+            "pgbus_uniqueness_key" => "TestJob:7", "pgbus_uniqueness_strategy" => "while_executing" }
+        end
+
+        before do
+          allow(Pgbus::UniquenessKey).to receive_messages(held_by_other?: true, release_held_by!: 0)
+        end
+
+        it "names the uniqueness conflict when another message holds the key and no attempt failed" do
+          executor.execute(message, queue_name)
+
+          expect(dead_letter_block).to include("reason" => "uniqueness_conflict", "attempts" => config.max_retries + 1)
+          expect(Pgbus::UniquenessKey).to have_received(:held_by_other?)
+            .with("TestJob:7", queue_name: queue_name, msg_id: 7)
+          expect(ActiveSupport::Notifications).to have_received(:instrument)
+            .with("pgbus.job_dead_lettered", hash_including(reason: "uniqueness_conflict", error: nil))
+        end
+
+        it "keeps max_retries_exceeded when nobody else holds the key (a crashed attempt)" do
+          allow(Pgbus::UniquenessKey).to receive(:held_by_other?).and_return(false)
+
+          executor.execute(message, queue_name)
+
+          expect(dead_letter_block["reason"]).to eq("max_retries_exceeded")
+        end
+
+        it "keeps max_retries_exceeded and the last error when an attempt failed" do
+          allow(Pgbus::FailedEventRecorder).to receive(:last_error).and_return(last_error)
+
+          executor.execute(message, queue_name)
+
+          expect(dead_letter_block).to include("reason" => "max_retries_exceeded", "error_class" => "Stripe::CardError")
+          expect(Pgbus::UniquenessKey).not_to have_received(:held_by_other?)
+        end
+
+        it "still dead-letters when the holder lookup raises" do
+          allow(Pgbus::UniquenessKey).to receive(:held_by_other?).and_raise(StandardError, "pooler timeout")
+
+          expect(executor.execute(message, queue_name)).to eq(:dead_lettered)
+          expect(dead_letter_block["reason"]).to eq("max_retries_exceeded")
+        end
+      end
+
+      it "does not look up a holder for a message without a :while_executing key" do
+        allow(Pgbus::UniquenessKey).to receive(:held_by_other?)
+
+        executor.execute(message, queue_name)
+
+        expect(Pgbus::UniquenessKey).not_to have_received(:held_by_other?)
       end
 
       context "when the worker read from a priority sub-queue" do
@@ -1522,6 +1578,163 @@ RSpec.describe Pgbus::ActiveJob::Executor do
 
           expect(job_double).to have_received(:perform_now)
         end
+      end
+    end
+  end
+
+  # Issue #629: a :while_executing copy whose key another message holds
+  # follows the job's on_conflict policy.
+  describe "#execute when another message holds the :while_executing lock" do
+    let(:policy) { "reject" }
+    let(:conflict_payload) do
+      job_payload.merge("pgbus_uniqueness_key" => "TestJob:user-42", "pgbus_uniqueness_strategy" => "while_executing",
+                        "pgbus_uniqueness_on_conflict" => policy, Pgbus::Batch::METADATA_KEY => "b-9")
+    end
+    let(:read_ct) { 1 }
+    let(:message) { build_message_double(msg_id: 70, message: JSON.generate(conflict_payload), read_ct: read_ct) }
+    let(:events) { [] }
+
+    before do
+      allow(Pgbus::Uniqueness).to receive(:acquire_execution_lock).and_return(false)
+      allow(Pgbus::Concurrency).to receive(:extract_key).and_return("conc-k")
+      allow(Pgbus::Concurrency::Semaphore).to receive(:signal)
+      allow(Pgbus::Batch).to receive(:job_discarded)
+      allow(Pgbus::UniquenessKey).to receive(:release_if_bound!)
+      allow(Pgbus::UniquenessKey).to receive(:release_held_by!)
+      allow(ActiveSupport::Notifications).to receive(:instrument).and_wrap_original do |original, name, *args, &block|
+        events << [name, args.first] if name.start_with?("pgbus.job_")
+        original.call(name, *args, &block)
+      end
+    end
+
+    def event(name) = events.find { |(n, _)| n == name }&.last
+
+    context "with on_conflict: :discard" do
+      let(:policy) { "discard" }
+
+      it "completes the duplicate without running it and returns :discarded" do
+        expect(executor.execute(message, queue_name)).to eq(:discarded)
+
+        expect(job_double).not_to have_received(:perform_now)
+        expect(mock_client).to have_received(:archive_message).with(queue_name, 70, job_completion: true)
+        expect(mock_client).not_to have_received(:set_visibility_timeout)
+      end
+
+      it "does the bookkeeping of a message that will never run, and releases no uniqueness row" do
+        executor.execute(message, queue_name)
+
+        expect(Pgbus::Concurrency::Semaphore).to have_received(:signal).with("conc-k", client: mock_client)
+        expect(Pgbus::Batch).to have_received(:job_discarded).with("b-9", job_id: job_id)
+        expect(Pgbus::UniquenessKey).not_to have_received(:release_held_by!)
+        expect(Pgbus::UniquenessKey).not_to have_received(:release_if_bound!)
+        expect(Pgbus::FailedEventRecorder).not_to have_received(:clear!)
+      end
+
+      it "instruments pgbus.job_discarded with the uniqueness reason" do
+        executor.execute(message, queue_name)
+
+        expect(event("pgbus.job_discarded")).to include(
+          queue: queue_name, job_class: "TestJob", job_id: job_id, msg_id: 70, reason: "uniqueness"
+        )
+        expect(event("pgbus.job_completed")).to be_nil
+      end
+
+      context "when an earlier attempt failed" do
+        let(:read_ct) { 3 }
+
+        it "clears that attempt's failed-event row" do
+          executor.execute(message, queue_name)
+
+          expect(Pgbus::FailedEventRecorder).to have_received(:clear!)
+            .with(queue_name: queue_name, msg_id: 70, source_queue: config.queue_name(queue_name))
+        end
+      end
+
+      it "completes it on the priority sub-queue it was read from" do
+        executor.execute(message, queue_name, source_queue: "pgbus_default_p1")
+
+        expect(mock_client).to have_received(:archive_message)
+          .with("pgbus_default_p1", 70, prefixed: false, job_completion: true)
+      end
+
+      # Another worker completed the message first: that worker owns the
+      # signals, as on the success path.
+      it "sends no signals when the message was already completed elsewhere" do
+        allow(mock_client).to receive(:archive_message).and_return(false)
+
+        expect(executor.execute(message, queue_name)).to eq(:duplicate)
+
+        expect(Pgbus::Concurrency::Semaphore).not_to have_received(:signal)
+        expect(Pgbus::Batch).not_to have_received(:job_discarded)
+        expect(event("pgbus.job_discarded")).to be_nil
+      end
+    end
+
+    context "with on_conflict: :reject" do
+      let(:read_ct) { 3 }
+
+      it "returns :skipped and leaves the message for redelivery" do
+        expect(executor.execute(message, queue_name)).to eq(:skipped)
+
+        expect(job_double).not_to have_received(:perform_now)
+        expect(mock_client).not_to have_received(:archive_message)
+        expect(Pgbus::Concurrency::Semaphore).not_to have_received(:signal)
+        expect(Pgbus::Batch).not_to have_received(:job_discarded)
+      end
+
+      # A skip must not come back sooner than the read's own visibility
+      # timeout, and repeated skips stretch over the holder's run:
+      # visibility_timeout * 2^(read_ct - 1), jittered, capped.
+      it "backs the redelivery off from the visibility timeout" do
+        executor.execute(message, queue_name)
+
+        expected = config.visibility_timeout * 4
+        expect(mock_client).to have_received(:set_visibility_timeout).with(
+          queue_name, 70, vt: a_value_between((expected * 0.85).floor, (expected * 1.15).ceil)
+        )
+      end
+
+      it "sets the backoff on the priority sub-queue it was read from" do
+        executor.execute(message, queue_name, source_queue: "pgbus_default_p1")
+
+        expect(mock_client).to have_received(:set_visibility_timeout)
+          .with("pgbus_default_p1", 70, vt: kind_of(Integer), prefixed: false).once
+      end
+
+      it "never backs off for less than the visibility timeout" do
+        small_max = Pgbus::Configuration.new.tap do |c|
+          c.retry_backoff_max = 1
+          c.retry_backoff_jitter = 0
+        end
+        executor = described_class.new(client: mock_client, config: small_max)
+
+        executor.execute(message, queue_name)
+
+        expect(mock_client).to have_received(:set_visibility_timeout)
+          .with(queue_name, 70, vt: small_max.visibility_timeout)
+      end
+
+      it "instruments pgbus.job_skipped" do
+        executor.execute(message, queue_name)
+
+        expect(event("pgbus.job_skipped")).to include(
+          queue: queue_name, job_class: "TestJob", job_id: job_id, msg_id: 70, read_ct: 3,
+          on_conflict: :reject, vt: kind_of(Integer)
+        )
+      end
+    end
+
+    context "with on_conflict: :log" do
+      let(:policy) { "log" }
+
+      it "skips like :reject and logs the skip at warn" do
+        warnings = []
+        allow(Pgbus.logger).to receive(:warn) { |*args, &block| warnings << (block ? block.call : args.first) }
+
+        expect(executor.execute(message, queue_name)).to eq(:skipped)
+
+        expect(mock_client).to have_received(:set_visibility_timeout)
+        expect(warnings.join).to include("TestJob", "msg_id=70", "TestJob:user-42")
       end
     end
   end

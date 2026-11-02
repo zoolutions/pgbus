@@ -224,6 +224,7 @@ de:
         retried_before:
           one: Schon einmal aus der DLQ wiederholt.
           other: Schon %{count}-mal aus der DLQ wiederholt.
+        uniqueness_conflict_html: Bei allen %{attempts} Lesevorgängen übersprungen (max. %{max}), weil eine andere Kopie des Jobs seinen Eindeutigkeitsschlüssel hielt — kein Versuch lief
       show:
         back: Zurück zur DLQ
         context: Kontext

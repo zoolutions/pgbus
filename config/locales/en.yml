@@ -224,6 +224,7 @@ en:
         retried_before:
           one: Retried from the DLQ once before.
           other: Retried from the DLQ %{count} times before.
+        uniqueness_conflict_html: Skipped on all %{attempts} reads (max %{max}) while another copy of the job held its uniqueness key — no attempt ran
       show:
         back: Back to DLQ
         context: Context

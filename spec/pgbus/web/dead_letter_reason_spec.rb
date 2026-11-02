@@ -58,6 +58,19 @@ RSpec.describe Pgbus::Web::DeadLetterReason do
     expect(result.reason_args).to eq(attempts: 6, max: 5)
   end
 
+  # Issue #629: a :while_executing copy skipped on every read while another
+  # copy held its key ran no attempt at all; "every failing attempt crashed"
+  # would send the operator looking for a crash that never happened.
+  it "says a uniqueness conflict skipped the copy on every read" do
+    block = Pgbus::DeadLetterHeader.build(existing: nil, reason: "uniqueness_conflict", source: "worker",
+                                          source_queue: "pgbus_default", attempts: 6, max_retries: 5)
+    result = present(block)
+
+    expect(result.reason).to eq("uniqueness_conflict")
+    expect(result.reason_key).to eq("uniqueness_conflict")
+    expect(result.reason_args).to eq(attempts: 6, max: 5)
+  end
+
   it "says no handler error was recorded for a consumer without one" do
     result = present(headers(source: "consumer"))
 

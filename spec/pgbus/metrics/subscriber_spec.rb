@@ -85,6 +85,41 @@ RSpec.describe Pgbus::Metrics::Subscriber do
     end
   end
 
+  # Issue #629: a :while_executing duplicate that met another message holding
+  # the key, and the dead-letter reason that says why a job died.
+  describe "pgbus.job_skipped" do
+    it "increments queue_job_count as skipped, tagged with the on_conflict policy" do
+      ActiveSupport::Notifications.instrument("pgbus.job_skipped", queue: "default", job_class: "TestJob",
+                                                                   on_conflict: :reject)
+
+      expect(backend.counters).to include(
+        ["pgbus_queue_job_count", 1, { queue: "default", job_class: "TestJob", status: "skipped", reason: "uniqueness" }]
+      )
+    end
+  end
+
+  describe "pgbus.job_discarded" do
+    it "increments queue_job_count as discarded, tagged with the reason" do
+      ActiveSupport::Notifications.instrument("pgbus.job_discarded", queue: "default", job_class: "TestJob",
+                                                                     reason: "uniqueness")
+
+      expect(backend.counters).to include(
+        ["pgbus_queue_job_count", 1, { queue: "default", job_class: "TestJob", status: "discarded", reason: "uniqueness" }]
+      )
+    end
+  end
+
+  describe "pgbus.job_dead_lettered with a reason" do
+    it "tags the dead-letter count with the reason" do
+      ActiveSupport::Notifications.instrument("pgbus.job_dead_lettered", queue: "default", job_class: "TestJob",
+                                                                         reason: "uniqueness_conflict")
+
+      expect(backend.counters).to include(
+        ["pgbus_queue_job_count", 1, hash_including(status: "dead_lettered", reason: "uniqueness_conflict")]
+      )
+    end
+  end
+
   describe "pgbus.executor.execute" do
     it "records a job_duration_ms histogram" do
       ActiveSupport::Notifications.instrument(

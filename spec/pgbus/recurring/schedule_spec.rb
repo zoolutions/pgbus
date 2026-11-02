@@ -460,6 +460,55 @@ RSpec.describe Pgbus::Recurring::Schedule do
       end
     end
 
+    # Issue #629: the executor takes a :while_executing lock only when the
+    # payload carries the key, so a recurring run that outlasts its interval
+    # overlapped itself unprotected. The scheduler takes no lock (the strategy
+    # allows duplicate enqueues) but carries key, strategy and policy.
+    context "when job class declares :while_executing" do
+      before do
+        stub_const("CleanupJob", Class.new do
+          include Pgbus::Uniqueness
+
+          def self.name
+            "CleanupJob"
+          end
+
+          ensures_uniqueness strategy: :while_executing, on_conflict: :discard
+        end)
+      end
+
+      it "takes no lock and carries key, strategy and on_conflict in the payload" do
+        schedule.enqueue_task(task, run_at: run_at)
+
+        expect(Pgbus::UniquenessKey).not_to have_received(:acquire!)
+        expect(Pgbus::UniquenessKey).not_to have_received(:bind!)
+        expect(mock_client).to have_received(:send_message).with(
+          anything,
+          hash_including(Pgbus::Uniqueness::METADATA_KEY => "CleanupJob",
+                         Pgbus::Uniqueness::STRATEGY_KEY => "while_executing",
+                         Pgbus::Uniqueness::ON_CONFLICT_KEY => "discard"),
+          headers: anything
+        )
+      end
+
+      # Fail closed, as for the enqueue-locked strategies: a broken key proc
+      # must not enqueue the run without the protection it configures.
+      it "enqueues nothing when the key proc raises" do
+        stub_const("CleanupJob", Class.new do
+          include Pgbus::Uniqueness
+
+          def self.name
+            "CleanupJob"
+          end
+
+          ensures_uniqueness strategy: :while_executing, key: -> { raise KeyError, "no tenant" }
+        end)
+
+        expect { schedule.enqueue_task(task, run_at: run_at) }.to raise_error(KeyError, "no tenant")
+        expect(mock_client).not_to have_received(:send_message)
+      end
+    end
+
     context "when job class does not have ensures_uniqueness" do
       before do
         plain_job = Class.new do

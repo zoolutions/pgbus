@@ -224,6 +224,7 @@ fr:
         retried_before:
           one: Déjà relancé depuis la DLQ une fois.
           other: Déjà relancé depuis la DLQ %{count} fois.
+        uniqueness_conflict_html: Ignoré à chacune des %{attempts} lectures (max %{max}) car une autre copie du job détenait sa clé d’unicité — aucune tentative n’a été exécutée
       show:
         back: Retour à la DLQ
         context: Contexte

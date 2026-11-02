@@ -224,6 +224,7 @@ sv:
         retried_before:
           one: Omförsökt från DLQ en gång tidigare.
           other: Omförsökt från DLQ %{count} gånger tidigare.
+        uniqueness_conflict_html: Hoppades över vid alla %{attempts} läsningar (max %{max}) medan en annan kopia av jobbet höll dess unikhetsnyckel — inget försök kördes
       show:
         back: Tillbaka till DLQ
         context: Kontext
