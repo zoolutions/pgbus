@@ -42,7 +42,12 @@
 # STREAMS_SCALE_MODES (ephemeral,durable), STREAMS_SCALE_WRITERS (0:
 # streams_writer_threads, the durable fan-out pump), STREAMS_SCALE_SLOW (0: K
 # extra clients in one extra process that sleep 1 s after each event; excluded
-# from the fan-out and connect columns).
+# from the fan-out and connect columns), STREAMS_SCALE_PROFILE (unset: a
+# directory turns on vernier over each cell's broadcast window, writes one
+# profile per cell there and prints the dispatcher thread's top self frames
+# and the inclusive share of io_writer.rb / write_nonblock / framing / the
+# audience filter: the #617 Ractor gate's profile half, issue #621; profiling
+# slows the cell, so time and profile in separate runs).
 #
 # The fd soft limit is raised first thing in every cell and client process
 # (to the hard limit, or OPEN_MAX when that is infinite, as on macOS); an M
@@ -51,6 +56,7 @@
 
 require "English"
 require "etc"
+require "fileutils"
 require "json"
 require "logger"
 require "rbconfig"
@@ -231,6 +237,7 @@ def run_cell(clients, mode)
   log = StringIO.new
   streamer, harness = boot_server(log)
   sinks = instrument(streamer)
+  streamer.dispatcher.threads.first.name = DISPATCHER_THREAD if KNOBS[:profile]
   url = "#{harness.url("/#{Pgbus::Streams::SignedName.sign(stream_name)}")}?since=#{stream.current_msg_id}"
 
   GC.start
@@ -253,8 +260,9 @@ def run_cell(clients, mode)
   sinks.each_value { |q| StreamsScaleHarness.drain(q) }
   cpu0 = cpu_seconds
   wall0 = monotonic
-  broadcasts = run_broadcasts(stream)
-  streamer.heartbeat.tick
+  broadcasts, profile = profiled(mode, clients) do
+    run_broadcasts(stream).tap { streamer.heartbeat.tick }
+  end
   cpu_ratio = (cpu_seconds - cpu0) / (monotonic - wall0)
   rss_after = rss_kb
   sleep [StreamsScaleHarness::MISS_DEADLINE_S - (realtime - broadcasts.last["at"]), 0].max
@@ -291,6 +299,7 @@ def run_cell(clients, mode)
     "rss_before_kb" => rss_before, "rss_connected_kb" => rss_connected, "rss_after_kb" => rss_after,
     "rss_kb_per_conn" => (rss_connected - rss_before).fdiv(expected), "cpu_ratio" => cpu_ratio,
     "errors" => errors, "over_capacity" => over, "retries" => every.sum { |c| c["retries"] },
+    "profile" => profile,
     # The error that ended each unconnected client's last attempt.
     "error_kinds" => every.select { |c| c["connected_at"].nil? }.filter_map { |c| c["error"]&.sub(/ - .*/, "") }.tally,
     "log" => log.string, "puma_log" => harness.server.log_writer.stderr.string
@@ -302,9 +311,26 @@ ensure
   Pgbus.client.drop_queue(stream_name) if stream_name
 end
 
+DISPATCHER_THREAD = "pgbus-streams-dispatcher"
+
+# Runs the block, under vernier when STREAMS_SCALE_PROFILE names a directory.
+# Returns [the block's value, the dispatcher's profile summary or nil].
+def profiled(mode, clients)
+  return [yield, nil] unless KNOBS[:profile]
+
+  require "vernier"
+  value = nil
+  result = Vernier.trace(interval: 200, allocation_interval: 0) { value = yield }
+  FileUtils.mkdir_p(KNOBS[:profile])
+  result.write(out: File.join(KNOBS[:profile], "streams_scale_#{mode}_#{clients}.vernier.json"))
+  samples = StreamsScaleHarness.enum_for(:each_profile_sample, result, DISPATCHER_THREAD)
+  [value, StreamsScaleHarness.profile_summary(samples)]
+end
+
 def print_cell_notes(mode, row)
   return if row["skip_reason"]
 
+  StreamsScaleHarness.profile_lines(row["profile"]).each { |l| puts "  dispatcher profile: #{l}" } if row["profile"]
   printf "  %s M=%d: registered %d; connect p50 %.1f ms; dispatcher handle_connect p50/p99 %.1f / %.1f ms; " \
          "%d wakes for %d broadcasts; %d heartbeat tick(s); RSS %d → %d → %d KB\n",
          mode, row["m"], row["registered"], row["connect_p50_ms"] || Float::NAN,
@@ -373,7 +399,7 @@ if (cell = ENV.fetch("STREAMS_SCALE_CELL", nil))
   row = run_cell(Integer(clients, 10), mode.to_sym)
   print_cell_notes(mode, row)
   # One write, so no Puma stderr line can land between the JSON and its newline.
-  $stdout.write("#{StreamsScaleHarness::CELL_RESULT}#{JSON.generate(row.except("log", "puma_log", "error_kinds"))}\n")
+  $stdout.write("#{StreamsScaleHarness::CELL_RESULT}#{JSON.generate(row.except("log", "puma_log", "error_kinds", "profile"))}\n")
   $stdout.flush
   exit
 end

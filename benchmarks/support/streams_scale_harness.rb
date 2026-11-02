@@ -20,8 +20,21 @@ module StreamsScaleHarness
   DEFAULTS = {
     "STREAMS_SCALE_CLIENTS" => "100,1000", "STREAMS_SCALE_CLIENT_PROCESSES" => "4",
     "STREAMS_SCALE_BROADCASTS" => "20", "STREAMS_SCALE_MODES" => "ephemeral,durable",
-    "STREAMS_SCALE_WRITERS" => "0", "STREAMS_SCALE_SLOW" => "0"
+    "STREAMS_SCALE_WRITERS" => "0", "STREAMS_SCALE_SLOW" => "0", "STREAMS_SCALE_PROFILE" => ""
   }.freeze
+  # The frames the #617 Ractor gate asks about, plus the rest of a wake's
+  # per-connection work (issue #621): each is the share of the profiled
+  # thread's running samples whose stack holds a matching frame.
+  PROFILE_MARKERS = {
+    "io_writer.rb" => ->(f) { f.filename.to_s.end_with?("streamer/io_writer.rb") },
+    "write_nonblock" => ->(f) { f.label.to_s.include?("write_nonblock") },
+    "framing (envelope.rb)" => ->(f) { f.filename.to_s.end_with?("streams/envelope.rb") },
+    "audience filter" => ->(f) { f.label.to_s.include?("visible_envelopes_for") },
+    "JSON.parse" => ->(f) { f.label.to_s.include?("JSON") && f.label.to_s.include?("parse") },
+    "read_after" => ->(f) { f.label.to_s.include?("read_after") },
+    "ActiveRecord" => ->(f) { f.filename.to_s.include?("/activerecord-") }
+  }.freeze
+  PROFILE_CATEGORIES = { 1 => :idle, 2 => :stalled }.freeze
   # Descriptors per client: the server's socket and, counted conservatively,
   # the client's (the clients live in other processes today).
   FD_PER_CLIENT = 2
@@ -51,7 +64,8 @@ module StreamsScaleHarness
       broadcasts: parse_integer(value.call("STREAMS_SCALE_BROADCASTS"), name: "STREAMS_SCALE_BROADCASTS", min: 1),
       modes: parse_modes(value.call("STREAMS_SCALE_MODES")),
       writers: parse_integer(value.call("STREAMS_SCALE_WRITERS"), name: "STREAMS_SCALE_WRITERS", min: 0),
-      slow: parse_integer(value.call("STREAMS_SCALE_SLOW"), name: "STREAMS_SCALE_SLOW", min: 0)
+      slow: parse_integer(value.call("STREAMS_SCALE_SLOW"), name: "STREAMS_SCALE_SLOW", min: 0),
+      profile: value.call("STREAMS_SCALE_PROFILE").to_s.strip.then { |dir| dir.empty? ? nil : dir }
     }
   end
 
@@ -240,4 +254,53 @@ module StreamsScaleHarness
   end
 
   def num(value, fmt) = value.nil? ? NA : format(fmt, value)
+
+  # Yields [frames (leaf first), category, weight] for every sample a
+  # Vernier::Result took on the thread named `thread_name`.
+  def each_profile_sample(result, thread_name)
+    result.threads.each_value do |thread|
+      next unless thread[:name].to_s == thread_name
+
+      categories = thread[:sample_categories] || []
+      thread[:samples].each_with_index do |stack_idx, i|
+        yield result.stack(stack_idx).frames, PROFILE_CATEGORIES.fetch(categories[i], :running), thread[:weights][i]
+      end
+    end
+  end
+
+  # samples: [frames (leaf first, each with #filename and #label), category
+  # (:running, :idle: blocked in a wait, :stalled: waiting for the GVL),
+  # weight]. Running samples only feed the shares: the top self frames (the
+  # leaf, "file.rb:label") and PROFILE_MARKERS' inclusive shares.
+  def profile_summary(samples, top: 8)
+    totals = Hash.new(0.0)
+    self_weights = Hash.new(0.0)
+    marker_weights = PROFILE_MARKERS.keys.to_h { |name| [name, 0.0] }
+    samples.each do |frames, category, weight|
+      totals[category] += weight
+      next unless category == :running
+
+      leaf = frames.first
+      self_weights["#{File.basename(leaf.filename.to_s)}:#{leaf.label}"] += weight if leaf
+      PROFILE_MARKERS.each { |name, match| marker_weights[name] += weight if frames.any?(&match) }
+    end
+    running = totals[:running]
+    share = ->(w) { running.zero? ? 0.0 : w / running }
+    {
+      "running" => running, "idle" => totals[:idle], "stalled" => totals[:stalled],
+      "top_self" => self_weights.sort_by { |label, w| [-w, label] }.first(top).map { |label, w| [label, share.call(w)] },
+      "inclusive" => marker_weights.transform_values(&share)
+    }
+  end
+
+  def profile_lines(summary)
+    pct = ->(v) { format("%.1f %%", v * 100) }
+    stalled = summary["running"] + summary["stalled"]
+    [
+      "running #{summary["running"].round} samples, stalled (GVL) " \
+      "#{pct.call(stalled.zero? ? 0.0 : summary["stalled"] / stalled)} of running + stalled",
+      "inclusive: #{summary["inclusive"].map { |name, v| "#{name} #{pct.call(v)}" }.join(", ")}",
+      "top self: #{summary["top_self"].map { |label, v| "#{label} #{pct.call(v)}" }.join(", ")}"
+    ]
+  end
 end

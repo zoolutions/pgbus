@@ -30,7 +30,7 @@ measured it and what it costs, is the docs site's
 | Connection pool checkout | every PGMQ operation under concurrency | `connection_pool_bench.rb` |
 | Execution pool dispatch | every job dispatched to thread/async pool | `execution_pool_bench.rb` |
 | SSE streaming | every Turbo Stream broadcast | `streams_bench.rb` |
-| Streamer at scale | connect storm, fan-out, dispatcher wake, heartbeat tick and RSS at 100–1 000 SSE clients on one web process (issue #620) | `streams_scale_bench.rb` |
+| Streamer at scale | connect storm, fan-out, dispatcher wake, heartbeat tick and RSS at 100–1 000 SSE clients on one web process (issue #620); frame once per wake and the dispatcher profile (issue #621) | `streams_scale_bench.rb`, `streams_frame_bench.rb`, `streams_fanout_bench.rb` |
 | Streamer replay read | every durable-stream wake + SSE connect (`Client#read_after`) | `streams_read_pool_bench.rb` |
 | Streams-pool hot-swap | elastic resize under load (issue #323) | `pool_swap_bench.rb` |
 | Streams-pool autoscaler | per-tick decision cost + grow-under-load (issue #323) | `pool_autoscale_bench.rb` |
@@ -554,6 +554,17 @@ transfers is discipline, measured step by step in #617: the Rails share of a
 job as a measured bucket ("The Rails share of a job" below), a commit that does
 not wait on the WAL flush for the completion statement only (#619), and SSE
 frames serialized once and fanned out as frozen bytes (#620, #621).
+
+The Ractor fan-out gate, evaluated 2026-11-02 for #617 step 5 after #621: shut.
+At 1 000 subscribers the dispatcher's wake is almost entirely the socket-write
+loop (`IO#write_nonblock` 74–81 % of its running samples, framing 0.1–0.2 %),
+but the wake is under half the last client's p99 in every cell (6–20 ms against
+14–30 ms), so the write loop is not the fan-out ceiling. Moving it into Ractors
+(sockets re-opened by fd, frozen frames by reference, a Ractor-local registry,
+Ruby 4.0 only) or turning `streams_writer_threads` on by default could save at
+most the wake's share of the time to the last client. The numbers are in "Frame
+once per wake (issue #621)" below; the question reopens if a later bench shows
+the wake above half the p99.
 
 ### Workflow steps (issue #540)
 
@@ -1243,6 +1254,115 @@ command arrives) would bring 1 000 connects from ~255 s down to the dispatcher's
 per-connect cost: the step this baseline recommends next. Ractor-gate pre-read (#617: wake wall time above half the fan-out p99 at
 1 000): durable 9.2 vs 14.5–17.7 ms, not met; ephemeral 17.4 vs 16.3 (round 1, met) and 23.0
 vs 28.6 (round 2, not met); this bench does not profile, which is the gate's other half.
+
+### Frame once per wake (issue #621)
+
+Four changes to the streamer's per-wake and per-tick work, measured against the baseline
+above: the dispatcher builds each envelope's SSE frame once per wake (`msg_id` → frozen
+frame) and hands the same frozen Hash to every connection on the stream, inline or through
+the pump, instead of every connection re-framing every envelope; `Envelope.data_lines` skips
+its split/map/join for a one-line payload; the heartbeat builds one frame per tick and writes
+it under `streams_fanout_write_deadline_ms` (250 ms) instead of the 5 s
+`streams_write_deadline_ms`; the `Registry` hands out frozen snapshots it caches until the
+next membership change instead of copying the connection list on every wake and tick. The
+connect replay and the in-flight drain still frame per connection.
+
+**Micro-benches** (no database, YJIT, `main` worktree and branch alternated, load 5.6–12.8 on
+12 cores):
+
+| bench | main | branch |
+|---|---:|---:|
+| durable wake, 3 broadcasts → 100 real `Connection`s (`streams_frame_bench`) | 377 µs, 2 641 objects | 102 µs, 256 objects |
+| `Connection#enqueue`, frame built vs given (`streams_fanout_bench`) | 771 ns, 6 objects | 148 ns, 2 objects |
+| `Envelope.message`, one-line payload | 990 ns, 8 objects | 620 ns, 4 objects |
+| `Envelope.message`, multi-line payload | ~1 540 ns | ~1 520 ns |
+| pgbus-owned objects per connection per wake (`fanout_allocation_budget_spec.rb`, gated `< 3`) | 22.5 | 1.8 |
+
+The one-line check is two `String#include?` scans, not the regex `match?` the plan named:
+232 vs 388 ns on a 170-byte line, and the regex check made multi-line payloads ~10 % slower
+(match, then split), where `include?` stays within noise.
+
+**The eager registry, superseded.** The first version replaced the frozen arrays on every
+`register` / `unregister` and read them without a lock. Its first round showed RSS Δ/conn
+36 KB at M = 1 000 against main's 26 KB, and a direct check put it at +35 MB of RSS and 80 ms
+for 2 000 registers (main: +0.4 MB, 2.5 ms): a connect storm copies the M-element list M
+times. The registry now builds a snapshot on the first read after a change and caches it
+(+0.35 MB, 2.5 ms); that round is left out of the table below.
+
+**1 000 clients** (`rake bench:streams_scale`, same machine and settings as the baseline,
+2026-11-02, each round alternating main and branch; load average before each run in the
+last column; `slow` rows add `STREAMS_SCALE_SLOW=20`; `×100` rows send 100 broadcasts
+instead of 20). Every row: 0 missed broadcasts, 0 failed clients.
+
+| mode | run | tree | fan-out last p50 / p99 (ms) | dispatcher wake p50 / p99 (ms) | heartbeat tick (ms) | RSS Δ / conn (KB) | CPU / wall | load |
+|---|---|---|---:|---:|---:|---:|---:|---:|
+| ephemeral | 1 | main | 37.8 / 51.6 | 27.4 / 36.2 | 8.8 | 27.6 | 10 % | 5.7 |
+| ephemeral | 2 | main | 24.1 / 108.9 | 8.9 / 36.4 | 16.3 | 26.9 | 6 % | 5.2 |
+| ephemeral | 2 | branch | 39.4 / 46.6 | 20.5 / 29.2 | 7.4 | 28.2 | 7 % | 2.0 |
+| ephemeral | 3 | branch | 18.2 / 31.8 | 5.7 / 8.2 | 5.5 | 28.2 | 3 % | 5.6 |
+| ephemeral | 3 | main | 26.4 / 48.6 | 15.3 / 23.0 | 12.7 | 27.0 | 6 % | 8.3 |
+| durable | 1 | main | 32.9 / 58.6 | 20.3 / 40.0 | 5.8 | 26.1 | 10 % | 5.7 |
+| durable | 2 | main | 49.5 / 65.1 | 33.8 / 37.0 | 25.4 | 26.9 | 12 % | 5.2 |
+| durable | 2 | branch | 34.6 / 60.0 | 13.8 / 36.3 | 5.2 | 28.2 | 7 % | 2.0 |
+| durable | 3 | branch | 33.4 / 60.2 | 16.3 / 19.0 | 15.2 | 28.4 | 6 % | 5.6 |
+| durable | 3 | main | 33.0 / 58.4 | 15.3 / 40.1 | 6.2 | 27.3 | 7 % | 8.3 |
+| durable | slow | main | 19.8 / 34.4 | 9.5 / 15.9 | 6.4 | 26.8 | 4 % | 4.8 |
+| durable | slow | branch | 21.2 / 35.2 | 7.3 / 13.5 | 6.1 | 28.0 | 3 % | 4.2 |
+| durable | ×100 #1 | main | 43.9 / 61.0 | 29.5 / 40.2 | 31.7 | 27.1 | 10 % | 4.2 |
+| durable | ×100 #1 | branch | 20.1 / 27.2 | 6.9 / 12.5 | 5.3 | 28.5 | 3 % | 4.6 |
+| durable | ×100 #2 | main | 22.9 / 56.4 | 9.2 / 28.3 | 6.6 | 26.3 | 4 % | 4.3 |
+| durable | ×100 #2 | branch | 27.3 / 60.8 | 9.8 / 35.9 | 12.2 | 27.7 | 5 % | 5.0 |
+
+What the numbers say:
+
+- **This machine did not reproduce the baseline today, so the scale bench cannot settle the
+  target.** Main's own durable wake p50 is 9.2–33.8 ms across six cells, against 9.2–9.3 ms
+  in the baseline. The cells fall in two regimes, and the CPU / wall column tells them apart:
+  at 3–5 % every number is near the baseline (main's wake 9.2–9.5 ms, branch's 6.9–9.8 ms), at
+  6–12 % everything is 2–3× slower on both trees (the same work burning more CPU, which reads
+  as the cell's threads landing on the efficiency cores, not as load average: the slowest main
+  cell started at 4.2). Medians over every cell: durable wake p50 main 17.8 ms, branch 9.8 ms;
+  heartbeat tick main 6.5 ms, branch 6.1 ms.
+- **Against the targets**, read in the fast regime, where the baseline was measured: dispatcher
+  wake p50 ≤ 8.2 ms — branch 6.9 and 7.3 ms in two of its three fast cells (9.8 in the third),
+  main 9.2 and 9.5; heartbeat tick ≤ 6.0 ms — branch 5.3, 6.1 and 12.2 ms, main 6.4 and 6.6
+  (one tick per cell, so a single sample each: met once, not settled). Fan-out last-client p99
+  ≤ 35.4 ms (a regression gate) — branch 27.2, 35.2 and 60.8 ms in its fast cells, main 34.4
+  and 56.4; in the slow regime both trees sit at 46–65 ms. No regression shows; the gain is
+  inside the spread. The per-wake saving is what the micro-bench shows: the
+  ~1 ms of framing and copying per 1 000-connection wake is gone.
+- **RSS per connection is 1–1.5 KB higher on the branch** (27.7–28.5 against 26.1–27.6 KB),
+  within the spread of the lazy registry's own micro-check (+0.35 MB per 2 000 registers, the
+  same as main). The bench reads RSS right after the connects without a GC, so fewer
+  allocations during the storm (one heartbeat frame per tick instead of one per connection)
+  also move when the next GC runs; this bench does not separate the two.
+- **The slow-client rows do not exercise the heartbeat deadline.** Twenty clients reading one
+  event a second never fill a socket buffer with 20 broadcasts and a 25-byte comment, so no
+  heartbeat write blocks and both trees tick in ~6 ms. The bound (K slow clients stall a tick
+  K × 250 ms, not K × 5 s) holds by construction, and `heartbeat_spec.rb`'s `:timeout` example
+  proves the connection is dropped.
+- **The profile** (`STREAMS_SCALE_PROFILE=<dir>`, new: vernier over the broadcast window, the
+  dispatcher thread's running samples, branch, M = 1 000): durable — `io_writer.rb` 77.8 %
+  inclusive, `IO#write_nonblock` 73.8 % self, framing 0.1 %, the audience filter 1.5 %,
+  `read_after` 1.6 %, waiting for the GVL 0.3 % of running + stalled; ephemeral —
+  `io_writer.rb` 89.0 %, `write_nonblock` 81.3 %, framing 0.2 %, JSON 0.0 %, GVL 0.8 %. The
+  wake is the socket-write loop and nothing else.
+- **The ephemeral/durable gap does not hold up.** The baseline's ephemeral wake was about twice
+  durable's; today ephemeral ranges 5.7–27.4 ms and durable 6.9–33.8 ms, both following the
+  regime, and the profile gives both the same composition (write loop ~80 %, no JSON or
+  database share worth naming). The two baseline rounds most likely caught ephemeral cells in
+  the slow regime.
+
+**The #617 step-5 gate: shut.** The gate opens when, at M = 1 000 after these changes, the
+dispatcher wake wall time is more than half the fan-out p99 *and* the profile's top frames are
+in `io_writer.rb` / `write_nonblock`. The second half holds (74–81 % `write_nonblock`). The
+first does not, in any branch cell: durable wake p50 against half the last-client p99 is 13.8
+vs 30.0, 16.3 vs 30.1, 7.3 vs 17.6, 6.9 vs 13.6 and 9.8 vs 30.4 ms; ephemeral 20.5 vs 23.3 and
+5.7 vs 15.9 ms; the profiled run 8.7 vs 21.5 (durable) and 6.4 vs 15.7 ms (ephemeral). Most of
+the time to the last client is spent outside the dispatcher's wake (the NOTIFY round trip, and
+1 000 clients parsed by 4 client processes), so parallelizing the write loop, by writer threads
+or by Ractors, could remove at most the wake's share. The verdict is recorded with the Ractor
+evaluations above.
 
 ### Execution mode and DB pool sizing (threads vs async)
 
