@@ -1095,7 +1095,9 @@ replays the gap from the durable archive (or triggers a fresh re-render for
 ephemeral streams). **Connect-replay** writes keep the full
 `streams_write_deadline_ms`, so a new client catching up a large backlog isn't
 evicted. Set `streams_fanout_write_deadline_ms = streams_write_deadline_ms` to
-restore the pre-fix timing.
+restore the pre-fix timing. Since #621 the heartbeat's writes use the same short
+deadline (they are serial on the heartbeat thread, so K slow clients stalled a
+tick `K × 5 s`); the same setting restores their old timing too.
 
 This is a **system-level** latency bound, not a per-write speedup: the fanout
 happy path (all-fast clients) is unchanged — the `deadline_ms` keyword is a

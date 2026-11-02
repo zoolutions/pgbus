@@ -4,30 +4,33 @@ module Pgbus
   module Web
     module Streamer
       # Worker-local in-memory registry of SSE connections indexed by stream
-      # name and connection id.
+      # name and connection id. Thread-safe via a single mutex.
       #
-      # Reads are copy-free (issue #621): the per-stream index and the list of
-      # every connection are frozen snapshots, replaced whole under the mutex
-      # on register / unregister and never mutated in place (the rule
-      # docs/concurrency.md sets for memos handed to other threads). A reader
-      # loads the current snapshot with one reference read and gets either the
-      # old or the new frozen object, never a half-built one, so the per-wake
-      # (connections_for), per-tick (each_connection) and per-connect (size)
-      # reads take no lock and copy nothing. Membership change pays instead:
-      # one Array copy of the stream's connections and of every connection,
-      # and one Hash copy of the stream index (microseconds at 2 000
-      # connections, on a path that already waits on a LISTEN round trip).
-      # The id index stays a mutable Hash under the mutex: lookup is rare.
+      # Reads are copy-free (issue #621): connections_for and each_connection
+      # hand out a frozen snapshot that is built on the first read after a
+      # membership change and cached until the next one, never mutated in
+      # place (the rule docs/concurrency.md sets for memos handed to other
+      # threads). Every wake and every heartbeat tick on an unchanged stream
+      # gets the same object back: one uncontended lock, no copy. The
+      # snapshot is not rebuilt on register / unregister themselves, so a
+      # connect storm of M clients does not copy the M-element list M times
+      # (an eager copy-on-write registry measured +35 MB of RSS and 80 ms for
+      # 2 000 registers, against 0.4 MB and 2.5 ms for this one). size reads
+      # an Integer kept under the mutex, without the lock.
       class Registry
         EMPTY = [].freeze
 
         def initialize
           @mutex = Mutex.new
-          # stream name → frozen Array of connections, the Hash itself frozen.
-          @by_stream = {}.freeze
-          # Every registered connection, frozen.
-          @all = EMPTY
+          # stream name → Array of its connections (mutated under @mutex only).
+          @by_stream = {}
           @by_id = {}
+          # stream name → the frozen snapshot of @by_stream[name]; an entry is
+          # dropped when that stream's membership changes.
+          @stream_snapshots = {}
+          # The frozen snapshot of every connection, nil after a change.
+          @all_snapshot = nil
+          @size = 0
         end
 
         def register(connection)
@@ -42,10 +45,13 @@ module Pgbus
             # must scrub the old entry from its stream index before
             # overwriting. Otherwise connections_for(stream) would
             # return orphaned objects and writes would go nowhere.
-            remove_from_snapshots(existing) if existing
+            evict_from_stream(existing) if existing
 
+            # Not already a member: the same object under its id returned
+            # above, and a connection's id never changes.
             @by_id[connection.id] = connection
-            add_to_snapshots(connection)
+            (@by_stream[connection.stream_name] ||= []) << connection
+            membership_changed(connection.stream_name)
           end
         end
 
@@ -60,7 +66,8 @@ module Pgbus
             existing = @by_id.delete(connection.id)
             return false unless existing
 
-            remove_from_snapshots(existing)
+            evict_from_stream(existing)
+            membership_changed(existing.stream_name)
             true
           end
         end
@@ -69,56 +76,54 @@ module Pgbus
           @mutex.synchronize { @by_id[id] }
         end
 
-        # The frozen Array of connections on the given stream, the same
+        # The frozen Array of connections on the given stream: the same
         # object until the stream's membership changes.
         def connections_for(stream_name)
-          @by_stream[stream_name] || EMPTY
+          @mutex.synchronize do
+            @stream_snapshots[stream_name] ||= @by_stream[stream_name]&.dup&.freeze || EMPTY
+          end
         end
 
         # Frozen list of stream names with at least one registered connection.
         def streams
-          @by_stream.keys.freeze
+          @mutex.synchronize { @by_stream.keys.freeze }
         end
 
         def empty?(stream_name)
-          !@by_stream.key?(stream_name)
+          @mutex.synchronize { !@by_stream.key?(stream_name) }
         end
 
-        def size
-          @all.size
-        end
+        # Read once per connect by the StreamApp's capacity check: an Integer
+        # written under @mutex and read whole, so a reader sees the count
+        # before or after a change, never a torn one.
+        attr_reader :size
 
         # Yields every registered connection across all streams. The iteration
         # walks the current frozen snapshot, so the block may safely call back
         # into register/unregister without risk of deadlock or skipped items.
         def each_connection(&)
-          @all.each(&)
+          snapshot = @mutex.synchronize { @all_snapshot ||= @by_id.values.freeze }
+          snapshot.each(&)
         end
 
         private
 
-        # Must be called while holding @mutex. Builds new frozen snapshots;
-        # the ones readers hold are never touched.
-        def add_to_snapshots(connection)
-          name = connection.stream_name
-          current = @by_stream[name] || EMPTY
-          @by_stream = @by_stream.merge(name => (current + [connection]).freeze).freeze unless current.any? { |c| c.equal?(connection) }
-          @all = (@all + [connection]).freeze unless @all.any? { |c| c.equal?(connection) }
+        # Must be called while holding @mutex.
+        def membership_changed(stream_name)
+          @stream_snapshots.delete(stream_name)
+          @all_snapshot = nil
+          @size = @by_id.size
         end
 
         # Must be called while holding @mutex.
-        def remove_from_snapshots(connection)
+        def evict_from_stream(connection)
           name = connection.stream_name
-          current = @by_stream[name]
-          if current&.any? { |c| c.equal?(connection) }
-            remaining = current.reject { |c| c.equal?(connection) }
-            @by_stream = if remaining.empty?
-                           @by_stream.except(name).freeze
-                         else
-                           @by_stream.merge(name => remaining.freeze).freeze
-                         end
-          end
-          @all = @all.reject { |c| c.equal?(connection) }.freeze
+          members = @by_stream[name]
+          return unless members
+
+          members.reject! { |c| c.equal?(connection) }
+          @by_stream.delete(name) if members.empty?
+          @stream_snapshots.delete(name)
         end
       end
     end

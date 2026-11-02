@@ -31,7 +31,7 @@ stops the thread.
 | | process heartbeat (`Concurrent::TimerTask`) | `Process::Heartbeat`; `stop` shuts the timer down (a beat in flight finishes on its own) |
 | Supervisor | the notify hub's one listener (supervisor scope: one LISTEN connection per host, forks are woken over pipes) | `Process::NotifyHub`; `stop` joins it |
 | | health server accept loop | `Web::HealthServer`; `stop` joins it, then kills it if it hangs |
-| Web (streams) | LISTEN thread, dispatcher, heartbeat, peer-close watcher, outbound pump writers | `Web::Streamer::Instance`, built once per process under `Streamer`'s lock; `shutdown!` stops them and joins each within a budget, logging any still running past it |
+| Web (streams) | LISTEN thread, dispatcher, heartbeat, peer-close watcher, outbound pump writers | `Web::Streamer::Instance`, built once per process under `Streamer`'s lock; `shutdown!` stops them and joins each within a budget, logging any still running past it. The heartbeat's writes, like the dispatcher's fan-out writes, run under `streams_fanout_write_deadline_ms` (250 ms), so slow clients stall its serial pass at most 250 ms each |
 | | hub client reader (Puma cluster mode) | `Web::Streamer::HubClient`; ends with its socket |
 | Puma master | hub accept / fanout / status loops, one reader and writer per worker | `Web::Streamer::MasterHub`; `stop` joins the three hub loops and closes the worker sockets, which ends their readers and writers |
 
@@ -58,7 +58,8 @@ reaped, so none stays checked out by a dead job.
   dashboard's, the batch probes', `StreamQueue`'s). A `Configuration`'s own
   deprecation warnings are deduped without a lock: at worst one is logged twice.
 - **Memos handed to other threads are frozen and replaced whole**, never
-  mutated in place (`StreamQueue.all_names`), so a caller iterating one can
+  mutated in place (`StreamQueue.all_names`, the streamer `Registry`'s
+  per-stream and all-connection snapshots), so a caller iterating one can
   never see it change.
 - **Idempotent schema probes** (does this table or column exist yet?) may race:
   both callers store the same answer. Their inline disables say so.
@@ -114,8 +115,10 @@ place:
   publishes the defaults. A setter alone does not publish.
 - **A shareable seam.** The values the LISTEN thread hands the dispatcher, and
   the frames the dispatcher hands a connection (`WakeMessage`,
-  `StreamEnvelope`, `ReadAfter::Envelope`), are `Ractor.shareable?`, so a
-  future Ractor dispatcher could pass them by reference.
+  `StreamEnvelope`, `ReadAfter::Envelope`, and since #621 the frozen Hash of
+  prebuilt SSE frames, msg_id → frozen String, built once per wake), are
+  `Ractor.shareable?`, so a future Ractor dispatcher could pass them by
+  reference.
 - **A canary** (`spec/pgbus/ractor_canary_spec.rb`, Ruby 4.0): stream names,
   full stream keys and their queue-name budget, durable and presence pattern
   resolution, the event serializer and the dispatch seam run inside a non-main

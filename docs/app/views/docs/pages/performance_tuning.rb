@@ -373,7 +373,8 @@ class Views::Docs::Pages::PerformanceTuning < DocsUI::Page
         plain "pool. A slow or congested client can't stall the fleet: the fan-out "
         plain "write deadline ("
         code { "streams_fanout_write_deadline_ms" }
-        plain ", default 250 ms) evicts it, and it reconnects and replays from the "
+        plain ", default 250 ms, which also bounds each heartbeat write) evicts it, "
+        plain "and it reconnects and replays from the "
         plain "durable archive. So the writer pool scales fan-out throughput; it "
         plain "doesn't need to grow to absorb slow clients. Size "
         code { "streams_writer_threads" }
