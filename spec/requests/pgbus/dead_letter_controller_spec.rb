@@ -117,6 +117,17 @@ RSpec.describe "Pgbus::DeadLetterController", type: :request do
         expect(response).to redirect_to("/pgbus/dlq")
         expect(@stub_data_source.calls[:retry_dlq_message]).to eq([%w[pgbus_default_dlq 12]])
       end
+
+      # Issue #631: refused while another copy holds the job's uniqueness key.
+      it "names the reasons a retry can fail" do
+        allow(@stub_data_source).to receive(:retry_dlq_message).and_return(false)
+
+        post "/pgbus/dlq/12/retry", params: { queue_name: "pgbus_default_dlq" }
+
+        expect(response).to redirect_to("/pgbus/dlq")
+        expect(flash[:alert]).to eq("Could not retry message: it is gone, the retry failed, " \
+                                    "or another copy of the job holds its uniqueness key.")
+      end
     end
 
     context "with a non-DLQ queue" do
