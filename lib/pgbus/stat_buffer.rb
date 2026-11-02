@@ -7,6 +7,8 @@ module Pgbus
   class StatBuffer
     DEFAULT_FLUSH_SIZE = 100
     DEFAULT_FLUSH_INTERVAL = 5 # seconds
+    BASE_COLUMNS = "job_class, queue_name, status, duration_ms"
+    ALL_COLUMNS = "#{BASE_COLUMNS}, enqueue_latency_ms, retry_count".freeze
 
     attr_reader :flush_size, :flush_interval
 
@@ -65,39 +67,52 @@ module Pgbus
 
     private
 
+    # One multi-row INSERT per flush, built here rather than by
+    # JobStat.insert_all: ActiveRecord's per-value attribute check and type
+    # cast and its RETURNING "id" cost ~1 ms of Ruby CPU per 100 rows, 12-15 %
+    # of a no-op job's on-CPU time (issue #622). The integer columns are
+    # written through Integer(); the strings (job_class comes from the
+    # message) go through the connection's quoting, once per distinct value.
+    #
+    # Always attempt all 6 columns. If the latency migration hasn't run, the
+    # statement fails, and we fall back to base columns. This avoids relying
+    # on the memoized latency_columns? flag which can be stuck at false if
+    # evaluated before the connection is ready.
     def write_to_database(entries)
       return unless JobStat.table_exists?
 
-      # Always attempt all 6 columns. If the latency migration hasn't
-      # run, the first flush will fail, and we fall back to base columns.
-      # This avoids relying on the memoized latency_columns? flag which
-      # can be stuck at false if evaluated before the connection is ready.
-      rows = entries.map do |e|
-        { job_class: e[:job_class], queue_name: e[:queue_name],
-          status: e[:status], duration_ms: e[:duration_ms],
-          enqueue_latency_ms: e[:enqueue_latency_ms], retry_count: e[:retry_count] }
-      end
+      JobStat.connection_pool.with_connection do |conn|
+        conn.execute(insert_sql(conn, entries, latency: true), "Pgbus::JobStat Bulk Insert")
+      rescue ActiveRecord::StatementInvalid => e
+        raise unless e.message.include?("enqueue_latency_ms") || e.message.include?("retry_count")
 
-      JobStat.insert_all(rows)
-    rescue ActiveRecord::StatementInvalid, ActiveModel::UnknownAttributeError => e
-      # Column doesn't exist — fall back to base columns only
-      if e.message.include?("enqueue_latency_ms") || e.message.include?("retry_count")
-        Pgbus.logger.warn { "[Pgbus] Latency columns missing — recording stats without latency data" } unless @degraded_warned
-        @degraded_warned = true
-        base_rows = entries.map do |entry|
-          { job_class: entry[:job_class], queue_name: entry[:queue_name],
-            status: entry[:status], duration_ms: entry[:duration_ms] }
-        end
-        begin
-          JobStat.insert_all(base_rows)
-        rescue StandardError => fallback_error
-          Pgbus.logger.warn { "[Pgbus] Stat buffer fallback flush failed: #{fallback_error.message}" }
-        end
-      else
-        Pgbus.logger.warn { "[Pgbus] Stat buffer flush failed: #{e.message}" }
+        write_base_columns(conn, entries)
       end
     rescue StandardError => e
       Pgbus.logger.warn { "[Pgbus] Stat buffer flush failed: #{e.message}" }
+    end
+
+    def write_base_columns(conn, entries)
+      Pgbus.logger.warn { "[Pgbus] Latency columns missing — recording stats without latency data" } unless @degraded_warned
+      @degraded_warned = true
+      conn.execute(insert_sql(conn, entries, latency: false), "Pgbus::JobStat Bulk Insert")
+    rescue StandardError => e
+      Pgbus.logger.warn { "[Pgbus] Stat buffer fallback flush failed: #{e.message}" }
+    end
+
+    def insert_sql(conn, entries, latency:)
+      quoted = Hash.new { |memo, value| memo[value] = conn.quote(value) }
+      columns = latency ? ALL_COLUMNS : BASE_COLUMNS
+      values = entries.map do |e|
+        row = "(#{quoted[e[:job_class]]}, #{quoted[e[:queue_name]]}, #{quoted[e[:status]]}, #{sql_integer(e[:duration_ms])}"
+        row << ", #{sql_integer(e[:enqueue_latency_ms])}, #{sql_integer(e[:retry_count])}" if latency
+        row << ")"
+      end
+      "INSERT INTO #{JobStat.quoted_table_name} (#{columns}) VALUES #{values.join(", ")}"
+    end
+
+    def sql_integer(value)
+      value.nil? ? "NULL" : Integer(value).to_s
     end
 
     def monotonic_now
