@@ -849,6 +849,136 @@ What the numbers say:
   and it ends `a_` table growth for job queues. Keep `:archive` when you query
   `a_` tables for audit or debugging.
 
+### Async completion commit (issue #619)
+
+`config.completion_synchronous_commit = false` (opt-in, default `true`) commits a
+job's completion (the executor's archive or delete, the completer's
+`archive_batch` or `delete_batch`) with `synchronous_commit` off for that
+transaction only. The completion goes out in libpq pipeline mode as four
+queries and one sync, so it is still one round trip:
+
+```
+BEGIN
+SET LOCAL synchronous_commit TO off
+<the prepared completion statement>   <- the result the caller gets
+COMMIT
+```
+
+The statement stays prepared (the planning #605 took out stays out), `SET LOCAL`
+ends with the transaction, and a transaction-mode pooler sees one explicit
+transaction. A failed query leaves the explicit `BEGIN` open in a failed state
+after the sync, so pgbus leaves pipeline mode, rolls it back and raises; a
+statement the session lost is prepared and run outside the pipeline for that
+call. A completion inside a caller's transaction is left to that transaction.
+Only callers passing `job_completion: true` (the executor and the completer)
+get it: the EventBus consumer's archive (its replay reads the archive) and the
+dashboard's archives and deletes stay durable. Native statements only.
+
+**Semantics.** With `completion_synchronous_commit = false`, a completion is
+acknowledged before its WAL record reaches disk. A Postgres server crash (not a
+client crash, not a normal failover) within about three times
+`wal_writer_delay` (default 200 ms) can lose completions committed in that
+window. Each lost completion redelivers its job after the visibility timeout,
+so the job runs again. Under synchronous replication it also stops waiting for
+the standby for that transaction. Sends, retries and dead-letter moves keep
+full durability.
+
+The precise exposure is smaller than that window. A durable commit on *any*
+connection flushes WAL up to its LSN, including an earlier asynchronous
+completion record, so a job that follows its completion with a synchronous
+write (a concurrency signal, a batch completion, a uniqueness release, the stat
+buffer's flush, its own ActiveRecord writes) closes its own window within
+microseconds. The exposure is a plain job with no follow-up write, whose re-run
+is the consequence above. That also answers "can a lost archive double-signal a
+semaphore?": the signal's own commit makes the archive durable first.
+
+Turn it on for a fleet on one Postgres whose fleet bench shows `WALWrite`
+waits. Leave it on (`true`) for jobs that are not idempotent and cannot
+tolerate one extra run after a database crash. `commit_delay` (with
+`commit_siblings`) on the server is the alternative that keeps every commit
+durable: it groups concurrent commits into one flush.
+
+**PgBouncer.** No PgBouncer release notes (read through 1.26.1, 2026-10-14)
+mention libpq pipeline mode; the closest are 1.7's "Support pipelining count
+expected ReadyForQuery packets" and 1.26.0's fix for batches that mix `Parse`
+and `Close` without a `Sync`. Untested behind PgBouncer in transaction mode:
+use session mode or leave the option on.
+
+**Measured** 2026-11-02 on the machine of "Fleet scaling" (Apple M2 Max, 12
+cores, PostgreSQL 18.6 on the same machine, Ruby 3.4.2, local only),
+`WP_BENCH_ROLE=fleet WP_BENCH_PROCESSES=1,4`, 5 000 jobs per process,
+**8 threads** (`WP_BENCH_THREADS=8`: the server's 100 connections were shared
+with other sessions, and a 12-thread four-process row needs 74), `read_ahead`
+not passed. Six variants alternated per round: `main`, the branch with
+`WP_BENCH_COMPLETION_COMMIT=sync` and with `async`, and the three again with
+`WP_BENCH_COMPLETION_BATCHING=1 WP_BENCH_COMPLETED_JOBS=delete` at four
+processes. Five rounds, each run started only once the load average was under
+the 12 cores and no other database had an active backend (waiting at most
+120 s); load 0.64–1.55× the cores across the runs. Other sessions benched the
+same Postgres during the rounds, so single runs dropped 3–6× at random:
+`main` and the branch at `sync` run the same code and still differ by up to 2×
+by median. Read the jobs/s columns as the noise floor, not as the effect.
+Medians, with the five-round range:
+
+| cell | processes | jobs/s main | jobs/s branch, sync | jobs/s branch, async | PG ms/job main → sync → async |
+|---|---:|---|---|---|---|
+| local / YJIT | 1 | 4 879 (4 454–8 021) | 4 817 (4 245–6 660) | 7 102 (4 839–7 481) | 0.141 → 0.149 → 0.057 |
+| local / YJIT | 4 | 9 550 (5 558–13 485) | 7 386 (4 471–12 235) | 10 620 (7 503–14 458) | 0.417 → 0.536 → 0.331 |
+| local / no JIT | 1 | 5 357 (5 095–6 205) | 4 595 (3 998–5 751) | 3 317 (2 885–5 770) | 0.099 → 0.138 → 0.075 |
+| local / no JIT | 4 | 9 233 (7 206–16 363) | 4 698 (3 069–13 504) | 6 506 (4 254–13 731) | 0.403 → 0.823 → 0.480 |
+
+Batched delete (`completion_batching` + `completed_jobs = :delete`), four
+processes:
+
+| cell | jobs/s main | jobs/s branch, sync | jobs/s branch, async | PG ms/job main → sync → async |
+|---|---|---|---|---|
+| local / YJIT | 10 692 (3 735–17 878) | 6 621 (3 197–20 992) | 15 302 (8 692–23 894) | 0.223 → 0.518 → 0.138 |
+| local / no JIT | 15 621 (3 179–15 876) | 6 781 (2 761–20 327) | 16 663 (2 952–19 366) | 0.141 → 0.505 → 0.057 |
+
+What the bench database's active backends waited on (share of
+`pg_stat_activity` samples, median of the five rounds with the range; the
+output lists the top six wait kinds per row, so 0 means "not in the top six"):
+
+| cell | processes | `LWLock:WALWrite` main / sync / async | `IO:WalWrite` main / sync / async |
+|---|---:|---|---|
+| local / YJIT | 1 | 9 (4–22) / 12 (5–19) / 0 (0–0) | 22 (15–24) / 19 (17–20) / 14 (2–21) |
+| local / YJIT | 4 | 18 (8–23) / 17 (9–29) / 2 (0–8) | 5 (5–6) / 4 (4–6) / 5 (3–6) |
+| local / no JIT | 1 | 5 (0–19) / 7 (0–13) / 0 (0–0) | 28 (16–43) / 26 (16–36) / 14 (7–20) |
+| local / no JIT | 4 | 12 (11–26) / 23 (6–31) / 2 (2–7) | 5 (4–6) / 5 (4–10) / 5 (3–6) |
+| batched delete / YJIT | 4 | 11 (6–17) / 10 (2–16) / 3 (0–6) | 11 (8–11) / 7 (3–14) / 11 (3–15) |
+| batched delete / no JIT | 4 | 11 (5–13) / 14 (2–16) / 4 (3–9) | 9 (8–13) / 7 (4–18) / 9 (4–16) |
+
+The single call (`rake bench:integration` "execute: plain job": enqueue, read
+and execute one plain job on one connection; `PGBUS_BENCH_COMPLETION_COMMIT=async`
+for the async rows), three alternated rounds, load 0.38–0.99× the cores:
+`main` 1 782 i/s median (756–2 652), the branch at the default 2 614
+(2 280–2 697), async 2 598 (821–2 664); every run reports ±8–37 %. The three
+extra statements in the pipeline add no visible cost to the round trip.
+
+What the numbers say:
+
+- **The flush wait goes away.** `LWLock:WALWrite`, a backend waiting for
+  another backend's WAL flush, falls from 12–23 % of samples (median, `main`
+  and `sync`, four processes) to 2 %, and at one process it drops out of the
+  top six. `IO:WalWrite` (a backend doing the write) falls at one process
+  (19–28 % → 14 %) and stays at 4–11 % elsewhere: the read's `UPDATE`, the
+  stats insert and the batched flushes still commit durably, and WAL still has
+  to be written, by the WAL writer instead of the job.
+- **Postgres time per job falls where the completion dominates it:** by median
+  in five of six rows against `main` (0.141 → 0.057 ms at one YJIT process,
+  0.417 → 0.331 at four, 0.223 → 0.138 batched), and in every row against the
+  branch at `sync`, with overlapping ranges.
+- **Jobs/s:** the async median is the highest of the three in both YJIT rows
+  and both batched-delete rows (15 302 and 16 663 jobs/s batched), and lowest
+  at one no-JIT process; every range overlaps, and the `main`/`sync` spread
+  shows the machine's noise is as large as any difference here. The expected
+  shape, a sharp fall in the WAL-flush wait with Postgres time per job falling
+  at four processes, is what the waits and PG ms/job show; whether that buys
+  jobs/s needs a quieter machine or a dedicated database host to measure.
+- **Batched delete:** batching already cut the per-job commits to one per
+  flush (~5 jobs), so the flush wait there was smaller to begin with
+  (10–14 %); async takes it to 3–4 %.
+
 ### Fair share reads (issue #426)
 
 `Client#read_batch_fair` replaces `pgmq.read` on the worker when
