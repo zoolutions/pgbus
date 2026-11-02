@@ -9,7 +9,7 @@ module Pgbus
     # PGMQ queue names are bounded by two ceilings: PostgreSQL's
     # NAMEDATALEN (63 chars for `pgmq.q_<name>`) and pgmq-ruby's own
     # stricter runtime check (`length >= 48` in
-    # `PGMQ::Client#validate_queue_name!`). The effective budget is the
+    # `PGMQ::QueueName.validate!`). The effective budget is the
     # lower of the two, exposed as `QueueNameValidator::MAX_QUEUE_NAME_LENGTH`
     # (currently 47). Any stream name composed from UUID primary keys
     # and turbo-rails-style dom ids blows past that budget almost
