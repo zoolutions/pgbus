@@ -24,7 +24,8 @@ RSpec.describe Pgbus::Doctor do
         configured_queues: %w[default],
         list_queues: [{ queue_name: "pgbus_default" }],
         notify_enabled?: true,
-        in_recovery?: false
+        in_recovery?: false,
+        mixed_case_queue_names: []
       )
       # Mirror the real Client: resolve a logical name to its physical PGMQ
       # table name(s). Default (non-priority) maps 1:1 with the prefix.
@@ -48,8 +49,8 @@ RSpec.describe Pgbus::Doctor do
   end
 
   describe "#run" do
-    it "runs thirteen checks" do
-      expect(doctor.run.size).to eq(13)
+    it "runs fourteen checks" do
+      expect(doctor.run.size).to eq(14)
     end
 
     it "returns hashes with :name, :status, :detail keys" do
@@ -524,6 +525,45 @@ RSpec.describe Pgbus::Doctor do
     end
   end
 
+  # Issue #633: PGMQ spells every queue table in lower case; a pgmq.meta row
+  # from before 0.23.0 may not.
+  describe "the queue-name case check" do
+    def case_check
+      doctor.run.find { |c| c[:name] == "Queue name case" }
+    end
+
+    it "is ok when every pgmq.meta row is spelled in lower case" do
+      expect(case_check).to include(status: :ok, detail: /lower case/)
+    end
+
+    it "warns about mixed-case rows, naming them and the migration that folds them" do
+      allow(client).to receive(:mixed_case_queue_names).and_return(%w[pgbus_Orders pgbus_Z2lkOi8v])
+
+      expect(case_check[:status]).to eq(:warn)
+      expect(case_check[:detail]).to include("pgbus_Orders, pgbus_Z2lkOi8v")
+      expect(case_check[:detail]).to include("rails generate pgbus:fold_queue_name_case")
+    end
+
+    it "lists at most five names and counts the rest" do
+      allow(client).to receive(:mixed_case_queue_names).and_return((1..7).map { |n| "pgbus_Q#{n}" })
+
+      expect(case_check[:detail]).to include("7 queue(s)").and(include("pgbus_Q5, …"))
+      expect(case_check[:detail]).not_to include("pgbus_Q6")
+    end
+
+    it "warns when it cannot read pgmq.meta" do
+      allow(client).to receive(:mixed_case_queue_names).and_raise(StandardError, "boom")
+
+      expect(case_check).to include(status: :warn, detail: /boom/)
+    end
+
+    it "never blocks a strict boot" do
+      allow(client).to receive(:mixed_case_queue_names).and_return(%w[pgbus_Orders])
+
+      expect(doctor.boot_ok?).to be(true)
+    end
+  end
+
   describe "the completion-commit check (issue #619)" do
     def commit_check
       doctor.run.find { |c| c[:name] == "Completion commit" }
@@ -729,8 +769,8 @@ RSpec.describe Pgbus::Doctor do
       expect(names).not_to include(a_string_matching(/process|liveness/i))
     end
 
-    it "runs the other twelve checks" do
-      expect(doctor.boot_checks.size).to eq(12)
+    it "runs the other thirteen checks" do
+      expect(doctor.boot_checks.size).to eq(13)
     end
 
     it "never invokes the HealthAnalyzer — the excluded check does zero work" do

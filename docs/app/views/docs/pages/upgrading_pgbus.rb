@@ -359,6 +359,65 @@ class Views::Docs::Pages::UpgradingPgbus < DocsUI::Page
         Messages already queued when you deploy carry no policy and keep the
         old redelivery (as `:reject`, with the backoff). A skip or a discard
         no longer counts as a success for the circuit breaker.
+
+        ### Queue names are lower case
+
+        PGMQ spells every queue table in lower case but records each spelling
+        in `pgmq.meta`, so `Orders` and `orders` shared `pgmq.q_pgbus_orders`
+        while the dashboard listed two queues. pgbus now spells every queue
+        name in lower case (`queue_name("Orders") == "pgbus_orders"`, and a
+        `queue_prefix` of `"MyApp"` becomes `"myapp"`). No table moves: PGMQ
+        already kept each queue in its lower-case table, and its messages stay
+        where they are.
+
+        An install with a queue that has an upper-case letter in its name (a
+        mixed-case name in `queues:` or `queue_as`, or a GlobalID stream such
+        as `pgbus_stream_from Current.user`) keeps working after the deploy,
+        but lists that queue twice until its rows are folded. `pgbus doctor`
+        names them under "Queue name case", and `pgbus:update` lists the
+        migration that folds them. **Run it after every process runs the new
+        version:** an older process that restarts recreates its mixed-case
+        row, and the migration runs once. A row that comes back after it is
+        folded by `rake pgbus:queues:fold_case`, which runs the same fold.
+      MD
+      DocsUI::Code(<<~SHELL, lexer: :shell)
+        rails generate pgbus:fold_queue_name_case
+        rails db:migrate            # single database
+        rails db:migrate:pgbus      # separate-database install
+      SHELL
+      md <<~'MD'
+        It renames each of pgbus's mixed-case `pgmq.meta` rows (those named
+        after `queue_prefix`; another PGMQ user of the schema keeps its
+        spelling) to the lower-case spelling, moves its NOTIFY throttle and
+        topic bindings, re-arms its insert trigger under the new name, and
+        lower-cases `pgbus_stream_queues`, `pgbus_queue_states`,
+        `pgbus_uniqueness_keys.queue_name` and
+        `pgbus_failed_events.source_queue`. Where both spellings exist, it
+        deletes only the extra `pgmq.meta` row. It never drops a table.
+
+        Rows that collide once lower-cased are merged, keeping one:
+        `pgbus_stream_queues` and `pgbus_queue_states` keep one row per queue
+        (a paused state wins), and a message that failed under two spellings
+        of its source queue keeps one failed-event row, the lower-case one or
+        else the newest, so the older error of that message is deleted.
+
+        Until the fold runs, the dashboard lists such a queue under both
+        spellings. Dropping the mixed-case entry (from the dashboard, or the
+        orphan stream sweep) removes only its `pgmq.meta` row; the table, its
+        messages and their uniqueness locks stay with the lower-case queue.
+        Dropping the lower-case entry drops the queue, and both rows with it.
+        Purging either entry purges the one shared table: both list the same
+        messages.
+
+        Until the last old process stops, an old web process LISTENs on the
+        mixed-case channel, so its SSE clients miss broadcasts until they
+        reconnect; an old worker falls back to polling; and a uniqueness lock
+        an old process takes under the mixed-case name after the fold ran is
+        not released by a new process, so its key stays held until the
+        orphan-lock reaper (every five minutes) frees it once the job is
+        gone. A lock taken before the fold is lower-cased with it, and a new
+        process releases it as usual. Two stream names that differ only in case now
+        share one queue, as their table already did.
       MD
     end
   end

@@ -16,7 +16,7 @@ module Pgbus
     def dead_letter_physical_name: (untyped queue_name, ?prefixed: untyped) -> untyped
     def delete_batch: (untyped queue_name, untyped msg_ids, ?prefixed: untyped, ?job_completion: bool) -> untyped
     def delete_message: (untyped queue_name, untyped msg_id, ?prefixed: untyped, ?job_completion: bool) -> untyped
-    def drop_queue: (untyped queue_name, ?prefixed: untyped) -> untyped
+    def drop_queue: (untyped queue_name, ?prefixed: untyped) ?{ () -> untyped } -> untyped
     def ensure_all_queues: () -> untyped
     def ensure_dead_letter_queue: (untyped name) -> untyped
     def ensure_fair_index: (untyped queue_name) -> untyped
@@ -32,6 +32,7 @@ module Pgbus
     def message_in_queue?: (untyped queue_name, msg_id: untyped, ?prefixed: untyped) -> bool?
     def message_with_job_id?: (untyped queue_name, job_id: untyped, ?prefixed: untyped) -> bool?
     def metrics: (?untyped queue_name) -> untyped
+    def mixed_case_queue_names: () -> Array[String]
     def move_to_dead_letter: (untyped queue_name, untyped message, ?headers: untyped) -> untyped
     def native_ready?: (String full_name) -> bool
     def notify_enabled?: (untyped queue_name) -> bool

@@ -1,0 +1,12 @@
+class FoldPgbusQueueNameCase < ActiveRecord::Migration<%= migration_version %>
+  # Issue #633. PGMQ lower-cases its table names, so a queue created as
+  # "pgbus_Orders" lives in pgmq.q_pgbus_orders while pgmq.meta records
+  # "pgbus_Orders". Pgbus::QueueNameFold renames the old rows to the lower-case
+  # spelling pgbus now uses; it changes rows only, never a table.
+  def up
+    Pgbus::QueueNameFold.run!(connection)
+  end
+
+  # The original spellings are not kept: PGMQ never used them for a table.
+  def down; end
+end

@@ -530,6 +530,21 @@ RSpec.describe Pgbus::Configuration do
     it "normalizes dots to underscores" do
       expect(config.queue_name("my.queue")).to eq("pgbus_my_queue")
     end
+
+    # Issue #633: PGMQ lower-cases table names, so two spellings of one name
+    # would share a table while pgmq.meta lists them as two queues.
+    it "spells the queue the way its PGMQ table does, in lower case" do
+      expect(config.queue_name("Orders")).to eq("pgbus_orders")
+      expect(config.queue_name("Orders")).to eq(config.queue_name("orders"))
+    end
+
+    it "lower-cases a GlobalID stream name" do
+      expect(config.queue_name("Z2lkOi8vYXBwL1VzZXIvMQ")).to eq("pgbus_z2lkoi8vyxbwl1vzzxivmq")
+    end
+
+    it "lower-cases the dead-letter queue name with it" do
+      expect(config.dead_letter_queue_name("Orders")).to eq("pgbus_orders_dlq")
+    end
   end
 
   # Issue #564: code that strips the prefix off a table name to get the queue
@@ -539,6 +554,13 @@ RSpec.describe Pgbus::Configuration do
     it "keeps a prefix its tables spell the same" do
       config.queue_prefix = "my_app2"
       expect(config.queue_prefix).to eq("my_app2")
+    end
+
+    it "spells a mixed-case prefix in lower case, as its tables are (issue #633)" do
+      config.queue_prefix = "MyApp"
+
+      expect(config.queue_prefix).to eq("myapp")
+      expect(config.queue_name("Orders")).to eq("myapp_orders")
     end
 
     it "spells the prefix the way its tables do, leaving every table name as it was" do

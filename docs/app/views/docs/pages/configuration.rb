@@ -42,7 +42,15 @@ class Views::Docs::Pages::Configuration < DocsUI::Page
         code { "pgbus_default" }
         plain "). Dead-letter queues append "
         code { "_dlq" }
-        plain "."
+        plain ". Names are lower case: PGMQ spells its tables that way, so "
+        code { "Orders" }
+        plain " and "
+        code { "orders" }
+        plain " are one queue, "
+        code { "pgbus_orders" }
+        plain " (since 0.23.0; an older install folds its queues with "
+        code { "rails generate pgbus:fold_queue_name_case" }
+        plain ")."
       end
     end
   end

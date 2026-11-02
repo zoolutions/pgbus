@@ -158,6 +158,25 @@ def bootstrap_integration_tables(conn)
     SQL
   end
 
+  # Pause/resume state — mirrors add_queue_states.rb.erb (issue #633's fold
+  # migration and QueueState's lower-case names run against it).
+  unless conn.table_exists?("pgbus_queue_states")
+    conn.execute(<<~SQL)
+      CREATE TABLE pgbus_queue_states (
+        id BIGSERIAL PRIMARY KEY,
+        queue_name VARCHAR NOT NULL,
+        paused BOOLEAN NOT NULL DEFAULT FALSE,
+        paused_reason VARCHAR,
+        paused_at TIMESTAMP,
+        circuit_breaker_trip_count INTEGER DEFAULT 0,
+        circuit_breaker_resume_at TIMESTAMP,
+        created_at TIMESTAMP NOT NULL,
+        updated_at TIMESTAMP NOT NULL
+      );
+      CREATE UNIQUE INDEX idx_pgbus_queue_states_queue_name ON pgbus_queue_states (queue_name);
+    SQL
+  end
+
   # Batch tracking — mirrors the pgbus_batches DDL in
   # lib/generators/pgbus/templates/migration.rb.erb.
   unless conn.table_exists?("pgbus_batches")
@@ -545,7 +564,7 @@ def cleanup_tables
     pgbus_semaphores pgbus_blocked_executions pgbus_uniqueness_keys
     pgbus_processes pgbus_recurring_executions pgbus_failed_events
     pgbus_presence_members pgbus_outbox_entries pgbus_processed_events
-    pgbus_batch_executions pgbus_batches pgbus_stream_queues
+    pgbus_batch_executions pgbus_batches pgbus_stream_queues pgbus_queue_states
     pgbus_deploy_tasks pgbus_deploy_task_runs
     pgbus_workflow_signals pgbus_workflow_events pgbus_workflow_steps pgbus_workflows
   ]

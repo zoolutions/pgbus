@@ -30,6 +30,12 @@ module Pgbus
     PGMQ_META_CHECK_SQL = "SELECT 1 FROM pg_tables WHERE schemaname = 'pgmq' AND tablename = 'meta' LIMIT 1"
     private_constant :PGMQ_META_CHECK_SQL
 
+    # pgbus's own queues only ($1: the lower-case "<queue_prefix>_"): another
+    # PGMQ user of the same schema keeps its spelling.
+    MIXED_CASE_QUEUES_SQL = "SELECT queue_name FROM pgmq.meta WHERE queue_name <> lower(queue_name) " \
+                            "AND left(lower(queue_name), length($1)) = $1 ORDER BY queue_name"
+    private_constant :MIXED_CASE_QUEUES_SQL
+
     PGMQ_INSTALL_SAVEPOINT = "pgbus_pgmq_install"
     private_constant :PGMQ_INSTALL_SAVEPOINT
 
@@ -311,6 +317,18 @@ module Pgbus
     def pgmq_installed?
       with_raw_connection do |conn|
         conn.exec(PGMQ_META_CHECK_SQL).ntuples.positive?
+      end
+    end
+
+    # pgmq.meta rows spelled with an upper-case letter (issue #633). PGMQ
+    # lower-cases table names, so each shares its table with the lower-case
+    # spelling pgbus now uses; `rails generate pgbus:fold_queue_name_case`
+    # renames them. Pgbus::Doctor reports them.
+    def mixed_case_queue_names
+      synchronized do
+        @pgmq.with_connection do |conn|
+          conn.exec_params(MIXED_CASE_QUEUES_SQL, ["#{config.queue_prefix.to_s.downcase}_"]).column_values(0)
+        end
       end
     end
 
@@ -725,12 +743,23 @@ module Pgbus
       end
     end
 
-    def drop_queue(queue_name, prefixed: true)
+    # +before_drop+ runs only when the table itself is dropped (not for a
+    # case duplicate, whose table stays), decided once: the dashboard
+    # releases the dropped messages' uniqueness locks there.
+    def drop_queue(queue_name, prefixed: true, &before_drop)
       name = prefixed ? config.queue_name(queue_name) : queue_name
+      if case_duplicate?(name)
+        forget_case_duplicate(name)
+        return true
+      end
+
+      before_drop&.call
+
       result = with_stale_connection_retry do
         synchronized { @pgmq.drop_queue(name) }
       end
       @queues_created.delete(name)
+      forget_other_spellings(name)
       # Failed-event rows are keyed by the name the executor saw (physical or
       # logical); a recreated queue reuses msg_ids, so neither may survive.
       FailedEventRecorder.clear_queue!([name, name.delete_prefix("#{config.queue_prefix}_")].uniq)
@@ -1627,6 +1656,67 @@ module Pgbus
       duplicate_install_error?(error) || duplicate_install_error?(error.cause)
     end
 
+    # A mixed-case pgmq.meta row from before issue #633 whose lower-case
+    # spelling is registered too: both name one table, the lower-case row is
+    # the queue every current process uses. Dropping the duplicate (the
+    # dashboard lists both until pgbus:fold_queue_name_case runs, and the
+    # orphan stream sweep sees both) must not drop that table.
+    def case_duplicate?(name)
+      return false if name == name.downcase
+
+      synchronized { queue_registered?(name) && queue_registered?(name.downcase) }
+    end
+
+    # Removes only the duplicate's pgmq.meta row (its throttle and topic
+    # bindings cascade); the table and the lower-case queue stay. The shared
+    # table's insert trigger may carry the duplicate's name (an older process
+    # armed it last), so it is re-armed under the lower-case name with the
+    # throttle the lower-case row had (else the duplicate's): with the
+    # duplicate's throttle row gone, that trigger would NOTIFY no more.
+    def forget_case_duplicate(name)
+      canonical = name.downcase
+      with_stale_connection_retry do
+        synchronized do
+          throttle = notify_throttle_for(canonical, name)
+          @pgmq.with_connection do |conn|
+            conn.exec_params("DELETE FROM pgmq.meta WHERE queue_name = $1", [name])
+          end
+          @pgmq.enable_notify_insert(canonical, throttle_interval_ms: throttle) if throttle && !notify_trigger_current?(canonical, throttle)
+        end
+      end
+      @queues_created.delete(name)
+    end
+
+    # The NOTIFY throttle of the first of +names+ that has one, or nil (no
+    # throttle row, or a PGMQ without notify_insert_throttle).
+    def notify_throttle_for(*names)
+      @pgmq.with_connection do |conn|
+        next nil unless conn.exec("SELECT to_regclass('pgmq.notify_insert_throttle')").getvalue(0, 0)
+
+        rows = conn.exec_params(
+          "SELECT queue_name, throttle_interval_ms FROM pgmq.notify_insert_throttle WHERE queue_name = ANY($1::text[])",
+          ["{#{names.join(",")}}"]
+        ).to_a
+        row = names.lazy.filter_map { |n| rows.find { |r| r["queue_name"] == n } }.first
+        row && Integer(row["throttle_interval_ms"])
+      end
+    end
+
+    # pgmq.drop_queue removes the table and only its own pgmq.meta row; a
+    # mixed-case spelling from before issue #633 would be left naming a table
+    # that is gone. Idempotent, so a stale pooled socket retries it.
+    def forget_other_spellings(name)
+      with_stale_connection_retry do
+        synchronized do
+          @pgmq.with_connection do |conn|
+            conn.exec_params(
+              "DELETE FROM pgmq.meta WHERE lower(queue_name) = lower($1) AND queue_name <> $1", [name]
+            )
+          end
+        end
+      end
+    end
+
     # Whether pgmq.meta records the queue — the authoritative "create
     # committed" signal (pgmq.create writes it atomically with the
     # tables). The pooled checkout is a sequential sibling of the failed
@@ -1643,7 +1733,13 @@ module Pgbus
     end
 
     # Check whether the NOTIFY trigger already exists on this queue with the
-    # expected throttle interval. When it does, we can skip the destructive
+    # expected throttle interval, armed under this spelling of its name. PGMQ
+    # 1.13.1's trigger NOTIFYs on the channel of the name it was armed with
+    # (its argument), and every spelling of a name shares the queue's table
+    # (issue #633): a process from before #633 that re-arms it under a
+    # mixed-case name moves its NOTIFYs to a channel no listener uses. A
+    # trigger without an argument (older PGMQ) NOTIFYs on the table's name,
+    # which is the lower-case spelling. When it does, we can skip the destructive
     # DROP TRIGGER + CREATE TRIGGER cycle that causes deadlocks when multiple
     # forked processes race during bootstrap.
     #
@@ -1665,6 +1761,7 @@ module Pgbus
           WHERE n.nspname = 'pgmq'
             AND c.relname = pgmq.format_table_name($1, 'q')
             AND t.tgname = '#{NOTIFY_TRIGGER_NAME}'
+            AND (t.tgnargs = 0 OR t.tgargs = convert_to($1, 'UTF8') || '\\000'::bytea)
             AND EXISTS (
               SELECT 1 FROM pgmq.notify_insert_throttle
               WHERE queue_name = $1

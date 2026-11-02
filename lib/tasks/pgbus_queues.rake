@@ -9,6 +9,33 @@ namespace :pgbus do
       puts "Done. FIFO indexes created on all queues."
     end
 
+    # Issue #633: the pgbus:fold_queue_name_case migration runs once; a
+    # mixed-case pgmq.meta row an older process recreated after it is folded
+    # here (pgbus doctor's "Queue name case" check names them).
+    desc "Spell mixed-case queues (pgmq.meta, NOTIFY triggers, pgbus's queue-name columns) in lower case"
+    task fold_case: :environment do
+      # The fold writes pgmq.meta and pgbus's tables through one connection,
+      # the one pgbus's models (and its migrations) use; a database without
+      # pgmq.meta there (PGMQ reached through database_url elsewhere) is
+      # refused rather than half-folded.
+      pool = Pgbus.configuration.connects_to ? Pgbus::BusRecord.connection_pool : ActiveRecord::Base.connection_pool
+      names = pool.with_connection do |connection|
+        unless connection.select_value("SELECT to_regclass('pgmq.meta')")
+          abort "pgmq.meta is not in the database pgbus's models use (#{connection.current_database}); " \
+                "run the fold where pgbus's tables and PGMQ live together"
+        end
+
+        prefix = "#{Pgbus.configuration.queue_prefix.to_s.downcase}_"
+        found = connection.select_values(
+          "SELECT queue_name FROM pgmq.meta WHERE queue_name <> lower(queue_name) " \
+          "AND left(lower(queue_name), length(#{connection.quote(prefix)})) = #{connection.quote(prefix)} ORDER BY queue_name"
+        )
+        connection.transaction { Pgbus::QueueNameFold.run!(connection) }
+        found
+      end
+      puts names.empty? ? "Every queue is already spelled in lower case." : "Folded: #{names.join(", ")}"
+    end
+
     desc "Create FIFO index on a specific queue (QUEUE=name)"
     task fifo_index: :environment do
       queue = ENV.fetch("QUEUE") do

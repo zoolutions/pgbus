@@ -589,7 +589,12 @@ module Pgbus
         prefix = "#{config.queue_prefix}_"
         if (match = MISSING_QUEUE_REGEX.match(error.message))
           physical_name = match[1]
-          logical_name = physical_name.delete_prefix(prefix)
+          # Postgres names the table as PGMQ spells it (lower case, issue #633;
+          # separators normalized), so find the queue as configured.
+          # A priority sub-queue (_pN) belongs to its base queue.
+          logical_name = @queues.find { |q| config.priority_queue_names(q).include?(physical_name) } ||
+                         @queues.find { |q| config.queue_name(q) == physical_name } ||
+                         physical_name.delete_prefix(prefix)
           if @queues.delete(logical_name)
             Pgbus.logger.warn { "[Pgbus] Evicted deleted queue '#{logical_name}' (#{physical_name}) from worker" }
           end

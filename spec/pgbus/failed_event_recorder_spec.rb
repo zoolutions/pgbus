@@ -330,9 +330,20 @@ RSpec.describe Pgbus::FailedEventRecorder do
       described_class.clear_queue!(%w[pgbus_default default])
 
       expect(mock_connection).to have_received(:exec_delete).with(
-        a_string_matching(/DELETE FROM pgbus_failed_events WHERE queue_name = ANY/),
+        a_string_matching(/DELETE FROM pgbus_failed_events WHERE lower\(queue_name\) = ANY/),
         "FailedEvent Clear Queue",
         ["{pgbus_default,default}"]
+      )
+    end
+
+    # Issue #633: a row may carry the executor's configured spelling.
+    it "matches the names in any case" do
+      allow(mock_connection).to receive(:exec_delete)
+
+      described_class.clear_queue!(%w[pgbus_critical Critical])
+
+      expect(mock_connection).to have_received(:exec_delete).with(
+        a_string_matching(/lower\(queue_name\)/), "FailedEvent Clear Queue", ["{pgbus_critical,critical}"]
       )
     end
 

@@ -66,8 +66,8 @@ module Pgbus
             q RECORD;
           BEGIN
             FOR q IN SELECT queue_name FROM pgmq.meta LOOP
-              EXECUTE format('ALTER TABLE pgmq.q_%I SET (#{settings_clause(QUEUE_SETTINGS)})', q.queue_name);
-              EXECUTE format('ALTER TABLE pgmq.a_%I SET (#{settings_clause(ARCHIVE_SETTINGS)})', q.queue_name);
+              EXECUTE format('ALTER TABLE pgmq.%I SET (#{settings_clause(QUEUE_SETTINGS)})', 'q_' || lower(q.queue_name));
+              EXECUTE format('ALTER TABLE pgmq.%I SET (#{settings_clause(ARCHIVE_SETTINGS)})', 'a_' || lower(q.queue_name));
             END LOOP;
           END $$;
         SQL

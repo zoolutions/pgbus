@@ -102,6 +102,30 @@ RSpec.describe Pgbus::QueueNameValidator do
     it "raises when normalized result is blank" do
       expect { described_class.normalize("---!!!") }.to raise_error(ArgumentError, /cannot be blank/)
     end
+
+    # Issue #633: PGMQ lower-cases its table names (pgmq.format_table_name),
+    # so "Orders" and "orders" share pgmq.q_orders. The canonical name is the
+    # table's spelling.
+    it "lower-cases an already-valid name, the way PGMQ spells its table" do
+      expect(described_class.normalize("pgbus_Orders")).to eq("pgbus_orders")
+    end
+
+    it "lower-cases a name it rewrites" do
+      expect(described_class.normalize("gid://App/User-1")).to eq("gid_appuser_1")
+    end
+
+    it "gives names that differ only in case one spelling" do
+      expect(described_class.normalize("pgbus_Z2lkOi8v")).to eq(described_class.normalize("pgbus_z2lkoi8v"))
+    end
+  end
+
+  describe ".validate! and .sanitize! on mixed case" do
+    # Both run on names read back from pgmq.meta (dashboard, dispatcher,
+    # doctor), where an install from before #633 still holds mixed-case rows.
+    it "keeps the case they were given" do
+      expect(described_class.validate!("pgbus_Orders")).to eq("pgbus_Orders")
+      expect(described_class.sanitize!("pgbus_Orders")).to eq("pgbus_Orders")
+    end
   end
 
   describe ".sanitize!" do
