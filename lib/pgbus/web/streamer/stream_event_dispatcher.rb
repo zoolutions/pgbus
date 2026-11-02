@@ -372,9 +372,26 @@ module Pgbus
           # prefix: pgmq.q_<prefixed>.INSERT. Registry and the in-flight
           # buffer use the logical name. The Dispatcher is the single
           # translator between the two naming worlds.
+          #
+          # Only a stream's first subscriber waits on the listener (issue
+          # #630). remove_listening is issued in exactly one place,
+          # cleanup_stream_if_unused, and only when the registry holds no
+          # connection on the stream. So a registered connection, dead or
+          # alive, proves the last ensure_listening for this stream was acked
+          # after the last remove_listening, and the listener runs commands
+          # in order: the LISTEN is active. A listener reconnect re-LISTENs
+          # its whole set; a hub failover replays FailoverListener's
+          # subscriptions, which the first-connect / last-disconnect calls
+          # keep exact. An empty stream always takes the slow path: that
+          # covers a connect that died mid-replay and unlistened without ever
+          # registering. @full_to_logical is set here and deleted only by
+          # that same cleanup, so it is present whenever the stream is not
+          # empty.
           full_name = notify_queue_name_for(stream)
-          @full_to_logical[full_name] = stream
-          @listener.ensure_listening(full_name)
+          if @registry.empty?(stream)
+            @full_to_logical[full_name] = stream
+            @listener.ensure_listening(full_name)
+          end
 
           # Step 2: install the in-flight buffer BEFORE any read.
           buffer = []

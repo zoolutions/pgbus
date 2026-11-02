@@ -608,6 +608,101 @@ RSpec.describe Pgbus::Web::Streamer::StreamEventDispatcher do
     end
   end
 
+  # A connect on a stream that already has a registered connection skips the
+  # listener round trip (issue #630): remove_listening is issued only from
+  # cleanup_stream_if_unused, and only on a stream with no registered
+  # connection, so a registered one proves its LISTEN was acked after the last
+  # UNLISTEN. An empty stream always takes the slow path.
+  describe "ConnectMessage — no listener wait for a stream that has a subscriber (issue #630)" do
+    def connect(conn)
+      dispatcher.send(:handle, described_class::ConnectMessage.new(connection: conn))
+    end
+
+    def disconnect(conn)
+      dispatcher.send(:handle, described_class::DisconnectMessage.new(connection: conn))
+    end
+
+    before { allow(client).to receive(:read_after).and_return([]) }
+
+    let(:first) { build_conn(id: "first", stream_name: "chat") }
+    let(:second) { build_conn(id: "second", stream_name: "chat") }
+
+    it "LISTENs on the first connect of a stream" do
+      connect(first)
+
+      expect(listener).to have_received(:ensure_listening).with("chat").once
+    end
+
+    it "does not wait on the listener for a second connect while the first is registered" do
+      connect(first)
+      connect(second)
+
+      expect(listener).to have_received(:ensure_listening).once
+      expect(registry.connections_for("chat")).to contain_exactly(first, second)
+    end
+
+    it "LISTENs per stream: a first connect on another stream still goes to the listener" do
+      connect(first)
+      connect(build_conn(id: "other", stream_name: "news"))
+
+      expect(listener).to have_received(:ensure_listening).with("chat").once
+      expect(listener).to have_received(:ensure_listening).with("news").once
+    end
+
+    it "LISTENs again on the next connect after the last disconnect unlistened the stream" do
+      connect(first)
+      disconnect(first)
+      connect(second)
+
+      expect(listener).to have_received(:remove_listening).with("chat").once
+      expect(listener).to have_received(:ensure_listening).with("chat").twice
+    end
+
+    it "takes the fast path while the only registered connection is dead but not yet unregistered, " \
+       "and the dead one's disconnect leaves the LISTEN in place" do
+      connect(first)
+      first.mark_dead!
+
+      connect(second)
+      disconnect(first)
+
+      expect(listener).to have_received(:ensure_listening).once
+      expect(listener).not_to have_received(:remove_listening)
+      expect(registry.connections_for("chat")).to contain_exactly(second)
+    end
+
+    it "LISTENs again after a connect whose client died mid-replay unlistened the stream" do
+      first.mark_dead!
+      connect(first)
+      connect(second)
+
+      expect(listener).to have_received(:remove_listening).with("chat").once
+      expect(listener).to have_received(:ensure_listening).with("chat").twice
+      expect(registry.connections_for("chat")).to contain_exactly(second)
+    end
+
+    it "keeps the stream's name mapping, so the last disconnect still unlistens it" do
+      connect(first)
+      connect(second)
+      disconnect(first)
+      disconnect(second)
+
+      expect(listener).to have_received(:remove_listening).with("chat").once
+      expect(dispatcher.instance_variable_get(:@full_to_logical)).to be_empty
+    end
+
+    it "fans a wake out to the fast-path connection as well as the first one" do
+      connect(first)
+      connect(second)
+      allow(client).to receive(:read_after).and_return([build_envelope(7)])
+
+      dispatcher.send(:handle, described_class::WakeMessage.new(queue_name: "chat"))
+
+      expect(first.enqueued.map(&:msg_id)).to eq([7])
+      expect(second.enqueued.map(&:msg_id)).to eq([7])
+    end
+  end
+
   describe "the replay race (the rails/rails#52420 fix)" do
     # These are the load-bearing tests for the whole subsystem. They prove
     # that a WakeMessage arriving *between* "subscribe" and "register"
