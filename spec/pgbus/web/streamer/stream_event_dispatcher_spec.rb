@@ -488,8 +488,10 @@ RSpec.describe Pgbus::Web::Streamer::StreamEventDispatcher do
 
       offloading.send(:handle, described_class::WakeMessage.new(queue_name: "chat"))
 
-      expect(pump.frames.map(&:last).uniq.size).to eq(1)
-      expect(pump.frames.first.last.keys).to eq([10])
+      shared = pump.frames.first.last
+      expect(pump.frames.size).to eq(2)
+      expect(pump.frames.map(&:last)).to all(be(shared))
+      expect(shared.keys).to eq([10])
     end
 
     it "leaves the connect replay building its own frames" do
@@ -670,6 +672,8 @@ RSpec.describe Pgbus::Web::Streamer::StreamEventDispatcher do
       conn = build_conn(id: "a", stream_name: "order_42")
       allow(client).to receive(:read_after).and_return([])
       dispatcher.send(:handle, described_class::ConnectMessage.new(connection: conn))
+      expect(registry.connections_for("order_42")).to eq([conn]) # a cached snapshot exists
+      expect(registry.instance_variable_get(:@stream_snapshots)).to have_key("order_42")
       dispatcher.send(:handle, described_class::DisconnectMessage.new(connection: conn))
 
       # A NOTIFY already in flight when the last subscriber left.

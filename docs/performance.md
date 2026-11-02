@@ -1248,7 +1248,9 @@ ephemeral streams). **Connect-replay** writes keep the full
 evicted. Set `streams_fanout_write_deadline_ms = streams_write_deadline_ms` to
 restore the pre-fix timing. Since #621 the heartbeat's writes use the same short
 deadline (they are serial on the heartbeat thread, so K slow clients stalled a
-tick `K × 5 s`); the same setting restores their old timing too.
+tick `K × 5 s`; each heartbeat write is now bounded by 250 ms once it holds the connection's
+mutex, which a concurrent fan-out write on that connection can delay); the same setting restores
+their old timing too.
 
 This is a **system-level** latency bound, not a per-write speedup: the fanout
 happy path (all-fast clients) is unchanged — the `deadline_ms` keyword is a
@@ -1467,9 +1469,11 @@ What the numbers say:
   wake p50 ≤ 8.2 ms — branch 6.9 and 7.3 ms in two of its three fast cells (9.8 in the third),
   main 9.2 and 9.5; heartbeat tick ≤ 6.0 ms — branch 5.3, 6.1 and 12.2 ms, main 6.4 and 6.6
   (one tick per cell, so a single sample each: met once, not settled). Fan-out last-client p99
-  ≤ 35.4 ms (a regression gate) — branch 27.2, 35.2 and 60.8 ms in its fast cells, main 34.4
-  and 56.4; in the slow regime both trees sit at 46–65 ms. No regression shows; the gain is
-  inside the spread. The per-wake saving is what the micro-bench shows: the
+  ≤ 35.4 ms, the regression gate: met by the branch in two of its three fast cells (27.2 and
+  35.2 ms; 60.8 in the third) and by main in one of two (34.4; 56.4); not met by either tree in
+  the slow regime (46–65 ms, main and branch alike). Since main misses the absolute gate as often
+  as the branch today, the gate cannot be read as passed or failed on this machine; within each
+  regime the branch is no worse than main. The per-wake saving is what the micro-bench shows: the
   ~1 ms of framing and copying per 1 000-connection wake is gone.
 - **RSS per connection is 1–1.5 KB higher on the branch** (27.7–28.5 against 26.1–27.6 KB),
   within the spread of the lazy registry's own micro-check (+0.35 MB per 2 000 registers, the
@@ -1477,9 +1481,9 @@ What the numbers say:
   allocations during the storm (one heartbeat frame per tick instead of one per connection)
   also move when the next GC runs; this bench does not separate the two.
 - **The slow-client rows do not exercise the heartbeat deadline.** Twenty clients reading one
-  event a second never fill a socket buffer with 20 broadcasts and a 25-byte comment, so no
-  heartbeat write blocks and both trees tick in ~6 ms. The bound (K slow clients stall a tick
-  K × 250 ms, not K × 5 s) holds by construction, and `heartbeat_spec.rb`'s `:timeout` example
+  event a second never fill a socket buffer with 20 broadcasts and the heartbeat comment, so no
+  heartbeat write blocks and both trees tick in ~6 ms. The bound (each heartbeat write gives up
+  after 250 ms once it holds the connection's mutex, not 5 s) holds by construction, and `heartbeat_spec.rb`'s `:timeout` example
   proves the connection is dropped.
 - **The profile** (`STREAMS_SCALE_PROFILE=<dir>`, new: vernier over the broadcast window, the
   dispatcher thread's running samples, branch, M = 1 000): durable — `io_writer.rb` 77.8 %

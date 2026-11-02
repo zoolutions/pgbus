@@ -13,9 +13,11 @@ module Pgbus
       #      SSE clients. The frame is built once per tick and shared by
       #      every connection, and each write runs under the short fan-out
       #      deadline (streams_fanout_write_deadline_ms, issue #621): the
-      #      writes are serial on this one thread, so K slow clients stall
-      #      the tick K x 250 ms, not K x streams_write_deadline_ms. A client
-      #      that cannot take a 20-byte comment in that window is marked dead
+      #      writes are serial on this one thread, and each socket write is
+      #      bounded by 250 ms once it holds the connection's mutex, not by
+      #      streams_write_deadline_ms (a concurrent fan-out or replay write
+      #      on the same connection can still delay its turn). A client that
+      #      cannot take the heartbeat comment in that window is marked dead
       #      and reconnects (durable streams replay from Last-Event-ID).
       #
       #   2. Mark connections that have been idle longer than the

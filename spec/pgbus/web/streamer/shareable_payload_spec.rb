@@ -96,7 +96,7 @@ RSpec.describe "the streamer's dispatch payloads" do # rubocop:disable RSpec/Des
       dispatcher.send(:handle, dispatcher_class::WakeMessage.new(queue_name: +"chat"))
 
       expect(prebuilt.size).to eq(2)
-      expect(prebuilt).to all(be_a(Hash))
+      expect(prebuilt.map(&:keys)).to eq([[-1], [9]])
       expect(prebuilt).to all(satisfy { |frames| Ractor.shareable?(frames) })
       expect(prebuilt.flat_map(&:values)).to all(be_a(String).and(satisfy { |frame| Ractor.shareable?(frame) }))
     end
