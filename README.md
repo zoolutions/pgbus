@@ -25,6 +25,7 @@ PostgreSQL-native job processing and event bus for Rails, built on [PGMQ](https:
   - [Circuit breaker and queue pause/resume](#circuit-breaker-and-queue-pauseresume)
   - [Client-level circuit breaker (database-down)](#client-level-circuit-breaker-database-down)
   - [Read timeouts (libpq-native)](#read-timeouts-libpq-native)
+  - [Stale connection retries](#stale-connection-retries)
   - [Prefetch flow control](#prefetch-flow-control)
   - [Read-ahead](#read-ahead)
   - [Worker recycling](#worker-recycling)
@@ -552,7 +553,7 @@ A custom RuboCop cop, `Pgbus/NoRubyTimeout`, bans `Timeout.timeout` project-wide
 
 ### Stale connection retries
 
-A `PGMQ::Errors::ConnectionError` whose message says the pooled connection was dead before it was used (`no connection to the server`, `connection is closed`, a PgBouncer-closed socket and the like) is retried twice, after about 0.1 s and 0.5 s. Errors that may have reached the server (`server closed the connection unexpectedly`) and pool timeouts are never retried. The first retry relies on pgmq-ruby's checkout health check, which replaces a closed connection. Before the last retry, pgbus drops the idle connections of both pools (job and streams) and logs `Dropping pooled connections before the last stale-connection retry`. This recovers a connection the health check keeps handing out, such as one a `Thread#raise` left half-way through a reset (`CONNECTION_STARTED`). A read interrupted by the Ruby `Timeout` fallback above reloads the job pool the same way. `Pgbus.client.reload` drops the idle connections of both pools by hand. None of these reload anything on the shared ActiveRecord `Proc` connection, whose socket pgbus does not own.
+A `PGMQ::Errors::ConnectionError` whose message says the pooled connection was dead before it was used (`no connection to the server`, `connection is closed`, a PgBouncer-closed socket and the like) is retried twice, after about 0.1 s and 0.5 s. Errors that may have reached the server (`server closed the connection unexpectedly`) and pool timeouts are never retried. The first retry relies on pgmq-ruby's checkout health check, which replaces a closed connection. On a dedicated connection (`database_url` or `connection_params`), before the last retry, pgbus drops the idle connections of both pools (job and streams) and logs `Dropping pooled connections before the last stale-connection retry`. This recovers a connection the health check keeps handing out, such as one a `Thread#raise` left half-way through a reset (`CONNECTION_STARTED`). A read interrupted by the Ruby `Timeout` fallback above reloads the job pool the same way. `Pgbus.client.reload` drops the idle connections of both pools by hand. None of these reload anything on the shared ActiveRecord `Proc` connection, whose socket pgbus does not own.
 
 ### Prefetch flow control
 

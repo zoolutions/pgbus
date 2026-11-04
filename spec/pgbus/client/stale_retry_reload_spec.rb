@@ -116,6 +116,15 @@ RSpec.describe Pgbus::Client do
                                                        "pool exploded"))
       end
 
+      it "still reloads the streams pool when the job-pool reload raises" do
+        produce_failing(job_pgmq, stale, stale)
+        allow(job_pgmq).to receive(:reload).and_raise(StandardError, "pool exploded")
+
+        client.send_message("default", { "k" => "v" })
+
+        expect(streams_pgmq).to have_received(:reload).once
+      end
+
       it "re-raises the stale error, not the reload failure, when the last retry fails too" do
         produce_failing(job_pgmq, stale, stale, stale)
         allow(streams_pgmq).to receive(:reload).and_raise(StandardError, "pool exploded")

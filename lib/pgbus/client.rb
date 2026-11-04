@@ -2022,7 +2022,8 @@ module Pgbus
     # instead of the one pgmq-ruby's health check kept handing back. Skipped
     # silently on the shared-AR Proc path: those slots wrap ActiveRecord's own
     # socket (#reload refuses there with a warning that would be noise on every
-    # retry). A reload failure is logged, never raised: the stale
+    # retry). Each pool reloads on its own, so one failing does not keep the
+    # other's connections. A reload failure is logged, never raised: the stale
     # ConnectionError the retry may raise next is the actionable error.
     def reload_pools_before_last_stale_retry(attempt, error)
       return if @shared_connection
@@ -2031,11 +2032,12 @@ module Pgbus
         "[Pgbus::Client] Dropping pooled connections before the last stale-connection retry " \
           "(attempt #{attempt}/#{STALE_RETRY_ATTEMPTS}): #{error.message}"
       end
-      @pgmq.reload
-      @streams_pool.reload
-    rescue StandardError => e
-      Pgbus.logger.warn do
-        "[Pgbus::Client] pool reload before the last stale-connection retry failed: #{e.class}: #{e.message}"
+      [@pgmq, @streams_pool].each do |pool|
+        pool.reload
+      rescue StandardError => e
+        Pgbus.logger.warn do
+          "[Pgbus::Client] pool reload before the last stale-connection retry failed: #{e.class}: #{e.message}"
+        end
       end
     end
 

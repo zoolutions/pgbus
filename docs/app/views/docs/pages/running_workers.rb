@@ -391,7 +391,8 @@ class Views::Docs::Pages::RunningWorkers < DocsUI::Page
         timeouts are never retried.
 
         The first retry relies on pgmq-ruby's checkout health check, which
-        replaces a closed connection. Before the last retry, pgbus drops the idle
+        replaces a closed connection. On a dedicated connection (`database_url`
+        or `connection_params`), before the last retry, pgbus drops the idle
         connections of both pools (job and streams) and logs `Dropping pooled
         connections before the last stale-connection retry`. This recovers a
         connection the health check keeps handing out, such as one a
