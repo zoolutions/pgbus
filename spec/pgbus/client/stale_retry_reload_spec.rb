@@ -112,8 +112,17 @@ RSpec.describe Pgbus::Client do
 
         expect(client.send_message("default", { "k" => "v" })).to eq(1)
         expect(calls.call).to eq(3)
-        expect(warnings).to include(a_string_including("pool reload before the last stale-connection retry failed",
+        expect(warnings).to include(a_string_including("job pool reload before the last stale-connection retry failed",
                                                        "pool exploded"))
+      end
+
+      it "names the streams pool when its reload fails" do
+        produce_failing(job_pgmq, stale, stale)
+        allow(streams_pgmq).to receive(:reload).and_raise(StandardError, "pool exploded")
+
+        client.send_message("default", { "k" => "v" })
+
+        expect(warnings).to include(a_string_including("streams pool reload before the last stale-connection retry failed"))
       end
 
       it "still reloads the streams pool when the job-pool reload raises" do

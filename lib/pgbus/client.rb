@@ -2032,11 +2032,12 @@ module Pgbus
         "[Pgbus::Client] Dropping pooled connections before the last stale-connection retry " \
           "(attempt #{attempt}/#{STALE_RETRY_ATTEMPTS}): #{error.message}"
       end
-      [@pgmq, @streams_pool].each do |pool|
+      { "job" => @pgmq, "streams" => @streams_pool }.each do |name, pool|
         pool.reload
       rescue StandardError => e
         Pgbus.logger.warn do
-          "[Pgbus::Client] pool reload before the last stale-connection retry failed: #{e.class}: #{e.message}"
+          "[Pgbus::Client] #{name} pool reload before the last stale-connection retry failed: " \
+            "#{e.class}: #{e.message}"
         end
       end
     end
