@@ -2466,9 +2466,12 @@ RSpec.describe Pgbus::Client do
 
         client.send_message("default", { "k" => "v" })
 
+        # The last retry also drops the pooled connections first (issue #645;
+        # spec/pgbus/client/stale_retry_reload_spec.rb), with its own line.
         expect(warnings).to contain_exactly(
-          a_string_matching(%r{attempt 1/2}),
-          a_string_matching(%r{attempt 2/2})
+          a_string_matching(%r{Retrying.*attempt 1/2}),
+          a_string_matching(%r{Retrying.*attempt 2/2}),
+          a_string_matching(%r{Dropping pooled connections.*attempt 2/2})
         )
       end
 

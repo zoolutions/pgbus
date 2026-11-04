@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Fixed
+
+- **A stale-connection retry drops the pooled connections before its last attempt, so a connection libpq left mid-reset no longer fails every call until the process restarts (issue #645).** A `PG::Connection#reset` that `Thread#raise` interrupted while it was polling (a request-timeout middleware, a forced shutdown) leaves the pooled connection in `CONNECTION_STARTED`: neither `finished?` nor `CONNECTION_BAD`, so pgmq-ruby's checkout health check keeps handing it out and libpq refuses every send with `PQsendQueryParams no connection to the server`. `with_stale_connection_retry` matched that as stale and retried twice on the same socket, so every enqueue and read from that process failed (seen for 15+ minutes after a network partition, on one web worker, until it was restarted). The first retry is unchanged: it goes through pgmq-ruby's health check alone, which replaces a socket the server closed without touching the rest of the pool. When that retry fails too, the client drops the idle connections of both pools (the job pool and the streams pool, as `Client#reload` does) before the last one, and logs one warning, `Dropping pooled connections before the last stale-connection retry (attempt 2/2): <error>`. Connections other threads hold are discarded when they come back, as on the #354 wedged-read path. Dedicated connections only: on the shared ActiveRecord connection (a `connection_params` Proc) the pools are never reloaded, and nothing extra is logged. A reload that raises is logged at warn and the retry still runs; the caller still sees the stale `ConnectionError` if the retry fails. A non-stale `ConnectionError` (a pool timeout, a completion whose result was lost) is neither retried nor reloaded, as before. Refs #645.
+
 ## [0.23.0] - 2026-11-02
 
 ### Added

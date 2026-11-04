@@ -107,6 +107,59 @@ RSpec.describe "Connection failure recovery (integration)", :integration do
     end
   end
 
+  # Issue #645: a reset Thread#raise interrupted mid-poll leaves the pooled
+  # PG::Connection in CONNECTION_STARTED. pgmq-ruby's checkout health check
+  # resets only a finished or CONNECTION_BAD connection, so it keeps handing
+  # this one out and libpq refuses every send ("no connection to the server").
+  # reset_start (PQresetStart) leaves exactly that state: it closes the socket
+  # and starts a reconnect that only advances when polled.
+  describe "a pooled connection left mid-reset (CONNECTION_STARTED)" do
+    # One slot, so the connection staged below is the one send_message gets.
+    let(:one_slot_config) do
+      Pgbus.configuration.dup.tap { |c| c.pool_size = 1 }
+    end
+    let(:one_slot_client) { Pgbus::Client.new(one_slot_config) }
+    let(:warnings) { [] }
+
+    # The pooled connection's status after staging. The queue is created
+    # first, so send_message is the only call that meets the staged one.
+    def stage_mid_reset
+      one_slot_client.ensure_queue("conn_mid_reset")
+      one_slot_client.pgmq.with_connection(&:reset_start)
+      one_slot_client.pgmq.with_connection(&:status)
+    end
+
+    before do
+      allow(Pgbus.logger).to receive(:warn).and_wrap_original do |original, *args, &blk|
+        warnings << blk.call if blk
+        original.call(*args, &blk)
+      end
+    end
+
+    after { one_slot_client.close }
+
+    it "recovers on the last stale retry and the message is enqueued" do
+      expect(stage_mid_reset).to eq(PG::CONNECTION_STARTED)
+
+      msg_id = one_slot_client.send_message("conn_mid_reset", { "n" => 645 }).to_i
+
+      expect(msg_id).to be > 0
+      message = one_slot_client.read_message("conn_mid_reset", vt: 0)
+      expect(message.msg_id.to_i).to eq(msg_id)
+      expect(JSON.parse(message.message)["n"]).to eq(645)
+      expect(warnings.grep(/Dropping pooled connections/).size).to eq(1)
+    end
+
+    it "keeps failing when the job pool is not reloaded (the reload, not the backoff, recovers)" do
+      expect(stage_mid_reset).to eq(PG::CONNECTION_STARTED)
+      allow(one_slot_client.pgmq).to receive(:reload)
+
+      expect { one_slot_client.send_message("conn_mid_reset", { "n" => 645 }) }
+        .to raise_error(PGMQ::Errors::ConnectionError, /no connection to the server/)
+      expect(one_slot_client.pgmq).to have_received(:reload).once
+    end
+  end
+
   describe "non-stale connection errors" do
     before { client.ensure_queue("conn_fail") }
 
