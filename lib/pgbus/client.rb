@@ -1876,6 +1876,16 @@ module Pgbus
     # restart or a brief failover — that outlasts the first immediate retry
     # still gets a second, backed-off chance rather than failing an enqueue
     # the caller may never retry.
+    #
+    # The last retry runs on freshly reloaded pools (issue #645). A reset that
+    # Thread#raise interrupted mid-poll leaves the pooled PG::Connection in
+    # CONNECTION_STARTED: neither finished? nor CONNECTION_BAD, so pgmq-ruby's
+    # checkout health check keeps handing it out and libpq refuses every send
+    # ("no connection to the server"). The first retry still goes through that
+    # health check alone, which replaces a socket the server closed without
+    # touching the rest of the pool; only when it fails too are both pools'
+    # idle connections dropped (reload_pools_before_last_stale_retry), as the
+    # #354 wedged-read path does.
     STALE_RETRY_ATTEMPTS = 2
     private_constant :STALE_RETRY_ATTEMPTS
 
@@ -2004,6 +2014,31 @@ module Pgbus
     rescue StandardError => e
       Pgbus.logger.warn do
         "[Pgbus::Client] pool reload after wedged read timeout failed: #{e.class}: #{e.message}"
+      end
+    end
+
+    # Drop both pools' idle connections before the last stale retry (issue
+    # #645; see STALE_RETRY_ATTEMPTS), so it checks out a fresh connection
+    # instead of the one pgmq-ruby's health check kept handing back. Skipped
+    # silently on the shared-AR Proc path: those slots wrap ActiveRecord's own
+    # socket (#reload refuses there with a warning that would be noise on every
+    # retry). Each pool reloads on its own, so one failing does not keep the
+    # other's connections. A reload failure is logged, never raised: the stale
+    # ConnectionError the retry may raise next is the actionable error.
+    def reload_pools_before_last_stale_retry(attempt, error)
+      return if @shared_connection
+
+      Pgbus.logger.warn do
+        "[Pgbus::Client] Dropping pooled connections before the last stale-connection retry " \
+          "(attempt #{attempt}/#{STALE_RETRY_ATTEMPTS}): #{error.message}"
+      end
+      { "job" => @pgmq, "streams" => @streams_pool }.each do |name, pool|
+        pool.reload
+      rescue StandardError => e
+        Pgbus.logger.warn do
+          "[Pgbus::Client] #{name} pool reload before the last stale-connection retry failed: " \
+            "#{e.class}: #{e.message}"
+        end
       end
     end
 
@@ -2293,6 +2328,7 @@ module Pgbus
           "[Pgbus::Client] Retrying after stale pgmq connection " \
             "(attempt #{attempts}/#{STALE_RETRY_ATTEMPTS}): #{e.message}"
         end
+        reload_pools_before_last_stale_retry(attempts, e) if attempts == STALE_RETRY_ATTEMPTS
         retry
       end
     end
