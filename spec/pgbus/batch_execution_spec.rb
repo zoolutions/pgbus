@@ -106,6 +106,19 @@ RSpec.describe Pgbus::BatchExecution do
 
       expect(described_class).to have_received(:backfill!).with(job_id, msg_id: 99, queue_name: "default")
     end
+
+    # It runs after the send: a cold process whose pool cannot hand out a
+    # connection must not fail an enqueue whose message is already live,
+    # exactly as the fail-soft schema probe never did.
+    it "skips the backfill without raising when the schema probe cannot get a connection" do
+      Pgbus::Batch.reset_executions_migrated_cache!
+      pool = instance_double(ActiveRecord::ConnectionAdapters::ConnectionPool)
+      allow(pool).to receive(:with_connection).and_raise(ActiveRecord::ConnectionNotEstablished, "no database")
+      allow(Pgbus::BusRecord).to receive(:connection_pool).and_return(pool)
+
+      expect(Pgbus::Batch.backfill_execution(payload, 99, "default")).to be_nil
+      expect(described_class).not_to have_received(:backfill!)
+    end
   end
 
   describe "Pgbus::Batch.job_completed with execution rows" do

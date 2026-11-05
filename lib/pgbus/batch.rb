@@ -445,10 +445,13 @@ module Pgbus
       job_id = payload["job_id"]
       return unless job_id
 
-      # The adapter calls this after its send, outside any lease of its own.
-      BatchExecution.connection_pool.with_connection do
-        next unless executions_migrated?
+      # The adapter calls this after its send, outside any lease of its own,
+      # so the schema probe stays fail-soft as it always was: a cold process
+      # that cannot get a connection skips the backfill rather than failing
+      # an enqueue whose message is already live.
+      return unless execution_rows_migrated_softly?
 
+      BatchExecution.connection_pool.with_connection do
         BatchExecution.backfill!(job_id, msg_id: msg_id, queue_name: queue_name)
       end
     end
@@ -496,6 +499,15 @@ module Pgbus
 
         record = BatchEntry.find_by(batch_id: batch_id)
         record && !counters_match_total?(record)
+      end
+
+      # executions_migrated? with its first probe inside a lease it returns;
+      # false when no connection can be had (it already is false when the
+      # probe itself raises).
+      def execution_rows_migrated_softly?
+        BatchExecution.connection_pool.with_connection { executions_migrated? }
+      rescue StandardError
+        false
       end
 
       def counters_match_total?(record)
