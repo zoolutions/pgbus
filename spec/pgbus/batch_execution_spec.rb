@@ -131,7 +131,9 @@ RSpec.describe Pgbus::BatchExecution do
   end
 
   describe "Pgbus::Batch.job_completed with execution rows" do
-    let(:counted) { double("BatchEntry", batch_id: batch_id) }
+    # The finish is keyed on the batch the deleted execution row belonged to
+    # (the RETURNING row), not on the caller's batch_id.
+    let(:counted) { double("BatchEntry", batch_id: "batch-of-the-row") }
 
     it "resolves and counts the job in one statement, then tries to finish with that row" do
       allow(Pgbus::BatchEntry).to receive(:count_and_resolve!).and_return(counted)
@@ -142,7 +144,7 @@ RSpec.describe Pgbus::BatchExecution do
 
       expect(Pgbus::BatchEntry).to have_received(:count_and_resolve!).with(job_id, "completed_jobs")
       expect(Pgbus::BatchEntry).not_to have_received(:increment_counter!)
-      expect(Pgbus::Batch).to have_received(:try_finish!).with(batch_id, record: counted)
+      expect(Pgbus::Batch).to have_received(:try_finish!).with("batch-of-the-row", record: counted)
     end
 
     it "does not increment counters when the row was already gone (idempotent signal)" do
@@ -190,14 +192,14 @@ RSpec.describe Pgbus::BatchExecution do
 
   describe "Pgbus::Batch.job_discarded with execution rows" do
     it "resolves the row and counts failed_jobs (not discarded_jobs)" do
-      counted = double("BatchEntry", batch_id: batch_id)
+      counted = double("BatchEntry", batch_id: "batch-of-the-row")
       allow(Pgbus::BatchEntry).to receive(:count_and_resolve!).and_return(counted)
       allow(Pgbus::Batch).to receive(:try_finish!).and_return(nil)
 
       Pgbus::Batch.job_discarded(batch_id, job_id: job_id)
 
       expect(Pgbus::BatchEntry).to have_received(:count_and_resolve!).with(job_id, "failed_jobs")
-      expect(Pgbus::Batch).to have_received(:try_finish!).with(batch_id, record: counted)
+      expect(Pgbus::Batch).to have_received(:try_finish!).with("batch-of-the-row", record: counted)
     end
 
     it "increments failed_jobs and re-checks finish when job_id is omitted" do

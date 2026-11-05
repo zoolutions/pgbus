@@ -1301,7 +1301,8 @@ the web request's executor.
 is what that issue acted on. A batch member's completion on the migrated path
 ran `BEGIN`, `DELETE FROM pgbus_batch_executions`, `SELECT … FOR UPDATE` on the
 batch row, `UPDATE` the counter, `COMMIT`, then `BEGIN`, the finish `UPDATE`,
-a `find_by` and `COMMIT`: the batch row stayed locked across four round trips,
+a `find_by` and `COMMIT`: the batch row stayed locked from the `SELECT … FOR
+UPDATE` through the counter `UPDATE` and the first `COMMIT`, three round trips,
 and every member of a batch queued on it. Now one statement deletes the
 execution row and counts it into its batch (`WITH gone AS (DELETE … RETURNING
 batch_id) UPDATE pgbus_batches … RETURNING b.*`), and the finish `UPDATE`
