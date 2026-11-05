@@ -1297,6 +1297,44 @@ maintenance leases between cycles. Left for later sweeps: the workflow runner
 and models, streams and recurring tasks; the dashboard's lease is returned by
 the web request's executor.
 
+**Batch completion in two statements (issue #650).** The `batch` cell above
+is what that issue acted on. A batch member's completion on the migrated path
+ran `BEGIN`, `DELETE FROM pgbus_batch_executions`, `SELECT … FOR UPDATE` on the
+batch row, `UPDATE` the counter, `COMMIT`, then `BEGIN`, the finish `UPDATE`,
+a `find_by` and `COMMIT`: the batch row stayed locked from the `SELECT … FOR
+UPDATE` through the counter `UPDATE` and the first `COMMIT`, three round trips,
+and every member of a batch queued on it. Now one statement deletes the
+execution row and counts it into its batch (`WITH gone AS (DELETE … RETURNING
+batch_id) UPDATE pgbus_batches … RETURNING b.*`), and the finish `UPDATE`
+returns its row (`RETURNING *`), so the record handed to the callbacks needs no
+query. The finish keeps its transaction for the winner's READ COMMITTED
+re-check (`SELECT 1 FROM pgbus_batch_executions`, once per batch).
+`spec/integration/batch_statement_count_spec.rb` pins the shape: a middle
+member is `[count, BEGIN, finish, COMMIT]`, against nine events on main.
+
+Same harness, `WP_BENCH_JOB_SHAPE=batch WP_BENCH_ROLE=all WP_BENCH_PROCESSES=1`,
+3 000 timed jobs, 12 threads, embedded PGMQ, main and branch interleaved,
+three rounds, 1-minute load 7–16 on 12 cores; ranges:
+
+| cell (YJIT / no JIT) | main | branch |
+|---|---:|---:|
+| worker jobs/s | 1 516–1 551 / 898–1 045 | 3 074–3 394 / 2 292–2 536 |
+| fleet jobs/s | 349–1 675 / 1 007–1 089 | 3 342–3 470 / 2 414–2 753 |
+| fleet statements/job | 6.79–6.97 / 6.95–7.00 | 3.40–3.41 / 3.37–3.41 |
+| fleet PG ms/job | 3.80–20.6 / 5.72–6.29 | 0.17–0.19 / 0.14–0.25 |
+
+- **Statements per job** fall by 3.5 (BEGIN/COMMIT are not counted): the
+  lock `SELECT`, the separate `DELETE` and counter `UPDATE`, and the refetch
+  are gone.
+- **jobs/s doubles**, more than the statement count alone explains. On main the
+  top statement was the `SELECT … FOR UPDATE` at 3.3 ms per call, and
+  `Lock:tuple` + `Lock:transactionid` were 75 % of sampled waits (6.4 active
+  backends): the members queued on the batch row while its holder made its
+  round trips. The branch holds that row lock for one statement; its top
+  statement is the CTE at 0.1 ms, and the waits are WAL and client reads again.
+  Main's fleet YJIT low of 349 is one round in a load spike (20.6 PG ms/job);
+  the other two are 1 188 and 1 675.
+
 ### Fair share reads (issue #426)
 
 `Client#read_batch_fair` replaces `pgmq.read` on the worker when

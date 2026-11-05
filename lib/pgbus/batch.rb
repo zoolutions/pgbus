@@ -459,18 +459,21 @@ module Pgbus
     # Single-winner finish via execution-row absence. After a winning UPDATE,
     # re-check exists? in a fresh statement (Postgres READ COMMITTED can let a
     # blocked CAS win from a stale NOT EXISTS snapshot — solid_queue's finalize).
-    def self.try_finish!(batch_id)
+    # The winner's record comes from the UPDATE's RETURNING; a loser hands back
+    # +record+ (the row a completion signal already holds, issue #650) and
+    # reads the row only when it has none (the sweep, check_finished!).
+    def self.try_finish!(batch_id, record: nil)
       BatchEntry.connection_pool.with_connection do
         result = BatchEntry.transaction do
-          updated = BatchEntry.finish_if_empty!(batch_id)
-          next { just_finished: false, record: BatchEntry.find_by(batch_id: batch_id) } unless updated.positive?
+          finished = BatchEntry.finish_if_empty!(batch_id)
+          next { just_finished: false, record: record || BatchEntry.find_by(batch_id: batch_id) } unless finished
 
           raise ActiveRecord::Rollback if BatchExecution.where(batch_id: batch_id).exists?
 
-          { just_finished: true, record: BatchEntry.find_by(batch_id: batch_id) }
+          { just_finished: true, record: finished }
         end
 
-        result || { just_finished: false, record: BatchEntry.find_by(batch_id: batch_id) }
+        result || { just_finished: false, record: record || BatchEntry.find_by(batch_id: batch_id) }
       end
     end
 
@@ -481,13 +484,16 @@ module Pgbus
     class << self
       private
 
+      # Two statements and one short finish transaction per member (issue
+      # #650): count_and_resolve! deletes the execution row and counts it
+      # into the batch, RETURNING the row the finish and the callbacks use.
+      # No row back means the job had no execution row: an already-resolved
+      # signal, or a pre-migration in-flight batch counted the old way.
       def resolve_execution(batch_id, job_id, column)
-        BatchEntry.connection_pool.with_connection do
-          BatchEntry.transaction do
-            deleted = BatchExecution.where(job_id: job_id).delete_all
-            BatchEntry.increment_counter!(batch_id, column) if deleted.positive? || legacy_untracked_batch?(batch_id)
-          end
-        end
+        record = BatchEntry.count_and_resolve!(job_id, column)
+        return finish_if_needed(try_finish!(record.batch_id, record: record)) if record
+
+        BatchEntry.increment_counter!(batch_id, column) if legacy_untracked_batch?(batch_id)
         finish_if_needed(try_finish!(batch_id))
       end
 
