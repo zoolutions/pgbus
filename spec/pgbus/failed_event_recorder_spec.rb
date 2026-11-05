@@ -9,7 +9,7 @@ RSpec.describe Pgbus::FailedEventRecorder do
   let(:mock_pool) { instance_double(ActiveRecord::ConnectionAdapters::ConnectionPool) }
 
   before do
-    allow(ActiveRecord::Base).to receive(:connection_pool).and_return(mock_pool)
+    allow(Pgbus::BusRecord).to receive(:connection_pool).and_return(mock_pool)
     allow(mock_pool).to receive(:with_connection).and_yield(mock_connection)
     allow(mock_connection).to receive(:column_exists?).with(:pgbus_failed_events, :source_queue)
                                                       .and_return(source_column)
