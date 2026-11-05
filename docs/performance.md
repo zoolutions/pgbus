@@ -1209,6 +1209,86 @@ What the numbers say:
   JIT.** The machine was shared and the main YJIT pair alone spread 26 %;
   the CPU-per-flush table is the measurement this change stands on.
 
+### Connection leases on the bookkeeping paths (issue #649)
+
+The executor runs `perform_now` inside `Rails.application.executor.wrap`,
+whose ActiveRecord hook returns the job's lease. pgbus's own bookkeeping runs
+after that wrap, on the same pool thread or fiber: the uniqueness release, the
+concurrency signal, the batch counters, the failed-event row and the job stat.
+Every one of those sites went through a bare `Model.connection`, which is a
+lease nobody returns (`lease_connection` since Rails 7.2, and on 7.1 every
+relation call too). In threads mode a job with a key, a limit or a batch left
+one connection pinned to its pool thread until the worker stopped. In async
+mode the fiber ended still owning it, and the pool's reaper (`ConnectionPool#reap`,
+run inline by `checkout` once the pool has nothing free) took it back with
+`reset!`: `ROLLBACK`, `DISCARD ALL` and the session's `SET`s, about once per
+job. This is River's v0.16 bug ([riverqueue/river#1574](https://github.com/riverqueue/river/pull/1574)),
+shape for shape.
+
+Every such call now runs inside `connection_pool.with_connection`, which
+reuses a lease the caller already holds and otherwise returns the one it took.
+`Pgbus/BareConnectionLease` keeps the job-path files that way, and
+`spec/integration/connection_lease_spec.rb` runs each operation, and a whole
+`Executor#execute` per job shape, in a fresh thread and in a fresh fiber under
+`:fiber` isolation (red on main: 16 of 23 examples on Rails 8.1, 22 of 23 on 7.1).
+
+`rake bench:worker_profile` takes `WP_BENCH_JOB_SHAPE=plain|unique|limited|batch`
+and `WP_BENCH_EXECUTION_MODE=threads|async`, and worker cells print the
+ActiveRecord pool's stat when the timed drain finished plus the
+`PostgreSQLAdapter#reset!` calls (nothing instruments `reset!`, and
+`pg_stat_statements` never sees `verify!`'s `;`). Main and the branch
+interleaved on one machine shared with other sessions (1-minute load 8–17 on
+12 cores), three rounds, 3 000 timed jobs, 12 threads; ranges, not means.
+
+| cell (worker, YJIT / no JIT) | main jobs/s | branch jobs/s | main busy / dead / resets | branch busy / dead / resets |
+|---|---:|---:|---:|---:|
+| plain, threads | 5 763–7 490 / 5 197–6 357 | 5 562–6 314 / 5 355–5 911 | 0 / 1 / 0 | 0 / 0 / 0 |
+| unique, threads | 3 176–4 740 / 3 201–4 401 | 4 551–4 892 / 3 875–4 469 | 12 / 0 / 12 | 0 / 0 / 0 |
+| limited, threads | 2 233–2 627 / 1 796–1 997 | 2 278–2 731 / 1 864–1 949 | 12 / 0 / 12 | 0 / 0 / 0 |
+| batch, threads | 1 299–1 431 / 927–1 008 | 1 142–1 588 / 920–1 048 | 0 / 1 / 0 | 0 / 0 / 0 |
+| **limited, async** | **1 039–1 143 / 434–873** | **1 059–2 761 / 1 805–2 151** | **0 / 6–12 / 3 000–3 005** | **0 / 0 / 0** |
+
+- **Async, the headline row.** On main every job's fiber died owning a
+  connection, the pool of 20 ran dry, and `checkout` reaped inline: 3 000
+  `reset!`s for 3 000 jobs, 6–12 connections dead when the drain ended. The
+  branch resets none and leaves none dead, and the cell runs about twice as
+  fast (one YJIT round, 1 059, sat in a load spike).
+- **Threads.** On main the 12 pool threads each kept one connection (busy 12),
+  and each drain's first checkouts reset the 12 the previous drain's threads
+  left behind when they ended. The branch holds none between jobs. jobs/s is
+  inside the round-to-round spread for every shape, so the per-call `verify!`
+  ping a fresh lease pays (one `;` before its first write) does not show: the
+  single lease around a job's whole bookkeeping that #649's plan held in
+  reserve was not needed.
+- **plain** pins nothing on either side except main's one dead connection: the
+  stat table's memoized `table_exists?` probe, also a bare `connection`, ran
+  once per process on a pool thread (now inside `with_connection` too).
+
+The fleet cell (`WP_BENCH_ROLE=fleet WP_BENCH_PROCESSES=1`, which honours the
+shape: a shaped drain child gets an ActiveRecord pool of threads + 2) reads
+the Postgres side from `pg_stat_statements`:
+
+| shape | main statements/job | branch statements/job | main jobs/s (YJIT) | branch jobs/s (YJIT) |
+|---|---:|---:|---:|---:|
+| plain | 1.19–1.24 | 1.19–1.24 | 7 332–8 849 | 7 395–8 286 |
+| unique | 2.21–2.28 | 2.21–2.26 | 4 982–6 181 | 4 883–5 650 |
+| limited | 3.35–3.55 | 3.36–3.46 | 2 382–2 604 | 2 597–2 910 |
+| batch | 6.99–7.01 | 6.85–7.00 | 1 502–1 650 | 1 298–1 493 |
+
+Statements per job do not move: the change is which connection runs a
+statement and when it goes back, not what runs.
+
+From River: the fix itself (scope every operation's lease, so a thread or
+fiber that held none before holds none after, and keep a caller's own), the
+spec shape (a fresh owner per operation, `active_connection?` falsy inside it,
+`stat[:dead] == 0` after it ends, a second example for the caller's lease) and
+the reset count as the measure. Already in place in pgbus: the job's own lease
+(the executor wrap), the stat buffer's flush (`with_connection` since #622),
+the semaphore heartbeat's `touch`, and the dispatcher, which returns its
+maintenance leases between cycles. Left for later sweeps: the workflow runner
+and models, streams and recurring tasks; the dashboard's lease is returned by
+the web request's executor.
+
 ### Fair share reads (issue #426)
 
 `Client#read_batch_fair` replaces `pgmq.read` on the worker when

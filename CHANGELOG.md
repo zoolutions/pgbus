@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Fixed
+
+- **pgbus returns its own ActiveRecord connection at the end of every job (issue #649).** The uniqueness release, the concurrency signal, the batch counters, the failed-event row and the job stat run after the Rails executor gave the job's lease back, and each went through a bare `Model.connection`: a lease nobody returned. In threads mode a job with a uniqueness key, a concurrency limit, a batch or a failure left one connection pinned to its pool thread for the worker's life (busy 12 of 20 after a drain on 12 threads), and a backend the server closed meanwhile was reused dead. In async mode the job fiber ended owning it, and the pool's reaper reset it (`ROLLBACK`, `DISCARD ALL`, the session `SET`s) on the next checkout: 3 000 resets for 3 000 `limits_concurrency` jobs. Every such call now runs inside `connection_pool.with_connection`, which reuses a lease the caller already holds (a job's perform, a caller's transaction) and otherwise returns the one it took, on Rails 7.1 through 8.1; the stat table's first `table_exists?` probe, which pinned one connection per process even for a plain job, included. Async `limited` cell: 0 resets, 0 dead connections, about twice the jobs/s; threads-mode jobs/s and statements per job unchanged for every shape. The new `Pgbus/BareConnectionLease` cop flags a bare `connection` / `lease_connection`, or a `transaction` outside `connection_pool.with_connection`, in the job-path files. `rake bench:worker_profile` takes `WP_BENCH_JOB_SHAPE=plain|unique|limited|batch` and `WP_BENCH_EXECUTION_MODE=threads|async` (new) and prints the ActiveRecord pool's stat and reset count. `docs/performance.md` → "Connection leases on the bookkeeping paths (issue #649)". Refs #648.
+
 ## [0.23.1] - 2026-11-04
 
 ### Fixed

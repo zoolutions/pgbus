@@ -90,6 +90,10 @@ thread and fiber.
 Async execution mode needs `config.active_support.isolation_level = :fiber`
 (see the README's "Async execution mode"), so ActiveRecord connections and
 `CurrentAttributes` are fiber-scoped too.
+pgbus's own ActiveRecord work on a job fiber (the uniqueness, concurrency,
+batch, failed-event and job-stat bookkeeping) runs inside
+`connection_pool.with_connection`, so it returns its connection before the
+fiber ends instead of leaving it for the pool's reaper (issue #649).
 
 ## Ractor readiness
 
