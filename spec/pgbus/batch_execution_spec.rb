@@ -8,6 +8,8 @@ RSpec.describe Pgbus::BatchExecution do
   let(:job_id) { "job-1" }
 
   before do
+    # The bookkeeping leases through connection_pool.with_connection (issue #649).
+    stub_bus_record_pool
     Pgbus::Batch.reset_executions_migrated_cache!
     allow(described_class).to receive(:table_exists?).and_return(true)
   end
@@ -37,7 +39,9 @@ RSpec.describe Pgbus::BatchExecution do
   describe ".insert_for!" do
     it "inserts a row keyed by job_id before send" do
       conn = double("connection")
-      allow(described_class).to receive_messages(connection: conn, table_name: "pgbus_batch_executions")
+      pool = instance_double(ActiveRecord::ConnectionAdapters::ConnectionPool)
+      allow(pool).to receive(:with_connection).and_yield(conn)
+      allow(described_class).to receive_messages(connection_pool: pool, table_name: "pgbus_batch_executions")
       allow(conn).to receive(:exec_query)
 
       described_class.insert_for!(batch_id: batch_id, job_id: job_id, queue_name: "default")
@@ -101,6 +105,28 @@ RSpec.describe Pgbus::BatchExecution do
       Pgbus::Batch.backfill_execution(payload, 99, "default")
 
       expect(described_class).to have_received(:backfill!).with(job_id, msg_id: 99, queue_name: "default")
+    end
+
+    # It runs after the send: a cold process whose pool cannot hand out a
+    # connection must not fail an enqueue whose message is already live,
+    # exactly as the fail-soft schema probe never did.
+    it "takes one lease once the schema probe is memoized" do
+      Pgbus::Batch.executions_migrated?
+      pool = stub_bus_record_pool
+
+      Pgbus::Batch.backfill_execution(payload, 99, "default")
+
+      expect(pool.leases).to eq(1)
+    end
+
+    it "skips the backfill without raising when the schema probe cannot get a connection" do
+      Pgbus::Batch.reset_executions_migrated_cache!
+      pool = instance_double(ActiveRecord::ConnectionAdapters::ConnectionPool)
+      allow(pool).to receive(:with_connection).and_raise(ActiveRecord::ConnectionNotEstablished, "no database")
+      allow(Pgbus::BusRecord).to receive(:connection_pool).and_return(pool)
+
+      expect(Pgbus::Batch.backfill_execution(payload, 99, "default")).to be_nil
+      expect(described_class).not_to have_received(:backfill!)
     end
   end
 

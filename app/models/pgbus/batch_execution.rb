@@ -13,12 +13,14 @@ module Pgbus
     # live message before the msg_id backfill lands); backfill! overwrites it
     # with the physical target after send.
     def self.insert_for!(batch_id:, job_id:, queue_name: nil)
-      connection.exec_query(
-        "INSERT INTO #{table_name} (batch_id, job_id, queue_name, created_at) " \
-        "VALUES ($1, $2, $3, $4) ON CONFLICT (job_id) DO NOTHING",
-        "BatchExecution Insert",
-        [batch_id, job_id, queue_name, Time.current]
-      )
+      connection_pool.with_connection do |conn|
+        conn.exec_query(
+          "INSERT INTO #{table_name} (batch_id, job_id, queue_name, created_at) " \
+          "VALUES ($1, $2, $3, $4) ON CONFLICT (job_id) DO NOTHING",
+          "BatchExecution Insert",
+          [batch_id, job_id, queue_name, Time.current]
+        )
+      end
     end
 
     def self.backfill!(job_id, msg_id:, queue_name:)

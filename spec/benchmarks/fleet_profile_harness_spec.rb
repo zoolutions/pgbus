@@ -65,6 +65,19 @@ RSpec.describe FleetProfileHarness do
 
       expect(reason).to eq("skipped: needs 8 × (14 + 2) + 10 = 138 connections, 88 free")
     end
+
+    it "budgets a shaped job's per-thread ActiveRecord pool (issue #649)" do
+      reason = described_class.budget_skip_reason(processes: 2, pool_size: 14, free_connections: 60, ar_pool: 14)
+
+      expect(reason).to eq("skipped: needs 2 × (14 + 14) + 10 = 66 connections, 60 free")
+    end
+  end
+
+  describe ".ar_pool" do
+    it "is AR_PER_PROCESS for the plain job and one per thread on top for a shaped one" do
+      expect(described_class.ar_pool(threads: 12, shape: "plain")).to eq(2)
+      expect(described_class.ar_pool(threads: 12, shape: "unique")).to eq(14)
+    end
   end
 
   describe ".throughput" do

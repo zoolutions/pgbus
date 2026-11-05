@@ -4,10 +4,24 @@ require "spec_helper"
 
 RSpec.describe Pgbus::JobStat do
   before do
+    # The bookkeeping leases through connection_pool.with_connection (issue #649).
+    stub_bus_record_pool
     allow(described_class).to receive_messages(create!: nil, table_exists?: true)
   end
 
   describe ".record!" do
+    # Issue #649: the executor writes the stat after the job's own lease went
+    # back, so record! must take its own and return it.
+    it "probes and inserts inside one connection_pool.with_connection" do
+      pool = stub_bus_record_pool
+      allow(described_class).to receive(:latency_columns?).and_return(false)
+
+      described_class.record!(job_class: "TestJob", queue_name: "default", status: "success", duration_ms: 1)
+
+      expect(pool.leases).to eq(1)
+      expect(described_class).to have_received(:create!)
+    end
+
     context "without latency columns" do
       before { allow(described_class).to receive(:latency_columns?).and_return(false) }
 
@@ -84,7 +98,7 @@ RSpec.describe Pgbus::JobStat do
     end
 
     it "returns false on connection error without poisoning the memo" do
-      allow(described_class).to receive(:connection).and_raise(StandardError, "no db")
+      allow(described_class).to receive(:connection_pool).and_raise(StandardError, "no db")
 
       expect(described_class.table_exists?).to be false
       # The failed probe must NOT set @table_exists — otherwise a
@@ -96,7 +110,9 @@ RSpec.describe Pgbus::JobStat do
     it "memoizes a successful probe" do
       fake_connection = instance_double(ActiveRecord::ConnectionAdapters::AbstractAdapter)
       allow(fake_connection).to receive(:table_exists?).with(described_class.table_name).and_return(true)
-      allow(described_class).to receive(:connection).and_return(fake_connection)
+      pool = instance_double(ActiveRecord::ConnectionAdapters::ConnectionPool)
+      allow(pool).to receive(:with_connection).and_yield(fake_connection)
+      allow(described_class).to receive(:connection_pool).and_return(pool)
 
       expect(described_class.table_exists?).to be true
       # Second call hits the memo, not the connection.

@@ -24,6 +24,8 @@ RSpec.describe Pgbus::ActiveJob::Adapter do
   let(:concurrency_payload) { serialized_hash.merge("pgbus_concurrency_key" => "TestJob-42") }
 
   before do
+    # The bookkeeping leases through connection_pool.with_connection (issue #649).
+    stub_bus_record_pool
     allow(Pgbus).to receive(:client).and_return(mock_client)
     allow(Pgbus::Semaphore).to receive(:transaction).and_yield
     allow(Pgbus::Serializer).to receive(:serialize_job_hash).and_return(serialized_hash)

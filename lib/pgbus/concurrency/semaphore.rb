@@ -19,17 +19,23 @@ module Pgbus
 
         # Release one slot in the semaphore. Called after a job completes.
         def release(key)
-          Pgbus::Semaphore.where(key: key).update_all("value = GREATEST(value - 1, 0)")
+          Pgbus::Semaphore.connection_pool.with_connection do
+            Pgbus::Semaphore.where(key: key).update_all("value = GREATEST(value - 1, 0)")
+          end
         end
 
         # A job holding a slot is done: give the slot back and hand it to the
         # next parked job for this key, in one transaction. The decrement locks
         # the semaphore row first, so an enqueue that is parking a job right
         # now commits before the promote looks for parked rows.
+        # The lease is the caller's when it holds one, else taken for the
+        # signal and returned at its end (issue #649).
         def signal(key, client:)
-          Pgbus::Semaphore.transaction do
-            release(key)
-            BlockedExecution.promote_next(key, client: client)
+          Pgbus::Semaphore.connection_pool.with_connection do
+            Pgbus::Semaphore.transaction do
+              release(key)
+              BlockedExecution.promote_next(key, client: client)
+            end
           end
         end
 
@@ -54,11 +60,13 @@ module Pgbus
         # Returns an array of hashes with expired keys.
         # Uses DELETE ... RETURNING for atomicity (no race between pluck and delete).
         def expire_stale
-          result = Pgbus::Semaphore.connection.exec_query(
-            "DELETE FROM pgbus_semaphores WHERE expires_at < $1 RETURNING key",
-            "Pgbus Semaphore Expire",
-            [Time.current]
-          )
+          result = Pgbus::Semaphore.connection_pool.with_connection do |conn|
+            conn.exec_query(
+              "DELETE FROM pgbus_semaphores WHERE expires_at < $1 RETURNING key",
+              "Pgbus Semaphore Expire",
+              [Time.current]
+            )
+          end
           result.rows.map { |row| { "key" => row[0] } }
         end
 

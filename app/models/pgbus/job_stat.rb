@@ -10,19 +10,22 @@ module Pgbus
     scope :dead_lettered, -> { where(status: "dead_lettered") }
 
     # Record a job execution stat. Called by the executor after each job.
+    # One lease for the probe and the insert, returned at the end (issue #649).
     def self.record!(job_class:, queue_name:, status:, duration_ms:, enqueue_latency_ms: nil, retry_count: 0)
-      return unless table_exists?
+      connection_pool.with_connection do
+        next unless table_exists?
 
-      attrs = {
-        job_class: job_class,
-        queue_name: queue_name,
-        status: status,
-        duration_ms: duration_ms
-      }
-      attrs[:enqueue_latency_ms] = enqueue_latency_ms if latency_columns?
-      attrs[:retry_count] = retry_count if latency_columns?
+        attrs = {
+          job_class: job_class,
+          queue_name: queue_name,
+          status: status,
+          duration_ms: duration_ms
+        }
+        attrs[:enqueue_latency_ms] = enqueue_latency_ms if latency_columns?
+        attrs[:retry_count] = retry_count if latency_columns?
 
-      create!(attrs)
+        create!(attrs)
+      end
     rescue StandardError => e
       Pgbus.logger.debug { "[Pgbus] Failed to record job stat: #{e.message}" }
     end
@@ -43,7 +46,7 @@ module Pgbus
     def self.table_exists?
       return @table_exists if defined?(@table_exists)
 
-      @table_exists = connection.table_exists?(table_name)
+      @table_exists = connection_pool.with_connection { |conn| conn.table_exists?(table_name) }
     rescue StandardError => e
       Pgbus.logger.debug { "[Pgbus] Failed to check job stat table: #{e.message}" }
       false

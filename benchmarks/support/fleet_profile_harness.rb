@@ -37,7 +37,14 @@ module FleetProfileHarness
     "add it to shared_preload_libraries"
   end
 
-  def budgeted_connections(processes:, pool_size:) = (processes * (pool_size + AR_PER_PROCESS)) + BUDGET_HEADROOM
+  def budgeted_connections(processes:, pool_size:, ar_pool: AR_PER_PROCESS)
+    (processes * (pool_size + ar_pool)) + BUDGET_HEADROOM
+  end
+
+  # A drain child's ActiveRecord pool. A plain job touches it only for the
+  # stat INSERT; a shaped job (WP_BENCH_JOB_SHAPE, issue #649) runs its
+  # bookkeeping on every job thread at once, so it gets one per thread.
+  def ar_pool(threads:, shape:) = shape == "plain" ? AR_PER_PROCESS : threads + AR_PER_PROCESS
 
   def free_connections(max_connections:, reserved:, in_use:)
     max_connections - reserved - in_use
@@ -45,11 +52,11 @@ module FleetProfileHarness
 
   # nil when the children's connections (plus headroom) fit the free
   # connections, else the reason the row is skipped.
-  def budget_skip_reason(processes:, pool_size:, free_connections:)
-    needed = budgeted_connections(processes: processes, pool_size: pool_size)
+  def budget_skip_reason(processes:, pool_size:, free_connections:, ar_pool: AR_PER_PROCESS)
+    needed = budgeted_connections(processes: processes, pool_size: pool_size, ar_pool: ar_pool)
     return if needed <= free_connections
 
-    "skipped: needs #{processes} × (#{pool_size} + #{AR_PER_PROCESS}) + #{BUDGET_HEADROOM} = #{needed} connections, " \
+    "skipped: needs #{processes} × (#{pool_size} + #{ar_pool}) + #{BUDGET_HEADROOM} = #{needed} connections, " \
       "#{free_connections} free"
   end
 

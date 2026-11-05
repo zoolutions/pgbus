@@ -88,11 +88,13 @@ module Pgbus
           # signalling right now waits and then sees the parked row instead
           # of stranding it (rails/solid_queue#712).
           acquired = false
-          Pgbus::Semaphore.transaction(requires_new: true) do
-            acquired = Concurrency::Semaphore.acquire(key, concurrency[:limit], slot_lease(concurrency, delay)) ==
-                       :acquired
-            blocked = handle_conflict(concurrency, active_job, key, queue, payload_hash, priority: priority) unless
-              acquired
+          Pgbus::Semaphore.connection_pool.with_connection do
+            Pgbus::Semaphore.transaction(requires_new: true) do
+              acquired = Concurrency::Semaphore.acquire(key, concurrency[:limit], slot_lease(concurrency, delay)) ==
+                         :acquired
+              blocked = handle_conflict(concurrency, active_job, key, queue, payload_hash, priority: priority) unless
+                acquired
+            end
           end
 
           if acquired

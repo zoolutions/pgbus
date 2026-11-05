@@ -10,21 +10,23 @@ module Pgbus
     # A parked job never ages out — `expires_at` orders the sweep, nothing more.
     # Returns { queue_name:, payload:, priority: } or nil.
     def self.release_next!(concurrency_key)
-      result = connection.exec_query(
-        <<~SQL,
-          DELETE FROM pgbus_blocked_executions
-          WHERE id = (
-            SELECT id FROM pgbus_blocked_executions
-            WHERE concurrency_key = $1
-            ORDER BY priority ASC, created_at ASC
-            LIMIT 1
-            FOR UPDATE SKIP LOCKED
-          )
-          RETURNING queue_name, payload, priority
-        SQL
-        "Pgbus Blocked Release",
-        [concurrency_key]
-      )
+      result = connection_pool.with_connection do |conn|
+        conn.exec_query(
+          <<~SQL,
+            DELETE FROM pgbus_blocked_executions
+            WHERE id = (
+              SELECT id FROM pgbus_blocked_executions
+              WHERE concurrency_key = $1
+              ORDER BY priority ASC, created_at ASC
+              LIMIT 1
+              FOR UPDATE SKIP LOCKED
+            )
+            RETURNING queue_name, payload, priority
+          SQL
+          "Pgbus Blocked Release",
+          [concurrency_key]
+        )
+      end
 
       row = result.first
       return nil unless row
