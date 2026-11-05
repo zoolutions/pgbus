@@ -38,19 +38,55 @@ module Pgbus
         .update_all(["total_jobs = GREATEST(total_jobs - 1, 0)"])
     end
 
+    # Resolve a batch member and count it, in one statement and no
+    # transaction (issue #650): delete the job's execution row and add one to
+    # +column+ on the batch that row belonged to, RETURNING the batch row.
+    # Returns that row as a BatchEntry, or nil when the job had no execution
+    # row (already resolved, or a pre-migration in-flight job) or its batch
+    # is gone. +column+ is interpolated, so only COUNTER_COLUMNS pass.
+    def self.count_and_resolve!(job_id, column)
+      raise ArgumentError, "Invalid column: #{column}" unless COUNTER_COLUMNS.include?(column)
+
+      sql = <<~SQL.squish
+        WITH gone AS (
+          DELETE FROM #{BatchExecution.table_name} WHERE job_id = $1 RETURNING batch_id
+        )
+        UPDATE #{table_name} b
+           SET #{column} = b.#{column} + 1
+          FROM gone
+         WHERE b.batch_id = gone.batch_id
+        RETURNING b.*
+      SQL
+      row = connection_pool.with_connection do |conn|
+        conn.exec_query(sql, "Pgbus Batch Count", [job_id]).first
+      end
+      row && instantiate(row)
+    end
+
     # Single-winner finish: status is processing AND no execution rows remain.
-    # Join-free NOT EXISTS so the subquery stays in this UPDATE's WHERE.
-    # Returns the number of rows updated (0 or 1).
+    # Join-free NOT EXISTS so the subquery stays in this UPDATE's WHERE (it
+    # was a NOT IN before issue #650; the same rows, batch_id is NOT NULL on
+    # pgbus_batch_executions). Returns the finished row as a BatchEntry
+    # (RETURNING *), or nil when this call did not finish the batch.
     def self.finish_if_empty!(batch_id)
       # Counters must already be terminal so a pre-migration in-flight batch
       # (zero execution rows, total_jobs = N, counters short of N) is not
       # closed empty. total_jobs = 0 with zero counters IS terminal: that is a
       # batch whose enqueue block crashed before it enqueued anything, and
       # nothing else will ever close it.
-      where(batch_id: batch_id, status: "processing")
-        .without_executions
-        .where("completed_jobs + failed_jobs = total_jobs")
-        .update_all(status: "finished", finished_at: Time.current)
+      sql = <<~SQL.squish
+        UPDATE #{table_name} SET status = 'finished', finished_at = $2
+         WHERE batch_id = $1 AND status = 'processing'
+           AND completed_jobs + failed_jobs = total_jobs
+           AND NOT EXISTS (
+             SELECT 1 FROM #{BatchExecution.table_name} e WHERE e.batch_id = #{table_name}.batch_id
+           )
+        RETURNING *
+      SQL
+      row = connection_pool.with_connection do |conn|
+        conn.exec_query(sql, "Pgbus Batch Finish", [batch_id, Time.current]).first
+      end
+      row && instantiate(row)
     end
 
     # Finish the batch if every job already reached a terminal state. Used

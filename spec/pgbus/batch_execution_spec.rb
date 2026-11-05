@@ -131,30 +131,23 @@ RSpec.describe Pgbus::BatchExecution do
   end
 
   describe "Pgbus::Batch.job_completed with execution rows" do
-    before do
-      allow(Pgbus::BatchEntry).to receive(:transaction).and_yield
-    end
+    let(:counted) { double("BatchEntry", batch_id: batch_id) }
 
-    it "deletes the execution row, increments completed_jobs, and tries to finish" do
-      relation = double("relation", delete_all: 1)
-      allow(described_class).to receive(:where).with(job_id: job_id).and_return(relation)
-      allow(Pgbus::BatchEntry).to receive(:increment_counter!).and_return(
-        { record: double("BatchEntry", failed_jobs: 0, on_finish_class: nil, on_success_class: nil,
-                                       on_failure_class: nil, properties: "{}"), just_finished: false }
-      )
+    it "resolves and counts the job in one statement, then tries to finish with that row" do
+      allow(Pgbus::BatchEntry).to receive(:count_and_resolve!).and_return(counted)
+      allow(Pgbus::BatchEntry).to receive(:increment_counter!)
       allow(Pgbus::Batch).to receive(:try_finish!).and_return(nil)
 
       Pgbus::Batch.job_completed(batch_id, job_id: job_id)
 
-      expect(relation).to have_received(:delete_all)
-      expect(Pgbus::BatchEntry).to have_received(:increment_counter!).with(batch_id, "completed_jobs")
-      expect(Pgbus::Batch).to have_received(:try_finish!).with(batch_id)
+      expect(Pgbus::BatchEntry).to have_received(:count_and_resolve!).with(job_id, "completed_jobs")
+      expect(Pgbus::BatchEntry).not_to have_received(:increment_counter!)
+      expect(Pgbus::Batch).to have_received(:try_finish!).with(batch_id, record: counted)
     end
 
     it "does not increment counters when the row was already gone (idempotent signal)" do
-      relation = double("relation", delete_all: 0)
       remaining = double("remaining", exists?: true)
-      allow(described_class).to receive(:where).with(job_id: job_id).and_return(relation)
+      allow(Pgbus::BatchEntry).to receive(:count_and_resolve!).and_return(nil)
       allow(described_class).to receive(:where).with(batch_id: batch_id).and_return(remaining)
       allow(Pgbus::BatchEntry).to receive(:increment_counter!)
       allow(Pgbus::Batch).to receive(:try_finish!).and_return(nil)
@@ -166,14 +159,12 @@ RSpec.describe Pgbus::BatchExecution do
     end
 
     it "increments counters for a pre-migration in-flight batch with no execution rows" do
-      relation = double("relation", delete_all: 0)
       remaining = double("remaining", exists?: false)
       record = double("BatchEntry", total_jobs: 3, completed_jobs: 1, failed_jobs: 0, discarded_jobs: 0)
-      allow(described_class).to receive(:where).with(job_id: job_id).and_return(relation)
       allow(described_class).to receive(:where).with(batch_id: batch_id).and_return(remaining)
       allow(Pgbus::BatchEntry).to receive(:find_by).with(batch_id: batch_id).and_return(record)
-      allow(Pgbus::BatchEntry).to receive(:increment_counter!).and_return(
-        { record: record, just_finished: false }
+      allow(Pgbus::BatchEntry).to receive_messages(
+        count_and_resolve!: nil, increment_counter!: { record: record, just_finished: false }
       )
       allow(Pgbus::Batch).to receive(:try_finish!).and_return(nil)
 
@@ -183,10 +174,9 @@ RSpec.describe Pgbus::BatchExecution do
     end
 
     it "does not increment a vanished row when counters are already terminal" do
-      relation = double("relation", delete_all: 0)
       remaining = double("remaining", exists?: false)
       record = double("BatchEntry", total_jobs: 2, completed_jobs: 2, failed_jobs: 0, discarded_jobs: 0)
-      allow(described_class).to receive(:where).with(job_id: job_id).and_return(relation)
+      allow(Pgbus::BatchEntry).to receive(:count_and_resolve!).and_return(nil)
       allow(described_class).to receive(:where).with(batch_id: batch_id).and_return(remaining)
       allow(Pgbus::BatchEntry).to receive(:find_by).with(batch_id: batch_id).and_return(record)
       allow(Pgbus::BatchEntry).to receive(:increment_counter!)
@@ -199,21 +189,15 @@ RSpec.describe Pgbus::BatchExecution do
   end
 
   describe "Pgbus::Batch.job_discarded with execution rows" do
-    before do
-      allow(Pgbus::BatchEntry).to receive(:transaction).and_yield
-    end
-
-    it "deletes the row and increments failed_jobs (not discarded_jobs)" do
-      relation = double("relation", delete_all: 1)
-      allow(described_class).to receive(:where).with(job_id: job_id).and_return(relation)
-      allow(Pgbus::BatchEntry).to receive(:increment_counter!).and_return(
-        { record: double("BatchEntry"), just_finished: false }
-      )
+    it "resolves the row and counts failed_jobs (not discarded_jobs)" do
+      counted = double("BatchEntry", batch_id: batch_id)
+      allow(Pgbus::BatchEntry).to receive(:count_and_resolve!).and_return(counted)
       allow(Pgbus::Batch).to receive(:try_finish!).and_return(nil)
 
       Pgbus::Batch.job_discarded(batch_id, job_id: job_id)
 
-      expect(Pgbus::BatchEntry).to have_received(:increment_counter!).with(batch_id, "failed_jobs")
+      expect(Pgbus::BatchEntry).to have_received(:count_and_resolve!).with(job_id, "failed_jobs")
+      expect(Pgbus::Batch).to have_received(:try_finish!).with(batch_id, record: counted)
     end
 
     it "increments failed_jobs and re-checks finish when job_id is omitted" do
@@ -237,17 +221,18 @@ RSpec.describe Pgbus::BatchExecution do
                            on_finish_class: nil, on_success_class: nil, on_failure_class: nil, properties: "{}")
     end
 
-    it "finishes when the CAS update wins and a fresh exists? check is empty" do
+    before { allow(Pgbus::BatchEntry).to receive(:find_by) }
+
+    it "finishes with the RETURNING row when the CAS update wins and a fresh exists? check is empty" do
       executions = double("executions", exists?: false)
       allow(Pgbus::BatchEntry).to receive(:transaction).and_yield
-      allow(Pgbus::BatchEntry).to receive(:finish_if_empty!).with(batch_id).and_return(1)
+      allow(Pgbus::BatchEntry).to receive(:finish_if_empty!).with(batch_id).and_return(record)
       allow(described_class).to receive(:where).with(batch_id: batch_id).and_return(executions)
-      allow(Pgbus::BatchEntry).to receive(:find_by).with(batch_id: batch_id).and_return(record)
-      allow(Pgbus::Instrumentation).to receive(:instrument).and_yield({})
 
       result = Pgbus::Batch.try_finish!(batch_id)
 
-      expect(result[:just_finished]).to be true
+      expect(result).to eq(just_finished: true, record: record)
+      expect(Pgbus::BatchEntry).not_to have_received(:find_by)
     end
 
     it "does not report finished when a fresh exists? check finds rows (READ COMMITTED hazard)" do
@@ -257,7 +242,7 @@ RSpec.describe Pgbus::BatchExecution do
       rescue ActiveRecord::Rollback
         nil
       end
-      allow(Pgbus::BatchEntry).to receive(:finish_if_empty!).with(batch_id).and_return(1)
+      allow(Pgbus::BatchEntry).to receive(:finish_if_empty!).with(batch_id).and_return(record)
       allow(described_class).to receive(:where).with(batch_id: batch_id).and_return(executions)
       allow(Pgbus::BatchEntry).to receive(:find_by).with(batch_id: batch_id).and_return(record)
 
@@ -266,14 +251,25 @@ RSpec.describe Pgbus::BatchExecution do
       expect(result[:just_finished]).to be false
     end
 
-    it "is a no-op when the CAS update matches zero rows" do
+    it "hands back the caller's row without a query when the CAS update matches zero rows" do
+      counted = double("BatchEntry")
       allow(Pgbus::BatchEntry).to receive(:transaction).and_yield
-      allow(Pgbus::BatchEntry).to receive(:finish_if_empty!).with(batch_id).and_return(0)
+      allow(Pgbus::BatchEntry).to receive(:finish_if_empty!).with(batch_id).and_return(nil)
+
+      result = Pgbus::Batch.try_finish!(batch_id, record: counted)
+
+      expect(result).to eq(just_finished: false, record: counted)
+      expect(Pgbus::BatchEntry).not_to have_received(:find_by)
+    end
+
+    it "reads the row when the CAS update matches zero rows and the caller has none (the sweep)" do
+      allow(Pgbus::BatchEntry).to receive(:transaction).and_yield
+      allow(Pgbus::BatchEntry).to receive(:finish_if_empty!).with(batch_id).and_return(nil)
       allow(Pgbus::BatchEntry).to receive(:find_by).with(batch_id: batch_id).and_return(record)
 
       result = Pgbus::Batch.try_finish!(batch_id)
 
-      expect(result[:just_finished]).to be false
+      expect(result).to eq(just_finished: false, record: record)
     end
   end
 
