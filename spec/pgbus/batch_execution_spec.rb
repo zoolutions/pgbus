@@ -110,6 +110,15 @@ RSpec.describe Pgbus::BatchExecution do
     # It runs after the send: a cold process whose pool cannot hand out a
     # connection must not fail an enqueue whose message is already live,
     # exactly as the fail-soft schema probe never did.
+    it "takes one lease once the schema probe is memoized" do
+      Pgbus::Batch.executions_migrated?
+      pool = stub_bus_record_pool
+
+      Pgbus::Batch.backfill_execution(payload, 99, "default")
+
+      expect(pool.leases).to eq(1)
+    end
+
     it "skips the backfill without raising when the schema probe cannot get a connection" do
       Pgbus::Batch.reset_executions_migrated_cache!
       pool = instance_double(ActiveRecord::ConnectionAdapters::ConnectionPool)

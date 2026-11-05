@@ -505,6 +505,9 @@ module Pgbus
       # false when no connection can be had (it already is false when the
       # probe itself raises).
       def execution_rows_migrated_softly?
+        # Memoized true: no lease for the probe, the backfill takes the one.
+        return true if @schema_lock.synchronize { @executions_migrated }
+
         BatchExecution.connection_pool.with_connection { executions_migrated? }
       rescue StandardError
         false
