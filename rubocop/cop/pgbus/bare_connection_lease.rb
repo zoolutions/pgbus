@@ -12,8 +12,9 @@ module RuboCop
       # `connection_pool.with_connection`: it reuses a lease the caller holds
       # and otherwise returns the one it took.
       #
-      # - `connection` / `lease_connection` on no receiver, `self` or a
-      #   constant: always an offense, inside `with_connection` too, since on
+      # - `connection` on no receiver, `self` or a constant, and
+      #   `lease_connection` on any receiver (`connection_pool.lease_connection`
+      #   too): always an offense, inside `with_connection` too, since on
       #   Rails 7.2+ it marks the lease sticky and `with_connection` then keeps
       #   it.
       # - `transaction` on no receiver, `self` or a constant whose nearest
@@ -44,6 +45,8 @@ module RuboCop
         RESTRICT_ON_SEND = %i[connection lease_connection transaction].freeze
 
         def on_send(node)
+          # lease_connection is permanent on any receiver, a pool's included.
+          return lease_offense(node) if node.method?(:lease_connection)
           return unless bare_receiver?(node)
 
           if node.method?(:transaction)
@@ -55,6 +58,10 @@ module RuboCop
         alias on_csend on_send
 
         private
+
+        def lease_offense(node)
+          add_offense(node.loc.selector, message: format(LEASE_MSG, method: node.method_name))
+        end
 
         def bare_receiver?(node)
           receiver = node.receiver

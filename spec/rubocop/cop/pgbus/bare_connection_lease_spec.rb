@@ -50,6 +50,15 @@ RSpec.describe RuboCop::Cop::Pgbus::BareConnectionLease do
     RUBY
   end
 
+  it "flags lease_connection on any receiver, a pool's included" do
+    expect_offense(<<~RUBY)
+      Pgbus::Semaphore.connection_pool.lease_connection.exec_query(sql)
+                                       ^^^^^^^^^^^^^^^^ #{lease_msg("lease_connection")}
+      pool.lease_connection
+           ^^^^^^^^^^^^^^^^ #{lease_msg("lease_connection")}
+    RUBY
+  end
+
   it "accepts a connection read off another object" do
     expect_no_offenses(<<~RUBY)
       client.connection.exec(sql)

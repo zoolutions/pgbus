@@ -6,7 +6,7 @@
 # with_connection yields +connection+ without checking one out; the models
 # inherit BusRecord's stub. Anything else asked of the pool raises what a
 # missing database raises, so schema probes (column_names, table_exists?)
-# behave as they do with no pool at all.
+# fail as they do with no pool at all.
 module BusRecordPoolStub
   class NoDatabasePool
     def initialize(connection)
@@ -16,7 +16,9 @@ module BusRecordPoolStub
     def with_connection(*) = yield(@connection)
 
     def method_missing(*)
-      raise ActiveRecord::ConnectionNotDefined, "No database connection defined."
+      # ConnectionNotEstablished: Rails 7.1 has no ConnectionNotDefined, its
+      # subclass on 7.2+, and every caller rescues the superclass alike.
+      raise ActiveRecord::ConnectionNotEstablished, "No database connection defined."
     end
 
     def respond_to_missing?(*) = false
