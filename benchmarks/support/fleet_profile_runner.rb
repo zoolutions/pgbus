@@ -62,6 +62,8 @@ module FleetProfileRunner
   # never sets.
   def pool_size(threads) = threads + 2
 
+  def ar_pool(threads) = FleetProfileHarness.ar_pool(threads: threads, shape: WorkerProfileHarness.job_shape)
+
   def realtime = Process.clock_gettime(Process::CLOCK_REALTIME)
 
   # Parent side. Returns the fleet cell's fields (string keys), or
@@ -75,7 +77,8 @@ module FleetProfileRunner
       reserved: Integer(conn.select_value("SHOW superuser_reserved_connections")),
       in_use: client_backends(conn)
     )
-    reason = FleetProfileHarness.budget_skip_reason(processes: processes, pool_size: pool, free_connections: free)
+    reason = FleetProfileHarness.budget_skip_reason(processes: processes, pool_size: pool, free_connections: free,
+                                                    ar_pool: ar_pool(threads))
     return { "skip_reason" => reason } if reason
 
     pg_unavailable = pg_stat_unavailable_reason(conn)
@@ -110,8 +113,7 @@ module FleetProfileRunner
 
   # Child side (WPROF_DRAIN_CHILD=<index>). Never purges the shared queue.
   def run_drain_child(url, index:, threads:, read_ahead:, input: $stdin, out: $stdout)
-    WorkerProfileRunner.configure!(url, threads: threads, pool_size: pool_size(threads),
-                                        ar_pool: FleetProfileHarness::AR_PER_PROCESS)
+    WorkerProfileRunner.configure!(url, threads: threads, pool_size: pool_size(threads), ar_pool: ar_pool(threads))
     warm_up(index, threads: threads, read_ahead: read_ahead)
 
     Pgbus.stopping = false
@@ -137,6 +139,7 @@ module FleetProfileRunner
   def worker_options(queue, threads, read_ahead)
     options = { queues: [queue], threads: threads }
     options[:read_ahead] = read_ahead unless read_ahead.nil?
+    options[:execution_mode] = :async if WorkerProfileRunner.async?
     options
   end
 

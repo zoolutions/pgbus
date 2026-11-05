@@ -8,6 +8,8 @@ RSpec.describe Pgbus::BatchExecution do
   let(:job_id) { "job-1" }
 
   before do
+    # The bookkeeping leases through connection_pool.with_connection (issue #649).
+    stub_bus_record_pool
     Pgbus::Batch.reset_executions_migrated_cache!
     allow(described_class).to receive(:table_exists?).and_return(true)
   end
@@ -37,7 +39,9 @@ RSpec.describe Pgbus::BatchExecution do
   describe ".insert_for!" do
     it "inserts a row keyed by job_id before send" do
       conn = double("connection")
-      allow(described_class).to receive_messages(connection: conn, table_name: "pgbus_batch_executions")
+      pool = instance_double(ActiveRecord::ConnectionAdapters::ConnectionPool)
+      allow(pool).to receive(:with_connection).and_yield(conn)
+      allow(described_class).to receive_messages(connection_pool: pool, table_name: "pgbus_batch_executions")
       allow(conn).to receive(:exec_query)
 
       described_class.insert_for!(batch_id: batch_id, job_id: job_id, queue_name: "default")

@@ -3,6 +3,9 @@
 require "spec_helper"
 
 RSpec.describe Pgbus::Concurrency::BlockedExecution do
+  # The bookkeeping leases through connection_pool.with_connection (issue #649).
+  before { stub_bus_record_pool }
+
   describe ".insert" do
     it "inserts a blocked execution row, leaving created_at to the database's clock" do
       allow(Pgbus::BlockedExecution).to receive(:insert!).and_return(double("result"))

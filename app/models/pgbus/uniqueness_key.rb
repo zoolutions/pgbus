@@ -21,11 +21,13 @@ module Pgbus
                     else
                       "DO NOTHING"
                     end
-      result = connection.exec_query(
-        "INSERT INTO #{table_name} (lock_key, queue_name, msg_id) " \
-        "VALUES ($1, $2, $3) ON CONFLICT (lock_key) #{on_conflict} RETURNING lock_key, created_at",
-        "UniquenessKey Acquire", [lock_key, queue_name, msg_id]
-      )
+      result = connection_pool.with_connection do |conn|
+        conn.exec_query(
+          "INSERT INTO #{table_name} (lock_key, queue_name, msg_id) " \
+          "VALUES ($1, $2, $3) ON CONFLICT (lock_key) #{on_conflict} RETURNING lock_key, created_at",
+          "UniquenessKey Acquire", [lock_key, queue_name, msg_id]
+        )
+      end
       row = result.rows.first
       return false unless row
 
@@ -52,7 +54,7 @@ module Pgbus
         sql += " AND created_at = $4"
         binds << created_at
       end
-      connection.exec_update(sql, "UniquenessKey Bind", binds)
+      connection_pool.with_connection { |conn| conn.exec_update(sql, "UniquenessKey Bind", binds) }
     end
 
     # Drop the bind ownership stamp without touching the lock row. Used when
@@ -65,10 +67,9 @@ module Pgbus
     # Release a uniqueness lock after job completion or DLQ.
     def self.release!(lock_key)
       Thread.current[:pgbus_uniqueness_created_at]&.delete(lock_key)
-      connection.exec_delete(
-        "DELETE FROM #{table_name} WHERE lock_key = $1",
-        "UniquenessKey Release", [lock_key]
-      )
+      connection_pool.with_connection do |conn|
+        conn.exec_delete("DELETE FROM #{table_name} WHERE lock_key = $1", "UniquenessKey Release", [lock_key])
+      end
     end
 
     # Release a lock only while it still points at this message. Used by the
@@ -81,10 +82,12 @@ module Pgbus
     # queue. The queue is part of the match.
     def self.release_if_bound!(lock_key, queue_name:, msg_id:)
       Thread.current[:pgbus_uniqueness_created_at]&.delete(lock_key)
-      connection.exec_delete(
-        "DELETE FROM #{table_name} WHERE lock_key = $1 AND queue_name = $2 AND msg_id = $3",
-        "UniquenessKey Release If Bound", [lock_key, queue_name.to_s, msg_id.to_i]
-      )
+      connection_pool.with_connection do |conn|
+        conn.exec_delete(
+          "DELETE FROM #{table_name} WHERE lock_key = $1 AND queue_name = $2 AND msg_id = $3",
+          "UniquenessKey Release If Bound", [lock_key, queue_name.to_s, msg_id.to_i]
+        )
+      end
     end
 
     # The row a message holds: bound to that message (queue + msg_id, see
@@ -109,10 +112,10 @@ module Pgbus
     # be a retry's it handed over), and the reaper takes an orphan.
     def self.release_held_by!(lock_key, queue_name:, msg_id:, enqueued_at:)
       Thread.current[:pgbus_uniqueness_created_at]&.delete(lock_key)
-      connection.exec_delete(
-        "DELETE FROM #{table_name} WHERE #{HELD_BY_CONDITION}",
-        "UniquenessKey Release Held By", held_by_binds(lock_key, queue_name, msg_id, sent_at_literal(enqueued_at))
-      )
+      binds = held_by_binds(lock_key, queue_name, msg_id, sent_at_literal(enqueued_at))
+      connection_pool.with_connection do |conn|
+        conn.exec_delete("DELETE FROM #{table_name} WHERE #{HELD_BY_CONDITION}", "UniquenessKey Release Held By", binds)
+      end
     end
 
     # Hand the running attempt's lock to its retry, which goes out through the
@@ -126,11 +129,13 @@ module Pgbus
     # attempt's enqueued_at only a row bound to it is taken.
     def self.unbind!(lock_key, from_queue_name:, from_msg_id:, from_enqueued_at:, queue_name:)
       binds = held_by_binds(lock_key, from_queue_name, from_msg_id, sent_at_literal(from_enqueued_at))
-      result = connection.exec_query(
-        "UPDATE #{table_name} SET queue_name = $5, msg_id = 0, created_at = CURRENT_TIMESTAMP " \
-        "WHERE #{HELD_BY_CONDITION} RETURNING created_at",
-        "UniquenessKey Unbind", binds + [queue_name.to_s]
-      )
+      result = connection_pool.with_connection do |conn|
+        conn.exec_query(
+          "UPDATE #{table_name} SET queue_name = $5, msg_id = 0, created_at = CURRENT_TIMESTAMP " \
+          "WHERE #{HELD_BY_CONDITION} RETURNING created_at",
+          "UniquenessKey Unbind", binds + [queue_name.to_s]
+        )
+      end
       result.rows.first&.first
     end
 
@@ -138,17 +143,19 @@ module Pgbus
     # discards and queue purges — as [lock_key, queue_name, msg_id,
     # enqueued_at] tuples, one statement per thousand.
     def self.release_all_held_by!(holders)
-      holders.each_slice(1000).sum do |slice|
-        values = slice.map do |lock_key, queue_name, msg_id, enqueued_at|
-          "(#{connection.quote(lock_key.to_s)}, #{connection.quote(queue_name.to_s)}, #{msg_id.to_i}, " \
-            "#{connection.quote(sent_at_literal(enqueued_at))}::timestamptz)"
+      connection_pool.with_connection do |conn|
+        holders.each_slice(1000).sum do |slice|
+          values = slice.map do |lock_key, queue_name, msg_id, enqueued_at|
+            "(#{conn.quote(lock_key.to_s)}, #{conn.quote(queue_name.to_s)}, #{msg_id.to_i}, " \
+              "#{conn.quote(sent_at_literal(enqueued_at))}::timestamptz)"
+          end
+          conn.exec_delete(
+            "DELETE FROM #{table_name} AS u USING (VALUES #{values.join(", ")}) AS m(lock_key, queue_name, msg_id, sent_at) " \
+            "WHERE u.lock_key = m.lock_key AND ((u.queue_name = m.queue_name AND u.msg_id = m.msg_id AND u.msg_id > 0) OR " \
+            "(u.msg_id <= 0 AND u.created_at <= m.sent_at))",
+            "UniquenessKey Release All Held By"
+          )
         end
-        connection.exec_delete(
-          "DELETE FROM #{table_name} AS u USING (VALUES #{values.join(", ")}) AS m(lock_key, queue_name, msg_id, sent_at) " \
-          "WHERE u.lock_key = m.lock_key AND ((u.queue_name = m.queue_name AND u.msg_id = m.msg_id AND u.msg_id > 0) OR " \
-          "(u.msg_id <= 0 AND u.created_at <= m.sent_at))",
-          "UniquenessKey Release All Held By"
-        )
       end
     end
 
@@ -185,10 +192,12 @@ module Pgbus
     # belong to it — pass the parked row's created_at as the ceiling.
     def self.release_if_unbound!(lock_key, acquired_before:)
       Thread.current[:pgbus_uniqueness_created_at]&.delete(lock_key)
-      connection.exec_delete(
-        "DELETE FROM #{table_name} WHERE lock_key = $1 AND msg_id = 0 AND created_at <= $2",
-        "UniquenessKey Release If Unbound", [lock_key, acquired_before]
-      )
+      connection_pool.with_connection do |conn|
+        conn.exec_delete(
+          "DELETE FROM #{table_name} WHERE lock_key = $1 AND msg_id = 0 AND created_at <= $2",
+          "UniquenessKey Release If Unbound", [lock_key, acquired_before]
+        )
+      end
     end
 
     # True when the key's row is bound to this message (queue + msg_id): its
@@ -196,18 +205,20 @@ module Pgbus
     # this when it dead-letters a :while_executing message that never failed
     # (issue #629): a crash loop, not a uniqueness conflict.
     def self.bound_to?(lock_key, queue_name:, msg_id:)
-      !connection.select_value(
-        "SELECT 1 FROM #{table_name} WHERE lock_key = $1 AND queue_name = $2 AND msg_id = $3 LIMIT 1",
-        "UniquenessKey Bound To", [lock_key, queue_name.to_s, msg_id.to_i]
-      ).nil?
+      row = connection_pool.with_connection do |conn|
+        conn.select_value(
+          "SELECT 1 FROM #{table_name} WHERE lock_key = $1 AND queue_name = $2 AND msg_id = $3 LIMIT 1",
+          "UniquenessKey Bound To", [lock_key, queue_name.to_s, msg_id.to_i]
+        )
+      end
+      !row.nil?
     end
 
     # Check if a key is currently locked.
     def self.locked?(lock_key)
-      result = connection.select_value(
-        "SELECT 1 FROM #{table_name} WHERE lock_key = $1 LIMIT 1",
-        "UniquenessKey Check", [lock_key]
-      )
+      result = connection_pool.with_connection do |conn|
+        conn.select_value("SELECT 1 FROM #{table_name} WHERE lock_key = $1 LIMIT 1", "UniquenessKey Check", [lock_key])
+      end
       !result.nil?
     end
   end

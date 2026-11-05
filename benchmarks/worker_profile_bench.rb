@@ -53,7 +53,13 @@
 # ActiveJob logger, warn gives ActiveJob a TaggedLogging logger at warn, quiet
 # sets config.quiet_active_job_logs), WP_BENCH_RAILS_APP (1 boots a minimal
 # Rails app in every cell so jobs run inside Rails.application.executor.wrap,
-# issue #618; unset or 0 leaves Rails out, the shape #484 measured).
+# issue #618; unset or 0 leaves Rails out, the shape #484 measured),
+# WP_BENCH_JOB_SHAPE (issue #649: plain, the default no-op job; unique,
+# limited or batch run the uniqueness, concurrency or batch bookkeeping on
+# every job, fleet drains included) and WP_BENCH_EXECUTION_MODE (threads, the
+# default, or async: fiber isolation and execution_mode: :async). Worker cells
+# then also print the ActiveRecord pool's stat when the timed drain finished
+# and the PostgreSQLAdapter#reset! calls the reaper made.
 # Worker and consumer cells also print an "inside rails" table: the on-CPU rails bucket
 # split by owner (benchmarks/support/worker_profile_harness.rb).
 # Raw vernier profiles land in tmp/benchmarks/ (open in profiler.firefox.com).
@@ -84,6 +90,8 @@ begin
   COMPLETION_COMMIT = WorkerProfileHarness.completion_commit
   AJ_LOGS = WorkerProfileHarness.aj_logs
   RAILS_APP = WorkerProfileHarness.rails_app?
+  JOB_SHAPE = WorkerProfileHarness.job_shape
+  EXECUTION_MODE = WorkerProfileHarness.execution_mode
 rescue ArgumentError => e
   abort e.message
 end
@@ -126,7 +134,8 @@ def run_child(role, location, url)
     role: role, location: location, jit: jit, jobs: JOBS,
     wall_s: timed[:wall_s], cpu_s: timed[:cpu_s], gc_s: timed[:gc_s],
     jobs_per_s: JOBS / timed[:wall_s], pool_shares: profiled[:pool_shares], loop_shares: profiled[:loop_shares],
-    cpu_shares: profiled[:cpu_shares], rails_sub_shares: profiled[:rails_sub_shares], profile_path: profile_path
+    cpu_shares: profiled[:cpu_shares], rails_sub_shares: profiled[:rails_sub_shares], profile_path: profile_path,
+    ar_pool: timed[:ar_pool]
   )
   puts RESULT_PREFIX + JSON.generate(cell.to_h)
 end
@@ -213,12 +222,19 @@ def print_rails_split(cells)
   puts WorkerProfileHarness.rails_sub_table(cells)
 end
 
+def print_ar_pool(cells)
+  puts
+  puts "ActiveRecord pool when the timed drain finished (job shape #{JOB_SHAPE}, #{EXECUTION_MODE}):"
+  puts WorkerProfileHarness.ar_pool_table(cells)
+end
+
 def print_profile_table(cells)
   print_throughput(cells)
   print_split(cells, "pool_shares", "Job-pool threads (where each executing job's time goes)")
   print_split(cells, "loop_shares", "Main loop (reads batches, hands them to the pool)")
   print_split(cells, "cpu_shares", "On-CPU composition, all threads (whose code ran while holding the GVL)", CPU_BUCKETS)
   print_rails_split(cells)
+  print_ar_pool(cells)
   puts
   puts "jobs/s and ms/job come from the unprofiled drain (#{JOBS} jobs, #{THREADS} threads, " \
        "read_ahead #{READ_AHEAD.nil? ? "not passed" : READ_AHEAD})."
@@ -264,6 +280,7 @@ puts "  completed_jobs (workers; consumers always archive): #{COMPLETED_JOBS || 
 puts "  completion commit: #{completion_commit_label}"
 puts "  ActiveJob log lines: #{AJ_LOGS}"
 puts "  Rails app (executor wrap): #{RAILS_APP ? "on" : "off (set WP_BENCH_RAILS_APP=1)"}"
+puts "  job shape: #{JOB_SHAPE}, execution mode: #{EXECUTION_MODE}"
 puts "  proxied cells: #{proxy_url ? "on" : "off (set PGBUS_BENCH_PROXY_URL)"}"
 puts "  fleet processes: #{PROCESSES.join(", ")}" if ROLES.fetch(ROLE).include?("fleet")
 puts "=" * 70

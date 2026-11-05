@@ -62,14 +62,16 @@ module Pgbus
     def self.check_finished!(batch_id)
       return Batch.try_finish!(batch_id) if Batch.executions_migrated?
 
-      transaction do
-        record = lock.find_by(batch_id: batch_id)
-        return nil unless record
-        return { record: record, just_finished: false } if record.status == "finished"
-        return { record: record, just_finished: false } unless record.completed_jobs + record.discarded_jobs == record.total_jobs
+      connection_pool.with_connection do
+        transaction do
+          record = lock.find_by(batch_id: batch_id)
+          return nil unless record
+          return { record: record, just_finished: false } if record.status == "finished"
+          return { record: record, just_finished: false } unless record.completed_jobs + record.discarded_jobs == record.total_jobs
 
-        record.update!(status: "finished", finished_at: Time.current)
-        { record: record, just_finished: true }
+          record.update!(status: "finished", finished_at: Time.current)
+          { record: record, just_finished: true }
+        end
       end
     end
 
@@ -80,23 +82,25 @@ module Pgbus
     def self.increment_counter!(batch_id, column)
       raise ArgumentError, "Invalid column: #{column}" unless COUNTER_COLUMNS.include?(column)
 
-      transaction do
-        record = lock.find_by(batch_id: batch_id)
-        return nil unless record
+      connection_pool.with_connection do
+        transaction do
+          record = lock.find_by(batch_id: batch_id)
+          return nil unless record
 
-        record.increment!(column)
+          record.increment!(column)
 
-        return { record: record, just_finished: false } if Batch.executions_migrated?
+          return { record: record, just_finished: false } if Batch.executions_migrated?
 
-        # total_jobs grows per job while the block is still open (issue #423),
-        # so completed == total can be momentarily true on a pending batch.
-        # Only a processing batch may auto-finish; check_finished! at the end
-        # of the block covers the pending case.
-        counters_match = record.completed_jobs + record.discarded_jobs == record.total_jobs
-        just_finished = counters_match && record.status == "processing"
-        record.update!(status: "finished", finished_at: Time.current) if just_finished
+          # total_jobs grows per job while the block is still open (issue #423),
+          # so completed == total can be momentarily true on a pending batch.
+          # Only a processing batch may auto-finish; check_finished! at the end
+          # of the block covers the pending case.
+          counters_match = record.completed_jobs + record.discarded_jobs == record.total_jobs
+          just_finished = counters_match && record.status == "processing"
+          record.update!(status: "finished", finished_at: Time.current) if just_finished
 
-        { record: record, just_finished: just_finished }
+          { record: record, just_finished: just_finished }
+        end
       end
     end
   end

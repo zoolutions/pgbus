@@ -311,6 +311,47 @@ RSpec.describe WorkerProfileHarness do
     end
   end
 
+  describe ".job_shape" do
+    it "is plain when unset, else the shape" do
+      expect(described_class.job_shape({})).to eq("plain")
+      %w[plain unique limited batch].each do |shape|
+        expect(described_class.job_shape("WP_BENCH_JOB_SHAPE" => shape)).to eq(shape)
+      end
+    end
+
+    it "rejects anything else" do
+      expect { described_class.job_shape("WP_BENCH_JOB_SHAPE" => "workflow") }
+        .to raise_error(ArgumentError, /WP_BENCH_JOB_SHAPE must be one of plain, unique, limited, batch \(got workflow\)/)
+    end
+  end
+
+  describe ".execution_mode" do
+    it "is threads when unset, else the mode" do
+      expect(described_class.execution_mode({})).to eq("threads")
+      expect(described_class.execution_mode("WP_BENCH_EXECUTION_MODE" => "async")).to eq("async")
+    end
+
+    it "rejects anything else" do
+      expect { described_class.execution_mode("WP_BENCH_EXECUTION_MODE" => "fibers") }
+        .to raise_error(ArgumentError, /WP_BENCH_EXECUTION_MODE must be threads or async \(got fibers\)/)
+    end
+  end
+
+  describe ".ar_pool_table" do
+    it "prints the pool stat and the resets of each cell that carries them" do
+      cells = [
+        { "role" => "worker", "location" => "local", "jit" => "yjit",
+          "ar_pool" => { "busy" => 0, "dead" => 3, "connections" => 20, "resets" => 41, "shutdown_resets" => 12 } },
+        { "role" => "fleet", "location" => "local", "jit" => "yjit" }
+      ]
+      expect(described_class.ar_pool_table(cells)).to eq(
+        ["| cell | busy | dead | connections | resets (drain) | resets (shutdown) |",
+         "|---|---:|---:|---:|---:|---:|",
+         "| worker / local / yjit | 0 | 3 | 20 | 41 | 12 |"]
+      )
+    end
+  end
+
   describe ".rails_app?" do
     it "is on for 1 and off when unset or 0" do
       expect(described_class.rails_app?("WP_BENCH_RAILS_APP" => "1")).to be(true)

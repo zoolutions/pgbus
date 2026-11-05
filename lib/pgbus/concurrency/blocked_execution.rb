@@ -58,28 +58,30 @@ module Pgbus
         def promote_next(concurrency_key, client:, delay: 0)
           released = nil
           msg_id = nil
-          Pgbus::BlockedExecution.transaction(requires_new: true) do
-            released = release_next(concurrency_key)
-            raise ActiveRecord::Rollback unless released
+          Pgbus::BlockedExecution.connection_pool.with_connection do
+            Pgbus::BlockedExecution.transaction(requires_new: true) do
+              released = release_next(concurrency_key)
+              raise ActiveRecord::Rollback unless released
 
-            # Resolve the delay first: a parked scheduled job goes back into
-            # PGMQ invisible, and nothing renews its lease until a worker
-            # picks it up, so the wait has to be part of the lease.
-            actual_delay = resolve_delay(released[:payload], delay)
-            raise ActiveRecord::Rollback unless slot_taken?(concurrency_key, released[:payload], actual_delay)
+              # Resolve the delay first: a parked scheduled job goes back into
+              # PGMQ invisible, and nothing renews its lease until a worker
+              # picks it up, so the wait has to be part of the lease.
+              actual_delay = resolve_delay(released[:payload], delay)
+              raise ActiveRecord::Rollback unless slot_taken?(concurrency_key, released[:payload], actual_delay)
 
-            # Carry the enqueuer's priority through: under priority routing it
-            # picks the _pN sub-queue, not just the release order (issue #423).
-            headers = released[:payload].is_a?(Hash) ? released[:payload].delete(HEADERS_KEY) : nil
-            msg_id = client.send_message(released[:queue_name], released[:payload],
-                                         delay: actual_delay, priority: released[:priority],
-                                         **(headers ? { headers: headers } : {}))
+              # Carry the enqueuer's priority through: under priority routing it
+              # picks the _pN sub-queue, not just the release order (issue #423).
+              headers = released[:payload].is_a?(Hash) ? released[:payload].delete(HEADERS_KEY) : nil
+              msg_id = client.send_message(released[:queue_name], released[:payload],
+                                           delay: actual_delay, priority: released[:priority],
+                                           **(headers ? { headers: headers } : {}))
+            end
+
+            next false unless released && msg_id
+
+            backfill(released, msg_id, client)
+            true
           end
-
-          return false unless released && msg_id
-
-          backfill(released, msg_id, client)
-          true
         rescue StandardError => e
           Pgbus.logger.warn { "[Pgbus] Promote blocked execution failed for #{concurrency_key}: #{e.message}" }
           false
@@ -112,9 +114,11 @@ module Pgbus
         # un-taking the slot while the message is already live, so the job
         # runs a second time.
         def backfill(released, msg_id, client)
-          Pgbus::BlockedExecution.transaction(requires_new: true) do
-            Batch.backfill_execution(released[:payload], msg_id,
-                                     client.target_queue(released[:queue_name], released[:priority]))
+          Pgbus::BlockedExecution.connection_pool.with_connection do
+            Pgbus::BlockedExecution.transaction(requires_new: true) do
+              Batch.backfill_execution(released[:payload], msg_id,
+                                       client.target_queue(released[:queue_name], released[:priority]))
+            end
           end
         rescue StandardError => e
           Pgbus.logger.warn { "[Pgbus] Batch execution backfill failed after promote: #{e.message}" }

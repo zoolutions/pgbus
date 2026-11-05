@@ -3,6 +3,9 @@
 require "spec_helper"
 
 RSpec.describe Pgbus::BatchEntry do
+  # The bookkeeping leases through connection_pool.with_connection (issue #649).
+  before { stub_bus_record_pool }
+
   describe ".increment_total_jobs!" do
     it "raises AlreadyFinished when no unfinished row is updated" do
       relation = double("relation", update_all: 0)

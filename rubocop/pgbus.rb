@@ -4,3 +4,4 @@
 # `require:` so the cops are available when linting this repo.
 require_relative "cop/pgbus/no_ruby_timeout"
 require_relative "cop/pgbus/dashboard_time_formatting"
+require_relative "cop/pgbus/bare_connection_lease"

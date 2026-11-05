@@ -5,6 +5,9 @@ require "uri"
 require "active_record"
 require "active_job"
 require "pgbus"
+require "active_job/queue_adapters/pgbus_adapter"
+require "active_record/connection_adapters/postgresql_adapter"
+require "concurrent"
 require_relative "worker_profile_harness"
 require_relative "bench_rails_app"
 
@@ -23,11 +26,51 @@ module WorkerProfileRunner
     def perform(*); end
   end
 
+  # WP_BENCH_JOB_SHAPE's jobs (issue #649) go out through the pgbus adapter,
+  # so each enqueue takes the lock, the slot or the batch row the executor
+  # hands back. A key per job (queue + index): nothing is rejected or parked.
+  class UniqueJob < ActiveJob::Base
+    include Pgbus::Uniqueness
+
+    self.queue_adapter = :pgbus
+    ensures_uniqueness strategy: :until_executed, key: ->(queue, i) { "u:#{queue}:#{i}" }
+    def perform(*); end
+  end
+
+  class LimitedJob < ActiveJob::Base
+    include Pgbus::Concurrency
+
+    self.queue_adapter = :pgbus
+    limits_concurrency to: 1_000_000, key: ->(queue, i) { "c:#{queue}:#{i}" }
+    def perform(*); end
+  end
+
+  class BatchJob < ActiveJob::Base
+    self.queue_adapter = :pgbus
+    def perform(*); end
+  end
+
+  SHAPED_JOBS = { "unique" => UniqueJob, "limited" => LimitedJob, "batch" => BatchJob }.freeze
+  BATCH_DESCRIPTION = "wprof-bench"
+  SHAPE_TABLES = %w[pgbus_uniqueness_keys pgbus_semaphores pgbus_blocked_executions pgbus_batches
+                    pgbus_batch_executions].freeze
+
+  # PostgreSQLAdapter#reset! calls: the pool's reaper resets every connection
+  # it takes back from a dead owner, and nothing instruments it.
+  RESETS = Concurrent::AtomicFixnum.new(0)
+  ActiveRecord::ConnectionAdapters::PostgreSQLAdapter.prepend(Module.new do
+    def reset!
+      RESETS.increment
+      super
+    end
+  end)
+
   module_function
 
   def setup!(database_url, threads:, pool_size: nil)
     configure!(database_url, threads: threads, pool_size: pool_size)
     bootstrap_tables(ActiveRecord::Base.connection)
+    check_shape_tables!(ActiveRecord::Base.connection)
     Pgbus.client.ensure_queue(QUEUE)
     reset!
   end
@@ -40,6 +83,8 @@ module WorkerProfileRunner
   # ar_pool caps the ActiveRecord pool (a fleet child budgets it exactly).
   def configure!(database_url, threads:, pool_size: nil, ar_pool: threads + 8)
     aj_logs = WorkerProfileHarness.aj_logs
+    # Issue #649: async runs each job on a fiber, so leases are per fiber.
+    ActiveSupport::IsolatedExecutionState.isolation_level = :fiber if async?
     ActiveRecord::Base.establish_connection(with_pool(database_url, ar_pool))
 
     Pgbus.configure do |c|
@@ -83,7 +128,32 @@ module WorkerProfileRunner
     conn = ActiveRecord::Base.connection
     conn.execute("DELETE FROM pgbus_failed_events WHERE queue_name LIKE 'pgbus_wprof%'")
     conn.execute("DELETE FROM pgbus_job_stats WHERE queue_name LIKE 'pgbus_wprof%'")
+    reset_shape_rows(conn) unless WorkerProfileHarness.job_shape == "plain"
+    # The setup's own lease, so the drain's pool stat counts the worker's alone.
+    ActiveRecord::Base.connection_pool.release_connection
   end
+
+  def reset_shape_rows(conn)
+    conn.execute(<<~SQL)
+      DELETE FROM pgbus_uniqueness_keys WHERE lock_key LIKE 'u:%';
+      DELETE FROM pgbus_semaphores WHERE key LIKE 'c:%';
+      DELETE FROM pgbus_batch_executions WHERE batch_id IN
+        (SELECT batch_id FROM pgbus_batches WHERE description = '#{BATCH_DESCRIPTION}');
+      DELETE FROM pgbus_batches WHERE description = '#{BATCH_DESCRIPTION}';
+    SQL
+  end
+
+  def check_shape_tables!(conn)
+    return if WorkerProfileHarness.job_shape == "plain"
+
+    missing = SHAPE_TABLES.reject { |table| conn.table_exists?(table) }
+    return if missing.empty?
+
+    abort "WP_BENCH_JOB_SHAPE=#{WorkerProfileHarness.job_shape} needs #{missing.join(", ")}: point " \
+          "PGBUS_DATABASE_URL at a database the install generator migrated (the integration database)"
+  end
+
+  def async? = WorkerProfileHarness.execution_mode == "async"
 
   # Enqueues `jobs` plain jobs, then drains them with a real Worker.
   # Returns {wall_s:, cpu_s:, gc_s:, jobs:} measured from worker start to the
@@ -96,16 +166,31 @@ module WorkerProfileRunner
     Pgbus.stopping = false
     options = { queues: [QUEUE], threads: threads }
     options[:read_ahead] = read_ahead unless read_ahead.nil?
+    options[:execution_mode] = :async if async?
     worker = Pgbus::Process::Worker.new(**options)
 
     # A crash rescued in Worker#process_message counts as failed but not
     # processed, so wait on either: the check below reports it.
-    measurement = drive(worker, profile_path) { drained?(worker, jobs) }
+    RESETS.value = 0
+    ar_pool = nil
+    measurement = drive(worker, profile_path) do
+      drained?(worker, jobs).tap { |done| ar_pool = ar_pool_stat if done }
+    end
+    ar_pool["shutdown_resets"] = RESETS.value - ar_pool["resets"]
 
     failed = worker.stats[:jobs_failed]
     raise "#{failed} jobs failed during the drain — the bench measured errors, not work" if failed.positive?
 
-    measurement.merge(jobs: jobs)
+    measurement.merge(jobs: jobs, ar_pool: ar_pool)
+  end
+
+  # The ActiveRecord pool the moment the drain finished, before the worker's
+  # shutdown reclaims anything (issue #649): busy is a connection a live
+  # thread or fiber still holds, dead one whose owner ended without returning
+  # it.
+  def ar_pool_stat
+    stat = ActiveRecord::Base.connection_pool.stat
+    { "busy" => stat[:busy], "dead" => stat[:dead], "connections" => stat[:connections], "resets" => RESETS.value }
   end
 
   # Runs `process` (a Worker or a Consumer) on a named loop thread until the
@@ -158,11 +243,30 @@ module WorkerProfileRunner
     }
   end
 
-  def enqueue(jobs, queue: QUEUE)
+  def enqueue(jobs, queue: QUEUE, shape: WorkerProfileHarness.job_shape)
+    return enqueue_shaped(jobs, queue, shape) unless shape == "plain"
+
     payload = NoopJob.new(1).serialize
     jobs.times.each_slice(ENQUEUE_SLICE) do |slice|
       Pgbus.client.send_batch(queue, Array.new(slice.size) { payload })
     end
+  end
+
+  # unique and limited go out one by one (the adapter sends a job with a
+  # lock or a slot on its own); batch puts each slice in one batch.
+  def enqueue_shaped(jobs, queue, shape)
+    job_class = SHAPED_JOBS.fetch(shape)
+    jobs.times.each_slice(ENQUEUE_SLICE) do |slice|
+      shaped = slice.map { |i| job_class.new(queue, i).set(queue: queue) }
+      if shape == "batch"
+        Pgbus.batch(description: BATCH_DESCRIPTION) { |b| b.add(*shaped) }
+      else
+        ::ActiveJob.perform_all_later(shaped)
+      end
+    end
+    # The enqueue's own lease (the adapter's semaphore transaction, the batch
+    # rows), so the drain's pool stat counts the worker's alone.
+    ActiveRecord::Base.connection_pool.release_connection
   end
 
   def with_pool(url, pool)

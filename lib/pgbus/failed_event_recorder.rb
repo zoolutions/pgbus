@@ -32,11 +32,12 @@ module Pgbus
           retry_count
         ]
         legacy = !source_queue_column?
-        if legacy
-          connection.exec_query(LEGACY_RECORD_SQL, "FailedEvent Record", [queue_name, msg_id.to_i, *details])
-        else
-          connection.exec_query(RECORD_SQL, "FailedEvent Record", [queue_name, source_queue, msg_id.to_i, *details])
-        end
+        sql, binds = if legacy
+                       [LEGACY_RECORD_SQL, [queue_name, msg_id.to_i, *details]]
+                     else
+                       [RECORD_SQL, [queue_name, source_queue, msg_id.to_i, *details]]
+                     end
+        with_connection { |conn| conn.exec_query(sql, "FailedEvent Record", binds) }
       rescue StandardError => e
         # A process started before the migration would keep sending the old
         # ON CONFLICT target, whose index the migration drops: probe again.
@@ -46,7 +47,9 @@ module Pgbus
 
       def exists?(queue_name:, msg_id:, source_queue:)
         sql, binds = message_scope(queue_name, msg_id, source_queue)
-        result = connection.select_value("SELECT 1 FROM pgbus_failed_events WHERE #{sql} LIMIT 1", "FailedEvent Exists", binds)
+        result = with_connection do |conn|
+          conn.select_value("SELECT 1 FROM pgbus_failed_events WHERE #{sql} LIMIT 1", "FailedEvent Exists", binds)
+        end
         !result.nil?
       rescue StandardError => e
         Pgbus.logger.debug { "[Pgbus] FailedEvent exists? check failed: #{e.class}: #{e.message}" }
@@ -61,12 +64,14 @@ module Pgbus
       def last_error(queue_name:, msg_id:, source_queue:)
         sql, binds = message_scope(queue_name, msg_id, source_queue)
         order = binds.size > 2 ? " ORDER BY source_queue IS NULL, failed_at DESC" : ""
-        row = connection.select_one(
-          "SELECT error_class, error_message, backtrace, retry_count, failed_at " \
-          "FROM pgbus_failed_events WHERE #{sql}#{order} LIMIT 1",
-          "FailedEvent Last Error",
-          binds
-        )
+        row = with_connection do |conn|
+          conn.select_one(
+            "SELECT error_class, error_message, backtrace, retry_count, failed_at " \
+            "FROM pgbus_failed_events WHERE #{sql}#{order} LIMIT 1",
+            "FailedEvent Last Error",
+            binds
+          )
+        end
         return unless row
 
         {
@@ -89,11 +94,13 @@ module Pgbus
       # case, while a row may carry the executor's configured spelling
       # ("Critical") or a physical name from before #633.
       def clear_queue!(queue_names)
-        connection.exec_delete(
-          "DELETE FROM pgbus_failed_events WHERE lower(queue_name) = ANY($1::text[])",
-          "FailedEvent Clear Queue",
-          ["{#{queue_names.map(&:downcase).join(",")}}"]
-        )
+        with_connection do |conn|
+          conn.exec_delete(
+            "DELETE FROM pgbus_failed_events WHERE lower(queue_name) = ANY($1::text[])",
+            "FailedEvent Clear Queue",
+            ["{#{queue_names.map(&:downcase).join(",")}}"]
+          )
+        end
       rescue StandardError => e
         Pgbus.logger.error do
           "[Pgbus] Failed to clear failed events for dropped queue(s) #{queue_names.join(", ")}: " \
@@ -105,7 +112,7 @@ module Pgbus
       # existed: a sibling sub-queue's row with the same msg_id stays.
       def clear!(queue_name:, msg_id:, source_queue:)
         sql, binds = message_scope(queue_name, msg_id, source_queue)
-        connection.exec_delete("DELETE FROM pgbus_failed_events WHERE #{sql}", "FailedEvent Clear", binds)
+        with_connection { |conn| conn.exec_delete("DELETE FROM pgbus_failed_events WHERE #{sql}", "FailedEvent Clear", binds) }
       rescue StandardError => e
         # ERROR-level: a failed clear leaves a stale row in the dashboard
         # AFTER the job actually succeeded — confusing and load-bearing
@@ -168,7 +175,7 @@ module Pgbus
       end
 
       def detect_source_queue_column(warn:)
-        supported = connection.column_exists?(:pgbus_failed_events, :source_queue)
+        supported = with_connection { |conn| conn.column_exists?(:pgbus_failed_events, :source_queue) }
         if warn && !supported
           Pgbus.logger.warn do
             "[Pgbus] pgbus_failed_events is missing the source_queue column; under priority routing two " \
@@ -186,12 +193,13 @@ module Pgbus
         value.to_s
       end
 
-      def connection
-        if defined?(BusRecord) && BusRecord.connected?
-          BusRecord.connection
-        else
-          ActiveRecord::Base.connection
-        end
+      # A lease the caller already holds is reused and kept; otherwise one is
+      # taken for the block and returned at its end (issue #649), so the
+      # executor's bookkeeping leaves no connection pinned to the job's
+      # thread or fiber.
+      def with_connection(&)
+        pool = defined?(BusRecord) && BusRecord.connected? ? BusRecord.connection_pool : ActiveRecord::Base.connection_pool
+        pool.with_connection(&)
       end
     end
 

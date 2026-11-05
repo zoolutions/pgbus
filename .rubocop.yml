@@ -47,6 +47,25 @@ Pgbus/DashboardTimeFormatting:
   Exclude:
     - "lib/pgbus/web/time_format.rb"
 
+# Custom cop: pgbus's own ActiveRecord work on the job path runs inside
+# connection_pool.with_connection, so it returns the lease it took (issue
+# #649). The files the executor and the adapter reach; the dashboard (the
+# Rails executor returns a web request's lease), the workflow models and
+# runner, streams and recurring tasks are later sweeps.
+Pgbus/BareConnectionLease:
+  Enabled: true
+  Include:
+    - "app/models/pgbus/batch_entry.rb"
+    - "app/models/pgbus/batch_execution.rb"
+    - "app/models/pgbus/blocked_execution.rb"
+    - "app/models/pgbus/job_stat.rb"
+    - "app/models/pgbus/semaphore.rb"
+    - "app/models/pgbus/uniqueness_key.rb"
+    - "lib/pgbus/active_job/**/*.rb"
+    - "lib/pgbus/batch.rb"
+    - "lib/pgbus/concurrency/**/*.rb"
+    - "lib/pgbus/failed_event_recorder.rb"
+
 Style/StringLiterals:
   EnforcedStyle: double_quotes
 

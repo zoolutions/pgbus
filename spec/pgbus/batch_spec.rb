@@ -18,6 +18,8 @@ RSpec.describe Pgbus::Batch do
   end
 
   before do
+    # The bookkeeping leases through connection_pool.with_connection (issue #649).
+    stub_bus_record_pool
     allow(Pgbus::BatchEntry).to receive_message_chain(:where, :update_all).and_return(1) # rubocop:disable RSpec/MessageChain
     allow(Pgbus::BatchEntry).to receive_messages(create!: batch_entry_double, find_by: batch_entry_double,
                                                  check_finished!: { just_finished: false, record: nil })

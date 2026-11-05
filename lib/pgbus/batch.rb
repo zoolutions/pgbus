@@ -198,20 +198,26 @@ module Pgbus
     end
 
     # Record a completed job. Returns the batch row after update.
+    # One lease for the whole signal, returned at its end (issue #649): the
+    # executor calls this after the job's own lease went back.
     def self.job_completed(batch_id, job_id: nil)
-      if executions_migrated?
-        job_id ? resolve_execution(batch_id, job_id, "completed_jobs") : signal_without_row(batch_id, "completed_jobs")
-      else
-        update_counter(batch_id, "completed_jobs")
+      BatchEntry.connection_pool.with_connection do
+        if executions_migrated?
+          job_id ? resolve_execution(batch_id, job_id, "completed_jobs") : signal_without_row(batch_id, "completed_jobs")
+        else
+          update_counter(batch_id, "completed_jobs")
+        end
       end
     end
 
     # Record a discarded/dead-lettered job. Returns the batch row after update.
     def self.job_discarded(batch_id, job_id: nil)
-      if executions_migrated?
-        job_id ? resolve_execution(batch_id, job_id, "failed_jobs") : signal_without_row(batch_id, "failed_jobs")
-      else
-        update_counter(batch_id, "discarded_jobs")
+      BatchEntry.connection_pool.with_connection do
+        if executions_migrated?
+          job_id ? resolve_execution(batch_id, job_id, "failed_jobs") : signal_without_row(batch_id, "failed_jobs")
+        else
+          update_counter(batch_id, "discarded_jobs")
+        end
       end
     end
 
@@ -354,15 +360,17 @@ module Pgbus
       return if payloads.empty? || batch_id.nil?
 
       migrated = executions_migrated?
-      BatchEntry.transaction do
-        BatchEntry.increment_total_jobs!(batch_id, payloads.size)
-        next unless migrated
+      BatchEntry.connection_pool.with_connection do
+        BatchEntry.transaction do
+          BatchEntry.increment_total_jobs!(batch_id, payloads.size)
+          next unless migrated
 
-        payloads.each do |payload|
-          job_id = payload["job_id"]
-          next unless job_id
+          payloads.each do |payload|
+            job_id = payload["job_id"]
+            next unless job_id
 
-          BatchExecution.insert_for!(batch_id: batch_id, job_id: job_id, queue_name: payload["queue_name"])
+            BatchExecution.insert_for!(batch_id: batch_id, job_id: job_id, queue_name: payload["queue_name"])
+          end
         end
       end
     end
@@ -418,9 +426,11 @@ module Pgbus
 
       job_id = payload["job_id"]
       migrated = executions_migrated?
-      BatchEntry.transaction do
-        BatchEntry.decrement_total_jobs!(batch_id)
-        BatchExecution.where(job_id: job_id).delete_all if migrated && job_id
+      BatchEntry.connection_pool.with_connection do
+        BatchEntry.transaction do
+          BatchEntry.decrement_total_jobs!(batch_id)
+          BatchExecution.where(job_id: job_id).delete_all if migrated && job_id
+        end
       end
     end
 
@@ -441,18 +451,18 @@ module Pgbus
     # re-check exists? in a fresh statement (Postgres READ COMMITTED can let a
     # blocked CAS win from a stale NOT EXISTS snapshot — solid_queue's finalize).
     def self.try_finish!(batch_id)
-      result = BatchEntry.transaction do
-        updated = BatchEntry.finish_if_empty!(batch_id)
-        next { just_finished: false, record: BatchEntry.find_by(batch_id: batch_id) } unless updated.positive?
+      BatchEntry.connection_pool.with_connection do
+        result = BatchEntry.transaction do
+          updated = BatchEntry.finish_if_empty!(batch_id)
+          next { just_finished: false, record: BatchEntry.find_by(batch_id: batch_id) } unless updated.positive?
 
-        raise ActiveRecord::Rollback if BatchExecution.where(batch_id: batch_id).exists?
+          raise ActiveRecord::Rollback if BatchExecution.where(batch_id: batch_id).exists?
 
-        { just_finished: true, record: BatchEntry.find_by(batch_id: batch_id) }
+          { just_finished: true, record: BatchEntry.find_by(batch_id: batch_id) }
+        end
+
+        result || { just_finished: false, record: BatchEntry.find_by(batch_id: batch_id) }
       end
-
-      return { just_finished: false, record: BatchEntry.find_by(batch_id: batch_id) } if result.nil?
-
-      result
     end
 
     def self.sweep_stalled(stalled_for: Pgbus.configuration.batch_stall_threshold, batch_size: 500, client: Pgbus.client)
@@ -463,9 +473,11 @@ module Pgbus
       private
 
       def resolve_execution(batch_id, job_id, column)
-        BatchEntry.transaction do
-          deleted = BatchExecution.where(job_id: job_id).delete_all
-          BatchEntry.increment_counter!(batch_id, column) if deleted.positive? || legacy_untracked_batch?(batch_id)
+        BatchEntry.connection_pool.with_connection do
+          BatchEntry.transaction do
+            deleted = BatchExecution.where(job_id: job_id).delete_all
+            BatchEntry.increment_counter!(batch_id, column) if deleted.positive? || legacy_untracked_batch?(batch_id)
+          end
         end
         finish_if_needed(try_finish!(batch_id))
       end

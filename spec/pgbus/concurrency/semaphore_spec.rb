@@ -3,6 +3,9 @@
 require "spec_helper"
 
 RSpec.describe Pgbus::Concurrency::Semaphore do
+  # The bookkeeping leases through connection_pool.with_connection (issue #649).
+  before { stub_bus_record_pool }
+
   describe ".acquire" do
     it "returns :acquired when a slot is available" do
       allow(Pgbus::Semaphore).to receive(:acquire!).and_return(:acquired)
@@ -116,7 +119,9 @@ RSpec.describe Pgbus::Concurrency::Semaphore do
     it "deletes expired semaphores and returns their keys" do
       result = double("result", rows: [["old-key-1"], ["old-key-2"]])
       connection = double("connection")
-      allow(Pgbus::Semaphore).to receive(:connection).and_return(connection)
+      pool = instance_double(ActiveRecord::ConnectionAdapters::ConnectionPool)
+      allow(Pgbus::Semaphore).to receive(:connection_pool).and_return(pool)
+      allow(pool).to receive(:with_connection).and_yield(connection)
       allow(connection).to receive(:exec_query).and_return(result)
 
       expired = described_class.expire_stale
