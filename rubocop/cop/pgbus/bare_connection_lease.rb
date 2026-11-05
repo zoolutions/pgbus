@@ -24,7 +24,10 @@ module RuboCop
       #
       # Scoped by .rubocop.yml to the files on the job path. The dashboard is
       # left out (the Rails executor returns a web request's lease), and so
-      # is the workflow runner, a later sweep.
+      # is the workflow runner, a later sweep. Without an Include the cop does
+      # nothing: the nested docs app loads pgbus's cops through the ancestor
+      # config but not that list, and its Phlex helpers (`transaction(s)` in a
+      # diagram) are not ActiveRecord.
       #
       # @example
       #   # bad
@@ -45,6 +48,7 @@ module RuboCop
         RESTRICT_ON_SEND = %i[connection lease_connection transaction].freeze
 
         def on_send(node)
+          return unless cop_config.key?("Include")
           # lease_connection is permanent on any receiver, a pool's included.
           return lease_offense(node) if node.method?(:lease_connection)
           return unless bare_receiver?(node)

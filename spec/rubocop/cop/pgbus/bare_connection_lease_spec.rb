@@ -14,10 +14,11 @@ RSpec.describe RuboCop::Cop::Pgbus::BareConnectionLease do
 
   include_context "config"
 
-  let(:config) { RuboCop::Config.new }
+  # The cop acts only where the config scopes it (see "without an Include").
+  let(:cop_config) { { "Include" => ["**/*.rb"] } }
 
-  def lease_msg(method) = "Pgbus/BareConnectionLease: #{format(described_class::LEASE_MSG, method: method)}"
-  def transaction_msg = "Pgbus/BareConnectionLease: #{described_class::TRANSACTION_MSG}"
+  def lease_msg(method) = format(described_class::LEASE_MSG, method: method)
+  def transaction_msg = described_class::TRANSACTION_MSG
 
   it "flags a bare connection, on no receiver, self or a constant" do
     expect_offense(<<~RUBY)
@@ -127,6 +128,17 @@ RSpec.describe RuboCop::Cop::Pgbus::BareConnectionLease do
       end
       conn.transaction { work }
     RUBY
+  end
+
+  context "without an Include (the docs app loads pgbus's cops, not their scope)" do
+    let(:config) { RuboCop::Config.new }
+
+    it "does nothing" do
+      expect_no_offenses(<<~RUBY)
+        connection.exec_query(sql)
+        transaction(s)
+      RUBY
+    end
   end
 
   describe "the scope in .rubocop.yml" do
