@@ -1276,7 +1276,13 @@ the Postgres side from `pg_stat_statements`:
 | batch | 6.99–7.01 | 6.85–7.00 | 1 502–1 650 | 1 298–1 493 |
 
 Statements per job do not move: the change is which connection runs a
-statement and when it goes back, not what runs.
+statement and when it goes back, not what runs. The one row whose jobs/s
+ranges did not overlap, `batch` with YJIT (main 1 502–1 650, branch
+1 298–1 493), was run again, three more interleaved rounds with the branch
+first at a lower load (1-minute 6–12): main 1 549–1 745, branch 1 470–1 703,
+statements per job 6.89–6.98 and 6.84–6.92. Every job in a batch slice updates
+one batch row, so the cell is bound by that row lock (`Lock:tuple` is about
+two thirds of sampled waits) and swings with load.
 
 From River: the fix itself (scope every operation's lease, so a thread or
 fiber that held none before holds none after, and keep a caller's own), the
