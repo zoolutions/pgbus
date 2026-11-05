@@ -104,7 +104,8 @@ module FleetProfileRunner
       "jobs" => total, "wall_s" => measured[:wall_s], "jobs_per_s" => measured[:jobs_per_s],
       "start_skew_ms" => measured[:start_skew_ms], "pg_unavailable_reason" => pg_unavailable,
       "pg_top" => cost.fetch(:top, []), "pg_waits" => waits, "peak_connections" => peak_connections,
-      "budgeted_connections" => FleetProfileHarness.budgeted_connections(processes: processes, pool_size: pool),
+      "budgeted_connections" => FleetProfileHarness.budgeted_connections(processes: processes, pool_size: pool,
+                                                                         ar_pool: ar_pool(threads)),
       "pg_ms_per_job" => cost[:ms_per_job],
       "pg_planning_tracked" => pg_unavailable ? nil : planning_tracked?(conn),
       "pg_statements_per_job" => cost[:statements_per_job], "pg_busy_backends" => cost[:busy_backends]

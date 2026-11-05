@@ -1228,9 +1228,11 @@ shape for shape.
 Every such call now runs inside `connection_pool.with_connection`, which
 reuses a lease the caller already holds and otherwise returns the one it took.
 `Pgbus/BareConnectionLease` keeps the job-path files that way, and
-`spec/integration/connection_lease_spec.rb` runs each operation, and a whole
-`Executor#execute` per job shape, in a fresh thread and in a fresh fiber under
-`:fiber` isolation (red on main: 16 of 23 examples on Rails 8.1, 22 of 23 on 7.1).
+`spec/integration/connection_lease_spec.rb` runs each model's operations as a
+group (UniquenessKey's in two, the semaphore's, the batch's, the failed-event
+recorder's), and a whole `Executor#execute` per job shape, in a fresh thread
+and in a fresh fiber under `:fiber` isolation, checking the owner holds no
+lease once its group returns (red on main: 16 of 23 examples on Rails 8.1, 22 of 23 on 7.1).
 
 `rake bench:worker_profile` takes `WP_BENCH_JOB_SHAPE=plain|unique|limited|batch`
 and `WP_BENCH_EXECUTION_MODE=threads|async`, and worker cells print the

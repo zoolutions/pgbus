@@ -143,6 +143,8 @@ module Pgbus
     # discards and queue purges — as [lock_key, queue_name, msg_id,
     # enqueued_at] tuples, one statement per thousand.
     def self.release_all_held_by!(holders)
+      return 0 if holders.empty?
+
       connection_pool.with_connection do |conn|
         holders.each_slice(1000).sum do |slice|
           values = slice.map do |lock_key, queue_name, msg_id, enqueued_at|

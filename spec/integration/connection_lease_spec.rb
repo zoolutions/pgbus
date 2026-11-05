@@ -11,8 +11,9 @@ require "active_job/queue_adapters/pgbus_adapter"
 # fiber for the reaper to reset (async mode). Every such call now runs inside
 # `connection_pool.with_connection`: an owner that held no lease before holds
 # none after, and a caller's own lease is kept. River's spec shape
-# (riverqueue/river#1574): each operation in a fresh owner, no lease inside it
-# afterwards, no dead connection once it has ended.
+# (riverqueue/river#1574), grouped per model: a model's operations, or one
+# Executor#execute, in a fresh owner, no lease inside it once the group
+# returns, no dead connection once it has ended.
 RSpec.describe "pgbus bookkeeping returns its connection lease (integration)", :integration do
   let(:client) { Pgbus.client }
   let(:config) { Pgbus.configuration }

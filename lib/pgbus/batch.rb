@@ -359,8 +359,10 @@ module Pgbus
       batch_id = payloads.first&.fetch(METADATA_KEY, nil)
       return if payloads.empty? || batch_id.nil?
 
-      migrated = executions_migrated?
       BatchEntry.connection_pool.with_connection do
+        # The schema probe inside the lease: its first call reads the table
+        # list through the connection.
+        migrated = executions_migrated?
         BatchEntry.transaction do
           BatchEntry.increment_total_jobs!(batch_id, payloads.size)
           next unless migrated
@@ -425,8 +427,8 @@ module Pgbus
       return unless batch_id
 
       job_id = payload["job_id"]
-      migrated = executions_migrated?
       BatchEntry.connection_pool.with_connection do
+        migrated = executions_migrated?
         BatchEntry.transaction do
           BatchEntry.decrement_total_jobs!(batch_id)
           BatchExecution.where(job_id: job_id).delete_all if migrated && job_id
@@ -439,12 +441,16 @@ module Pgbus
       # Only batch members have an execution row: without this, every plain
       # enqueue paid a no-op UPDATE round trip after the send (issue #603).
       return unless payload[METADATA_KEY]
-      return unless executions_migrated?
 
       job_id = payload["job_id"]
       return unless job_id
 
-      BatchExecution.backfill!(job_id, msg_id: msg_id, queue_name: queue_name)
+      # The adapter calls this after its send, outside any lease of its own.
+      BatchExecution.connection_pool.with_connection do
+        next unless executions_migrated?
+
+        BatchExecution.backfill!(job_id, msg_id: msg_id, queue_name: queue_name)
+      end
     end
 
     # Single-winner finish via execution-row absence. After a winning UPDATE,

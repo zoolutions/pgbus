@@ -12,7 +12,7 @@ module RuboCop
       # `connection_pool.with_connection`: it reuses a lease the caller holds
       # and otherwise returns the one it took.
       #
-      # - `connection` on no receiver, `self` or a constant, and
+      # - `connection` on no receiver, `self`, a constant or `connection_pool`, and
       #   `lease_connection` on any receiver (`connection_pool.lease_connection`
       #   too): always an offense, inside `with_connection` too, since on
       #   Rails 7.2+ it marks the lease sticky and `with_connection` then keeps
@@ -67,9 +67,12 @@ module RuboCop
           add_offense(node.loc.selector, message: format(LEASE_MSG, method: node.method_name))
         end
 
+        # A pool's own `connection` (Rails 7.1's lease) counts as bare too.
         def bare_receiver?(node)
           receiver = node.receiver
-          receiver.nil? || receiver.self_type? || receiver.const_type?
+          return true if receiver.nil? || receiver.self_type? || receiver.const_type?
+
+          node.method?(:connection) && receiver.send_type? && receiver.method?(:connection_pool)
         end
 
         def inside_with_connection?(node)

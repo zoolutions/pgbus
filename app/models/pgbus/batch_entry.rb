@@ -60,9 +60,10 @@ module Pgbus
     # idempotent against concurrent completion signals.
     # Returns { just_finished:, record: } or nil if batch not found.
     def self.check_finished!(batch_id)
-      return Batch.try_finish!(batch_id) if Batch.executions_migrated?
-
       connection_pool.with_connection do
+        # The schema probe inside the lease: its first call reads the table list.
+        return Batch.try_finish!(batch_id) if Batch.executions_migrated?
+
         transaction do
           record = lock.find_by(batch_id: batch_id)
           return nil unless record

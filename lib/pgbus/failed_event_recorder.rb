@@ -196,10 +196,11 @@ module Pgbus
       # A lease the caller already holds is reused and kept; otherwise one is
       # taken for the block and returned at its end (issue #649), so the
       # executor's bookkeeping leaves no connection pinned to the job's
-      # thread or fiber.
+      # thread or fiber. BusRecord's pool is the pgbus database's under
+      # connects_to and the primary's otherwise; asking first whether it had
+      # connected sent a cold process's first failure to the primary.
       def with_connection(&)
-        pool = defined?(BusRecord) && BusRecord.connected? ? BusRecord.connection_pool : ActiveRecord::Base.connection_pool
-        pool.with_connection(&)
+        BusRecord.connection_pool.with_connection(&)
       end
     end
 

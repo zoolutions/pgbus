@@ -9,11 +9,17 @@
 # fail as they do with no pool at all.
 module BusRecordPoolStub
   class NoDatabasePool
+    attr_reader :leases
+
     def initialize(connection)
       @connection = connection
+      @leases = 0
     end
 
-    def with_connection(*) = yield(@connection)
+    def with_connection(*)
+      @leases += 1
+      yield(@connection)
+    end
 
     def method_missing(*)
       # ConnectionNotEstablished: Rails 7.1 has no ConnectionNotDefined, its

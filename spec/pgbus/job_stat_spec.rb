@@ -10,6 +10,18 @@ RSpec.describe Pgbus::JobStat do
   end
 
   describe ".record!" do
+    # Issue #649: the executor writes the stat after the job's own lease went
+    # back, so record! must take its own and return it.
+    it "probes and inserts inside one connection_pool.with_connection" do
+      pool = stub_bus_record_pool
+      allow(described_class).to receive(:latency_columns?).and_return(false)
+
+      described_class.record!(job_class: "TestJob", queue_name: "default", status: "success", duration_ms: 1)
+
+      expect(pool.leases).to eq(1)
+      expect(described_class).to have_received(:create!)
+    end
+
     context "without latency columns" do
       before { allow(described_class).to receive(:latency_columns?).and_return(false) }
 

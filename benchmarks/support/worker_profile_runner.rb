@@ -29,11 +29,13 @@ module WorkerProfileRunner
   # WP_BENCH_JOB_SHAPE's jobs (issue #649) go out through the pgbus adapter,
   # so each enqueue takes the lock, the slot or the batch row the executor
   # hands back. A key per job (queue + index): nothing is rejected or parked.
+  # Keys and the batch description start with wprof-, and reset! deletes only
+  # those, so a shared database keeps every other lock, slot and batch.
   class UniqueJob < ActiveJob::Base
     include Pgbus::Uniqueness
 
     self.queue_adapter = :pgbus
-    ensures_uniqueness strategy: :until_executed, key: ->(queue, i) { "u:#{queue}:#{i}" }
+    ensures_uniqueness strategy: :until_executed, key: ->(queue, i) { "wprof-u:#{queue}:#{i}" }
     def perform(*); end
   end
 
@@ -41,7 +43,7 @@ module WorkerProfileRunner
     include Pgbus::Concurrency
 
     self.queue_adapter = :pgbus
-    limits_concurrency to: 1_000_000, key: ->(queue, i) { "c:#{queue}:#{i}" }
+    limits_concurrency to: 1_000_000, key: ->(queue, i) { "wprof-c:#{queue}:#{i}" }
     def perform(*); end
   end
 
@@ -135,8 +137,8 @@ module WorkerProfileRunner
 
   def reset_shape_rows(conn)
     conn.execute(<<~SQL)
-      DELETE FROM pgbus_uniqueness_keys WHERE lock_key LIKE 'u:%';
-      DELETE FROM pgbus_semaphores WHERE key LIKE 'c:%';
+      DELETE FROM pgbus_uniqueness_keys WHERE lock_key LIKE 'wprof-u:%';
+      DELETE FROM pgbus_semaphores WHERE key LIKE 'wprof-c:%';
       DELETE FROM pgbus_batch_executions WHERE batch_id IN
         (SELECT batch_id FROM pgbus_batches WHERE description = '#{BATCH_DESCRIPTION}');
       DELETE FROM pgbus_batches WHERE description = '#{BATCH_DESCRIPTION}';

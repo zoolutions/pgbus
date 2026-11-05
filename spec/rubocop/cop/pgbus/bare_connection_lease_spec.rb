@@ -51,6 +51,13 @@ RSpec.describe RuboCop::Cop::Pgbus::BareConnectionLease do
     RUBY
   end
 
+  it "flags a pool's own connection, Rails 7.1's lease" do
+    expect_offense(<<~RUBY)
+      Pgbus::Semaphore.connection_pool.connection.exec_query(sql)
+                                       ^^^^^^^^^^ #{lease_msg("connection")}
+    RUBY
+  end
+
   it "flags lease_connection on any receiver, a pool's included" do
     expect_offense(<<~RUBY)
       Pgbus::Semaphore.connection_pool.lease_connection.exec_query(sql)
@@ -151,17 +158,29 @@ RSpec.describe RuboCop::Cop::Pgbus::BareConnectionLease do
       described_class.new(RuboCop::Config.new({ "Pgbus/BareConnectionLease" => cop_config }, path))
     end
 
-    it "covers the job path" do
+    it "covers every file the sweep made lease-safe" do
       %w[
-        app/models/pgbus/uniqueness_key.rb
+        app/models/pgbus/batch_entry.rb
+        app/models/pgbus/batch_execution.rb
+        app/models/pgbus/blocked_execution.rb
         app/models/pgbus/job_stat.rb
+        app/models/pgbus/semaphore.rb
+        app/models/pgbus/uniqueness_key.rb
+        lib/pgbus/active_job/adapter.rb
+        lib/pgbus/active_job/executor.rb
         lib/pgbus/batch.rb
+        lib/pgbus/concurrency/blocked_execution.rb
         lib/pgbus/concurrency/semaphore.rb
         lib/pgbus/failed_event_recorder.rb
-        lib/pgbus/active_job/executor.rb
       ].each do |path|
         expect(repo_cop.relevant_file?(File.join(root, path))).to be(true), path
       end
+    end
+
+    it "covers every Ruby file under its globs" do
+      files = Dir.glob(File.join(root, "lib/pgbus/{active_job,concurrency}/**/*.rb"))
+      expect(files).not_to be_empty
+      files.each { |path| expect(repo_cop.relevant_file?(path)).to be(true), path }
     end
 
     it "leaves out the dashboard and the workflow runner" do

@@ -223,6 +223,8 @@ def print_rails_split(cells)
 end
 
 def print_ar_pool(cells)
+  return unless cells.any? { |c| c["ar_pool"] }
+
   puts
   puts "ActiveRecord pool when the timed drain finished (job shape #{JOB_SHAPE}, #{EXECUTION_MODE}):"
   puts WorkerProfileHarness.ar_pool_table(cells)
@@ -280,7 +282,8 @@ puts "  completed_jobs (workers; consumers always archive): #{COMPLETED_JOBS || 
 puts "  completion commit: #{completion_commit_label}"
 puts "  ActiveJob log lines: #{AJ_LOGS}"
 puts "  Rails app (executor wrap): #{RAILS_APP ? "on" : "off (set WP_BENCH_RAILS_APP=1)"}"
-puts "  job shape: #{JOB_SHAPE}, execution mode: #{EXECUTION_MODE}"
+puts "  job shape, execution mode (worker and fleet cells; consumers publish events on threads): " \
+     "#{JOB_SHAPE}, #{EXECUTION_MODE}"
 puts "  proxied cells: #{proxy_url ? "on" : "off (set PGBUS_BENCH_PROXY_URL)"}"
 puts "  fleet processes: #{PROCESSES.join(", ")}" if ROLES.fetch(ROLE).include?("fleet")
 puts "=" * 70
