@@ -130,18 +130,27 @@ class PgbusStreamSourceElement extends HTMLElement {
   // durable frame since the page rendered. So the cursor this instance
   // earned on the same src is kept, unless since-id is ahead of it (a
   // re-render carried a newer watermark): both are durable msg_ids of one
-  // stream, so the greater is the safe resume point. A cursor earned on
-  // another src (the element was re-pointed) is dropped, as is one that
-  // does not parse as an integer.
+  // stream, so the greater is the safe resume point; when only one parses
+  // as an integer, that one is used. A cursor earned on another src (the
+  // element was re-pointed) is dropped.
   resumeCursor() {
     const attribute = this.getAttribute("since-id") || null
     const kept = this.cursorSrc === this.getAttribute("src") ? this.lastEventId : null
-    if (kept === null || attribute === null) return kept ?? attribute
+    const keptId = this.parseCursor(kept)
+    const attributeId = this.parseCursor(attribute)
+    if (keptId === null) return attribute
+    if (attributeId === null) return kept
+    return keptId > attributeId ? kept : attribute
+  }
 
+  // A msg_id as a BigInt (PGMQ ids are bigints), or null when absent or not
+  // an integer.
+  parseCursor(id) {
+    if (id === null) return null
     try {
-      return BigInt(kept) > BigInt(attribute) ? kept : attribute
+      return BigInt(id)
     } catch {
-      return attribute
+      return null
     }
   }
 

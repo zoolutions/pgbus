@@ -109,6 +109,21 @@ RSpec.describe "<pgbus-stream-source>", type: :system do
     expect_request(2, "fetch /fake-sse/demo since=250")
   end
 
+  it "keeps the cursor when since-id does not parse as an integer" do
+    expect_request(1, "fetch /fake-sse/demo since=100")
+    id = broadcast("/fake-sse/demo", append_item(1))
+    expect(page).to have_css("#deliveries li", count: 1)
+
+    page.execute_script(<<~JS)
+      const el = document.getElementById("source")
+      el.remove()
+      el.setAttribute("since-id", "not-a-number")
+      document.body.appendChild(el)
+    JS
+
+    expect_request(2, "fetch /fake-sse/demo since=#{id}")
+  end
+
   it "drops the cursor when the element is re-pointed at another stream" do
     expect_request(1, "fetch /fake-sse/demo since=100")
     [1, 2].each { |n| broadcast("/fake-sse/demo", append_item(n)) }
