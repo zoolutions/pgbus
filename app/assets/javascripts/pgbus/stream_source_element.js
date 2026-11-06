@@ -174,12 +174,18 @@ class PgbusStreamSourceElement extends HTMLElement {
     this.resetConnectionId()
     const url = this.buildUrl({ includeSince: true })
     this.abortController = new AbortController()
+    // This connection's own signal. A DOM move tears it down and connects
+    // again before this loop resumes, so this.closed is already false by
+    // then; the abort is what stops the loop, checked between the frames of
+    // one chunk too, since a pgbus:message listener can move the element
+    // mid-chunk and the new connection resumes after that frame (issue #644).
+    const { signal } = this.abortController
 
     try {
       const response = await fetch(url, {
         headers: { Accept: "text/event-stream" },
         credentials: "same-origin",
-        signal: this.abortController.signal
+        signal
       })
 
       if (!response.ok) {
@@ -198,7 +204,7 @@ class PgbusStreamSourceElement extends HTMLElement {
       const decoder = new TextDecoder("utf-8")
       let buffer = ""
 
-      while (!this.closed) {
+      while (!signal.aborted) {
         const { value, done } = await reader.read()
         if (done) {
           this.removeAttribute("connected")
@@ -211,6 +217,7 @@ class PgbusStreamSourceElement extends HTMLElement {
         buffer = events.pop() // last chunk may be incomplete
 
         for (const block of events) {
+          if (signal.aborted) return
           this.handleBlock(block)
         }
       }

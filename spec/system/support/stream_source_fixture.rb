@@ -71,12 +71,18 @@ module StreamSourceFixture
 
       window.fakeSse = {
         broadcast(stream, data, { ephemeral = false } = {}) {
-          const frame = { id: ephemeral ? --nextEphemeral : ++nextDurable, data }
-          if (!ephemeral) (logs[stream] ||= []).push(frame)
+          return this.broadcastChunk(stream, [data], { ephemeral })[0]
+        },
+        // Several durable frames in ONE network chunk, so the element parses
+        // them in one pass of its read loop.
+        broadcastChunk(stream, datas, { ephemeral = false } = {}) {
+          const frames = datas.map((data) => ({ id: ephemeral ? --nextEphemeral : ++nextDurable, data }))
+          if (!ephemeral) (logs[stream] ||= []).push(...frames)
+          const chunk = encoder.encode(frames.map(frameText).join(""))
           for (const sub of open) {
-            if (sub.stream === stream) sub.controller.enqueue(encoder.encode(frameText(frame)))
+            if (sub.stream === stream) sub.controller.enqueue(chunk)
           }
-          return frame.id
+          return frames.map((f) => f.id)
         }
       }
     })()
@@ -130,6 +136,10 @@ module StreamSourceFixture
       })
     end
     visit "/__pgbus_fixture/first"
+  end
+
+  def broadcast_chunk(stream, datas)
+    page.evaluate_script("window.fakeSse.broadcastChunk(#{stream.to_json}, #{datas.to_json})")
   end
 
   def broadcast(stream, data, ephemeral: false)

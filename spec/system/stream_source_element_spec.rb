@@ -52,6 +52,23 @@ RSpec.describe "<pgbus-stream-source>", type: :system do
     expect_deliveries_after_marker("/fake-sse/demo", [first, missed])
   end
 
+  # The old read loop must stop at the move: the frames left in its chunk are
+  # the new connection's to deliver (it resumes after the frame that moved it).
+  it "delivers the rest of a chunk once when a listener moves the element mid-chunk", :aggregate_failures do
+    expect_request(1, "fetch /fake-sse/demo since=100")
+    page.execute_script(<<~JS)
+      const el = document.getElementById("source")
+      el.addEventListener("pgbus:message", (event) => {
+        if (event.detail.msgId === 101) document.body.appendChild(el)
+      })
+    JS
+
+    ids = broadcast_chunk("/fake-sse/demo", [1, 2, 3].map { |n| append_item(n) })
+
+    expect_request(2, "fetch /fake-sse/demo since=#{ids.first}")
+    expect_deliveries_after_marker("/fake-sse/demo", ids)
+  end
+
   it "keeps the cursor on the last durable id when an ephemeral frame came last", :aggregate_failures do
     expect_request(1, "fetch /fake-sse/demo since=100")
     durable = broadcast("/fake-sse/demo", append_item(1))
