@@ -8,9 +8,12 @@
 //                         the URL-safe signed stream name
 //   since-id            — PGMQ msg_id watermark at render time; the
 //                         client sends this as ?since= on the FIRST
-//                         connect so the server can replay any
-//                         broadcasts from the render-to-connect gap
-//                         (rails/rails#52420 fix)
+//                         connect of this element instance so the server
+//                         can replay any broadcasts from the
+//                         render-to-connect gap (rails/rails#52420 fix).
+//                         A reconnect, including after a DOM move,
+//                         resumes from the last durable id received
+//                         instead (issue #644)
 //   signed-stream-name  — present for parity with turbo-rails; unused
 //                         by this element because the signed name is
 //                         already in the URL path
@@ -60,10 +63,12 @@
 // from `element.pgbusSeat`.
 //
 // Transport strategy:
-//   - FIRST connect: use fetch() + ReadableStream to include ?since=
-//     in the URL. Native EventSource cannot send Last-Event-ID on the
-//     initial request, so we need fetch to carry the watermark.
-//   - RECONNECT: switch to native EventSource, which sends Last-Event-ID
+//   - CONNECT (first, or again after a DOM move): use fetch() +
+//     ReadableStream to include ?since= in the URL. Native EventSource
+//     cannot send Last-Event-ID on the initial request, so we need
+//     fetch to carry the watermark.
+//   - RECONNECT (the network dropped): switch to native EventSource,
+//     which sends Last-Event-ID
 //     automatically based on the last id: we observed. The native
 //     client is more battle-tested for reconnection backoff.
 
@@ -92,6 +97,7 @@ class PgbusStreamSourceElement extends HTMLElement {
     this.abortController = null
     this.eventSource = null
     this.lastEventId = null
+    this.cursorSrc = null
     this.connectionId = null
     this.closed = false
   }
@@ -112,9 +118,31 @@ class PgbusStreamSourceElement extends HTMLElement {
   connectedCallback() {
     this.closed = false
     connectStreamSource(this)
-    const sinceId = this.getAttribute("since-id")
-    this.lastEventId = sinceId && sinceId !== "" ? sinceId : null
+    this.lastEventId = this.resumeCursor()
+    this.cursorSrc = this.getAttribute("src")
     this.openFetchStream()
+  }
+
+  // The ?since= for this connect (issue #644). A move in the DOM (Turbo
+  // carrying a data-turbo-permanent element into the new body, or app code
+  // re-inserting it) disconnects and reconnects the same instance; resuming
+  // from the render-time since-id then would replay, and re-apply, every
+  // durable frame since the page rendered. So the cursor this instance
+  // earned on the same src is kept, unless since-id is ahead of it (a
+  // re-render carried a newer watermark): both are durable msg_ids of one
+  // stream, so the greater is the safe resume point. A cursor earned on
+  // another src (the element was re-pointed) is dropped, as is one that
+  // does not parse as an integer.
+  resumeCursor() {
+    const attribute = this.getAttribute("since-id") || null
+    const kept = this.cursorSrc === this.getAttribute("src") ? this.lastEventId : null
+    if (kept === null || attribute === null) return kept ?? attribute
+
+    try {
+      return BigInt(kept) > BigInt(attribute) ? kept : attribute
+    } catch {
+      return attribute
+    }
   }
 
   disconnectedCallback() {
