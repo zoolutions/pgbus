@@ -62,6 +62,40 @@ module Pgbus
         end
       end
 
+      # Makes each subscriber queue's pgmq.topic_bindings equal to the patterns
+      # registered for it (issue #657). A subscriber queue is named after its
+      # handler, so narrowing a subscription ("#" → "order.created") binds the
+      # new pattern on the same queue and leaves the old row, which keeps
+      # copying events the consumer archives as unrouted.
+      #
+      # For every registered queue (or only +queue_names+, logical names, not
+      # the prefixed ones #event_queue_names returns): bind the patterns its
+      # subscribers declare first, so the queue is never left without a
+      # binding, then unbind every other pattern bound to it. Run it with every
+      # subscriber registered: a pattern only an unloaded subscriber declares
+      # counts as stale. +queue_names: []+ prunes nothing; a name no registered
+      # subscriber uses raises ArgumentError before anything changes (a typo, a
+      # prefixed name or a process without the handlers loaded would otherwise
+      # strip a live queue). A removed handler's queue is cleaned up with
+      # Pgbus.client.topic_patterns and Pgbus.client.unbind_topic.
+      #
+      # Returns { queue_name => [removed patterns] } for the queues it changed;
+      # a second run returns {}.
+      #
+      # Deliberately not part of setup_all!: during a rolling deploy a process
+      # still on the old release owns the old pattern, so pruning is an explicit
+      # step to run once every process runs the new subscriptions.
+      def prune_stale_bindings!(queue_names: nil)
+        declared = declared_bindings
+        targets = queue_names.nil? ? declared.keys : physical_targets(queue_names, declared)
+
+        targets.each_with_object({}) do |physical, removed|
+          queue_name, patterns = declared.fetch(physical)
+          stale = prune_queue_bindings(queue_name, patterns)
+          removed[queue_name] = stale unless stale.empty?
+        end
+      end
+
       # Subscribers a message read from +queue_name+ must be dispatched to
       # (issue #469). Every subscriber gets its own queue, so a topic with N
       # matching subscribers produces N queue copies of each event; selecting by
@@ -132,6 +166,49 @@ module Pgbus
       end
 
       private
+
+      # { physical queue name => [logical name, declared patterns] }. Keyed by
+      # the physical name so a Symbol and a String, or two spellings
+      # QueueNameValidator folds to one table ("Audit-Q", "audit_q"), count as
+      # one queue; the logical name is the first registered spelling.
+      def declared_bindings
+        subscribers = @mutex.synchronize { @subscribers.dup }
+        subscribers.each_with_object({}) do |subscriber, declared|
+          physical = Pgbus.configuration.queue_name(subscriber.queue_name)
+          entry = declared[physical] ||= [subscriber.queue_name.to_s, []]
+          entry[1] |= [subscriber.pattern]
+        end
+      end
+
+      # The physical names of +queue_names+; raises before any change when one
+      # names no registered subscriber queue.
+      def physical_targets(queue_names, declared)
+        targets = queue_names.to_h { |name| [name, Pgbus.configuration.queue_name(name)] }
+        unknown = targets.reject { |_name, physical| declared.key?(physical) }.keys
+        unless unknown.empty?
+          raise ArgumentError, "No event subscriber is registered on queue(s) #{unknown.join(", ")}; " \
+                               "prune_stale_bindings! takes logical subscriber queue names"
+        end
+
+        targets.values.uniq
+      end
+
+      # Binds +patterns+ to +queue_name+, unbinds every other pattern bound to
+      # it, and returns the patterns this call removed (one another process
+      # removed first is not reported).
+      def prune_queue_bindings(queue_name, patterns)
+        client = Pgbus.client
+        patterns.each { |pattern| client.bind_topic(pattern, queue_name) }
+
+        stale = client.topic_patterns(queue_name) - patterns
+        removed = stale.select { |pattern| client.unbind_topic(pattern, queue_name) }
+        unless removed.empty?
+          Pgbus.logger.info do
+            "[Pgbus] Unbound stale topic patterns #{removed.inspect} from event queue #{queue_name}"
+          end
+        end
+        removed
+      end
 
       # True when running inside a rake schema/asset task, where setup_all!(safe:)
       # should skip rather than open a connection. Delegates to the shared,
