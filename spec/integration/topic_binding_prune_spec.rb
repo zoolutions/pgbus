@@ -83,6 +83,14 @@ RSpec.describe "Topic binding prune (integration)", :integration do
       expect(client.read_batch(audit_queue, qty: 10).size).to eq(1)
     end
 
+    it "keeps both patterns when two subscribers spell one queue differently" do
+      registry.subscribe("payments.#", billing_handler, queue_name: "Prune-Audit")
+      registry.setup_all!
+
+      expect(registry.prune_stale_bindings!).to eq(audit_queue => ["#"])
+      expect(client.topic_patterns(audit_queue)).to contain_exactly("order.created", "payments.#")
+    end
+
     it "with queue_names:, prunes only the named queue" do
       client.bind_topic("#", billing_queue)
 

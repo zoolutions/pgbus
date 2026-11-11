@@ -86,18 +86,12 @@ module Pgbus
       # still on the old release owns the old pattern, so pruning is an explicit
       # step to run once every process runs the new subscriptions.
       def prune_stale_bindings!(queue_names: nil)
-        subscribers = @mutex.synchronize { @subscribers.dup }
-        # Compared as strings: a subscriber may name its queue with a Symbol.
-        declared = subscribers.group_by { |s| s.queue_name.to_s }.transform_values { |subs| subs.map(&:pattern).uniq }
-        targets = queue_names.nil? ? declared.keys : queue_names.map(&:to_s).uniq
-        unknown = targets - declared.keys
-        unless unknown.empty?
-          raise ArgumentError, "No event subscriber is registered on queue(s) #{unknown.join(", ")}; " \
-                               "prune_stale_bindings! takes logical subscriber queue names"
-        end
+        declared = declared_bindings
+        targets = queue_names.nil? ? declared.keys : physical_targets(queue_names, declared)
 
-        targets.each_with_object({}) do |queue_name, removed|
-          stale = prune_queue_bindings(queue_name, declared.fetch(queue_name))
+        targets.each_with_object({}) do |physical, removed|
+          queue_name, patterns = declared.fetch(physical)
+          stale = prune_queue_bindings(queue_name, patterns)
           removed[queue_name] = stale unless stale.empty?
         end
       end
@@ -172,6 +166,32 @@ module Pgbus
       end
 
       private
+
+      # { physical queue name => [logical name, declared patterns] }. Keyed by
+      # the physical name so a Symbol and a String, or two spellings
+      # QueueNameValidator folds to one table ("Audit-Q", "audit_q"), count as
+      # one queue; the logical name is the first registered spelling.
+      def declared_bindings
+        subscribers = @mutex.synchronize { @subscribers.dup }
+        subscribers.each_with_object({}) do |subscriber, declared|
+          physical = Pgbus.configuration.queue_name(subscriber.queue_name)
+          entry = declared[physical] ||= [subscriber.queue_name.to_s, []]
+          entry[1] |= [subscriber.pattern]
+        end
+      end
+
+      # The physical names of +queue_names+; raises before any change when one
+      # names no registered subscriber queue.
+      def physical_targets(queue_names, declared)
+        targets = queue_names.to_h { |name| [name, Pgbus.configuration.queue_name(name)] }
+        unknown = targets.reject { |_name, physical| declared.key?(physical) }.keys
+        unless unknown.empty?
+          raise ArgumentError, "No event subscriber is registered on queue(s) #{unknown.join(", ")}; " \
+                               "prune_stale_bindings! takes logical subscriber queue names"
+        end
+
+        targets.values.uniq
+      end
 
       # Binds +patterns+ to +queue_name+, unbinds every other pattern bound to
       # it, and returns the patterns this call removed (one another process

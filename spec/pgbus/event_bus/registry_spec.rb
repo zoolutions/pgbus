@@ -256,6 +256,16 @@ RSpec.describe Pgbus::EventBus::Registry do
       expect(bound["q_shared"]).to contain_exactly("orders.#", "payments.#")
     end
 
+    it "treats two spellings of one physical queue as one queue" do
+      bound["Audit-Q"] = ["#"]
+      registry.subscribe("orders.#", handler_class, queue_name: "Audit-Q")
+      registry.subscribe("payments.#", other_handler_class, queue_name: "audit_q")
+
+      expect(registry.prune_stale_bindings!).to eq("Audit-Q" => ["#"])
+      expect(bound["Audit-Q"]).to contain_exactly("orders.#", "payments.#")
+      expect(client).not_to have_received(:topic_patterns).with("audit_q")
+    end
+
     it "never touches a queue no subscriber is registered on" do
       bound["q_unregistered"] = ["#"]
       registry.subscribe("order.created", handler_class, queue_name: "q_audit")
@@ -312,6 +322,14 @@ RSpec.describe Pgbus::EventBus::Registry do
           .to raise_error(ArgumentError, /q_removed/)
         expect(bound["q_audit"]).to eq(["#"])
         expect(bound["q_removed"]).to eq(["orders.#"])
+      end
+
+      it "matches another spelling of a registered queue" do
+        bound["audit_q"] = ["#"]
+        registry.subscribe("order.created", handler_class, queue_name: "audit_q")
+
+        expect(registry.prune_stale_bindings!(queue_names: ["Audit-Q"])).to eq("audit_q" => ["#"])
+        expect(bound["audit_q"]).to eq(["order.created"])
       end
 
       it "matches a Symbol queue name against a String-registered queue" do
