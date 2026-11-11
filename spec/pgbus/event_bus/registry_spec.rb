@@ -239,6 +239,23 @@ RSpec.describe Pgbus::EventBus::Registry do
       expect(registry.prune_stale_bindings!).to eq({})
     end
 
+    it "keeps the declared pattern of a subscriber registered with a Symbol queue name" do
+      bound["q_audit"] = ["#"]
+      registry.subscribe("order.created", handler_class, queue_name: :q_audit)
+
+      expect(registry.prune_stale_bindings!).to eq("q_audit" => ["#"])
+      expect(bound["q_audit"]).to eq(["order.created"])
+    end
+
+    it "keeps every declared pattern when subscribers name one queue as a String and a Symbol" do
+      bound["q_shared"] = ["#"]
+      registry.subscribe("orders.#", handler_class, queue_name: "q_shared")
+      registry.subscribe("payments.#", other_handler_class, queue_name: :q_shared)
+
+      expect(registry.prune_stale_bindings!).to eq("q_shared" => ["#"])
+      expect(bound["q_shared"]).to contain_exactly("orders.#", "payments.#")
+    end
+
     it "never touches a queue no subscriber is registered on" do
       bound["q_unregistered"] = ["#"]
       registry.subscribe("order.created", handler_class, queue_name: "q_audit")
@@ -286,12 +303,23 @@ RSpec.describe Pgbus::EventBus::Registry do
         expect(client).not_to have_received(:bind_topic)
       end
 
-      it "unbinds every pattern of a named queue no subscriber declares any more (a removed handler)" do
-        bound["q_removed"] = ["orders.#", "#"]
+      it "raises for a named queue no subscriber is registered on, and changes nothing" do
+        bound["q_audit"] = ["#"]
+        bound["q_removed"] = ["orders.#"]
+        registry.subscribe("order.created", handler_class, queue_name: "q_audit")
 
-        expect(registry.prune_stale_bindings!(queue_names: ["q_removed"])).to eq("q_removed" => ["orders.#", "#"])
-        expect(bound["q_removed"]).to eq([])
-        expect(client).not_to have_received(:bind_topic)
+        expect { registry.prune_stale_bindings!(queue_names: %w[q_audit q_removed]) }
+          .to raise_error(ArgumentError, /q_removed/)
+        expect(bound["q_audit"]).to eq(["#"])
+        expect(bound["q_removed"]).to eq(["orders.#"])
+      end
+
+      it "matches a Symbol queue name against a String-registered queue" do
+        bound["q_audit"] = ["#"]
+        registry.subscribe("order.created", handler_class, queue_name: "q_audit")
+
+        expect(registry.prune_stale_bindings!(queue_names: [:q_audit])).to eq("q_audit" => ["#"])
+        expect(bound["q_audit"]).to eq(["order.created"])
       end
     end
   end

@@ -68,12 +68,16 @@ module Pgbus
       # new pattern on the same queue and leaves the old row, which keeps
       # copying events the consumer archives as unrouted.
       #
-      # For every registered queue (or only +queue_names+, logical names): bind
-      # the patterns its subscribers declare first, so the queue is never left
-      # without a binding, then unbind every other pattern bound to it. A named
-      # queue with no subscriber registered in this process declares nothing,
-      # so all its bindings go: that is how a removed or renamed handler's
-      # queue is cleaned up. +queue_names: []+ prunes nothing.
+      # For every registered queue (or only +queue_names+, logical names, not
+      # the prefixed ones #event_queue_names returns): bind the patterns its
+      # subscribers declare first, so the queue is never left without a
+      # binding, then unbind every other pattern bound to it. Run it with every
+      # subscriber registered: a pattern only an unloaded subscriber declares
+      # counts as stale. +queue_names: []+ prunes nothing; a name no registered
+      # subscriber uses raises ArgumentError before anything changes (a typo, a
+      # prefixed name or a process without the handlers loaded would otherwise
+      # strip a live queue). A removed handler's queue is cleaned up with
+      # Pgbus.client.topic_patterns and Pgbus.client.unbind_topic.
       #
       # Returns { queue_name => [removed patterns] } for the queues it changed;
       # a second run returns {}.
@@ -83,12 +87,17 @@ module Pgbus
       # step to run once every process runs the new subscriptions.
       def prune_stale_bindings!(queue_names: nil)
         subscribers = @mutex.synchronize { @subscribers.dup }
-        declared = subscribers.group_by(&:queue_name).transform_values { |subs| subs.map(&:pattern).uniq }
+        # Compared as strings: a subscriber may name its queue with a Symbol.
+        declared = subscribers.group_by { |s| s.queue_name.to_s }.transform_values { |subs| subs.map(&:pattern).uniq }
         targets = queue_names.nil? ? declared.keys : queue_names.map(&:to_s).uniq
+        unknown = targets - declared.keys
+        unless unknown.empty?
+          raise ArgumentError, "No event subscriber is registered on queue(s) #{unknown.join(", ")}; " \
+                               "prune_stale_bindings! takes logical subscriber queue names"
+        end
 
         targets.each_with_object({}) do |queue_name, removed|
-          patterns = declared.fetch(queue_name, [])
-          stale = prune_queue_bindings(queue_name, patterns)
+          stale = prune_queue_bindings(queue_name, declared.fetch(queue_name))
           removed[queue_name] = stale unless stale.empty?
         end
       end

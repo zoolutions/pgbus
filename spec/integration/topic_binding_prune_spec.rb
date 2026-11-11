@@ -83,10 +83,20 @@ RSpec.describe "Topic binding prune (integration)", :integration do
       expect(client.read_batch(audit_queue, qty: 10).size).to eq(1)
     end
 
-    it "with queue_names:, unbinds every pattern of a queue no subscriber declares" do
-      expect(registry.prune_stale_bindings!(queue_names: [bystander_queue])).to eq(bystander_queue => ["#"])
+    it "with queue_names:, prunes only the named queue" do
+      client.bind_topic("#", billing_queue)
 
-      expect(client.topic_patterns(bystander_queue)).to eq([])
+      expect(registry.prune_stale_bindings!(queue_names: [billing_queue])).to eq(billing_queue => ["#"])
+
+      expect(client.topic_patterns(billing_queue)).to eq(["invoice.paid"])
+      expect(client.topic_patterns(audit_queue)).to contain_exactly("#", "order.created")
+    end
+
+    it "with queue_names:, raises for a queue no subscriber is registered on and unbinds nothing" do
+      expect { registry.prune_stale_bindings!(queue_names: [audit_queue, bystander_queue]) }
+        .to raise_error(ArgumentError, /prune_bystander/)
+
+      expect(client.topic_patterns(bystander_queue)).to eq(["#"])
       expect(client.topic_patterns(audit_queue)).to contain_exactly("#", "order.created")
     end
   end
