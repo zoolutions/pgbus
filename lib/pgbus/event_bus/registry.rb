@@ -62,6 +62,37 @@ module Pgbus
         end
       end
 
+      # Makes each subscriber queue's pgmq.topic_bindings equal to the patterns
+      # registered for it (issue #657). A subscriber queue is named after its
+      # handler, so narrowing a subscription ("#" → "order.created") binds the
+      # new pattern on the same queue and leaves the old row, which keeps
+      # copying events the consumer archives as unrouted.
+      #
+      # For every registered queue (or only +queue_names+, logical names): bind
+      # the patterns its subscribers declare first, so the queue is never left
+      # without a binding, then unbind every other pattern bound to it. A named
+      # queue with no subscriber registered in this process declares nothing,
+      # so all its bindings go: that is how a removed or renamed handler's
+      # queue is cleaned up. +queue_names: []+ prunes nothing.
+      #
+      # Returns { queue_name => [removed patterns] } for the queues it changed;
+      # a second run returns {}.
+      #
+      # Deliberately not part of setup_all!: during a rolling deploy a process
+      # still on the old release owns the old pattern, so pruning is an explicit
+      # step to run once every process runs the new subscriptions.
+      def prune_stale_bindings!(queue_names: nil)
+        subscribers = @mutex.synchronize { @subscribers.dup }
+        declared = subscribers.group_by(&:queue_name).transform_values { |subs| subs.map(&:pattern).uniq }
+        targets = queue_names.nil? ? declared.keys : queue_names.map(&:to_s).uniq
+
+        targets.each_with_object({}) do |queue_name, removed|
+          patterns = declared.fetch(queue_name, [])
+          stale = prune_queue_bindings(queue_name, patterns)
+          removed[queue_name] = stale unless stale.empty?
+        end
+      end
+
       # Subscribers a message read from +queue_name+ must be dispatched to
       # (issue #469). Every subscriber gets its own queue, so a topic with N
       # matching subscribers produces N queue copies of each event; selecting by
@@ -132,6 +163,23 @@ module Pgbus
       end
 
       private
+
+      # Binds +patterns+ to +queue_name+, unbinds every other pattern bound to
+      # it, and returns the patterns this call removed (one another process
+      # removed first is not reported).
+      def prune_queue_bindings(queue_name, patterns)
+        client = Pgbus.client
+        patterns.each { |pattern| client.bind_topic(pattern, queue_name) }
+
+        stale = client.topic_patterns(queue_name) - patterns
+        removed = stale.select { |pattern| client.unbind_topic(pattern, queue_name) }
+        unless removed.empty?
+          Pgbus.logger.info do
+            "[Pgbus] Unbound stale topic patterns #{removed.inspect} from event queue #{queue_name}"
+          end
+        end
+        removed
+      end
 
       # True when running inside a rake schema/asset task, where setup_all!(safe:)
       # should skip rather than open a connection. Delegates to the shared,

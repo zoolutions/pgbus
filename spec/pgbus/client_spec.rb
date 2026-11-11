@@ -2311,6 +2311,39 @@ RSpec.describe Pgbus::Client do
     end
   end
 
+  describe "#unbind_topic" do
+    it "unbinds the pattern from the prefixed queue and returns pgmq's result" do
+      allow(mock_pgmq).to receive(:unbind_topic).and_return(true, false)
+
+      expect(client.unbind_topic("orders.#", "events")).to be(true)
+      expect(client.unbind_topic("orders.#", "events")).to be(false)
+      expect(mock_pgmq).to have_received(:unbind_topic).with("orders.#", "pgbus_test_events").twice
+    end
+
+    it "never creates the queue" do
+      client.unbind_topic("orders.#", "events")
+
+      expect(mock_pgmq).not_to have_received(:create)
+    end
+  end
+
+  describe "#topic_patterns" do
+    it "returns the patterns bound to the prefixed queue" do
+      allow(mock_pgmq).to receive(:list_topic_bindings).with(queue_name: "pgbus_test_events").and_return(
+        [
+          { pattern: "orders.#", queue_name: "pgbus_test_events", bound_at: "2026-11-11 10:00:00+00" },
+          { pattern: "#", queue_name: "pgbus_test_events", bound_at: "2026-11-10 10:00:00+00" }
+        ]
+      )
+
+      expect(client.topic_patterns("events")).to eq(["orders.#", "#"])
+    end
+
+    it "returns an empty array for a queue with no bindings" do
+      expect(client.topic_patterns("events")).to eq([])
+    end
+  end
+
   describe "#publish_to_topic" do
     it "publishes a serialized payload with the routing key" do
       client.publish_to_topic("orders.created", { "id" => 1 })
@@ -2701,6 +2734,36 @@ RSpec.describe Pgbus::Client do
 
         expect(create_count).to eq(2)
         expect(mock_pgmq).to have_received(:bind_topic)
+      end
+    end
+
+    describe "unbind_topic inside retry scope" do
+      it "retries unbind_topic on a stale connection error" do
+        calls = 0
+        allow(mock_pgmq).to receive(:unbind_topic) do
+          calls += 1
+          raise(PGMQ::Errors::ConnectionError, "Database connection error: connection not open") if calls == 1
+
+          true
+        end
+
+        expect(client.unbind_topic("orders.*", "default")).to be(true)
+        expect(calls).to eq(2)
+      end
+    end
+
+    describe "topic_patterns inside retry scope" do
+      it "retries list_topic_bindings on a stale connection error" do
+        calls = 0
+        allow(mock_pgmq).to receive(:list_topic_bindings) do
+          calls += 1
+          raise(PGMQ::Errors::ConnectionError, "Database connection error: connection not open") if calls == 1
+
+          [{ pattern: "orders.*", queue_name: "pgbus_test_default", bound_at: nil }]
+        end
+
+        expect(client.topic_patterns("default")).to eq(["orders.*"])
+        expect(calls).to eq(2)
       end
     end
 

@@ -173,6 +173,129 @@ RSpec.describe Pgbus::EventBus::Registry do
     end
   end
 
+  # Narrowing a handler's subscription keeps its queue (named after the
+  # handler), so the old pattern's pgmq.topic_bindings row stays and keeps
+  # copying events the consumer archives as unrouted (issue #657).
+  describe "#prune_stale_bindings!" do
+    let(:client) { instance_double(Pgbus::Client, bind_topic: nil, topic_patterns: [], unbind_topic: true) }
+    let(:other_handler_class) do
+      klass = Class.new(Pgbus::EventBus::Handler)
+      stub_const("OtherTestHandler", klass)
+      klass
+    end
+    let(:bound) { Hash.new { |h, k| h[k] = [] } }
+
+    before do
+      allow(Pgbus).to receive(:client).and_return(client)
+      allow(Pgbus.logger).to receive(:info)
+      allow(client).to receive(:bind_topic) { |pattern, queue| bound[queue] |= [pattern] }
+      allow(client).to receive(:topic_patterns) { |queue| bound[queue].dup }
+      allow(client).to receive(:unbind_topic) { |pattern, queue| !bound[queue].delete(pattern).nil? }
+    end
+
+    it "unbinds a pattern no subscriber of the queue declares and keeps the declared one" do
+      bound["q_audit"] = ["#"]
+      registry.subscribe("order.created", handler_class, queue_name: "q_audit")
+
+      expect(registry.prune_stale_bindings!).to eq("q_audit" => ["#"])
+      expect(bound["q_audit"]).to eq(["order.created"])
+      expect(client).to have_received(:unbind_topic).with("#", "q_audit").once
+      expect(client).not_to have_received(:unbind_topic).with("order.created", "q_audit")
+    end
+
+    it "binds the declared patterns before it unbinds anything" do
+      bound["q_audit"] = ["#"]
+      registry.subscribe("order.created", handler_class, queue_name: "q_audit")
+
+      registry.prune_stale_bindings!
+
+      expect(client).to have_received(:bind_topic).with("order.created", "q_audit").ordered
+      expect(client).to have_received(:unbind_topic).with("#", "q_audit").ordered
+    end
+
+    it "keeps every pattern declared by any subscriber sharing the queue" do
+      bound["q_shared"] = ["#", "orders.#", "payments.#"]
+      registry.subscribe("orders.#", handler_class, queue_name: "q_shared")
+      registry.subscribe("payments.#", other_handler_class, queue_name: "q_shared")
+
+      expect(registry.prune_stale_bindings!).to eq("q_shared" => ["#"])
+      expect(bound["q_shared"]).to contain_exactly("orders.#", "payments.#")
+    end
+
+    it "leaves out queues with nothing stale, so a second run returns an empty hash" do
+      bound["q_audit"] = ["#"]
+      registry.subscribe("order.created", handler_class, queue_name: "q_audit")
+      registry.subscribe("payments.#", other_handler_class, queue_name: "q_payments")
+
+      expect(registry.prune_stale_bindings!).to eq("q_audit" => ["#"])
+      expect(registry.prune_stale_bindings!).to eq({})
+    end
+
+    it "does not report a pattern another process unbound first" do
+      registry.subscribe("order.created", handler_class, queue_name: "q_audit")
+      allow(client).to receive(:topic_patterns).with("q_audit").and_return(["#", "order.created"])
+      allow(client).to receive(:unbind_topic).with("#", "q_audit").and_return(false)
+
+      expect(registry.prune_stale_bindings!).to eq({})
+    end
+
+    it "never touches a queue no subscriber is registered on" do
+      bound["q_unregistered"] = ["#"]
+      registry.subscribe("order.created", handler_class, queue_name: "q_audit")
+
+      registry.prune_stale_bindings!
+
+      expect(client).not_to have_received(:topic_patterns).with("q_unregistered")
+      expect(bound["q_unregistered"]).to eq(["#"])
+    end
+
+    it "returns an empty hash and makes no call with no subscriber registered" do
+      expect(registry.prune_stale_bindings!).to eq({})
+      expect(client).not_to have_received(:topic_patterns)
+    end
+
+    it "logs each queue it pruned" do
+      bound["q_audit"] = ["#"]
+      registry.subscribe("order.created", handler_class, queue_name: "q_audit")
+
+      registry.prune_stale_bindings!
+
+      expect(Pgbus.logger).to have_received(:info) do |&block|
+        expect(block.call).to include("q_audit", '"#"')
+      end
+    end
+
+    context "with queue_names:" do
+      it "prunes only the named queues" do
+        bound["q_audit"] = ["#"]
+        bound["q_payments"] = ["#"]
+        registry.subscribe("order.created", handler_class, queue_name: "q_audit")
+        registry.subscribe("payments.#", other_handler_class, queue_name: "q_payments")
+
+        expect(registry.prune_stale_bindings!(queue_names: ["q_audit"])).to eq("q_audit" => ["#"])
+        expect(bound["q_payments"]).to eq(["#"])
+        expect(client).not_to have_received(:topic_patterns).with("q_payments")
+      end
+
+      it "prunes nothing for an empty list" do
+        bound["q_audit"] = ["#"]
+        registry.subscribe("order.created", handler_class, queue_name: "q_audit")
+
+        expect(registry.prune_stale_bindings!(queue_names: [])).to eq({})
+        expect(client).not_to have_received(:topic_patterns)
+        expect(client).not_to have_received(:bind_topic)
+      end
+
+      it "unbinds every pattern of a named queue no subscriber declares any more (a removed handler)" do
+        bound["q_removed"] = ["orders.#", "#"]
+
+        expect(registry.prune_stale_bindings!(queue_names: ["q_removed"])).to eq("q_removed" => ["orders.#", "#"])
+        expect(bound["q_removed"]).to eq([])
+        expect(client).not_to have_received(:bind_topic)
+      end
+    end
+  end
+
   describe "#queue_names_for_topics" do
     # The topic → queue derivation the Consumer uses in setup_subscriptions,
     # exposed on the registry so the supervisor-owned NotifyHub (issue #381)

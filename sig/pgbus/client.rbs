@@ -71,7 +71,9 @@ module Pgbus
     def streams_swap_stats: () -> untyped
     def synchronizing?: () -> bool
     def target_queue: (untyped queue_name, ?untyped priority) -> untyped
+    def topic_patterns: (untyped queue_name) -> Array[String]
     def transaction: () ?{ (*untyped) -> untyped } -> untyped
+    def unbind_topic: (untyped pattern, untyped queue_name) -> bool
     def uniqueness_keys_present: (untyped lock_keys) -> untyped
     def update_notify_insert: (untyped queue_name, throttle_interval_ms: untyped) -> untyped
     def verify_connection!: () -> untyped

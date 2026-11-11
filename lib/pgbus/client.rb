@@ -1098,6 +1098,25 @@ module Pgbus
       end
     end
 
+    # Removes the +pattern+ binding from the logical +queue_name+ (issue #657).
+    # True when a binding was removed, false when there was none. Never creates
+    # the queue.
+    def unbind_topic(pattern, queue_name)
+      full_name = config.queue_name(queue_name)
+      with_stale_connection_retry do
+        synchronized { @pgmq.unbind_topic(pattern, full_name) }
+      end
+    end
+
+    # The patterns bound to the logical +queue_name+ in pgmq.topic_bindings
+    # (issue #657).
+    def topic_patterns(queue_name)
+      full_name = config.queue_name(queue_name)
+      with_stale_connection_retry do
+        synchronized { @pgmq.list_topic_bindings(queue_name: full_name).map { |binding| binding[:pattern] } }
+      end
+    end
+
     def publish_to_topic(routing_key, payload, headers: nil, delay: 0)
       with_stale_connection_retry do
         synchronized do
