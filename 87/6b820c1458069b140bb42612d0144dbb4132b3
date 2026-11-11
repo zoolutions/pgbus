@@ -1,0 +1,31 @@
+spec/system/support/stream_source_fixture.rb
+  s_5195f171f5a6c6::t_5fee596cbcc3b3 74-81,83,85,141-142
+app/assets/javascripts/pgbus/stream_source_element.min.js.map
+  ai_agent 1
+app/assets/javascripts/pgbus/stream_source_element.js
+  s_5195f171f5a6c6::t_8b6f1cc6006a15 177-182,188,207,220
+README.md
+  s_5195f171f5a6c6::t_8b6f1cc6006a15 1609
+CHANGELOG.md
+  ai_agent 5
+spec/system/stream_source_element_spec.rb
+  s_5195f171f5a6c6::t_5fee596cbcc3b3 55-71
+app/assets/javascripts/pgbus/stream_source_element.min.js
+  ai_agent 1,3-5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "876b820c1458069b140bb42612d0144dbb4132b3",
+  "prompts": {},
+  "sessions": {
+    "s_5195f171f5a6c6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "59d3a1ae-355b-4200-b17b-ee92abc13ff1",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}

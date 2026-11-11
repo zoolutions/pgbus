@@ -1,0 +1,34 @@
+README.md
+  s_5195f171f5a6c6::t_4b3f7006f65969 1609
+app/assets/javascripts/pgbus/stream_source_element.min.js.map
+  ai_agent 1
+spec/system/support/stream_source_fixture.rb
+  s_5195f171f5a6c6::t_6a2a165f16ce98 1-155
+app/assets/javascripts/pgbus/stream_source_element.min.js
+  ai_agent 1,3-5
+app/assets/javascripts/pgbus/stream_source_element.js
+  s_5195f171f5a6c6::t_29f8366a19eee4 11-16,66,100,121-122,126-145
+  s_5195f171f5a6c6::t_6cc1e1ff5cbaa6 67-71
+CHANGELOG.md
+  s_5195f171f5a6c6::t_72e932cc8d67f7 5-6
+spec/system/stream_source_element_spec.rb
+  s_5195f171f5a6c6::t_9e6b93f2c05be0 1-6,9,11-46,48,50-64,78-110
+  s_5195f171f5a6c6::t_b41836fdd2a773 65-77
+  s_5195f171f5a6c6::t_6a2a165f16ce98 7-8,10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "56a0b1a9e87510292af389d1d5e48139be025c36",
+  "prompts": {},
+  "sessions": {
+    "s_5195f171f5a6c6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "59d3a1ae-355b-4200-b17b-ee92abc13ff1",
+        "model": "unknown"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}

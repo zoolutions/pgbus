@@ -1,0 +1,91 @@
+spec/benchmarks/worker_profile_harness_spec.rb
+  s_e5a077aaf4d041::t_909a271cb5692a 320-321,326-327,333,338-339,353-354
+  s_e5a077aaf4d041::t_754e3fb350a399 314-319,322-325,328-332,334-337,340-352
+spec/pgbus/concurrency/blocked_execution_spec.rb
+  s_e5a077aaf4d041::t_9511e41d104faa 6-8
+spec/integration/connection_lease_spec.rb
+  s_e5a077aaf4d041::t_9f6eefc19e289f 216-219
+  s_e5a077aaf4d041::t_387874f506e834 1-107,109-215,220-279
+  s_e5a077aaf4d041::t_e6ce877022c311 108
+lib/pgbus/failed_event_recorder.rb
+  s_e5a077aaf4d041::t_345ee2391d9f9b 35-40,50-52,67-74,97-103,115,178,196-202
+app/models/pgbus/batch_execution.rb
+  s_e5a077aaf4d041::t_439d615a994ed5 16-23
+lib/pgbus/concurrency/semaphore.rb
+  s_e5a077aaf4d041::t_2455ae941357e8 22-24,31-32,34-38,63-69
+rubocop/cop/pgbus/bare_connection_lease.rb
+  s_e5a077aaf4d041::t_824b23f694d1e5 1-83
+benchmarks/support/worker_profile_harness.rb
+  s_e5a077aaf4d041::t_6eb207665c2a32 89,259,263,266,270,274,277,290
+  s_e5a077aaf4d041::t_754e3fb350a399 253-258,260-262,264-265,267-269,271-273,275-276,278-289
+spec/pgbus/job_stat_spec.rb
+  s_e5a077aaf4d041::t_f8ca7b00cd09b0 89,101-103
+  s_e5a077aaf4d041::t_800ee81df46091 7-8
+benchmarks/support/fleet_profile_runner.rb
+  s_e5a077aaf4d041::t_a362b499d02a85 65-66,80-81,116,142
+benchmarks/support/fleet_profile_harness.rb
+  s_e5a077aaf4d041::t_a362b499d02a85 40-47,55-56,59
+spec/benchmarks/fleet_profile_harness_spec.rb
+  s_e5a077aaf4d041::t_78f113ac3003c8 68-80
+lib/pgbus/batch.rb
+  s_e5a077aaf4d041::t_6aa897b091a4db 201-202,204-209,215-220,363-366,368-370,372-373,429-433,454-457,459,461-462,464-465,476-480
+spec/rubocop/cop/pgbus/bare_connection_lease_spec.rb
+  s_e5a077aaf4d041::t_b8d462fdc3789e 125-126,128-130
+  s_e5a077aaf4d041::t_b1450d886995c3 1-18,21-24,26,28,30,32-38,40-63,65-70,72-80,82-91,93-124,127,131-152
+  s_e5a077aaf4d041::t_6da9f4e7ee98bd 19-20
+  s_e5a077aaf4d041::t_9f4a9d85efda4c 25,27,29,31,39,64,71,81,92
+benchmarks/support/worker_profile_runner.rb
+  s_e5a077aaf4d041::t_b0b1535e65b7ea 8-10,29-67,73,86-87,131-133,136-157,169,174-179,184-193,246-248,255-269
+spec/pgbus/active_job/adapter_spec.rb
+  s_e5a077aaf4d041::t_800ee81df46091 27-28
+spec/pgbus/concurrency/semaphore_spec.rb
+  s_e5a077aaf4d041::t_9511e41d104faa 6-8
+  s_e5a077aaf4d041::t_f8ca7b00cd09b0 122-124
+app/models/pgbus/blocked_execution.rb
+  s_e5a077aaf4d041::t_439d615a994ed5 13-29
+benchmarks/worker_profile_bench.rb
+  s_e5a077aaf4d041::t_63cd348f4dbf3d 56-62,93-94,137-138,225-230,237,283
+spec/pgbus/batch_entry_spec.rb
+  s_e5a077aaf4d041::t_9511e41d104faa 6-8
+spec/pgbus/failed_event_recorder_spec.rb
+  s_e5a077aaf4d041::t_f8ca7b00cd09b0 9-10,12-13
+app/models/pgbus/semaphore.rb
+  s_e5a077aaf4d041::t_439d615a994ed5 16-31
+spec/pgbus/batch_execution_spec.rb
+  s_e5a077aaf4d041::t_800ee81df46091 11-12
+  s_e5a077aaf4d041::t_f8ca7b00cd09b0 42-44
+app/models/pgbus/job_stat.rb
+  s_e5a077aaf4d041::t_c4eb8c0e374831 13,15-16,18-25,27-28,49
+app/models/pgbus/batch_entry.rb
+  s_e5a077aaf4d041::t_6aa897b091a4db 65-74,85-88,90,92,94-100,102-103
+lib/pgbus/concurrency/blocked_execution.rb
+  s_e5a077aaf4d041::t_2455ae941357e8 61-83,117-121
+app/models/pgbus/uniqueness_key.rb
+  s_e5a077aaf4d041::t_7049e6207b175d 24-30,57,70-72,85-90,115-118,132-138,146-157,195-200,208-214,219-221
+rubocop/pgbus.rb
+  s_e5a077aaf4d041::t_e0d3341d28d9d8 7
+.rubocop.yml
+  s_e5a077aaf4d041::t_e0d3341d28d9d8 50-68
+lib/pgbus/active_job/adapter.rb
+  s_e5a077aaf4d041::t_da0f6f0c0c625f 91-97
+spec/pgbus/batch_spec.rb
+  s_e5a077aaf4d041::t_800ee81df46091 21-22
+spec/support/bus_record_pool_stub.rb
+  s_e5a077aaf4d041::t_5ef07e0d639d9d 5-26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "df697b7e476d64631491604965033c56e4fb18e7",
+  "prompts": {},
+  "sessions": {
+    "s_e5a077aaf4d041": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "640a8129-e9dd-4eb5-9d12-4102ce694f6c",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
