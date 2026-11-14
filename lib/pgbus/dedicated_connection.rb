@@ -56,8 +56,7 @@ module Pgbus
       return conninfo if conninfo.include?("application_name")
 
       if conninfo.include?("://")
-        separator = conninfo.include?("?") ? "&" : "?"
-        "#{conninfo}#{separator}fallback_application_name=#{APP_NAME}"
+        "#{conninfo}#{query_separator(conninfo)}fallback_application_name=#{APP_NAME}"
       else
         "#{conninfo} fallback_application_name=#{APP_NAME}".strip
       end
@@ -92,17 +91,37 @@ module Pgbus
     end
 
     # URL query-param style for postgres:// URLs, space-separated keyword
-    # style otherwise (as with_app_name does).
+    # style otherwise (as with_app_name does). The keywords already set are
+    # read with libpq's own parser, so a keyword quoted inside another value
+    # does not count; a conninfo libpq cannot parse is left for PG.connect to
+    # report.
     def append_keepalives(conninfo)
-      missing = LISTEN_KEEPALIVES.reject { |key, _| conninfo.match?(/(?:\A|[\s?&])#{key}\s*=/) }
+      set = conninfo_keywords(conninfo)
+      return conninfo if set.nil?
+
+      missing = LISTEN_KEEPALIVES.reject { |key, _| set.include?(key.to_s) }
       return conninfo if missing.empty?
 
       if conninfo.include?("://")
-        separator = conninfo.include?("?") ? "&" : "?"
-        "#{conninfo}#{separator}#{missing.map { |key, value| "#{key}=#{value}" }.join("&")}"
+        "#{conninfo}#{query_separator(conninfo)}#{missing.map { |key, value| "#{key}=#{value}" }.join("&")}"
       else
         "#{conninfo} #{missing.map { |key, value| "#{key}=#{value}" }.join(" ")}".strip
       end
+    end
+
+    # The keywords a conninfo String sets, or nil when libpq cannot parse it.
+    def conninfo_keywords(conninfo)
+      ::PG::Connection.conninfo_parse(conninfo).filter_map { |option| option[:keyword] if option[:val] }
+    rescue ::PG::Error
+      nil
+    end
+
+    # "?" to start a URL's query string, "&" to extend one, nothing after a
+    # trailing "?" or "&" (an empty parameter would fail the connect).
+    def query_separator(url)
+      return "" if url.end_with?("?", "&")
+
+      url.include?("?") ? "&" : "?"
     end
 
     def connect_from_hash(opts)

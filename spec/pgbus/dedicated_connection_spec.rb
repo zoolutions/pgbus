@@ -55,6 +55,12 @@ RSpec.describe Pgbus::DedicatedConnection do
         end
       end
 
+      it "appends to a URL that ends in a bare ? without an empty parameter" do
+        described_class.connect("postgres://u@h/db?")
+
+        expect(captured[:args].first).to eq("postgres://u@h/db?fallback_application_name=pgbus-listen")
+      end
+
       it "appends with & when the URL already has a query string" do
         described_class.connect("postgres://u@h/db?sslmode=require")
 
@@ -173,6 +179,30 @@ RSpec.describe Pgbus::DedicatedConnection do
           expect(url.scan("tcp_user_timeout=").size).to eq(1)
           expect(url).to include("keepalives_idle=60", "tcp_user_timeout=30000", "keepalives=1",
                                  "keepalives_interval=2", "keepalives_count=3")
+        end
+
+        it "adds a keyword that only appears inside another keyword's quoted value" do
+          described_class.connect_with_keepalives("host=h application_name='x tcp_user_timeout=1'")
+
+          expect(captured[:args].first).to eq(
+            "host=h application_name='x tcp_user_timeout=1' keepalives=1 keepalives_idle=5 " \
+            "keepalives_interval=2 keepalives_count=3 tcp_user_timeout=11000"
+          )
+        end
+
+        it "appends to a URL that ends in a bare ? without an empty parameter" do
+          described_class.connect_with_keepalives("postgres://u@h/db?")
+
+          expect(captured[:args].first).to eq(
+            "postgres://u@h/db?keepalives=1&keepalives_idle=5&keepalives_interval=2&keepalives_count=3" \
+            "&tcp_user_timeout=11000&fallback_application_name=pgbus-listen"
+          )
+        end
+
+        it "leaves a conninfo libpq cannot parse to PG.connect, which reports it" do
+          described_class.connect_with_keepalives("host=h bogus=1")
+
+          expect(captured[:args].first).to eq("host=h bogus=1 fallback_application_name=pgbus-listen")
         end
 
         it "adds nothing through .connect" do

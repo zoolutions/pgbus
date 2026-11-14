@@ -575,7 +575,9 @@ module Pgbus
       # Slow maintenance cadence (seconds) — the autoscaler runs as a periodic
       # check on the streamer's idle LISTEN connection (pghero-style), not a busy
       # loop. 5 minutes: the interval itself debounces, so there is no per-sample
-      # hysteresis; a sustained burst converges over a few checks.
+      # hysteresis; a sustained burst converges over a few checks. The check
+      # runs on the listener's keepalive tick, so an interval shorter than
+      # streams_listen_health_check_ms runs once per keepalive instead.
       @streams_pool_autoscale_interval = 300.0
       # Distinctive application_name prefix stamped on streams-pool connections
       # so the autoscaler can count peer processes (DISTINCT application_name
