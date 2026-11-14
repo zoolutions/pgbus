@@ -129,7 +129,7 @@ class Views::Docs::Pages::DeployTasks < DocsUI::Page
         `retry_on` attempt whose retry is queued leaves the outcome to the retry. It
         stamps `failed_at` when the job is dead-lettered, discarded as a
         `:while_executing` duplicate, or its retry was dropped by the job's own
-        uniqueness or concurrency `on_conflict`. The task's page shows each run's
+        concurrency limit (`on_conflict: :discard`). The task's page shows each run's
         outcome.
 
         A dependency whose run never gets an outcome (its worker was killed between

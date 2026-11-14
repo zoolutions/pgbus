@@ -54,7 +54,8 @@ module Pgbus
       # counts the declared entries instead.
       def task_count
         tasks.size
-      rescue StandardError
+      rescue StandardError => e
+        Pgbus.logger.warn { "[Pgbus] Deploy tasks not loaded yet (#{e.class}: #{e.message}); counting the declared entries" }
         (@config.deploy_tasks || {}).size
       end
 

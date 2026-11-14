@@ -584,6 +584,7 @@ RSpec.describe Pgbus::Deploy::Runner do
         allow(Pgbus::Deploy::Schema).to receive(:outcomes?).and_raise(StandardError, "db blip")
 
         expect(runner.task_count).to eq(2)
+        expect(warnings.join).to include("Deploy tasks not loaded yet (StandardError: db blip)")
       end
 
       it "does not probe the schema when no task declares after:" do

@@ -121,6 +121,27 @@ RSpec.describe "Deploy task dependencies (integration)", :integration do
     expect(run_for("widgets").completed_at).to be_nil
   end
 
+  it "leaves the outcome to a retry parked behind the job's concurrency limit, which stamps it when it runs" do
+    attempts = []
+    stub_const("WidgetsJob", job_class("WidgetsJob") do
+      limits_concurrency to: 1, key: ->(*) { "deploy-deps-parked" }
+      retry_on RuntimeError, wait: 0, attempts: 2
+      define_method(:perform) do |*|
+        attempts << executions
+        raise "not yet" if attempts.one?
+      end
+    end)
+    runner.enqueue(Pgbus::Deploy::Task.from_configuration("widgets", class: "WidgetsJob", queue: queue),
+                   triggered_by: "manual")
+
+    expect(work_one).to eq(:success) # the attempt: its retry is parked, then released when its slot frees
+    expect(run_for("widgets")).to have_attributes(completed_at: nil, failed_at: nil)
+
+    expect(work_one).to eq(:success)
+    expect(attempts.size).to eq(2)
+    expect(run_for("widgets").completed_at).not_to be_nil
+  end
+
   it "fails Run now, leaving no run, when the adapter drops the job as a uniqueness duplicate" do
     stub_const("WidgetsJob", job_class("WidgetsJob") do
       ensures_uniqueness strategy: :until_executed, key: ->(*) { "deploy-deps-unique" }, on_conflict: :discard

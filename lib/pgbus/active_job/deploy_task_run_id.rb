@@ -14,8 +14,8 @@ module Pgbus
     # deploy_task_run_enqueued is transient, never serialized: the pgbus
     # adapter sets it on a marked instance it was asked to enqueue, true once
     # the message is live (sent, or parked behind its concurrency limit),
-    # false when it dropped the job (uniqueness or concurrency on_conflict
-    # :discard / :log). nil means no enqueue of this instance was attempted.
+    # false when it dropped the job (a uniqueness on_conflict :discard / :log
+    # on a first enqueue, or a concurrency on_conflict :discard on any). nil means no enqueue of this instance was attempted.
     module DeployTaskRunId
       METADATA_KEY = "pgbus_deploy_task_run_id"
 

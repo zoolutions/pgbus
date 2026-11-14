@@ -155,13 +155,6 @@ module Pgbus
         raise e
       end
 
-      # True when a failure raised from inside the produce reached the
-      # database, so the message may have been written even though the reply
-      # did not come back. Deliberately an over-approximation: the client's
-      # pre-produce queue setup is inside the same call, so its connection
-      # errors are counted as ambiguous too. That errs toward keeping a lock
-      # and a batch count the reapers can reclaim, rather than dropping
-      # bookkeeping for a message that turns out to be live.
       # A deploy task's job (issue #660): whether this enqueue left a live
       # message. Deploy::Runner reads it to tell a dropped enqueue from a sent
       # one, the executor to tell a retry_on retry that will run from one the
@@ -172,6 +165,13 @@ module Pgbus
         active_job.deploy_task_run_enqueued = value
       end
 
+      # True when a failure raised from inside the produce reached the
+      # database, so the message may have been written even though the reply
+      # did not come back. Deliberately an over-approximation: the client's
+      # pre-produce queue setup is inside the same call, so its connection
+      # errors are counted as ambiguous too. That errs toward keeping a lock
+      # and a batch count the reapers can reclaim, rather than dropping
+      # bookkeeping for a message that turns out to be live.
       def ambiguous_delivery?(error)
         (defined?(PGMQ::Errors::ConnectionError) && error.is_a?(PGMQ::Errors::ConnectionError)) ||
           (defined?(PG::Error) && error.is_a?(PG::Error))
