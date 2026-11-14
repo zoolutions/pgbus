@@ -21,6 +21,7 @@
 #     args: [arg1, arg2]       # Optional: job arguments
 #     priority: 0              # Optional: numeric priority
 #     description: "text"      # Optional: human-readable description
+#     after: other_task_key    # Optional: wait until these tasks (a key or a list) have completed
 #
 # Command-based tasks (no job class needed):
 #   warm_fragment_caches:
@@ -40,3 +41,7 @@
 #   warm_fragment_caches:
 #     command: "FragmentCacheWarmer.run"
 #     every_deploy: true
+#
+#   backfill_order_reports:
+#     class: BackfillOrderReportsJob
+#     after: backfill_order_totals  # enqueued only once backfill_order_totals completed at version 2

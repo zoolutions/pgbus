@@ -313,8 +313,12 @@ module Pgbus
         task[:enabled] ? :enabled : :disabled
       end
 
-      def enqueue_deploy_task_now(id)
-        record(:enqueue_deploy_task_now, id)
+      # :blocked, as DataSource does, for a task still waiting on a dependency.
+      def enqueue_deploy_task_now(id, ignore_dependencies: false)
+        record(:enqueue_deploy_task_now, id, ignore_dependencies)
+        task = @deploy_tasks_list.find { |t| t[:id].to_s == id.to_s }
+        return :blocked if !ignore_dependencies && task&.fetch(:waiting_on, nil).present?
+
         @deploy_enqueue_result
       end
 

@@ -15,7 +15,7 @@ RSpec.describe Pgbus::DeployTask, :integration do
 
   def rollover_run(key, version:, revision: "rev-a")
     Pgbus::DeployTaskRun.create!(task_key: key, version: version, revision: revision,
-                                 triggered_by: "rollover", run_at: now - 3600)
+                                 triggered_by: "rollover", run_at: now - 3600, queue_name: "default")
   end
 
   def row(key = "backfill")
@@ -219,6 +219,35 @@ RSpec.describe Pgbus::DeployTask, :integration do
       sync(task("warm", class: nil, command: "Cache.warm!", every_deploy: true, queue: "low"))
 
       expect(row("warm").to_task.to_h).to include(command: "Cache.warm!", every_deploy: true, queue_name: "low")
+    end
+
+    it "carries the declared dependencies" do
+      sync(task("totals", after: %w[widgets]))
+
+      expect(row("totals").to_task.dependencies).to eq(%w[widgets])
+      expect(row("totals").parsed_dependencies).to eq(%w[widgets])
+    end
+  end
+
+  describe "dependencies before pgbus:add_deploy_task_run_outcomes is migrated" do
+    let(:conn) { ActiveRecord::Base.connection }
+
+    around do |example|
+      conn.execute("ALTER TABLE pgbus_deploy_tasks DROP COLUMN IF EXISTS dependencies")
+      described_class.reset_column_information
+      Pgbus::Deploy::Schema.reset!
+      example.run
+    ensure
+      conn.execute("ALTER TABLE pgbus_deploy_tasks ADD COLUMN IF NOT EXISTS dependencies TEXT")
+      described_class.reset_column_information
+      Pgbus::Deploy::Schema.reset!
+    end
+
+    it "still syncs, without the column" do
+      sync(task("totals"))
+
+      expect(row("totals")).to have_attributes(armed_for: "1")
+      expect(row("totals").parsed_dependencies).to eq([])
     end
   end
 end

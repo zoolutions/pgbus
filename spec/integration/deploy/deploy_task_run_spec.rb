@@ -5,9 +5,14 @@ require_relative "../../integration_helper"
 RSpec.describe Pgbus::DeployTaskRun, :integration do
   let(:now) { Time.utc(2026, 10, 16, 12, 0, 0) }
 
-  def run(key, version: "1", revision: "rev-a", triggered_by: "rollover", run_at: now)
+  def run(key, version: "1", revision: "rev-a", triggered_by: "rollover", run_at: now, queue_name: "default", **outcome)
     described_class.create!(task_key: key, version: version, revision: revision,
-                            triggered_by: triggered_by, run_at: run_at)
+                            triggered_by: triggered_by, run_at: run_at, queue_name: queue_name, **outcome)
+  end
+
+  # A run row created before its enqueue, whose enqueue never finished.
+  def unfinished(key, **options)
+    run(key, queue_name: nil, **options)
   end
 
   describe ".last_rollover_for" do
@@ -18,6 +23,13 @@ RSpec.describe Pgbus::DeployTaskRun, :integration do
       run("other", revision: "rev-d")
 
       expect(described_class.last_rollover_for("backfill")).to eq(newest)
+    end
+
+    it "ignores a run whose enqueue never finished" do
+      enqueued = run("backfill")
+      unfinished("backfill")
+
+      expect(described_class.last_rollover_for("backfill")).to eq(enqueued)
     end
 
     it "is nil without a rollover run" do
@@ -37,6 +49,13 @@ RSpec.describe Pgbus::DeployTaskRun, :integration do
 
       expect(described_class.latest_for(%w[a b]).to_a).to contain_exactly(newest_rollover, manual, other)
     end
+
+    it "ignores a run whose enqueue never finished" do
+      enqueued = run("a")
+      unfinished("a")
+
+      expect(described_class.latest_for(%w[a]).to_a).to eq([enqueued])
+    end
   end
 
   describe ".rollover_run_for?" do
@@ -47,6 +66,12 @@ RSpec.describe Pgbus::DeployTaskRun, :integration do
       expect(described_class.rollover_run_for?("backfill", "2")).to be(true)
       expect(described_class.rollover_run_for?("backfill", "3")).to be(false)
       expect(described_class.rollover_run_for?("other", "2")).to be(false)
+    end
+
+    it "is false for a run whose enqueue never finished, so the version is still owed" do
+      unfinished("backfill", version: "2")
+
+      expect(described_class.rollover_run_for?("backfill", "2")).to be(false)
     end
   end
 
@@ -71,6 +96,64 @@ RSpec.describe Pgbus::DeployTaskRun, :integration do
 
       expect(described_class.prunable_before(cutoff)).to contain_exactly(superseded, manual)
       expect([kept, other_version]).to all(satisfy { |r| described_class.exists?(r.id) })
+    end
+
+    it "keeps the newest completed run per (task_key, version), which an after: dependency reads" do
+      cutoff = now - (90 * 86_400)
+      old = now - (100 * 86_400)
+      older_completed = run("a", triggered_by: "manual", run_at: old, completed_at: old)
+      completed = run("a", triggered_by: "manual", run_at: old, completed_at: old)
+      failed = run("a", triggered_by: "manual", run_at: old, failed_at: old)
+      rollover = run("a", run_at: old)
+
+      expect(described_class.prunable_before(cutoff)).to contain_exactly(older_completed, failed)
+      expect([completed, rollover]).to all(satisfy { |r| described_class.exists?(r.id) })
+    end
+  end
+
+  describe ".mark_completed! and .mark_failed!" do
+    it "stamps the outcome once" do
+      row = run("a")
+
+      expect(described_class.mark_completed!(row.id, now: now)).to be(true)
+      expect(described_class.mark_completed!(row.id, now: now + 60)).to be(false)
+      expect(described_class.mark_failed!(row.id, now: now)).to be(true)
+
+      expect(row.reload).to have_attributes(completed_at: now, failed_at: now)
+    end
+
+    it "matches no row for an unknown id" do
+      expect(described_class.mark_completed!(0, now: now)).to be(false)
+    end
+  end
+
+  describe ".outcomes_for" do
+    it "reports per (key, version, revision) whether any run completed and whether the newest failed" do
+      run("a", version: "1", completed_at: now)
+      run("a", version: "1", failed_at: now)
+      run("a", version: "2", completed_at: now)
+      run("a", version: "2", failed_at: now) # newest of version 2: failed, but one completed
+      run("b", revision: "rev-b", completed_at: now, failed_at: now) # a DLQ re-send that succeeded
+      run("b", revision: "rev-c")
+      run("c", failed_at: now)
+      run("d", completed_at: now)
+
+      expect(described_class.outcomes_for(%w[a b c]).map { |o| o.to_h.except(:latest_id).values }).to contain_exactly(
+        ["a", "1", "rev-a", true, true], ["a", "2", "rev-a", true, true],
+        ["b", "1", "rev-b", true, false], ["b", "1", "rev-c", false, false],
+        ["c", "1", "rev-a", false, true]
+      )
+    end
+
+    it "carries the newest run's id per group" do
+      run("a")
+      newest = run("a")
+
+      expect(described_class.outcomes_for(%w[a]).sole.latest_id).to eq(newest.id)
+    end
+
+    it "is empty for no keys, without a query" do
+      expect(described_class.outcomes_for([])).to eq([])
     end
   end
 

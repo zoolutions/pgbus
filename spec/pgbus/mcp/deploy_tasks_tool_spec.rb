@@ -57,6 +57,23 @@ RSpec.describe Pgbus::MCP::Tools::DeployTasksTool do
     end
   end
 
+  context "with a task waiting on its dependencies (issue #660)" do
+    let(:tasks) do
+      [task("totals", armed_at: ran_at, armed_for: "1", dependencies: %w[widgets gadgets],
+                      waiting_on: [{ key: "widgets", state: "running" }, { key: "gadgets", state: "failed" }])]
+    end
+
+    it "lists the dependencies, what it waits on and why" do
+      out = result["tasks"].sole
+
+      expect(out).to include(
+        "dependencies" => %w[widgets gadgets],
+        "waiting_on" => [{ "key" => "widgets", "state" => "running" }, { "key" => "gadgets", "state" => "failed" }],
+        "state" => "waiting", "reason" => "waiting_dependencies", "reason_args" => { "count" => 2 }
+      )
+    end
+  end
+
   it "passes page and per_page through" do
     result(page: 3, per_page: 20)
 

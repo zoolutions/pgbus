@@ -5,8 +5,10 @@ module Pgbus
     class StubDataSource
       # The Deploy tasks page's sample data (issue #536): a deploy mid-rollover
       # with two processes still on the old revision, and a task in every state
-      # (ran, waiting, never, disabled, an every_deploy task, a manual run),
-      # padded past one page. Part of fill_sample_data!.
+      # (ran, waiting, never, disabled, an every_deploy task, a manual run, an
+      # after: task waiting on a running, a failed and a not-run dependency),
+      # padded past one page, and runs with every outcome. Part of
+      # fill_sample_data!.
       module SampleDeployTasks
         OLD_REVISION = "3f2a9c1"
         NEW_REVISION = "8d41b07"
@@ -39,7 +41,12 @@ module Pgbus
             deploy_task_row(now, 3, last_rollover_run: deploy_run(now - 3600, OLD_REVISION, "1")),
             deploy_task_row(now, 4, enabled: false),
             deploy_task_row(now, 5, last_manual_run: deploy_run(now - 7200, OLD_REVISION, "1", "manual")),
-            deploy_task_row(now, 6, version: "3", last_rollover_run: deploy_run(now - 86_400, OLD_REVISION, "3"))
+            deploy_task_row(now, 6, version: "3", armed_at: now - 240, armed_for: "3",
+                                    dependencies: DEPLOY_KEYS.first(3),
+                                    waiting_on: [{ key: DEPLOY_KEYS[0], state: "running" },
+                                                 { key: DEPLOY_KEYS[1], state: "failed" },
+                                                 { key: DEPLOY_KEYS[2], state: "not_run" }],
+                                    last_rollover_run: deploy_run(now - 86_400, OLD_REVISION, "2"))
           ] + Array.new(SampleData::PAGED_ROWS - DEPLOY_KEYS.size) do |i|
             deploy_task_row(now, DEPLOY_KEYS.size + i + 1, key: format("tenant_%02d_backfill", i + 1),
                                                            class_name: "TenantBackfillJob", static: false,
@@ -51,7 +58,7 @@ module Pgbus
           key = attrs.delete(:key) || DEPLOY_KEYS[id - 1]
           { id: id, key: key, class_name: "#{key.split("_").map(&:capitalize).join}Job", command: nil, version: "1",
             every_deploy: false, queue_name: "default", priority: 0, description: nil, enabled: true, static: true,
-            armed_at: nil, armed_for: nil, last_rollover_run: nil, last_manual_run: nil,
+            armed_at: nil, armed_for: nil, last_rollover_run: nil, last_manual_run: nil, dependencies: [], waiting_on: [],
             created_at: now - (30 * 86_400), updated_at: now - 3600 }.merge(attrs)
         end
 
@@ -59,9 +66,12 @@ module Pgbus
           { run_at: run_at, revision: revision, version: version, triggered_by: triggered_by }
         end
 
+        # Newest first: a manual run still going, a failed one, a completed one.
         def sample_deploy_task_runs(now)
-          [deploy_run(now - 90, NEW_REVISION, "1", "manual"), deploy_run(now - (3 * 86_400), OLD_REVISION, "1"),
-           deploy_run(now - (9 * 86_400), "c09e4d2", "1")].each_with_index.map do |run, i|
+          [deploy_run(now - 90, NEW_REVISION, "1", "manual"),
+           deploy_run(now - (3 * 86_400), OLD_REVISION, "1").merge(failed_at: now - (3 * 86_400) + 1800),
+           deploy_run(now - (9 * 86_400), "c09e4d2", "1").merge(completed_at: now - (9 * 86_400) + 600)]
+            .each_with_index.map do |run, i|
             run.merge(task_key: DEPLOY_KEYS.first, queue_name: "default", msg_id: 9100 - i)
           end
         end

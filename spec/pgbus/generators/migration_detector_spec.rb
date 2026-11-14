@@ -316,6 +316,30 @@ RSpec.describe Pgbus::Generators::MigrationDetector do
 
         expect(detector.missing_migrations).not_to include(:add_deploy_tasks)
       end
+
+      it "queues the outcomes add-on with the tables, in that order (issue #660)" do
+        missing = detector.missing_migrations
+
+        expect(missing.index(:add_deploy_task_run_outcomes)).to eq(missing.index(:add_deploy_tasks) + 1)
+      end
+
+      it "queues add_deploy_task_run_outcomes when the tables lack its columns" do
+        add_table("pgbus_deploy_tasks")
+        add_table("pgbus_deploy_task_runs")
+        stub_columns("pgbus_deploy_task_runs", %w[id task_key version])
+        stub_columns("pgbus_deploy_tasks", %w[id key dependencies])
+
+        expect(detector.missing_migrations).to include(:add_deploy_task_run_outcomes)
+      end
+
+      it "does not queue add_deploy_task_run_outcomes once its columns exist" do
+        add_table("pgbus_deploy_tasks")
+        add_table("pgbus_deploy_task_runs")
+        stub_columns("pgbus_deploy_task_runs", %w[id task_key completed_at failed_at])
+        stub_columns("pgbus_deploy_tasks", %w[id key dependencies])
+
+        expect(detector.missing_migrations).not_to include(:add_deploy_task_run_outcomes)
+      end
     end
 
     context "with workflow tables detection" do
@@ -634,6 +658,7 @@ RSpec.describe Pgbus::Generators::MigrationDetector do
           :add_queue_states,
           :add_outbox,
           :add_deploy_tasks,
+          :add_deploy_task_run_outcomes,
           :add_workflows,
           :add_failed_events_source_queue,
           :add_processed_event_completion,
@@ -671,7 +696,7 @@ RSpec.describe Pgbus::Generators::MigrationDetector do
         add_queue_states add_outbox add_recurring add_failed_events_source_queue
         add_processed_event_completion add_batch_executions add_batch_callback_jobs
         add_stream_queues tune_autovacuum tune_fillfactor add_presence_seats add_deploy_tasks
-        add_workflows add_workflow_signals fold_queue_name_case
+        add_deploy_task_run_outcomes add_workflows add_workflow_signals fold_queue_name_case
       ]
 
       keys.each do |key|

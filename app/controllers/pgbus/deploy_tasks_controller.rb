@@ -28,11 +28,21 @@ module Pgbus
     end
 
     def enqueue
-      if data_source.enqueue_deploy_task_now(params[:id]) == :enqueued
+      case data_source.enqueue_deploy_task_now(params[:id], ignore_dependencies: params[:ignore_dependencies] == "1")
+      when :enqueued
         redirect_to pgbus.deploy_tasks_path, notice: t("pgbus.deploy_tasks.enqueue.enqueued")
+      when :blocked
+        redirect_to pgbus.deploy_task_path(params[:id]), alert: t("pgbus.deploy_tasks.enqueue.blocked", tasks: waiting_on_keys)
       else
         redirect_to pgbus.deploy_tasks_path, alert: t("pgbus.deploy_tasks.enqueue.failed")
       end
+    end
+
+    private
+
+    # The dependencies a refused Run now names: the task page's own reading.
+    def waiting_on_keys
+      Array(data_source.deploy_task(params[:id])&.dig(:waiting_on)).map { |dep| dep[:key] }.join(", ")
     end
   end
 end

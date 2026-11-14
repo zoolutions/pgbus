@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-# One-time work owed by a release: the YAML, version vs every_deploy, the
-# revision chain, the rollover gate, manual control, and failure semantics.
+# One-time work owed by a release: the YAML, version vs every_deploy, after:,
+# the revision chain, the rollover gate, manual control, and failure semantics.
 class Views::Docs::Pages::DeployTasks < DocsUI::Page
   title "Deploy tasks"
   eyebrow "Guide"
@@ -12,6 +12,7 @@ class Views::Docs::Pages::DeployTasks < DocsUI::Page
     overview
     yaml_file
     version_vs_every_deploy
+    dependencies
     revision
     gate
     who_runs_it
@@ -88,6 +89,62 @@ class Views::Docs::Pages::DeployTasks < DocsUI::Page
     end
   end
 
+  def dependencies
+    DocsUI::Section("Wait for another task with after:", description: "Ordering by completion, not by enqueue.") do
+      md <<~'MD'
+        `after:` names the tasks a task waits for: one key, or a list of keys declared
+        in the same file. The task stays armed, and is not enqueued, until every task
+        it names has a **completed** run at that task's current version; for an
+        `every_deploy` dependency, a completed run on this revision. A rollover run and
+        a Run now run both count, so a dependency that failed and that you fixed and
+        ran again with Run now unblocks its dependents without a new deploy. A
+        completed run from an earlier release counts too, as long as the version is
+        the same.
+
+        A waiting task is not a failure: no retry backoff, no error report. It fires
+        on the first scheduler tick after its last dependency completes. The
+        dashboard says what it waits on and each dependency's state: `not run`,
+        `running` (the newest run at that version has no outcome yet) or `failed`.
+      MD
+      DocsUI::Code(<<~YAML, filename: "config/deploy_tasks.yml", lexer: :yaml)
+        production:
+          widgets_backfill:
+            class: BackfillWidgetsJob
+            version: 1
+          widget_totals_backfill:
+            class: BackfillWidgetTotalsJob
+            version: 1
+            after: [widgets_backfill]          # or after: widgets_backfill
+      YAML
+      md <<~'MD'
+        A task is skipped at scheduler boot, with a warning naming the problem, when
+        its `after:` names an unknown key, when it is part of a cycle (a task naming
+        itself included), or when a task it names is itself skipped. Removing a task
+        from the file therefore means removing it from its dependents' `after:` in
+        the same change.
+
+        Each run records its outcome. The worker stamps `completed_at` when `perform`
+        returned without re-enqueuing the job: success, but also a `discard_on`, or a
+        `retry_on` that gave up through its block, since both return normally. A
+        `retry_on` attempt whose retry is queued leaves the outcome to the retry. It
+        stamps `failed_at` when the job is dead-lettered, discarded as a
+        `:while_executing` duplicate, or its retry was dropped by the job's own
+        concurrency limit (`on_conflict: :discard`). The task's page shows each run's
+        outcome.
+
+        A dependency whose run never gets an outcome (its worker was killed between
+        finishing and recording it, or its message was discarded from the dashboard)
+        keeps reading `running`: Run now the dependency, or Run now the waiting task
+        with **Ignore dependencies** ticked.
+      MD
+      DocsUI::Callout(:warning) do
+        plain "Runs recorded before the outcome columns existed have no outcome, so they satisfy nothing. When an "
+        code { "after:" }
+        plain " names a task whose only runs predate the upgrade, bump that task's version or Run now it once."
+      end
+    end
+  end
+
   def revision
     DocsUI::Section("The app revision", description: "How pgbus knows which release a process runs.") do
       md <<~'MD'
@@ -143,7 +200,8 @@ class Views::Docs::Pages::DeployTasks < DocsUI::Page
         and an arm can only be fired by a scheduler declaring that version or revision.
 
         Tasks that are due together are enqueued in key order, with no completion
-        ordering between them. If one depends on another, make it a single job.
+        ordering between them. If one depends on another, declare it with `after:`
+        (above).
       MD
     end
   end
@@ -160,6 +218,8 @@ class Views::Docs::Pages::DeployTasks < DocsUI::Page
 
         - **Run now** enqueues immediately, with no gate and no claim, and records a
           manual run. It does not cancel a pending rollover run: Disable the task for that.
+          A task still waiting on an `after:` dependency is refused, with a message
+          naming the dependencies, unless you tick **Ignore dependencies** on its page.
         - **Enable / Disable** is honoured by the scheduler on every tick.
       MD
     end
@@ -179,8 +239,11 @@ class Views::Docs::Pages::DeployTasks < DocsUI::Page
         enqueue emits `pgbus.deploy_task.enqueue` (`task`, `version`, `revision`,
         `triggered_by`).
 
-        The run row is what marks a version as done. If it cannot be written right
-        after a successful enqueue (logged and reported), the job still runs, but the
+        The run row is what marks a version as done. It is written before the job is
+        enqueued (the job carries its id, so the worker can record the outcome) and
+        deleted if the enqueue fails, including when the job's own uniqueness or
+        concurrency `on_conflict: :discard` / `:log` drops it. It counts once the enqueue has been recorded on
+        it; if that write fails (logged and reported), the job still runs, but the
         next scheduler boot sees the version as owed and runs it again: make deploy
         tasks idempotent.
       MD
@@ -208,6 +271,11 @@ class Views::Docs::Pages::DeployTasks < DocsUI::Page
       md <<~'MD'
         `rails generate pgbus:update` detects the missing tables and queues the
         generator for you. Fresh installs (`pgbus:install`) already have them.
+
+        Installs whose deploy task tables predate run outcomes and `after:` add them
+        with `rails generate pgbus:add_deploy_task_run_outcomes` (`pgbus:update`
+        queues it too). Until it is migrated, a task with `after:` is skipped with a
+        warning naming that generator, and no outcome is recorded.
       MD
     end
   end

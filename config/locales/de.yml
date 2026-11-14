@@ -260,9 +260,14 @@ de:
         ready_html: 'Rollover abgeschlossen: Jeder aktive Prozess läuft auf <code>%{revision}</code>. Vorgemerkte Aufgaben laufen beim nächsten Scheduler-Tick.'
         unavailable_html: Der Rollover-Status konnte nicht gelesen werden.
       default_queue: default
+      dependency_states:
+        failed: fehlgeschlagen
+        not_run: nicht gelaufen
+        running: läuft
       disable: Deaktivieren
       enable: Aktivieren
       enqueue:
+        blocked: 'Jetzt ausführen abgelehnt: Die Aufgabe wartet auf %{tasks}. Aktiviere "Abhängigkeiten ignorieren", um sie trotzdem auszuführen.'
         enqueued: Deploy-Aufgabe eingereiht
         failed: 'Die Deploy-Aufgabe wurde nicht eingereiht: Den Grund findest du im Log'
       every_deploy: Bei jedem Deploy
@@ -272,6 +277,10 @@ de:
           other: "%{count} Aufgaben deklariert"
         title: Deploy-Aufgaben
       not_found: Deploy-Aufgabe nicht gefunden
+      outcomes:
+        completed_html: Abgeschlossen %{ago}
+        failed_html: Fehlgeschlagen %{ago}
+        none: Noch kein Ergebnis
       reasons:
         disabled_armed_html: 'Deaktiviert mit ausstehendem Rollover-Lauf: Aktiviere sie, damit sie ausgelöst wird.'
         disabled_html: 'Deaktiviert: Der Scheduler überspringt sie.'
@@ -279,6 +288,9 @@ de:
         manual_html: "· lief %{ago} (manuell)"
         never_html: Nach keinem Rollover gelaufen.
         ran_html: Lief %{ago} auf <code>%{revision}</code> (Rollover).
+        waiting_dependencies_html:
+          one: Wartet darauf, dass 1 Abhängigkeit abgeschlossen ist.
+          other: Wartet darauf, dass %{count} Abhängigkeiten abgeschlossen sind.
         waiting_lagging_html:
           one: 'Warte auf Rollover: 1 Prozess läuft noch nicht auf <code>%{revision}</code>.'
           other: 'Warte auf Rollover: %{count} Prozesse laufen noch nicht auf <code>%{revision}</code>.'
@@ -291,7 +303,9 @@ de:
         armed_html: "%{armed_for}, vorgemerkt %{ago}"
         back: Zurück
         configuration: Konfiguration
+        ignore_dependencies: Abhängigkeiten ignorieren
         labels:
+          after: Nach
           arguments: Argumente
           armed: Ausstehende Vormerkung
           command: Befehl
@@ -305,6 +319,7 @@ de:
         recent_runs: Letzte Läufe
         run_headers:
           enqueued_at: Eingereiht am
+          outcome: Ergebnis
           queue: Warteschlange
           revision: Revision
           triggered_by: Ausgelöst durch
@@ -338,6 +353,9 @@ de:
         manual: Manuell
         rollover: Rollover
       version: v%{version}
+      waiting_on:
+        dependency_html: "<code>%{key}</code> (%{state})"
+        label: 'Wartet auf:'
     dialogs:
       cancel: Abbrechen
       confirm: Bestätigen

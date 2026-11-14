@@ -94,6 +94,7 @@ module Pgbus
         add_outbox: "pgbus:add_outbox",
         add_recurring: "pgbus:add_recurring",
         add_deploy_tasks: "pgbus:add_deploy_tasks",
+        add_deploy_task_run_outcomes: "pgbus:add_deploy_task_run_outcomes",
         add_workflows: "pgbus:add_workflows",
         add_workflow_signals: "pgbus:add_workflow_signals",
         add_failed_events_index: "pgbus:add_failed_events_index",
@@ -121,6 +122,7 @@ module Pgbus
         add_outbox: "outbox entries table (transactional outbox)",
         add_recurring: "recurring tasks + executions tables",
         add_deploy_tasks: "deploy tasks + runs tables (one-time jobs run after a rollover)",
+        add_deploy_task_run_outcomes: "deploy task run outcomes (completed_at, failed_at) and after: dependencies",
         add_workflows: "workflow tables (durable multi-step workflows: runs, step attempts, audit trail)",
         add_workflow_signals: "waiting workflow steps (fan_out, wait_for: signals, wait timeouts)",
         add_failed_events_index: "unique index on pgbus_failed_events (queue_name, msg_id)",
@@ -253,10 +255,17 @@ module Pgbus
 
       # Same shape as recurring_migrations: plain create_table in the
       # template, so the generator is queued only while a table is absent.
+      # The outcomes add-on (issue #660) follows the tables: its template
+      # adds each column if_not_exists, so queuing it after add_deploy_tasks
+      # also completes a half-present schema whose existing table lacks them.
       def deploy_tasks_migrations
-        return [] if table_exists?("pgbus_deploy_tasks") && table_exists?("pgbus_deploy_task_runs")
+        return %i[add_deploy_tasks add_deploy_task_run_outcomes] unless
+          table_exists?("pgbus_deploy_tasks") && table_exists?("pgbus_deploy_task_runs")
 
-        [:add_deploy_tasks]
+        runs = column_names("pgbus_deploy_task_runs")
+        outcomes = runs.include?("completed_at") && runs.include?("failed_at") &&
+                   column_names("pgbus_deploy_tasks").include?("dependencies")
+        outcomes ? [] : [:add_deploy_task_run_outcomes]
       end
 
       # The add_workflows template uses if_not_exists throughout, so a

@@ -76,8 +76,31 @@ RSpec.describe "Pgbus::DeployTasksController", type: :request do
     it "flashes success when the task was enqueued" do
       post "/pgbus/deploy_tasks/1/enqueue"
 
-      expect(@stub_data_source.calls[:enqueue_deploy_task_now]).to eq([["1"]])
+      expect(@stub_data_source.calls[:enqueue_deploy_task_now]).to eq([["1", false]])
       expect(flash[:notice]).to eq(I18n.t("pgbus.deploy_tasks.enqueue.enqueued"))
+    end
+
+    context "when the task waits on a dependency (issue #660)" do
+      before do
+        @stub_data_source.deploy_tasks_list = [
+          task(1, "totals", dependencies: %w[widgets gadgets],
+                            waiting_on: [{ key: "widgets", state: "running" }, { key: "gadgets", state: "failed" }])
+        ]
+      end
+
+      it "refuses it, naming the dependencies, on the task's page" do
+        post "/pgbus/deploy_tasks/1/enqueue"
+
+        expect(response).to redirect_to("/pgbus/deploy_tasks/1")
+        expect(flash[:alert]).to eq(I18n.t("pgbus.deploy_tasks.enqueue.blocked", tasks: "widgets, gadgets"))
+      end
+
+      it "runs it when ignore dependencies is ticked" do
+        post "/pgbus/deploy_tasks/1/enqueue", params: { ignore_dependencies: "1" }
+
+        expect(@stub_data_source.calls[:enqueue_deploy_task_now]).to eq([["1", true]])
+        expect(flash[:notice]).to eq(I18n.t("pgbus.deploy_tasks.enqueue.enqueued"))
+      end
     end
 
     it "flashes the real failure when it was not" do

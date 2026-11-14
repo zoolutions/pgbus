@@ -11,7 +11,7 @@ module Pgbus
         tool_name "pgbus_deploy_tasks"
         title "Pgbus Deploy Tasks"
         description <<~DESC
-          Deploy tasks: one-time jobs the scheduler enqueues once every live pgbus process runs the new app revision. Lists each task's state (disabled, waiting, due, ran, never) and the rollover status the scheduler waits on.
+          Deploy tasks: one-time jobs the scheduler enqueues once every live pgbus process runs the new app revision. Lists each task's state (disabled, waiting, due, ran, never), the rollover status the scheduler waits on, and for a task with after: its dependencies and the ones it still waits on (waiting_on, each not_run, running or failed).
           Returns every task unless page or per_page is given; then it is
           paginated (per_page defaults to 100, capped at 100). The response
           carries page, per_page, total (capped at 10000 when paginated; the

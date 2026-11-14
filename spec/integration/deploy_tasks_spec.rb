@@ -87,7 +87,7 @@ RSpec.describe "Deploy tasks (integration)", :integration do
 
   it "produces one run for the new version when an old scheduler re-syncs mid-deploy" do
     Pgbus::DeployTaskRun.create!(task_key: "backfill", version: "1", revision: "rev-a",
-                                 triggered_by: "rollover", run_at: now - 86_400)
+                                 triggered_by: "rollover", run_at: now - 86_400, queue_name: "default")
     process("scheduler", revision: "rev-b", pid: 1)
     process("worker", revision: "rev-a", pid: 2)
     new_runner = runner("rev-b")

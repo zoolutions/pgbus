@@ -260,9 +260,14 @@ fr:
         ready_html: 'Bascule terminée : chaque processus actif exécute <code>%{revision}</code>. Les tâches armées s''exécutent au prochain tick du planificateur.'
         unavailable_html: L'état de la bascule n'a pas pu être lu.
       default_queue: default
+      dependency_states:
+        failed: échouée
+        not_run: non exécutée
+        running: en cours
       disable: Désactiver
       enable: Activer
       enqueue:
+        blocked: 'Exécution refusée : la tâche attend %{tasks}. Cochez « Ignorer les dépendances » pour l’exécuter quand même.'
         enqueued: Tâche de déploiement mise en file
         failed: 'La tâche de déploiement n''a pas été mise en file : consultez le journal pour la raison'
       every_deploy: À chaque déploiement
@@ -272,6 +277,10 @@ fr:
           other: "%{count} tâches déclarées"
         title: Tâches de déploiement
       not_found: Tâche de déploiement introuvable
+      outcomes:
+        completed_html: Terminée %{ago}
+        failed_html: Échouée %{ago}
+        none: Pas encore de résultat
       reasons:
         disabled_armed_html: 'Désactivée avec une exécution de bascule en attente : activez-la pour la laisser s''exécuter.'
         disabled_html: 'Désactivée : le planificateur l''ignore.'
@@ -279,6 +288,9 @@ fr:
         manual_html: "· exécutée %{ago} (manuel)"
         never_html: Jamais exécutée après une bascule.
         ran_html: Exécutée %{ago} sur <code>%{revision}</code> (bascule).
+        waiting_dependencies_html:
+          one: En attente de la fin d’1 dépendance.
+          other: En attente de la fin de %{count} dépendances.
         waiting_lagging_html:
           one: 'En attente de bascule : 1 processus n''exécute pas encore <code>%{revision}</code>.'
           other: 'En attente de bascule : %{count} processus n''exécutent pas encore <code>%{revision}</code>.'
@@ -291,7 +303,9 @@ fr:
         armed_html: "%{armed_for}, armée %{ago}"
         back: Retour
         configuration: Configuration
+        ignore_dependencies: Ignorer les dépendances
         labels:
+          after: Après
           arguments: Arguments
           armed: Exécution en attente
           command: Commande
@@ -305,6 +319,7 @@ fr:
         recent_runs: Exécutions récentes
         run_headers:
           enqueued_at: Mise en file le
+          outcome: Résultat
           queue: File d'attente
           revision: Révision
           triggered_by: Déclenchée par
@@ -338,6 +353,9 @@ fr:
         manual: Manuel
         rollover: Bascule
       version: v%{version}
+      waiting_on:
+        dependency_html: "<code>%{key}</code> (%{state})"
+        label: 'En attente de :'
     dialogs:
       cancel: Annuler
       confirm: Confirmer

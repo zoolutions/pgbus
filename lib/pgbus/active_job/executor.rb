@@ -44,6 +44,7 @@ module Pgbus
                                      source_queue: physical_queue(queue_name, source_queue))
           signal_concurrency(payload)
           signal_batch_discarded(payload)
+          record_deploy_task_run_outcome(payload, :failed)
           release_uniqueness_lock(Uniqueness.extract_key(payload), queue_name, message) if holds_uniqueness_row?(payload)
           record_stat(payload, queue_name, "dead_lettered", execution_start, message: message)
           instrument(
@@ -94,6 +95,7 @@ module Pgbus
         Pgbus.logger.debug { "[Pgbus::Executor] deserialized #{log_tag(message, queue_name)} job_class=#{job_class}" }
         job_succeeded = false
         retried = false
+        deploy_run_requeue = nil
 
         msg_id = message.msg_id.to_i
         instrument_payload = {
@@ -127,6 +129,12 @@ module Pgbus
           # this attempt is done (archive it) but the job is not — the retry
           # message carries the batch tag and signals on its own outcome.
           retried = Batch.retry_reenqueued?(payload["job_id"])
+          # The same for a deploy task's job, batch or not: nil when perform
+          # did not re-enqueue it, true when its retry_on retry is live (the
+          # retry records the outcome), false when the adapter dropped that
+          # retry. Asked only of a marked job: an unmarked one pays one Hash
+          # lookup.
+          deploy_run_requeue = job.try(:deploy_task_run_enqueued) if payload.key?(DeployTaskRunId::METADATA_KEY)
           Pgbus.logger.debug { "[Pgbus::Executor] perform_returned #{log_tag(message, queue_name)} job_class=#{job_class}" }
           # Archiving is the exact-once claim on this execution.
           # :already_archived means another worker archived the message (our
@@ -200,6 +208,10 @@ module Pgbus
           # key if the first DELETE committed but the client raised afterward.
           signal_concurrency(payload)
           signal_batch_completed(payload) unless retried
+          case deploy_run_requeue
+          when nil then record_deploy_task_run_outcome(payload, :completed)
+          when false then record_deploy_task_run_outcome(payload, :failed)
+          end
         end
         Batch.clear_retry_reenqueued
       end
@@ -432,6 +444,7 @@ module Pgbus
         end
         signal_concurrency(payload)
         signal_batch_discarded(payload)
+        record_deploy_task_run_outcome(payload, :failed)
         instrument("pgbus.job_discarded", queue: queue_name, job_class: payload["job_class"], job_id: payload["job_id"],
                                           provider_job_id: payload["provider_job_id"], msg_id: msg_id, reason: "uniqueness")
         Pgbus.logger.info do
@@ -518,6 +531,17 @@ module Pgbus
         Batch.job_discarded(batch_id, job_id: payload["job_id"])
       rescue StandardError => e
         Pgbus.logger.warn { "[Pgbus] Batch discard signal failed: #{e.message}" }
+      end
+
+      # Stamps a deploy task run's outcome (issue #660). Best-effort, like
+      # record_stat: a failed write is reported and never fails the job.
+      def record_deploy_task_run_outcome(payload, outcome)
+        run_id = payload[DeployTaskRunId::METADATA_KEY]
+        return unless run_id && Deploy::Schema.outcomes?
+
+        outcome == :completed ? DeployTaskRun.mark_completed!(run_id) : DeployTaskRun.mark_failed!(run_id)
+      rescue StandardError => e
+        ErrorReporter.report(e, { action: "deploy_task_run_outcome", deploy_task_run_id: run_id, outcome: outcome })
       end
 
       # Archiving is idempotent — archiving an already-archived message is a

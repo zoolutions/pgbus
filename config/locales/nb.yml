@@ -260,9 +260,14 @@ nb:
         ready_html: 'Utrullet: hver aktive prosess kjører <code>%{revision}</code>. Ventende oppgaver kjøres ved planleggerens neste tick.'
         unavailable_html: Utrullingsstatusen kunne ikke leses.
       default_queue: default
+      dependency_states:
+        failed: feilet
+        not_run: ikke kjørt
+        running: kjører
       disable: Deaktiver
       enable: Aktiver
       enqueue:
+        blocked: 'Kjør nå ble avvist: oppgaven venter på %{tasks}. Kryss av for "Ignorer avhengigheter" for å kjøre den likevel.'
         enqueued: Deploy-oppgaven er lagt i kø
         failed: 'Deploy-oppgaven ble ikke lagt i kø: se loggen for årsaken'
       every_deploy: Ved hver deploy
@@ -272,6 +277,10 @@ nb:
           other: "%{count} oppgaver deklarert"
         title: Deploy-oppgaver
       not_found: Fant ikke deploy-oppgaven
+      outcomes:
+        completed_html: Fullført %{ago}
+        failed_html: Feilet %{ago}
+        none: Ikke noe utfall ennå
       reasons:
         disabled_armed_html: 'Deaktivert med en ventende utrullingskjøring: aktiver den for å la den kjøre.'
         disabled_html: 'Deaktivert: planleggeren hopper over den.'
@@ -279,6 +288,9 @@ nb:
         manual_html: "· kjørte %{ago} (manuelt)"
         never_html: Har aldri kjørt etter en utrulling.
         ran_html: Kjørte %{ago} på <code>%{revision}</code> (utrulling).
+        waiting_dependencies_html:
+          one: Venter på at 1 avhengighet blir ferdig.
+          other: Venter på at %{count} avhengigheter blir ferdige.
         waiting_lagging_html:
           one: 'Venter på utrulling: 1 prosess kjører ennå ikke <code>%{revision}</code>.'
           other: 'Venter på utrulling: %{count} prosesser kjører ennå ikke <code>%{revision}</code>.'
@@ -291,7 +303,9 @@ nb:
         armed_html: "%{armed_for}, klargjort %{ago}"
         back: Tilbake
         configuration: Konfigurasjon
+        ignore_dependencies: Ignorer avhengigheter
         labels:
+          after: Etter
           arguments: Argumenter
           armed: Ventende kjøring
           command: Kommando
@@ -305,6 +319,7 @@ nb:
         recent_runs: Siste kjøringer
         run_headers:
           enqueued_at: Lagt i kø
+          outcome: Utfall
           queue: Kø
           revision: Revisjon
           triggered_by: Startet av
@@ -338,6 +353,9 @@ nb:
         manual: Manuelt
         rollover: Utrulling
       version: v%{version}
+      waiting_on:
+        dependency_html: "<code>%{key}</code> (%{state})"
+        label: 'Venter på:'
     dialogs:
       cancel: Avbryt
       confirm: Bekreft

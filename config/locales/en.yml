@@ -260,9 +260,14 @@ en:
         ready_html: 'Rolled over: every live process runs <code>%{revision}</code>. Armed tasks run on the scheduler''s next tick.'
         unavailable_html: The rollover status could not be read.
       default_queue: default
+      dependency_states:
+        failed: failed
+        not_run: not run
+        running: running
       disable: Disable
       enable: Enable
       enqueue:
+        blocked: 'Run now refused: this task waits on %{tasks}. Tick "Ignore dependencies" to run it anyway.'
         enqueued: Deploy task enqueued
         failed: 'The deploy task was not enqueued: see the log for the reason'
       every_deploy: Every deploy
@@ -272,6 +277,10 @@ en:
           other: "%{count} tasks declared"
         title: Deploy Tasks
       not_found: Deploy task not found
+      outcomes:
+        completed_html: Completed %{ago}
+        failed_html: Failed %{ago}
+        none: No outcome yet
       reasons:
         disabled_armed_html: 'Disabled with a rollover run pending: enable it to let it fire.'
         disabled_html: 'Disabled: the scheduler skips it.'
@@ -279,6 +288,9 @@ en:
         manual_html: "· ran %{ago} (manual)"
         never_html: Never ran after a rollover.
         ran_html: Ran %{ago} on <code>%{revision}</code> (rollover).
+        waiting_dependencies_html:
+          one: Waiting for 1 dependency to complete.
+          other: Waiting for %{count} dependencies to complete.
         waiting_lagging_html:
           one: 'Waiting for rollover: 1 process is not on <code>%{revision}</code> yet.'
           other: 'Waiting for rollover: %{count} processes are not on <code>%{revision}</code> yet.'
@@ -291,7 +303,9 @@ en:
         armed_html: "%{armed_for}, armed %{ago}"
         back: Back
         configuration: Configuration
+        ignore_dependencies: Ignore dependencies
         labels:
+          after: After
           arguments: Arguments
           armed: Pending arm
           command: Command
@@ -305,6 +319,7 @@ en:
         recent_runs: Recent Runs
         run_headers:
           enqueued_at: Enqueued At
+          outcome: Outcome
           queue: Queue
           revision: Revision
           triggered_by: Triggered By
@@ -338,6 +353,9 @@ en:
         manual: Manual
         rollover: Rollover
       version: v%{version}
+      waiting_on:
+        dependency_html: "<code>%{key}</code> (%{state})"
+        label: 'Waiting on:'
     dialogs:
       cancel: Cancel
       confirm: Confirm
