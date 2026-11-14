@@ -106,6 +106,105 @@ RSpec.describe Pgbus::DedicatedConnection do
       end
     end
 
+    # The streamer's LISTEN connection gets libpq TCP keepalives, so a dead
+    # socket errors within ~11 s even between application keepalives
+    # (issue #664). Opt-in: the worker NotifyListener and the doctor keep
+    # their options as they were.
+    context "with .connect_with_keepalives (issue #664)" do
+      let(:captured) { {} }
+      let(:keepalive_keys) do
+        { keepalives: 1, keepalives_idle: 5, keepalives_interval: 2, keepalives_count: 3, tcp_user_timeout: 11_000 }
+      end
+
+      before do
+        allow(PG).to receive(:connect) do |*args, **kwargs|
+          captured[:args] = args
+          captured[:kwargs] = kwargs
+          fake_conn
+        end
+      end
+
+      context "when libpq is 12 or newer" do
+        before { allow(PG).to receive(:library_version).and_return(170_000) }
+
+        it "merges the keepalive keywords into a Hash" do
+          described_class.connect_with_keepalives({ host: "db.example", dbname: "app" })
+
+          expect(captured[:kwargs]).to eq(
+            { host: "db.example", dbname: "app", fallback_application_name: "pgbus-listen" }.merge(keepalive_keys)
+          )
+        end
+
+        it "keeps a keepalive keyword the Hash already sets" do
+          described_class.connect_with_keepalives({ host: "db.example", keepalives_idle: 60 })
+
+          expect(captured[:kwargs]).to include(keepalives_idle: 60, keepalives: 1, tcp_user_timeout: 11_000)
+        end
+
+        it "appends them as query params to a URL" do
+          described_class.connect_with_keepalives("postgres://u@h/db")
+
+          expect(captured[:args].first).to eq(
+            "postgres://u@h/db?keepalives=1&keepalives_idle=5&keepalives_interval=2&keepalives_count=3" \
+            "&tcp_user_timeout=11000&fallback_application_name=pgbus-listen"
+          )
+        end
+
+        it "appends them with & to a URL that already has a query string" do
+          described_class.connect_with_keepalives("postgresql://u@h/db?sslmode=require")
+
+          expect(captured[:args].first).to start_with("postgresql://u@h/db?sslmode=require&keepalives=1&")
+        end
+
+        it "appends them space-separated to a key=value conninfo string" do
+          described_class.connect_with_keepalives("host=db.example dbname=app")
+
+          expect(captured[:args].first).to eq(
+            "host=db.example dbname=app keepalives=1 keepalives_idle=5 keepalives_interval=2 " \
+            "keepalives_count=3 tcp_user_timeout=11000 fallback_application_name=pgbus-listen"
+          )
+        end
+
+        it "keeps a keepalive keyword the String already sets and adds the rest" do
+          described_class.connect_with_keepalives("postgres://u@h/db?keepalives_idle=60&tcp_user_timeout=30000")
+
+          url = captured[:args].first
+          expect(url.scan("keepalives_idle=").size).to eq(1)
+          expect(url.scan("tcp_user_timeout=").size).to eq(1)
+          expect(url).to include("keepalives_idle=60", "tcp_user_timeout=30000", "keepalives=1",
+                                 "keepalives_interval=2", "keepalives_count=3")
+        end
+
+        it "adds nothing through .connect" do
+          described_class.connect("postgres://u@h/db")
+
+          expect(captured[:args].first).to eq("postgres://u@h/db?fallback_application_name=pgbus-listen")
+        end
+      end
+
+      context "when libpq is older than 12" do
+        before { allow(PG).to receive(:library_version).and_return(110_000) }
+
+        it "omits them from a Hash" do
+          described_class.connect_with_keepalives({ host: "db.example" })
+
+          expect(captured[:kwargs]).to eq(host: "db.example", fallback_application_name: "pgbus-listen")
+        end
+
+        it "omits them from a URL" do
+          described_class.connect_with_keepalives("postgres://u@h/db")
+
+          expect(captured[:args].first).to eq("postgres://u@h/db?fallback_application_name=pgbus-listen")
+        end
+
+        it "omits them from a key=value conninfo string" do
+          described_class.connect_with_keepalives("host=db.example")
+
+          expect(captured[:args].first).to eq("host=db.example fallback_application_name=pgbus-listen")
+        end
+      end
+    end
+
     context "with a Hash of libpq options (no :variables)" do
       it "connects with the same keys and execs nothing" do
         captured = nil

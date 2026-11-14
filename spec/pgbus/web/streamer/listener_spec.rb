@@ -54,6 +54,7 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
         @gated_sql = nil
         @exec_gate = Queue.new
         @bad = false
+        @raise_sql = nil
         @socket_io, @socket_writer = IO.pipe
       end
 
@@ -67,6 +68,10 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
         @executed << sql
         @exec_gate.pop if sql == @gated_sql
         sleep @slow_exec[1] if @slow_exec && sql == @slow_exec[0]
+        if sql == @raise_sql
+          @raise_sql = nil
+          raise PG::ConnectionBad, "server closed the connection unexpectedly"
+        end
         if sql.start_with?("LISTEN") && @raise_on_next_listen
           @raise_on_next_listen = false
           raise PG::Error, "listen failed mid-rebuild"
@@ -133,6 +138,9 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
 
       # IO.select on a closed IO raises IOError, as on a socket closed under it.
       def break_socket! = @socket_io.close
+
+      # The next exec of `sql` raises PG::ConnectionBad once.
+      def raise_on_next_exec!(sql) = (@raise_sql = sql)
 
       # Every exec of `sql` takes `seconds`.
       def slow_exec!(sql, seconds) = (@slow_exec = [sql, seconds])
@@ -362,7 +370,7 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
       started = monotonic
       result = listener.ensure_listening("chat")
 
-      expect(monotonic - started).to be < 0.5 # the ack budget is 6 s here
+      expect(monotonic - started).to be < 0.5 # the ack budget is 1.25 s here
       expect(result).to be_nil
     end
 
@@ -387,7 +395,7 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
       started = monotonic
       result = listener.ensure_listening("chat")
 
-      expect(monotonic - started).to be < 0.5 # the ack budget is 6 s here
+      expect(monotonic - started).to be < 0.5 # the ack budget is 1.25 s here
       expect(result).to be_nil
     end
 
@@ -426,7 +434,7 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
       let(:stuck) do
         described_class.new(
           pg_connection: fake_pg, dispatch_queue: dispatch_queue, health_check_ms: 20,
-          logger: Logger.new(log), connection_factory: -> {}
+          ack_timeout_ms: 20, logger: Logger.new(log), connection_factory: -> {}
         )
       end
 
@@ -639,6 +647,69 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
     end
   end
 
+  # The keepalive interval only bounds how long a silently dropped LISTEN goes
+  # unnoticed; the ack and stop budgets bound a stuck listener and must not
+  # stretch when the keepalive is raised (issue #664).
+  describe "budgets independent of the keepalive (issue #664)" do
+    it "keeps ack_timeout and stop_join_timeout when health_check_ms changes" do
+      fast = build_listener(health_check_ms: 50, ack_timeout_ms: 1_250)
+      slow = build_listener(health_check_ms: 30_000, ack_timeout_ms: 1_250)
+
+      expect(slow.send(:ack_timeout)).to eq(fast.send(:ack_timeout))
+      expect(slow.send(:stop_join_timeout)).to eq(fast.send(:stop_join_timeout))
+    end
+
+    it "takes the ack budget from ack_timeout_ms and adds the grace to it for stop" do
+      listener = build_listener(health_check_ms: 30_000, ack_timeout_ms: 2_000)
+
+      expect(listener.send(:ack_timeout)).to eq(2.0)
+      expect(listener.send(:stop_join_timeout)).to eq(2.0 + described_class::STOP_JOIN_GRACE_SECONDS)
+    end
+
+    it "defaults the ack budget to 1.25 s, whatever the keepalive" do
+      listener = build_listener(health_check_ms: 5_000)
+
+      expect(listener.send(:ack_timeout)).to eq(1.25)
+    end
+
+    it "waits at most the ack budget, not a keepalive cycle, for a listener that never acks" do
+      parked = build_listener(health_check_ms: 30_000, ack_timeout_ms: 100)
+      # Never started: nothing serves the command, so only the budget ends the wait.
+      parked.instance_variable_set(:@stopped, false)
+
+      started = monotonic
+      expect(parked.ensure_listening("chat")).to be_nil
+      expect(monotonic - started).to be < 1.0
+    end
+  end
+
+  describe "an idle listener on a fake clock (issue #664)" do
+    it "issues one SELECT 1 per 5 s keepalive interval" do
+      clock = [0.0]
+      idle = build_listener(health_check_ms: 5_000, clock: -> { clock[0] })
+      timeouts = []
+      allow(IO).to receive(:select).and_call_original
+      allow(IO).to receive(:select).with(array_including(fake_pg.socket_io), nil, nil, anything) do |*, timeout|
+        timeouts << timeout
+        clock[0] += timeout # the select sleeps out its whole timeout: nothing arrived
+        nil
+      end
+      idle.instance_variable_set(:@running, true)
+      idle.send(:schedule_health_check)
+
+      idle.send(:wait_once)
+      expect(clock[0]).to eq(5.0)
+      expect(fake_pg.executed.count("SELECT 1")).to eq(1)
+
+      idle.send(:wait_once) while clock[0] < 60.0
+
+      expect(fake_pg.executed.count("SELECT 1")).to eq(12)
+      expect(timeouts).to all(eq(5.0))
+    ensure
+      idle&.instance_variable_set(:@running, false)
+    end
+  end
+
   describe "a command backlog" do
     it "runs the keepalive between commands once it is due, so a backlog cannot postpone it" do
       clock = [0.0]
@@ -715,6 +786,19 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
       # The old connection is discarded, never reset — a fresh connect was used.
       expect(fake_pg.reset_count).to eq(0)
       expect(listener.listening_to).to contain_exactly("pgmq.q_chat.INSERT", "pgmq.q_presence.INSERT")
+    end
+
+    it "rebuilds via the factory and re-LISTENs every channel when the keepalive raises" do
+      new_pg = fake_pg_class.new
+      factory_conns << new_pg
+      listen_to_chat_and_presence
+
+      fake_pg.raise_on_next_exec!("SELECT 1")
+
+      wait_until { listens(new_pg) >= 2 }
+      expect(new_pg.executed).to include(%(LISTEN "pgmq.q_chat.INSERT"), %(LISTEN "pgmq.q_presence.INSERT"))
+      expect(listener.listening_to).to contain_exactly("pgmq.q_chat.INSERT", "pgmq.q_presence.INSERT")
+      expect(listener.threads.first).to be_alive
     end
 
     it "reconnects when the socket turns readable but the connection went bad" do

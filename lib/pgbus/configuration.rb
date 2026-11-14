@@ -328,6 +328,7 @@ module Pgbus
     attr_accessor :streams_enabled, :streams_path, :streams_signed_name_secret,
                   :streams_default_retention, :streams_retention, :streams_heartbeat_interval, :streams_peer_close_interval,
                   :streams_max_connections, :streams_idle_timeout, :streams_listen_health_check_ms,
+                  :streams_listen_ack_timeout_ms,
                   :streams_write_deadline_ms, :streams_falcon_streaming_body,
                   :streams_stats_enabled, :streams_test_mode,
                   :streams_orphan_sweep_interval, :streams_orphan_threshold,
@@ -595,16 +596,21 @@ module Pgbus
       @streams_peer_close_interval = 1.0
       @streams_max_connections = 2_000
       @streams_idle_timeout = 3_600 # 1 hour
-      # 250ms — this value plays two roles: (1) the TCP keepalive
-      # interval for the streamer's PG LISTEN connection, and (2) the
-      # budget (plus 1s) a stream's first connect waits for a stuck local
-      # Listener to acknowledge its ensure_listening (with
-      # streams_listen_scope :master, HubClient waits this cycle plus 2s
-      # before failing over). A live listener
-      # is woken through a pipe and acks within a thread hop, and a
-      # connect on a stream that already has a subscriber does not
-      # wait at all (issue #630), so connects no longer pay this cycle.
-      @streams_listen_health_check_ms = 250
+      # 5 s — the keepalive interval of the streamer's PG LISTEN
+      # connection: one `SELECT 1` per idle cycle, and the bound on how
+      # long a LISTEN the server dropped on a still-open socket goes
+      # unnoticed. A dead socket is caught sooner by the TCP keepalives
+      # on that connection (~11 s, libpq >= 12). Connects do not wait on
+      # this cycle: the listener wakes through a pipe (issue #630). Was
+      # 250 ms, which ran 4 queries a second per web process (issue #664).
+      @streams_listen_health_check_ms = 5_000
+      # 1.25 s — how long a stream's first connect waits for a stuck local
+      # Listener to acknowledge its ensure_listening; #stop's join budget
+      # is this plus a grace. With streams_listen_scope :master, HubClient
+      # waits this plus 1 s before failing over. Independent of the
+      # keepalive above (issue #664). A live listener acks within a thread
+      # hop.
+      @streams_listen_ack_timeout_ms = 1_250
       @streams_write_deadline_ms = 5_000
       # Deadline (ms) for a socket write made INSIDE the dispatcher's
       # serial fanout loop (handle_durable_wake / handle_ephemeral_wake).
@@ -1306,6 +1312,10 @@ module Pgbus
 
       unless streams_listen_health_check_ms.is_a?(Integer) && streams_listen_health_check_ms.positive?
         raise Pgbus::ConfigurationError, "streams_listen_health_check_ms must be a positive integer"
+      end
+
+      unless streams_listen_ack_timeout_ms.is_a?(Integer) && streams_listen_ack_timeout_ms.positive?
+        raise Pgbus::ConfigurationError, "streams_listen_ack_timeout_ms must be a positive integer"
       end
 
       unless streams_write_deadline_ms.is_a?(Integer) && streams_write_deadline_ms.positive?

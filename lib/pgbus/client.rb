@@ -2253,10 +2253,9 @@ module Pgbus
     end
 
     # Whether the linked libpq accepts the tcp_user_timeout / keepalives conninfo
-    # keywords. Added in libpq 12; an older libpq raises "invalid connection
-    # option" and fails the connection, so we must not emit them there.
+    # keywords (libpq 12+). One gate for every connection pgbus opens.
     def libpq_supports_socket_bounds?
-      defined?(PG) && PG.respond_to?(:library_version) && PG.library_version >= 120_000
+      DedicatedConnection.libpq_supports_socket_bounds?
     end
 
     # Hash form maps 1:1 to libpq keywords, so no escaping/encoding is needed.

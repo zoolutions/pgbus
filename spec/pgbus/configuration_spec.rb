@@ -2618,8 +2618,12 @@ RSpec.describe Pgbus::Configuration do
       expect(config.streams_idle_timeout).to eq(3_600)
     end
 
-    it "has a 250ms LISTEN health check interval" do
-      expect(config.streams_listen_health_check_ms).to eq(250)
+    it "has a 5 s LISTEN keepalive interval (issue #664)" do
+      expect(config.streams_listen_health_check_ms).to eq(5_000)
+    end
+
+    it "has a 1.25 s listener ack budget, independent of the keepalive (issue #664)" do
+      expect(config.streams_listen_ack_timeout_ms).to eq(1_250)
     end
 
     it "has a 5 second write deadline" do
@@ -2712,6 +2716,16 @@ RSpec.describe Pgbus::Configuration do
     it "rejects non-positive streams_listen_health_check_ms" do
       config.streams_listen_health_check_ms = 0
       expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /streams_listen_health_check_ms/)
+    end
+
+    it "rejects non-positive streams_listen_ack_timeout_ms" do
+      config.streams_listen_ack_timeout_ms = 0
+      expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /streams_listen_ack_timeout_ms/)
+    end
+
+    it "rejects a non-Integer streams_listen_ack_timeout_ms" do
+      config.streams_listen_ack_timeout_ms = 1.5
+      expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /streams_listen_ack_timeout_ms/)
     end
 
     it "rejects non-positive streams_write_deadline_ms" do

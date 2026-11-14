@@ -239,6 +239,8 @@ module Pgbus
     def streams_idle_timeout=: (untyped) -> untyped
     def streams_listen_health_check_ms: () -> Integer
     def streams_listen_health_check_ms=: (untyped) -> untyped
+    def streams_listen_ack_timeout_ms: () -> Integer
+    def streams_listen_ack_timeout_ms=: (untyped) -> untyped
     def streams_listen_scope: () -> Symbol
     def streams_listen_scope=: (untyped scope) -> untyped
     def streams_max_connections: () -> Integer
