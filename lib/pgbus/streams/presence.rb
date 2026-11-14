@@ -145,14 +145,14 @@ module Pgbus
         end
 
         # What Pgbus::Doctor reports (issue #665): :absent (no
-        # pgbus_presence_members table, or no ActiveRecord to reach it),
-        # :missing (add_presence_seats has not run) or :present. Read on the
-        # connection presence uses, leased for this statement only, and never
-        # cached.
+        # pgbus_presence_members table, or no ActiveRecord database to reach
+        # it), :missing (add_presence_seats has not run) or :present. Read on
+        # the connection presence uses, leased for this statement only, and
+        # never cached. A database that is configured but down raises.
         def seats_state
           return :absent unless defined?(::ActiveRecord::Base)
 
-          value = record_base.connection_pool.with_connection { |conn| conn.select_value(SEATS_STATE_SQL) }
+          value = presence_pool&.with_connection { |conn| conn.select_value(SEATS_STATE_SQL) }
           case value
           when nil then :absent
           when true, "t" then :present
@@ -235,6 +235,16 @@ module Pgbus
 
         def record_base
           Pgbus.configuration.connects_to ? Pgbus::BusRecord : ::ActiveRecord::Base
+        end
+
+        # The pool presence reads from, or nil when ActiveRecord has none
+        # defined for it (a process on database_url alone): connection_pool
+        # raises ConnectionNotEstablished only for a missing pool, never for
+        # a database that is down.
+        def presence_pool
+          record_base.connection_pool
+        rescue ::ActiveRecord::ConnectionNotEstablished
+          nil
         end
 
         def schema_answer_fresh?(supported, probed_at, recheck_seconds)

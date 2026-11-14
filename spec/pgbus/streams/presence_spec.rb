@@ -4,6 +4,8 @@ require "spec_helper"
 require "pg"
 require "monitor"
 require "pgbus/streams/presence"
+# Loaded with the real ActiveRecord::Base, before the examples stub it.
+require "pgbus/bus_record"
 
 RSpec.describe Pgbus::Streams::Presence do
   subject(:presence) { described_class.new(stream) }
@@ -690,6 +692,18 @@ RSpec.describe Pgbus::Streams::Presence do
       expect(described_class.seats_state).to eq(:present)
     end
 
+    it "is :absent when no ActiveRecord database is configured (presence cannot run)" do
+      allow(ActiveRecord::Base).to receive(:connection_pool).and_raise(ActiveRecord::ConnectionNotEstablished)
+
+      expect(described_class.seats_state).to eq(:absent)
+    end
+
+    it "raises when the database cannot be reached, so the doctor warns" do
+      allow(pool).to receive(:with_connection).and_raise(ActiveRecord::ConnectionNotEstablished, "connection refused")
+
+      expect { described_class.seats_state }.to raise_error(ActiveRecord::ConnectionNotEstablished, /refused/)
+    end
+
     it "is :absent without ActiveRecord (presence cannot run)" do
       hide_const("ActiveRecord::Base")
 
@@ -698,7 +712,6 @@ RSpec.describe Pgbus::Streams::Presence do
 
     it "reads on Pgbus::BusRecord's pool under connects_to" do
       allow(Pgbus.configuration).to receive(:connects_to).and_return({ database: { writing: :pgbus } })
-      stub_const("Pgbus::BusRecord", Class.new)
       allow(Pgbus::BusRecord).to receive(:connection_pool).and_return(pool)
       answer(true)
 
