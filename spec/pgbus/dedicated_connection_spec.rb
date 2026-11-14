@@ -205,6 +205,29 @@ RSpec.describe Pgbus::DedicatedConnection do
           expect(captured[:args].first).to eq("host=h bogus=1 fallback_application_name=pgbus-listen")
         end
 
+        # A service file applies only to keywords the conninfo leaves unset, so
+        # an appended keyword would override the service's own keepalives.
+        it "adds none to a conninfo that names a service" do
+          described_class.connect_with_keepalives("service=mydb")
+
+          expect(captured[:args].first).to eq("service=mydb fallback_application_name=pgbus-listen")
+        end
+
+        it "adds none to a Hash that names a service" do
+          described_class.connect_with_keepalives({ service: "mydb" })
+
+          expect(captured[:kwargs]).to eq(service: "mydb", fallback_application_name: "pgbus-listen")
+        end
+
+        it "adds none when PGSERVICE names a service" do
+          allow(ENV).to receive(:fetch).and_call_original
+          allow(ENV).to receive(:fetch).with("PGSERVICE", nil).and_return("mydb")
+
+          described_class.connect_with_keepalives("postgres://u@h/db")
+
+          expect(captured[:args].first).to eq("postgres://u@h/db?fallback_application_name=pgbus-listen")
+        end
+
         it "adds nothing through .connect" do
           described_class.connect("postgres://u@h/db")
 

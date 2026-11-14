@@ -77,12 +77,18 @@ module Pgbus
     end
 
     # Fill in the LISTEN_KEEPALIVES keywords the options do not already set.
-    # Unchanged on libpq < 12 (see libpq_supports_socket_bounds?).
+    # Unchanged on libpq < 12 (see libpq_supports_socket_bounds?), and for a
+    # connection that names a service (service=, or PGSERVICE): libpq applies
+    # the service file only to keywords the conninfo leaves unset, so an added
+    # keyword would override the service's own.
     def with_keepalives(opts)
       return opts unless libpq_supports_socket_bounds?
+      return opts if ENV.fetch("PGSERVICE", nil).to_s != ""
 
       case opts
       when Hash
+        return opts if opts.key?(:service) || opts.key?("service")
+
         missing = LISTEN_KEEPALIVES.reject { |key, _| opts.key?(key) || opts.key?(key.to_s) }
         opts.merge(missing)
       when String then append_keepalives(opts)
@@ -97,7 +103,7 @@ module Pgbus
     # report.
     def append_keepalives(conninfo)
       set = conninfo_keywords(conninfo)
-      return conninfo if set.nil?
+      return conninfo if set.nil? || set.include?("service")
 
       missing = LISTEN_KEEPALIVES.reject { |key, _| set.include?(key.to_s) }
       return conninfo if missing.empty?
