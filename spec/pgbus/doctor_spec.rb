@@ -46,11 +46,12 @@ RSpec.describe Pgbus::Doctor do
     # the check-specific describe re-stubs it per scenario.
     allow(Pgbus::DedicatedConnection).to receive(:connect)
       .and_return(double("dedicated PG connection", exec: nil, close: nil))
+    allow(Pgbus::Streams::Presence).to receive(:seats_state).and_return(:present)
   end
 
   describe "#run" do
-    it "runs fourteen checks" do
-      expect(doctor.run.size).to eq(14)
+    it "runs fifteen checks" do
+      expect(doctor.run.size).to eq(15)
     end
 
     it "returns hashes with :name, :status, :detail keys" do
@@ -564,6 +565,44 @@ RSpec.describe Pgbus::Doctor do
     end
   end
 
+  # Issue #665: without add_presence_seats presence runs member-keyed and
+  # re-probes information_schema, and nothing told the operator.
+  describe "the presence seats check" do
+    def seats_check
+      doctor.run.find { |c| c[:name] == "Presence seats" }
+    end
+
+    it "passes when pgbus_presence_members has the seat columns" do
+      expect(seats_check).to include(status: :ok, detail: /migrated/)
+    end
+
+    it "passes when presence is not installed" do
+      allow(Pgbus::Streams::Presence).to receive(:seats_state).and_return(:absent)
+
+      expect(seats_check).to include(status: :ok, detail: /not installed/)
+    end
+
+    it "warns when the table has no connection_id column, naming the fix" do
+      allow(Pgbus::Streams::Presence).to receive(:seats_state).and_return(:missing)
+
+      expect(seats_check[:status]).to eq(:warn)
+      expect(seats_check[:detail]).to include("rails generate pgbus:add_presence_seats && rails db:migrate")
+    end
+
+    it "warns when it cannot read the schema" do
+      allow(Pgbus::Streams::Presence).to receive(:seats_state).and_raise(StandardError, "boom")
+
+      expect(seats_check).to include(status: :warn, detail: /boom/)
+    end
+
+    it "runs in the boot preflight and never blocks a strict boot" do
+      allow(Pgbus::Streams::Presence).to receive(:seats_state).and_return(:missing)
+
+      expect(doctor.boot_checks.map { |c| c[:name] }).to include("Presence seats")
+      expect(doctor.boot_ok?).to be(true)
+    end
+  end
+
   describe "the completion-commit check (issue #619)" do
     def commit_check
       doctor.run.find { |c| c[:name] == "Completion commit" }
@@ -769,8 +808,8 @@ RSpec.describe Pgbus::Doctor do
       expect(names).not_to include(a_string_matching(/process|liveness/i))
     end
 
-    it "runs the other thirteen checks" do
-      expect(doctor.boot_checks.size).to eq(13)
+    it "runs the other fourteen checks" do
+      expect(doctor.boot_checks.size).to eq(14)
     end
 
     it "never invokes the HealthAnalyzer — the excluded check does zero work" do

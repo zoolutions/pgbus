@@ -4,6 +4,8 @@ require "spec_helper"
 require "pg"
 require "monitor"
 require "pgbus/streams/presence"
+# Loaded with the real ActiveRecord::Base, before the examples stub it.
+require "pgbus/bus_record"
 
 RSpec.describe Pgbus::Streams::Presence do
   subject(:presence) { described_class.new(stream) }
@@ -565,6 +567,162 @@ RSpec.describe Pgbus::Streams::Presence do
       expect(described_class.seats_supported?).to be(false)
       clock += described_class::SCHEMA_RECHECK_SECONDS + 1
       expect(described_class.seats_supported?).to be(true)
+    end
+
+    # Issue #665: an unmigrated table was probed every 30 s per process, forever.
+    describe "backoff on a table without seats" do
+      let(:clock) { [100.0] }
+      let(:probes) { [] }
+      let(:logger) { instance_double(Logger, warn: nil, debug: nil) }
+
+      before do
+        allow(described_class).to receive(:monotonic_now) { clock.first }
+        allow(raw_connection).to receive(:exec_params) do |sql, _binds|
+          probes << clock.first if sql.include?("information_schema")
+          []
+        end
+        allow(Pgbus).to receive(:logger).and_return(logger)
+        described_class.instance_variable_set(:@seats_warning_logged, false)
+      end
+
+      after { described_class.instance_variable_set(:@seats_warning_logged, false) }
+
+      def ask_at(time)
+        clock[0] = time
+        described_class.seats_supported?
+      end
+
+      def probe_times_until(stop)
+        (100..stop).each { |second| ask_at(second.to_f) }
+        probes.map(&:to_i)
+      end
+
+      it "spaces consecutive negative probes 30, 60, 120, 240 and 480 seconds, capped at 600" do
+        gaps = probe_times_until(100 + 30 + 60 + 120 + 240 + 480 + 600 + 600).each_cons(2).map { |a, b| b - a }
+
+        expect(gaps).to eq([30, 60, 120, 240, 480, 600, 600])
+      end
+
+      it "re-probes at once after reset_schema_cache!, and starts again from 30 seconds" do
+        probe_times_until(100 + 30 + 60 + 120)
+        described_class.reset_schema_cache!
+
+        expect { ask_at(311.0) }.to change(probes, :size).by(1)
+        expect { ask_at(340.0) }.not_to change(probes, :size)
+        expect { ask_at(341.0) }.to change(probes, :size).by(1)
+      end
+
+      it "counts two concurrent negative probes as one step" do
+        arrived = Queue.new
+        release = Queue.new
+        # Two connections of an unpinned pool: the adapter's lock is a NullLock.
+        allow(ar_connection).to receive(:lock).and_return(Class.new { def synchronize = yield }.new)
+        allow(raw_connection).to receive(:exec_params) do |sql, _binds|
+          if sql.include?("information_schema")
+            probes << clock.first
+            arrived << true
+            release.pop # both threads hold an unstored "no" before either stores it
+          end
+          []
+        end
+
+        threads = Array.new(2) { Thread.new { described_class.seats_supported? } } # rubocop:disable ThreadSafety/NewThread -- joined below
+        2.times { arrived.pop(timeout: 5) || raise("a probe thread never reached the probe: #{threads.map(&:status)}") }
+        release.close # wakes both, and lets later probes through
+        threads.each { |thread| thread.join(5) || raise("a probe thread did not finish") }
+
+        expect(probes.size).to eq(2)
+        expect { ask_at(129.0) }.not_to change(probes, :size)
+        expect { ask_at(130.0) }.to change(probes, :size).by(1)
+      end
+
+      it "keeps a positive answer for the life of the process" do
+        allow(raw_connection).to receive(:exec_params) do |_sql, _binds|
+          probes << clock.first
+          [{ "present" => "1" }]
+        end
+
+        expect(ask_at(100.0)).to be(true)
+        expect(ask_at(1_000_000.0)).to be(true)
+        expect(probes.size).to eq(1)
+      end
+
+      it "warns once per process, naming the migration, however often it probes or resets" do
+        probe_times_until(100 + 30 + 60)
+        described_class.reset_schema_cache!
+        ask_at(500.0)
+
+        expect(logger).to have_received(:warn).once
+        expect(logger).to have_received(:warn).with(/rails generate pgbus:add_presence_seats && rails db:migrate/)
+      end
+
+      it "does not warn when the table has seats" do
+        allow(raw_connection).to receive(:exec_params).and_return([{ "present" => "1" }])
+
+        ask_at(100.0)
+
+        expect(logger).not_to have_received(:warn)
+      end
+    end
+  end
+
+  # Issue #665: what Pgbus::Doctor reports.
+  describe ".seats_state" do
+    let(:pool) { double("ConnectionPool") }
+
+    before do
+      allow(ActiveRecord::Base).to receive(:connection_pool).and_return(pool)
+      allow(pool).to receive(:with_connection).and_yield(ar_connection)
+    end
+
+    def answer(value)
+      allow(ar_connection).to receive(:select_value).with(/bool_or.*pgbus_presence_members.*current_schemas/m)
+                                                    .and_return(value)
+    end
+
+    it "is :absent without the table" do
+      answer(nil)
+
+      expect(described_class.seats_state).to eq(:absent)
+    end
+
+    it "is :missing on a table without connection_id" do
+      answer(false)
+
+      expect(described_class.seats_state).to eq(:missing)
+    end
+
+    it "is :present on a table with seats" do
+      answer(true)
+
+      expect(described_class.seats_state).to eq(:present)
+    end
+
+    it "is :absent when no ActiveRecord database is configured (presence cannot run)" do
+      allow(ActiveRecord::Base).to receive(:connection_pool).and_raise(ActiveRecord::ConnectionNotEstablished)
+
+      expect(described_class.seats_state).to eq(:absent)
+    end
+
+    it "raises when the database cannot be reached, so the doctor warns" do
+      allow(pool).to receive(:with_connection).and_raise(ActiveRecord::ConnectionNotEstablished, "connection refused")
+
+      expect { described_class.seats_state }.to raise_error(ActiveRecord::ConnectionNotEstablished, /refused/)
+    end
+
+    it "is :absent without ActiveRecord (presence cannot run)" do
+      hide_const("ActiveRecord::Base")
+
+      expect(described_class.seats_state).to eq(:absent)
+    end
+
+    it "reads on Pgbus::BusRecord's pool under connects_to" do
+      allow(Pgbus.configuration).to receive(:connects_to).and_return({ database: { writing: :pgbus } })
+      allow(Pgbus::BusRecord).to receive(:connection_pool).and_return(pool)
+      answer(true)
+
+      expect(described_class.seats_state).to eq(:present)
+      expect(Pgbus::BusRecord).to have_received(:connection_pool)
     end
   end
 

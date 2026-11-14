@@ -65,19 +65,39 @@ module Pgbus
       RECORD_COLUMNS = "member_id, metadata, joined_at, last_seen_at"
       SEAT_RECORD_COLUMNS = "member_id, metadata, joined_at, last_seen_at, connection_id, seat, state"
 
-      # How long a "no seats" answer is trusted before the schema is probed
-      # again, so a table migrated under a running process is picked up.
+      # How long the first "no seats" answer is trusted before the schema is
+      # probed again, so a table migrated under a running process is picked
+      # up. Each further "no" doubles the wait, up to SCHEMA_RECHECK_MAX_SECONDS
+      # (issue #665).
       SCHEMA_RECHECK_SECONDS = 30
+      SCHEMA_RECHECK_MAX_SECONDS = 600
+
+      # What the doctor and the one-time warning tell an operator to run.
+      SEATS_MIGRATION_FIX = "rails generate pgbus:add_presence_seats && rails db:migrate"
+
+      # NULL: no pgbus_presence_members table; false: the table without the
+      # seat columns; true: seats. The same schema predicate as the
+      # seats_supported? probe.
+      SEATS_STATE_SQL = <<~SQL
+        SELECT bool_or(column_name = 'connection_id') FROM information_schema.columns
+        WHERE table_name = 'pgbus_presence_members' AND table_schema = ANY (current_schemas(false))
+      SQL
 
       @schema_mutex = Mutex.new
       @seats_supported = nil
       @probed_at = nil
+      @recheck_seconds = SCHEMA_RECHECK_SECONDS
       @schema_generation = 0
+      # Survives reset_schema_cache!: the warning is once per process.
+      @seats_warning_logged = false
 
       class << self
         # True when pgbus_presence_members has the seat columns (the
         # add_presence_seats migration ran). A true answer is kept for the
-        # life of the process; a false one for SCHEMA_RECHECK_SECONDS.
+        # life of the process. A false one is kept for SCHEMA_RECHECK_SECONDS,
+        # then twice as long after each further false answer, up to
+        # SCHEMA_RECHECK_MAX_SECONDS (issue #665); the first one logs a
+        # warning naming the migration, once per process.
         #
         # The answer is read and written under @schema_mutex only (issue
         # #527). A successful probe is kept as above; a probe that raises is
@@ -90,7 +110,7 @@ module Pgbus
         # probe that a reset_schema_cache! overtook stores nothing.
         def seats_supported?
           cached, generation = @schema_mutex.synchronize do
-            [(@seats_supported if schema_answer_fresh?(@seats_supported, @probed_at)), @schema_generation]
+            [(@seats_supported if schema_answer_fresh?(@seats_supported, @probed_at, @recheck_seconds)), @schema_generation]
           end
           return cached unless cached.nil?
 
@@ -100,12 +120,9 @@ module Pgbus
               AND table_schema = ANY (current_schemas(false))
           SQL
           supported = !rows.to_a.empty?
-          @schema_mutex.synchronize do
-            next supported unless generation == @schema_generation
-
-            @probed_at = monotonic_now
-            @seats_supported ||= supported
-          end
+          answer, warn = store_schema_answer(supported, generation)
+          warn_seats_missing if warn
+          answer
         end
 
         # seats_supported?, but a cached "no seats" is probed again first.
@@ -124,6 +141,22 @@ module Pgbus
             @schema_generation += 1
             @probed_at = nil
             @seats_supported = nil
+          end
+        end
+
+        # What Pgbus::Doctor reports (issue #665): :absent (no
+        # pgbus_presence_members table, or no ActiveRecord database to reach
+        # it), :missing (add_presence_seats has not run) or :present. Read on
+        # the connection presence uses, leased for this statement only, and
+        # never cached. A database that is configured but down raises.
+        def seats_state
+          return :absent unless defined?(::ActiveRecord::Base)
+
+          value = presence_pool&.with_connection { |conn| conn.select_value(SEATS_STATE_SQL) }
+          case value
+          when nil then :absent
+          when true, "t" then :present
+          else :missing
           end
         end
 
@@ -197,13 +230,71 @@ module Pgbus
                   "Pgbus::Streams::Presence requires ActiveRecord (no AR connection available)"
           end
 
-          Pgbus.configuration.connects_to ? Pgbus::BusRecord.connection : ::ActiveRecord::Base.connection
+          record_base.connection
         end
 
-        def schema_answer_fresh?(supported, probed_at)
+        def record_base
+          Pgbus.configuration.connects_to ? Pgbus::BusRecord : ::ActiveRecord::Base
+        end
+
+        # The pool presence reads from, or nil when ActiveRecord has none
+        # defined for it (a process on database_url alone): connection_pool
+        # raises ConnectionNotEstablished only for a missing pool, never for
+        # a database that is down.
+        def presence_pool
+          record_base.connection_pool
+        rescue ::ActiveRecord::ConnectionNotEstablished
+          nil
+        end
+
+        def schema_answer_fresh?(supported, probed_at, recheck_seconds)
           return false if supported.nil? || probed_at.nil?
 
-          supported || monotonic_now - probed_at < SCHEMA_RECHECK_SECONDS
+          supported || monotonic_now - probed_at < recheck_seconds
+        end
+
+        # Stores a probe's answer unless a reset_schema_cache! overtook it.
+        # Returns the answer to give and whether to log the missing-seats
+        # warning (the first "no" of the process).
+        #
+        # A "no" over a fresh "no" (two threads probed at once) keeps the
+        # first one's time and step, so concurrent probes are one step. A
+        # true answer is never taken back.
+        def store_schema_answer(supported, generation)
+          @schema_mutex.synchronize do
+            next [supported, false] unless generation == @schema_generation
+
+            if supported || @seats_supported
+              @probed_at = monotonic_now
+              next [@seats_supported = true, false]
+            end
+            next [false, false] if schema_answer_fresh?(@seats_supported, @probed_at, @recheck_seconds)
+
+            @recheck_seconds = next_recheck_seconds(@seats_supported, @recheck_seconds)
+            @probed_at = monotonic_now
+            @seats_supported = false
+            warn = !@seats_warning_logged
+            @seats_warning_logged = true
+            [false, warn]
+          end
+        end
+
+        # A "no" after a stale "no" doubles the wait, up to the cap; a "no"
+        # after no answer (the first probe, or after reset_schema_cache!)
+        # starts at SCHEMA_RECHECK_SECONDS.
+        def next_recheck_seconds(previous_answer, previous_seconds)
+          return SCHEMA_RECHECK_SECONDS if previous_answer.nil?
+
+          [previous_seconds * 2, SCHEMA_RECHECK_MAX_SECONDS].min
+        end
+
+        def warn_seats_missing
+          Pgbus.logger&.warn(
+            "[Pgbus::Streams::Presence] pgbus_presence_members has no seat columns (connection_id): presence " \
+            "runs member-keyed, one row per member, and the schema keeps being re-checked. Run `#{SEATS_MIGRATION_FIX}` to get seats " \
+            "(if the table does not exist, run `rails generate pgbus:add_presence && rails db:migrate` instead: " \
+            "it already creates the seat columns)."
+          )
         end
 
         def expire_stream_seats(stream_name, connection_ids, ttl)

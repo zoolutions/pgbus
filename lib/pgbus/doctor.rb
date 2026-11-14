@@ -5,7 +5,7 @@ require "pgbus/mcp/health_analyzer"
 
 module Pgbus
   # Preflight diagnostics for a pgbus deployment — the single command that
-  # answers "is this environment healthy enough to run?". Runs fourteen checks and
+  # answers "is this environment healthy enough to run?". Runs fifteen checks and
   # returns a machine-readable result plus a human report, so `pgbus doctor`
   # and `rake pgbus:doctor` can gate a deploy or CI run (exit 0 on success,
   # 1 on any failure).
@@ -44,7 +44,8 @@ module Pgbus
       "Primary affinity" => :check_primary,
       "Dedicated connections" => :check_dedicated_connections,
       "Connection budget" => :check_connection_budget,
-      "Completion commit" => :check_completion_commit
+      "Completion commit" => :check_completion_commit,
+      "Presence seats" => :check_presence_seats
     }.freeze
 
     # Process liveness reads the pgbus_processes table (via HealthAnalyzer), so
@@ -446,6 +447,27 @@ module Pgbus
                         "lose the last completions, whose jobs run again after visibility_timeout")
     rescue StandardError => e
       Check.new(name: "Completion commit", status: :warn, detail: "#{e.class}: #{e.message}")
+    end
+
+    # Presence seats (issue #665). Without the add_presence_seats migration
+    # presence runs member-keyed (one row per member, no seats), and every
+    # process re-probes information_schema with backoff. A supported degraded
+    # mode, so a warning; ok when the columns exist or presence is not installed.
+    # Read through Presence, not the Client: presence reads ActiveRecord's
+    # connection (Pgbus::BusRecord under connects_to), which a database_url or
+    # connection_params Client connection need not share.
+    def check_presence_seats
+      case Pgbus::Streams::Presence.seats_state
+      when :absent then Check.new(name: "Presence seats", status: :ok, detail: "presence not installed")
+      when :present then Check.new(name: "Presence seats", status: :ok, detail: "pgbus_presence_members migrated with seats")
+      else
+        Check.new(name: "Presence seats", status: :warn,
+                  detail: "pgbus_presence_members has no connection_id column — presence runs member-keyed " \
+                          "(one row per member, no seats) and each process re-probes the schema; run " \
+                          "`#{Pgbus::Streams::Presence::SEATS_MIGRATION_FIX}`")
+      end
+    rescue StandardError => e
+      Check.new(name: "Presence seats", status: :warn, detail: "could not read the schema (#{e.class}: #{e.message})")
     end
 
     # How many direct LISTEN connections this config pins at steady state

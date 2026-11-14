@@ -1962,7 +1962,7 @@ Pgbus.configure do |c|
 end
 ```
 
-Keep each ttl above `streams_heartbeat_interval` (pgbus warns at boot otherwise): a shorter one expires live seats between touches. On a seat table `sweep!` only expires member-keyed rows; seats expire through the heartbeat. A process that probed the table before the migration re-checks within 30 seconds (and at once if a member-keyed `join` outside a transaction hits the new index). A raising hook is logged, not propagated. Library authors can probe for seat support with `Pgbus::Streams::Presence.instance_method(:join).parameters.include?([:key, :connection_id])` (the gem) and `Pgbus::Streams::Presence.seats_supported?` (the table).
+Keep each ttl above `streams_heartbeat_interval` (pgbus warns at boot otherwise): a shorter one expires live seats between touches. On a seat table `sweep!` only expires member-keyed rows; seats expire through the heartbeat. A process that probed the table before the migration re-checks after 30 seconds, then after twice as long each time it still finds no seats, up to every 10 minutes. A member-keyed `leave`, `touch` or `sweep!` re-checks before it runs and starts that backoff again at 30 seconds, and a member-keyed `join` outside a transaction re-checks at once if it hits the new index. The first time it finds no seats it logs one warning naming the migration, and `pgbus doctor` warns under `Presence seats`; restart the processes after migrating to pick the columns up at once. A raising hook is logged, not propagated. Library authors can probe for seat support with `Pgbus::Streams::Presence.instance_method(:join).parameters.include?([:key, :connection_id])` (the gem) and `Pgbus::Streams::Presence.seats_supported?` (the table).
 
 ### Stream stats (opt-in)
 
@@ -2243,7 +2243,7 @@ pgbus help      # Show help
 
 #### pgbus doctor
 
-A single preflight command that answers "is this environment healthy enough to run?" — useful as a deploy or CI gate. It runs 14 checks and never raises; a broken environment turns every probe into a failed/warned check instead of a crash:
+A single preflight command that answers "is this environment healthy enough to run?" — useful as a deploy or CI gate. It runs 15 checks and never raises; a broken environment turns every probe into a failed/warned check instead of a crash:
 
 | Check | Fails (`:fail`) when | Warns (`:warn`) when |
 |---|---|---|
@@ -2261,6 +2261,7 @@ A single preflight command that answers "is this environment healthy enough to r
 | Dedicated connections | Streamer LISTEN and/or worker notify dedicated path cannot connect | — |
 | Connection budget | — (informational: prints how many direct LISTEN connections the current config pins — 1 per host under `worker_notify_scope: :supervisor`, one per fork under `:fork`; streams add 1 per web host under `streams_listen_scope: :master` or 1 per web process under `:process`) | — |
 | Completion commit | — (informational: prints whether completions commit synchronously, the default, or with `synchronous_commit` off under `completion_synchronous_commit = false`) | `completion_synchronous_commit = false` with `native_statements = false`, or with pgbus on ActiveRecord's shared connection, where it has no effect |
+| Presence seats | — | `pgbus_presence_members` exists without the `connection_id` column: presence runs member-keyed (one row per member, no seats) until `rails generate pgbus:add_presence_seats && rails db:migrate` runs; ok when the column exists or presence is not installed |
 
 ```bash
 pgbus doctor       # prints the report; exit 1 unless every check passed
