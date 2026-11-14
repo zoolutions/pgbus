@@ -160,7 +160,7 @@ module Pgbus
       # one, the executor to tell a retry_on retry that will run from one the
       # adapter dropped. Only a marked instance is touched.
       def note_deploy_task_run_enqueued(active_job, value)
-        return unless active_job.respond_to?(:deploy_task_run_id) && active_job.deploy_task_run_id
+        return unless active_job.is_a?(DeployTaskRunId) && active_job.deploy_task_run_id
 
         active_job.deploy_task_run_enqueued = value
       end
