@@ -16,6 +16,14 @@ module Pgbus
     # the message is live (sent, or parked behind its concurrency limit),
     # false when it dropped the job (a uniqueness on_conflict :discard / :log
     # on a first enqueue, or a concurrency on_conflict :discard on any). nil means no enqueue of this instance was attempted.
+    #
+    # pgbus_discarded? is transient too (issue #662): true once ActiveJob
+    # discarded this instance. Every discard (discard_on, a retry_on that
+    # gives up) runs the job's after_discard procs through
+    # run_after_discard_procs, so overriding it here sees them all, and a
+    # subclass's own after_discard procs keep running as declared. discard_on
+    # and a retry_on with a block then return normally, and the executor
+    # stamps failed_at, not completed_at.
     module DeployTaskRunId
       METADATA_KEY = "pgbus_deploy_task_run_id"
 
@@ -30,6 +38,15 @@ module Pgbus
       def deserialize(job_data)
         super
         self.deploy_task_run_id = job_data[METADATA_KEY]
+      end
+
+      def pgbus_discarded? = @pgbus_discarded == true
+
+      private
+
+      def run_after_discard_procs(exception)
+        super
+        @pgbus_discarded = true
       end
     end
   end

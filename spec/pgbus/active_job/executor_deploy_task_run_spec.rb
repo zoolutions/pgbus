@@ -26,6 +26,7 @@ RSpec.describe Pgbus::ActiveJob::Executor, "#execute with a deploy task run id" 
   before do
     allow(ActiveJob::Base).to receive(:deserialize).and_return(job_double)
     allow(job_double).to receive(:try).with(:deploy_task_run_enqueued).and_return(nil)
+    allow(job_double).to receive(:try).with(:pgbus_discarded?).and_return(nil)
     allow(job_double).to receive(:successfully_enqueued?).and_return(nil)
     allow(Pgbus::Concurrency).to receive(:extract_key).and_return(nil)
     stub_const("Pgbus::JobStat", Class.new)
@@ -67,6 +68,25 @@ RSpec.describe Pgbus::ActiveJob::Executor, "#execute with a deploy task run id" 
 
     expect(executor.execute(message, queue_name)).to eq(:success)
     expect(Pgbus::DeployTaskRun).to have_received(:mark_failed!).with(31)
+    expect(Pgbus::DeployTaskRun).not_to have_received(:mark_completed!)
+  end
+
+  # Issue #662: discard_on, and a retry_on that gave up through its block,
+  # return normally without the job's work having happened.
+  it "stamps failed_at, not completed_at, when perform returned after discarding the job" do
+    allow(job_double).to receive(:try).with(:pgbus_discarded?).and_return(true)
+
+    expect(executor.execute(message, queue_name)).to eq(:success)
+    expect(Pgbus::DeployTaskRun).to have_received(:mark_failed!).with(31).once
+    expect(Pgbus::DeployTaskRun).not_to have_received(:mark_completed!)
+  end
+
+  it "leaves the outcome to a live retry even when the job was also marked discarded" do
+    allow(job_double).to receive(:try).with(:pgbus_discarded?).and_return(true)
+    allow(job_double).to receive(:try).with(:deploy_task_run_enqueued).and_return(true)
+
+    expect(executor.execute(message, queue_name)).to eq(:success)
+    expect(Pgbus::DeployTaskRun).not_to have_received(:mark_failed!)
     expect(Pgbus::DeployTaskRun).not_to have_received(:mark_completed!)
   end
 

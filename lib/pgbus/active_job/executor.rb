@@ -95,7 +95,7 @@ module Pgbus
         Pgbus.logger.debug { "[Pgbus::Executor] deserialized #{log_tag(message, queue_name)} job_class=#{job_class}" }
         job_succeeded = false
         retried = false
-        deploy_run_requeue = nil
+        deploy_run_outcome = nil
 
         msg_id = message.msg_id.to_i
         instrument_payload = {
@@ -129,12 +129,13 @@ module Pgbus
           # this attempt is done (archive it) but the job is not — the retry
           # message carries the batch tag and signals on its own outcome.
           retried = Batch.retry_reenqueued?(payload["job_id"])
-          # The same for a deploy task's job, batch or not: nil when perform
-          # did not re-enqueue it, true when its retry_on retry is live (the
-          # retry records the outcome), false when the adapter dropped that
-          # retry. Asked only of a marked job: an unmarked one pays one Hash
-          # lookup.
-          deploy_run_requeue = deploy_task_run_requeue(job) if payload.key?(DeployTaskRunId::METADATA_KEY)
+          # The same for a deploy task's job, batch or not: :completed when
+          # perform returned having done its work, nil when its retry_on
+          # retry is live (the retry records the outcome), :failed when the
+          # adapter dropped that retry or ActiveJob discarded the job
+          # (discard_on, a retry_on giving up through its block). Asked only
+          # of a marked job: an unmarked one pays one Hash lookup.
+          deploy_run_outcome = deploy_task_run_outcome(job) if payload.key?(DeployTaskRunId::METADATA_KEY)
           Pgbus.logger.debug { "[Pgbus::Executor] perform_returned #{log_tag(message, queue_name)} job_class=#{job_class}" }
           # Archiving is the exact-once claim on this execution.
           # :already_archived means another worker archived the message (our
@@ -208,10 +209,7 @@ module Pgbus
           # key if the first DELETE committed but the client raised afterward.
           signal_concurrency(payload)
           signal_batch_completed(payload) unless retried
-          case deploy_run_requeue
-          when nil then record_deploy_task_run_outcome(payload, :completed)
-          when false then record_deploy_task_run_outcome(payload, :failed)
-          end
+          record_deploy_task_run_outcome(payload, deploy_run_outcome) if deploy_run_outcome
         end
         Batch.clear_retry_reenqueued
       end
@@ -533,10 +531,22 @@ module Pgbus
         Pgbus.logger.warn { "[Pgbus] Batch discard signal failed: #{e.message}" }
       end
 
-      # nil: perform did not re-enqueue the job. true: its retry is live.
-      # false: the adapter dropped the retry, or a before_enqueue callback
-      # aborted it before the adapter saw it (ActiveJob then leaves
-      # successfully_enqueued false, where an untried enqueue leaves it nil).
+      # The outcome of a marked job's run once perform returned. nil: its
+      # retry is live, and the retry records it. :failed: the adapter dropped
+      # the retry, or a before_enqueue callback aborted it before the adapter
+      # saw it (ActiveJob then leaves successfully_enqueued false, where an
+      # untried enqueue leaves it nil); or ActiveJob discarded the job, which
+      # returned without doing its work (issue #662). A live retry wins over
+      # the discard, so a discard block that re-enqueues leaves the outcome
+      # to that retry. :completed otherwise.
+      def deploy_task_run_outcome(job)
+        requeue = deploy_task_run_requeue(job)
+        return if requeue
+        return :failed if requeue == false || job.try(:pgbus_discarded?)
+
+        :completed
+      end
+
       def deploy_task_run_requeue(job)
         flag = job.try(:deploy_task_run_enqueued)
         return flag unless flag.nil?

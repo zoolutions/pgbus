@@ -108,6 +108,67 @@ RSpec.describe "Deploy task dependencies (integration)", :integration do
     expect(run_for("widgets").completed_at).not_to be_nil
   end
 
+  # Issue #662: discard_on and a retry_on that gives up through its block
+  # return normally, but the job's work did not happen.
+  it "stamps failed_at for a discard_on job, keeps its dependent waiting, and a completed Run now unblocks it" do
+    stub_const("WidgetsJob", job_class("WidgetsJob") do
+      discard_on ArgumentError
+      define_method(:perform) { |*| raise ArgumentError, "bad row" }
+    end)
+    scheduler = runner
+    scheduler.sync!(now: now)
+    scheduler.tick(now)
+
+    expect(work_one).to eq(:success)
+    expect(run_for("widgets")).to have_attributes(completed_at: nil, failed_at: be_present)
+
+    scheduler.tick(now)
+    expect(Pgbus::DeployTaskRun.pluck(:task_key)).to eq(%w[widgets])
+    totals = Pgbus::Web::DataSource.new.deploy_tasks.find { |row| row[:key] == "totals" }
+    expect(totals[:waiting_on]).to eq([{ key: "widgets", state: "failed" }])
+
+    stub_const("WidgetsJob", job_class("WidgetsJob"))
+    runner.enqueue(Pgbus::Deploy::Task.from_configuration("widgets", class: "WidgetsJob", queue: queue),
+                   triggered_by: "manual")
+    expect(work_one).to eq(:success)
+    scheduler.tick(now)
+    expect(work_one).to eq(:success)
+
+    expect(performed).to eq(%w[WidgetsJob TotalsJob])
+    expect(run_for("totals").completed_at).not_to be_nil
+  end
+
+  it "stamps failed_at once a retry_on with a block gives up, and nothing on the attempt whose retry was queued" do
+    stub_const("WidgetsJob", job_class("WidgetsJob") do
+      retry_on(RuntimeError, wait: 0, attempts: 2) { |*| nil }
+      define_method(:perform) { |*| raise "not yet" }
+    end)
+    runner.enqueue(Pgbus::Deploy::Task.from_configuration("widgets", class: "WidgetsJob", queue: queue),
+                   triggered_by: "manual")
+
+    expect(work_one).to eq(:success) # the first attempt: its retry is queued
+    expect(run_for("widgets")).to have_attributes(completed_at: nil, failed_at: nil)
+
+    expect(work_one).to eq(:success) # the last attempt: the block runs and the job returns
+    expect(run_for("widgets")).to have_attributes(completed_at: nil, failed_at: be_present)
+  end
+
+  it "still stamps completed_at for a job that rescues inside perform and returns" do
+    stub_const("WidgetsJob", job_class("WidgetsJob") do
+      discard_on ArgumentError
+      define_method(:perform) do |*|
+        raise ArgumentError, "bad row"
+      rescue ArgumentError
+        nil
+      end
+    end)
+    runner.enqueue(Pgbus::Deploy::Task.from_configuration("widgets", class: "WidgetsJob", queue: queue),
+                   triggered_by: "manual")
+
+    expect(work_one).to eq(:success)
+    expect(run_for("widgets")).to have_attributes(completed_at: be_present, failed_at: nil)
+  end
+
   it "stamps failed_at when the adapter drops a retry_on retry (its concurrency limit, on_conflict: :discard)" do
     stub_const("WidgetsJob", job_class("WidgetsJob") do
       limits_concurrency to: 1, key: ->(*) { "deploy-deps-limited" }, on_conflict: :discard
