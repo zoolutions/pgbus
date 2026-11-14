@@ -1,0 +1,21 @@
+spec/integration/presence_seats_state_spec.rb
+  s_2a9c7569c34f5d::t_02fd7c2bd7109d 1-6,10-12,14-27,29-37,39,42,44-46
+spec/pgbus/streams/presence_spec.rb
+  s_2a9c7569c34f5d::t_b77e77ffb60f04 569-658
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "c375951b8f20bed65081125cc61370093008d490",
+  "prompts": {},
+  "sessions": {
+    "s_2a9c7569c34f5d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4dfc7d14-1b6d-490f-ba17-6dc28374bffc",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
