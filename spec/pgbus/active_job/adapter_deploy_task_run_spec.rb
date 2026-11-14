@@ -57,6 +57,19 @@ RSpec.describe Pgbus::ActiveJob::Adapter, "#enqueue of a deploy task's job" do
     expect(later.deploy_task_run_enqueued).to be(true)
   end
 
+  it "enqueues a job with its own deploy_task_run_id attribute and leaves it unmarked" do
+    own_class = Class.new(ActiveJob::Base) do
+      attr_accessor :deploy_task_run_id
+
+      def self.name = "AdapterDeployTaskRunSpec::Plain"
+      def perform(*) = nil
+    end
+    job = own_class.new.tap { |j| j.deploy_task_run_id = 7 }
+
+    expect { adapter.enqueue(job) }.not_to raise_error
+    expect(mock_client).to have_received(:send_message)
+  end
+
   it "marks a job parked behind its concurrency limit as enqueued: it runs later" do
     allow(Pgbus::Concurrency::Semaphore).to receive(:acquire).and_return(:blocked)
     job = marked

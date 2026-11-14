@@ -26,6 +26,7 @@ RSpec.describe Pgbus::ActiveJob::Executor, "#execute with a deploy task run id" 
   before do
     allow(ActiveJob::Base).to receive(:deserialize).and_return(job_double)
     allow(job_double).to receive(:try).with(:deploy_task_run_enqueued).and_return(nil)
+    allow(job_double).to receive(:try).with(:pgbus_discarded?).and_return(nil)
     allow(job_double).to receive(:successfully_enqueued?).and_return(nil)
     allow(Pgbus::Concurrency).to receive(:extract_key).and_return(nil)
     stub_const("Pgbus::JobStat", Class.new)
@@ -68,6 +69,96 @@ RSpec.describe Pgbus::ActiveJob::Executor, "#execute with a deploy task run id" 
     expect(executor.execute(message, queue_name)).to eq(:success)
     expect(Pgbus::DeployTaskRun).to have_received(:mark_failed!).with(31)
     expect(Pgbus::DeployTaskRun).not_to have_received(:mark_completed!)
+  end
+
+  # Issue #662: discard_on, and a retry_on that gave up through its block,
+  # return normally without the job's work having happened.
+  it "stamps failed_at, not completed_at, when perform returned after discarding the job" do
+    allow(job_double).to receive(:try).with(:pgbus_discarded?).and_return(true)
+
+    expect(executor.execute(message, queue_name)).to eq(:success)
+    expect(Pgbus::DeployTaskRun).to have_received(:mark_failed!).with(31).once
+    expect(Pgbus::DeployTaskRun).not_to have_received(:mark_completed!)
+  end
+
+  it "leaves the outcome to a live retry even when the job was also marked discarded" do
+    allow(job_double).to receive(:try).with(:pgbus_discarded?).and_return(true)
+    allow(job_double).to receive(:try).with(:deploy_task_run_enqueued).and_return(true)
+
+    expect(executor.execute(message, queue_name)).to eq(:success)
+    expect(Pgbus::DeployTaskRun).not_to have_received(:mark_failed!)
+    expect(Pgbus::DeployTaskRun).not_to have_received(:mark_completed!)
+  end
+
+  # A worker whose job class lacks the mixin (no engine include) still gets
+  # the discard mark and keeps the run id on a retry.
+  describe "a job class without DeployTaskRunId" do
+    let(:test_adapter) { ActiveJob::QueueAdapters::TestAdapter.new }
+    let(:plain_class) do
+      adapter = test_adapter
+      Class.new(ActiveJob::Base) do
+        self.queue_adapter = adapter
+        def self.name = "ExecutorDeployTaskRunSpec::PlainJob"
+      end
+    end
+
+    def real_message(klass)
+      message(body: klass.new.serialize.merge("pgbus_deploy_task_run_id" => 31))
+    end
+
+    around do |example|
+      saved = ActiveJob::Base.logger
+      ActiveJob::Base.logger = Logger.new(IO::NULL)
+      example.run
+    ensure
+      ActiveJob::Base.logger = saved
+    end
+
+    before do
+      stub_const("ExecutorDeployTaskRunSpec::PlainJob", plain_class)
+      allow(ActiveJob::Base).to receive(:deserialize).and_call_original
+    end
+
+    it "stamps failed_at when it was discarded" do
+      plain_class.class_eval do
+        discard_on ArgumentError
+        def perform = raise(ArgumentError, "bad row")
+      end
+
+      expect(executor.execute(real_message(plain_class), queue_name)).to eq(:success)
+      expect(Pgbus::DeployTaskRun).to have_received(:mark_failed!).with(31).once
+      expect(Pgbus::DeployTaskRun).not_to have_received(:mark_completed!)
+    end
+
+    it "stamps failed_at when it was discarded and has an unrelated deploy_task_run_id writer" do
+      plain_class.class_eval do
+        attr_accessor :deploy_task_run_id
+
+        discard_on ArgumentError
+        def perform = raise(ArgumentError, "bad row")
+      end
+
+      expect(executor.execute(real_message(plain_class), queue_name)).to eq(:success)
+      expect(Pgbus::DeployTaskRun).to have_received(:mark_failed!).with(31).once
+    end
+
+    it "stamps completed_at when it performed" do
+      plain_class.class_eval { def perform = nil }
+
+      expect(executor.execute(real_message(plain_class), queue_name)).to eq(:success)
+      expect(Pgbus::DeployTaskRun).to have_received(:mark_completed!).with(31).once
+    end
+
+    it "carries the run id on its retry_on retry" do
+      plain_class.class_eval do
+        retry_on RuntimeError, wait: 0, attempts: 2
+        def perform = raise("not yet")
+      end
+
+      executor.execute(real_message(plain_class), queue_name)
+
+      expect(test_adapter.enqueued_jobs.sole).to include("pgbus_deploy_task_run_id" => 31)
+    end
   end
 
   it "stamps nothing when perform raises" do
