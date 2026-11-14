@@ -627,9 +627,9 @@ RSpec.describe Pgbus::Streams::Presence do
         end
 
         threads = Array.new(2) { Thread.new { described_class.seats_supported? } } # rubocop:disable ThreadSafety/NewThread -- joined below
-        2.times { arrived.pop }
+        2.times { arrived.pop(timeout: 5) || raise("a probe thread never reached the probe: #{threads.map(&:status)}") }
         release.close # wakes both, and lets later probes through
-        threads.each(&:join)
+        threads.each { |thread| thread.join(5) || raise("a probe thread did not finish") }
 
         expect(probes.size).to eq(2)
         expect { ask_at(129.0) }.not_to change(probes, :size)
