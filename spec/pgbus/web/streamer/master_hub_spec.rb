@@ -94,6 +94,39 @@ RSpec.describe Pgbus::Web::Streamer::MasterHub do
     )
   end
 
+  # The hub's own listener is the one that LISTENs in :master scope, so it gets
+  # the same ack budget and TCP keepalives as a per-worker one (issue #664).
+  describe "default listener factory (issue #664)" do
+    let(:built) { {} }
+    let(:pg_conn) { Object.new }
+
+    before do
+      allow(Pgbus::DedicatedConnection).to receive(:connect_with_keepalives).and_return(pg_conn)
+      allow(Pgbus::Process::PrimaryValidator).to receive(:validate_primary!) { |conn| conn }
+      allow(Pgbus::Web::Streamer::Listener).to receive(:new) do |**kwargs|
+        built[:kwargs] = kwargs
+        fake_listener
+      end
+      allow(fake_listener).to receive(:start).and_return(fake_listener)
+      config.streams_listen_ack_timeout_ms = 900
+      config.streams_listen_health_check_ms = 30_000
+    end
+
+    it "passes streams_listen_ack_timeout_ms to the Listener" do
+      hub.send(:default_listener_factory).call(dispatch_queue: Queue.new)
+
+      expect(built[:kwargs]).to include(ack_timeout_ms: 900, health_check_ms: 30_000)
+    end
+
+    it "opens the LISTEN connection, and every reconnect, with keepalives" do
+      hub.send(:default_listener_factory).call(dispatch_queue: Queue.new)
+      built[:kwargs][:connection_factory].call
+
+      expect(Pgbus::DedicatedConnection).to have_received(:connect_with_keepalives)
+        .with(config.streams_connection_options).twice
+    end
+  end
+
   describe "subscription lifecycle" do
     it "acks a sub after the listener actually LISTENs" do
       hub.start

@@ -118,6 +118,7 @@ RSpec.describe Pgbus::Web::Streamer::Instance do
 
     it "uses streams_connection_options so the listener can be pointed at a different port" do
       require "pg"
+      allow(PG).to receive(:library_version).and_return(110_000) # no keepalive keywords on old libpq
       captured = nil
       allow(PG).to receive(:connect) do |**kwargs|
         captured = kwargs
@@ -128,6 +129,25 @@ RSpec.describe Pgbus::Web::Streamer::Instance do
 
       expect(captured).to eq(host: "pooler.example", port: 5432, dbname: "app", user: "app",
                              fallback_application_name: "pgbus-listen")
+    end
+
+    # A dead LISTEN socket errors within ~11 s even between keepalives
+    # (issue #664), on the first connection and on every reconnect.
+    it "opens the LISTEN connection, and every reconnect, with TCP keepalives on libpq >= 12" do
+      require "pg"
+      allow(PG).to receive(:library_version).and_return(170_000)
+      captured = []
+      allow(PG).to receive(:connect) do |**kwargs|
+        captured << kwargs
+        fake_pg_module_conn
+      end
+
+      instance = described_class.new(client: client, config: streamer_config, logger: Logger.new(IO::NULL))
+      instance.listener.instance_variable_get(:@connection_factory).call
+
+      expect(captured.size).to eq(2)
+      expect(captured).to all(include(keepalives: 1, keepalives_idle: 5, keepalives_interval: 2,
+                                      keepalives_count: 3, tcp_user_timeout: 11_000, port: 5432))
     end
 
     it "runs the LISTEN/NOTIFY self-probe on the freshly built connection" do
@@ -242,8 +262,10 @@ RSpec.describe Pgbus::Web::Streamer::Instance do
 
         described_class.new(client: client, config: session_config, logger: Logger.new(IO::NULL))
 
-        expect(captured).to eq(host: "pooler.example", port: 5432, dbname: "app", user: "app",
-                               fallback_application_name: "pgbus-listen")
+        # The TCP keepalive keywords (issue #664) are covered on their own above.
+        expect(captured.except(*Pgbus::DedicatedConnection::LISTEN_KEEPALIVES.keys))
+          .to eq(host: "pooler.example", port: 5432, dbname: "app", user: "app",
+                 fallback_application_name: "pgbus-listen")
       end
 
       it "keeps the GUCs by applying them via post-connect SET" do
@@ -619,6 +641,22 @@ RSpec.describe Pgbus::Web::Streamer::Instance do
     end
   end
 
+  describe "listener ack budget (issue #664)" do
+    it "hands the per-worker Listener streams_listen_ack_timeout_ms, not a keepalive-derived budget" do
+      config.streams_listen_ack_timeout_ms = 900
+      config.streams_listen_health_check_ms = 30_000
+      captured = nil
+      allow(Pgbus::Web::Streamer::Listener).to receive(:new).and_wrap_original do |orig, **kwargs|
+        captured = kwargs
+        orig.call(**kwargs)
+      end
+
+      described_class.new(client: client, config: config, pg_connection: fake_pg, logger: Logger.new(IO::NULL))
+
+      expect(captured).to include(ack_timeout_ms: 900, health_check_ms: 30_000)
+    end
+  end
+
   describe "listener selection by streams_listen_scope (issue #382)" do
     require "tmpdir"
 
@@ -648,6 +686,26 @@ RSpec.describe Pgbus::Web::Streamer::Instance do
 
       expect(instance.listener).to be_a(Pgbus::Web::Streamer::FailoverListener)
       expect(PG).not_to have_received(:connect)
+      instance.listener.stop
+    end
+
+    # The worker's deadline stays 1 s above the hub listener's own ack
+    # budget, whatever the keepalive (issue #664).
+    it "gives the HubClient the ack budget plus 1 s, independent of the keepalive" do
+      hub_server
+      ENV["PGBUS_STREAMS_HUB_SOCKET"] = socket_path
+      config.streams_listen_scope = :master
+      config.streams_listen_ack_timeout_ms = 1_250
+      config.streams_listen_health_check_ms = 30_000
+      captured = nil
+      allow(Pgbus::Web::Streamer::HubClient).to receive(:new).and_wrap_original do |orig, **kwargs|
+        captured = kwargs
+        orig.call(**kwargs)
+      end
+
+      instance = described_class.new(client: client, config: config, logger: Logger.new(IO::NULL))
+
+      expect(captured[:ack_timeout]).to eq(2.25)
       instance.listener.stop
     end
 

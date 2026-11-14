@@ -398,7 +398,7 @@ module Pgbus
           #
           # The fast path holds while the listener reconnects, on purpose.
           # Waiting on a reconnecting listener would cost every connect the
-          # full ack budget (health_check_ms + 1 s) for as long as the
+          # full ack budget (streams_listen_ack_timeout_ms) for as long as the
           # database stays unreachable: the storm this rule removes. A
           # connect in that window has the same exposure as every connection
           # already registered: a durable stream's next wake after the

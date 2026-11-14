@@ -28,8 +28,10 @@ module Pgbus
       #     the pipe is touched from other threads
       #
       # Health check: once per health_check_ms the listener runs `SELECT 1` as
-      # a TCP keepalive, on a deadline: an idle connection sees exactly one per
-      # cycle, and a stream of wakes or notifications cannot postpone it. If
+      # a keepalive, on a deadline: an idle connection sees exactly one per
+      # cycle, and a stream of wakes or notifications cannot postpone it. The
+      # interval only bounds how long a silently dropped LISTEN goes unnoticed:
+      # no wait budget is derived from it (ack_timeout_ms is, issue #664). If
       # it raises, the listener rebuilds a FRESH connection via
       # connection_factory and re-LISTENs every channel in `@listening_to`.
       # This is the fix for design doc §11 #1 (silently dropped LISTEN
@@ -62,9 +64,13 @@ module Pgbus
 
         RECONNECT_BACKOFF_SECONDS = 0.5
 
-        # Grace added to one health-check cycle when #stop joins the listener
-        # thread. See #stop_join_timeout.
+        # Grace added to the ack budget when #stop joins the listener thread.
+        # See #stop_join_timeout.
         STOP_JOIN_GRACE_SECONDS = 5
+
+        # Default for ack_timeout_ms: the old 250 ms cycle plus its 1 s margin,
+        # now fixed instead of following the keepalive (issue #664).
+        DEFAULT_ACK_TIMEOUT_MS = 1_250
 
         attr_reader :listening_to
 
@@ -84,14 +90,18 @@ module Pgbus
         # most once per `maintenance.interval` seconds with THIS connection, so a
         # maintenance query (e.g. pg_stat_activity headroom) reuses the existing
         # idle connection instead of opening its own. nil disables it.
+        # `ack_timeout_ms:` bounds how long ensure_listening waits for this
+        # thread's ack, and (plus a grace) how long #stop joins it
+        # (streams_listen_ack_timeout_ms; issue #664).
         def initialize(pg_connection:, dispatch_queue:, health_check_ms:,
-                       connection_factory:, dispatch_queue_limit: 0, maintenance: nil,
-                       logger: Pgbus.logger, clock: nil)
+                       connection_factory:, ack_timeout_ms: DEFAULT_ACK_TIMEOUT_MS, dispatch_queue_limit: 0,
+                       maintenance: nil, logger: Pgbus.logger, clock: nil)
           raise ArgumentError, "connection_factory is required" unless connection_factory.respond_to?(:call)
 
           @conn = pg_connection
           @dispatch_queue = dispatch_queue
           @health_check_ms = health_check_ms
+          @ack_timeout_ms = ack_timeout_ms
           @logger = logger
           @connection_factory = connection_factory
           @dispatch_queue_limit = dispatch_queue_limit
@@ -182,9 +192,12 @@ module Pgbus
           # a process-killing SEGV, not a rescuable PG::Error (issue #375).
           # The listener thread is the sole owner of @conn and closes it in
           # run_loop's ensure; clearing @running above is the whole stop signal,
-          # and the wake makes the thread see it at once. The join budget still
-          # covers a full health-check cycle: the thread may be inside a
-          # keepalive or a reconnect rather than the select.
+          # and the wake makes the thread see it at once. The join budget
+          # (the ack budget plus a grace, 6.25 s by default) covers a thread
+          # inside a normal keepalive or reconnect attempt. A keepalive stuck
+          # on a dead socket can outlast it (libpq's TCP bound is ~11 s): #stop
+          # then logs "did not stop" and the thread exits on its own once
+          # libpq raises.
           wake
           joined = @thread.nil? || @thread.join(stop_join_timeout)
           # A thread past its budget stays referenced, so #start refuses to
@@ -208,9 +221,9 @@ module Pgbus
         # in the read_after result nor delivered as a WakeMessage.
         #
         # The wake pipe makes the typical wait a thread hop (issue #630). The
-        # wait is bounded by one health-check cycle
-        # (streams_listen_health_check_ms, default 250ms) plus a small margin,
-        # so a stuck listener can't hang the dispatcher forever.
+        # wait is bounded by the ack budget (streams_listen_ack_timeout_ms,
+        # default 1.25 s; issue #664), so a stuck listener can't hang the
+        # dispatcher forever.
         def ensure_listening(queue_name)
           # A connect the dispatcher drains during shutdown (Instance#shutdown!
           # stops the listener first) must not wait out the ack budget.
@@ -411,18 +424,20 @@ module Pgbus
 
         # Caller wait budget for ensure_listening's ack. The wake pipe
         # makes the usual wait a thread hop; a thread busy in a keepalive
-        # or a reconnect gets one health-check cycle plus a margin, so the
-        # dispatcher fails loud rather than hanging if the thread is dead.
+        # or a reconnect gets ack_timeout_ms, so the dispatcher fails loud
+        # rather than hanging if the thread is dead. Not derived from the
+        # keepalive interval: raising that must not slow this failure path
+        # (issue #664).
         def ack_timeout
-          (@health_check_ms / 1000.0) + 1.0
+          @ack_timeout_ms / 1000.0
         end
 
         # How long #stop waits for the listener thread to notice the cleared
         # @running and finish teardown. The wake pipe interrupts its select at
         # once, but it may be inside a keepalive or a reconnect attempt, so the
-        # budget stays one health-check cycle plus grace.
+        # budget is the ack budget plus grace, independent of the keepalive.
         def stop_join_timeout
-          (@health_check_ms / 1000.0) + STOP_JOIN_GRACE_SECONDS
+          ack_timeout + STOP_JOIN_GRACE_SECONDS
         end
 
         # The channel joins @listening_to BEFORE the exec: if the LISTEN
