@@ -118,6 +118,7 @@ RSpec.describe Pgbus::ActiveJob::Executor, "#execute with a deploy task run id" 
     expect(executor.execute(message(body: body), queue_name)).to eq(:success)
     expect(Pgbus::Deploy::Schema).not_to have_received(:outcomes?)
     expect(job_double).not_to have_received(:try)
+    expect(job_double).not_to have_received(:successfully_enqueued?)
     expect(Pgbus::DeployTaskRun).not_to have_received(:mark_completed!)
   end
 end

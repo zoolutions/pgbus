@@ -144,6 +144,21 @@ RSpec.describe "Deploy task dependencies (integration)", :integration do
     expect(run_for("widgets").completed_at).not_to be_nil
   end
 
+  it "stamps failed_at when a before_enqueue callback aborts a retry_on retry" do
+    stub_const("WidgetsJob", job_class("WidgetsJob") do
+      retry_on RuntimeError, wait: 0, attempts: 3
+      before_enqueue { throw :abort if executions.positive? }
+      define_method(:perform) { |*| raise "not yet" }
+    end)
+    runner.enqueue(Pgbus::Deploy::Task.from_configuration("widgets", class: "WidgetsJob", queue: queue),
+                   triggered_by: "manual")
+
+    expect(work_one).to eq(:success) # the attempt is archived; its retry never left the callback
+    expect(Pgbus.client.read_batch(queue, qty: 1, vt: 30)).to be_empty
+    expect(run_for("widgets").failed_at).not_to be_nil
+    expect(run_for("widgets").completed_at).to be_nil
+  end
+
   it "fails Run now, leaving no run, when the adapter drops the job as a uniqueness duplicate" do
     stub_const("WidgetsJob", job_class("WidgetsJob") do
       ensures_uniqueness strategy: :until_executed, key: ->(*) { "deploy-deps-unique" }, on_conflict: :discard
