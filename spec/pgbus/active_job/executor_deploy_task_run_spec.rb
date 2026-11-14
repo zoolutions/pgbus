@@ -90,6 +90,65 @@ RSpec.describe Pgbus::ActiveJob::Executor, "#execute with a deploy task run id" 
     expect(Pgbus::DeployTaskRun).not_to have_received(:mark_completed!)
   end
 
+  # A worker whose job class lacks the mixin (no engine include) still gets
+  # the discard mark and keeps the run id on a retry.
+  describe "a job class without DeployTaskRunId" do
+    let(:test_adapter) { ActiveJob::QueueAdapters::TestAdapter.new }
+    let(:plain_class) do
+      adapter = test_adapter
+      Class.new(ActiveJob::Base) do
+        self.queue_adapter = adapter
+        def self.name = "ExecutorDeployTaskRunSpec::PlainJob"
+      end
+    end
+
+    def real_message(klass)
+      message(body: klass.new.serialize.merge("pgbus_deploy_task_run_id" => 31))
+    end
+
+    around do |example|
+      saved = ActiveJob::Base.logger
+      ActiveJob::Base.logger = Logger.new(IO::NULL)
+      example.run
+    ensure
+      ActiveJob::Base.logger = saved
+    end
+
+    before do
+      stub_const("ExecutorDeployTaskRunSpec::PlainJob", plain_class)
+      allow(ActiveJob::Base).to receive(:deserialize).and_call_original
+    end
+
+    it "stamps failed_at when it was discarded" do
+      plain_class.class_eval do
+        discard_on ArgumentError
+        def perform = raise(ArgumentError, "bad row")
+      end
+
+      expect(executor.execute(real_message(plain_class), queue_name)).to eq(:success)
+      expect(Pgbus::DeployTaskRun).to have_received(:mark_failed!).with(31).once
+      expect(Pgbus::DeployTaskRun).not_to have_received(:mark_completed!)
+    end
+
+    it "stamps completed_at when it performed" do
+      plain_class.class_eval { def perform = nil }
+
+      expect(executor.execute(real_message(plain_class), queue_name)).to eq(:success)
+      expect(Pgbus::DeployTaskRun).to have_received(:mark_completed!).with(31).once
+    end
+
+    it "carries the run id on its retry_on retry" do
+      plain_class.class_eval do
+        retry_on RuntimeError, wait: 0, attempts: 2
+        def perform = raise("not yet")
+      end
+
+      executor.execute(real_message(plain_class), queue_name)
+
+      expect(test_adapter.enqueued_jobs.sole).to include("pgbus_deploy_task_run_id" => 31)
+    end
+  end
+
   it "stamps nothing when perform raises" do
     allow(job_double).to receive(:perform_now).and_raise(StandardError, "boom")
     allow(Pgbus::ErrorReporter).to receive(:report)

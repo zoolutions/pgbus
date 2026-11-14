@@ -118,6 +118,7 @@ module Pgbus
           # job data, so hand it to the job before perform — that is what makes
           # `batch` (and `batch.enqueue` for open batches) work inside a job.
           assign_batch_id(job, payload)
+          mark_deploy_task_job(job, payload) if payload.key?(DeployTaskRunId::METADATA_KEY)
           Pgbus.logger.debug { "[Pgbus::Executor] running #{log_tag(message, queue_name)} job_class=#{job_class}" }
           with_visibility_heartbeat(job, queue_name, msg_id, source_queue, payload) do
             Delivery.with(msg_id: msg_id, read_ct: read_count, queue_name: queue_name,
@@ -529,6 +530,17 @@ module Pgbus
         Batch.job_discarded(batch_id, job_id: payload["job_id"])
       rescue StandardError => e
         Pgbus.logger.warn { "[Pgbus] Batch discard signal failed: #{e.message}" }
+      end
+
+      # The engine includes DeployTaskRunId on every job. A class without it
+      # (no engine) gets it on this instance, as Deploy::Runner does on the
+      # enqueue side, so a discard is still seen and a retry still carries the
+      # run id.
+      def mark_deploy_task_job(job, payload)
+        return if job.respond_to?(:deploy_task_run_id=)
+
+        job.extend(DeployTaskRunId)
+        job.deploy_task_run_id = payload[DeployTaskRunId::METADATA_KEY]
       end
 
       # The outcome of a marked job's run once perform returned. nil: its

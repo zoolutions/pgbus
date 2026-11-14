@@ -153,6 +153,26 @@ RSpec.describe "Deploy task dependencies (integration)", :integration do
     expect(run_for("widgets")).to have_attributes(completed_at: nil, failed_at: be_present)
   end
 
+  it "leaves the outcome to a retry that a discard_on block queued, which completes" do
+    attempts = []
+    stub_const("WidgetsJob", job_class("WidgetsJob") do
+      discard_on(ArgumentError) { |job, _error| job.retry_job(wait: 0) }
+      define_method(:perform) do |*|
+        attempts << executions
+        raise ArgumentError, "bad row" if attempts.one?
+      end
+    end)
+    runner.enqueue(Pgbus::Deploy::Task.from_configuration("widgets", class: "WidgetsJob", queue: queue),
+                   triggered_by: "manual")
+
+    expect(work_one).to eq(:success) # discarded, but its block queued a retry
+    expect(run_for("widgets")).to have_attributes(completed_at: nil, failed_at: nil)
+
+    expect(work_one).to eq(:success)
+    expect(attempts.size).to eq(2)
+    expect(run_for("widgets")).to have_attributes(completed_at: be_present, failed_at: nil)
+  end
+
   it "still stamps completed_at for a job that rescues inside perform and returns" do
     stub_const("WidgetsJob", job_class("WidgetsJob") do
       discard_on ArgumentError
