@@ -17,6 +17,7 @@ module Pgbus
         def deploy_tasks(page: nil, per_page: nil)
           return [] unless DeployTask.table_exists?
 
+          DeployTask.refresh_dependencies_column!
           scope = DeployTask.order(:key)
           scope = scope.limit(per_page).offset(((page || 1) - 1) * per_page) if per_page
           records = scope.to_a
@@ -31,6 +32,7 @@ module Pgbus
         def deploy_task(id)
           return nil unless DeployTask.table_exists?
 
+          DeployTask.refresh_dependencies_column!
           record = DeployTask.find_by(id: id)
           return nil unless record
 
@@ -62,6 +64,7 @@ module Pgbus
         # :enqueued or :failed, the real outcome; :blocked when the task waits
         # on a dependency and ignore_dependencies is not set.
         def enqueue_deploy_task_now(id, ignore_dependencies: false)
+          DeployTask.refresh_dependencies_column!
           record = DeployTask.find_by(id: id)
           return :failed unless record
           # The hidden button is not the boundary: a disabled task is not run.

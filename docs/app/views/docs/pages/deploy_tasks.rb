@@ -93,7 +93,7 @@ class Views::Docs::Pages::DeployTasks < DocsUI::Page
     DocsUI::Section("Wait for another task with after:", description: "Ordering by completion, not by enqueue.") do
       md <<~'MD'
         `after:` names the tasks a task waits for: one key, or a list of keys declared
-        in the same file. The task stays armed, and is not enqueued, until every task
+        in the loaded configuration (every file in `config.deploy_tasks_files` counts). The task stays armed, and is not enqueued, until every task
         it names has a **completed** run at that task's current version; for an
         `every_deploy` dependency, a completed run on this revision. A rollover run and
         a Run now run both count, so a dependency that failed and that you fixed and
@@ -140,7 +140,9 @@ class Views::Docs::Pages::DeployTasks < DocsUI::Page
       DocsUI::Callout(:warning) do
         plain "Runs recorded before the outcome columns existed have no outcome, so they satisfy nothing. When an "
         code { "after:" }
-        plain " names a task whose only runs predate the upgrade, bump that task's version or Run now it once."
+        plain " names a task whose only runs predate the upgrade, Run now that task once (for a versioned task, bumping its version works too; an "
+        code { "every_deploy" }
+        plain " task needs a completed run on the current revision, so only Run now helps)."
       end
     end
   end
@@ -246,6 +248,10 @@ class Views::Docs::Pages::DeployTasks < DocsUI::Page
         it; if that write fails (logged and reported), the job still runs, but the
         next scheduler boot sees the version as owed and runs it again: make deploy
         tasks idempotent.
+
+        The scheduler clears a task's arm before it writes the run row. A scheduler
+        that dies between the two leaves the task unarmed with no run; the next
+        scheduler boot sees the version as owed and arms it again.
       MD
     end
   end

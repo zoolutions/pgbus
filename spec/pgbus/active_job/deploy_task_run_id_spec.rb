@@ -42,6 +42,17 @@ RSpec.describe Pgbus::ActiveJob::DeployTaskRunId do
     expect(restored.deploy_task_run_id).to eq(42)
   end
 
+  it "never serializes the transient enqueued flag" do
+    job = job_class.new
+    job.deploy_task_run_id = 5
+    job.deploy_task_run_enqueued = true
+
+    data = job.serialize
+
+    expect(data.keys.grep(/deploy_task_run/)).to eq(["pgbus_deploy_task_run_id"])
+    expect(ActiveJob::Base.deserialize(data).deploy_task_run_enqueued).to be_nil
+  end
+
   it "marks a single instance of a class that does not include it" do
     job = plain_class.new.extend(described_class)
     job.deploy_task_run_id = 7

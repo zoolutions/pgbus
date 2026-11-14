@@ -24,6 +24,7 @@ module Pgbus
     # and never touches enabled; an arm already held keeps its armed_at and
     # takes the new armed_for (a later bump supersedes an unfired one).
     def self.sync_from_config!(tasks, revision:, now: Time.current)
+      refresh_dependencies_column!
       transaction do
         tasks.each { |task| sync_task!(task, revision: revision, now: now) }
         static_tasks.where.not(key: tasks.map(&:key)).delete_all
@@ -37,6 +38,15 @@ module Pgbus
       return false if revision.nil?
 
       DeployTaskRun.last_rollover_for(task.key)&.revision != revision
+    end
+
+    # A process that loaded this model before pgbus:add_deploy_task_run_outcomes
+    # was migrated keeps the old column list: reload it once the column
+    # exists, so dependencies are read and written (issue #660).
+    def self.refresh_dependencies_column!
+      return if column_names.include?("dependencies") || !Deploy::Schema.outcomes?
+
+      reset_column_information
     end
 
     def self.sync_task!(task, revision:, now:)

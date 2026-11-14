@@ -264,7 +264,8 @@ module Pgbus
 
         runs = column_names("pgbus_deploy_task_runs")
         outcomes = runs.include?("completed_at") && runs.include?("failed_at") &&
-                   column_names("pgbus_deploy_tasks").include?("dependencies")
+                   column_names("pgbus_deploy_tasks").include?("dependencies") &&
+                   index_exists?("pgbus_deploy_task_runs", "idx_pgbus_deploy_task_runs_completed")
         outcomes ? [] : [:add_deploy_task_run_outcomes]
       end
 

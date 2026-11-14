@@ -145,6 +145,13 @@ RSpec.describe Pgbus::DeployTaskRun, :integration do
       )
     end
 
+    it "leaves out a run whose enqueue never finished, unless the worker stamped its outcome" do
+      unfinished("a")
+      unfinished("b", completed_at: now)
+
+      expect(described_class.outcomes_for(%w[a b]).map(&:task_key)).to eq(%w[b])
+    end
+
     it "carries the newest run's id per group" do
       run("a")
       newest = run("a")

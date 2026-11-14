@@ -70,7 +70,7 @@ RSpec.describe Pgbus::ActiveJob::Adapter, "#enqueue of a deploy task's job" do
   context "with on_conflict: :discard" do
     let(:on_conflict) { :discard }
 
-    it "marks a job its concurrency limit dropped as not enqueued" do
+    it "marks a job dropped by its concurrency limit as not enqueued" do
       allow(Pgbus::Concurrency::Semaphore).to receive(:acquire).and_return(:blocked)
       job = marked
 
@@ -81,7 +81,7 @@ RSpec.describe Pgbus::ActiveJob::Adapter, "#enqueue of a deploy task's job" do
     end
   end
 
-  it "marks a job a uniqueness on_conflict dropped as not enqueued" do
+  it "marks a job dropped by a uniqueness on_conflict as not enqueued" do
     allow(adapter).to receive(:uniqueness_rejected?).and_return(true)
     job = marked(plain_class)
 

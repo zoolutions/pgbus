@@ -30,11 +30,13 @@ RSpec.describe "Deploy task dependencies (integration)", :integration do
 
   around do |example|
     saved = config.deploy_tasks
+    saved_logger = ActiveJob::Base.logger
     ActiveJob::Base.logger = Logger.new(IO::NULL)
     Pgbus::Deploy::Schema.reset!
     example.run
   ensure
     config.deploy_tasks = saved
+    ActiveJob::Base.logger = saved_logger
     Pgbus::Deploy::Schema.reset!
   end
 

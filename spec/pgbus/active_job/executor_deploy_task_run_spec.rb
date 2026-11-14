@@ -26,6 +26,7 @@ RSpec.describe Pgbus::ActiveJob::Executor, "#execute with a deploy task run id" 
   before do
     allow(ActiveJob::Base).to receive(:deserialize).and_return(job_double)
     allow(job_double).to receive(:try).with(:deploy_task_run_enqueued).and_return(nil)
+    allow(job_double).to receive(:successfully_enqueued?).and_return(nil)
     allow(Pgbus::Concurrency).to receive(:extract_key).and_return(nil)
     stub_const("Pgbus::JobStat", Class.new)
     allow(Pgbus::JobStat).to receive_messages(record!: nil, table_exists?: true)
@@ -55,6 +56,14 @@ RSpec.describe Pgbus::ActiveJob::Executor, "#execute with a deploy task run id" 
 
   it "stamps failed_at when the adapter dropped the attempt's retry (nothing will run again)" do
     allow(job_double).to receive(:try).with(:deploy_task_run_enqueued).and_return(false)
+
+    expect(executor.execute(message, queue_name)).to eq(:success)
+    expect(Pgbus::DeployTaskRun).to have_received(:mark_failed!).with(31)
+    expect(Pgbus::DeployTaskRun).not_to have_received(:mark_completed!)
+  end
+
+  it "stamps failed_at when a before_enqueue callback aborted the attempt's retry" do
+    allow(job_double).to receive(:successfully_enqueued?).and_return(false)
 
     expect(executor.execute(message, queue_name)).to eq(:success)
     expect(Pgbus::DeployTaskRun).to have_received(:mark_failed!).with(31)
@@ -98,9 +107,9 @@ RSpec.describe Pgbus::ActiveJob::Executor, "#execute with a deploy task run id" 
   it "writes nothing before the outcome columns are migrated" do
     allow(Pgbus::Deploy::Schema).to receive(:outcomes?).and_return(false)
 
-    executor.execute(message, queue_name)
-
+    expect(executor.execute(message, queue_name)).to eq(:success)
     expect(Pgbus::DeployTaskRun).not_to have_received(:mark_completed!)
+    expect(Pgbus::DeployTaskRun).not_to have_received(:mark_failed!)
   end
 
   it "neither probes the schema nor asks the job about a retry for an unmarked job" do

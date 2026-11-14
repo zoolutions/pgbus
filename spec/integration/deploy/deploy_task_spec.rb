@@ -243,6 +243,16 @@ RSpec.describe Pgbus::DeployTask, :integration do
       Pgbus::Deploy::Schema.reset!
     end
 
+    it "picks the column up once it is migrated, in a process that loaded the model before" do
+      described_class.columns # cache the column list without dependencies
+      conn.execute("ALTER TABLE pgbus_deploy_tasks ADD COLUMN IF NOT EXISTS dependencies TEXT")
+      Pgbus::Deploy::Schema.reset!
+
+      sync(task("totals", after: %w[widgets]))
+
+      expect(row("totals").parsed_dependencies).to eq(%w[widgets])
+    end
+
     it "still syncs, without the column" do
       sync(task("totals"))
 

@@ -134,7 +134,7 @@ module Pgbus
           # retry records the outcome), false when the adapter dropped that
           # retry. Asked only of a marked job: an unmarked one pays one Hash
           # lookup.
-          deploy_run_requeue = job.try(:deploy_task_run_enqueued) if payload.key?(DeployTaskRunId::METADATA_KEY)
+          deploy_run_requeue = deploy_task_run_requeue(job) if payload.key?(DeployTaskRunId::METADATA_KEY)
           Pgbus.logger.debug { "[Pgbus::Executor] perform_returned #{log_tag(message, queue_name)} job_class=#{job_class}" }
           # Archiving is the exact-once claim on this execution.
           # :already_archived means another worker archived the message (our
@@ -531,6 +531,17 @@ module Pgbus
         Batch.job_discarded(batch_id, job_id: payload["job_id"])
       rescue StandardError => e
         Pgbus.logger.warn { "[Pgbus] Batch discard signal failed: #{e.message}" }
+      end
+
+      # nil: perform did not re-enqueue the job. true: its retry is live.
+      # false: the adapter dropped the retry, or a before_enqueue callback
+      # aborted it before the adapter saw it (ActiveJob then leaves
+      # successfully_enqueued false, where an untried enqueue leaves it nil).
+      def deploy_task_run_requeue(job)
+        flag = job.try(:deploy_task_run_enqueued)
+        return flag unless flag.nil?
+
+        job.successfully_enqueued? == false ? false : nil
       end
 
       # Stamps a deploy task run's outcome (issue #660). Best-effort, like

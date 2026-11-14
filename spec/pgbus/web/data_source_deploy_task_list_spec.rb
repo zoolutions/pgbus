@@ -15,7 +15,10 @@ RSpec.describe Pgbus::Web::DataSource::DeployTaskList do
                                 parsed_dependencies: [])
   end
 
-  before { allow(Pgbus::DeployTask).to receive(:table_exists?).and_return(true) }
+  before do
+    allow(Pgbus::DeployTask).to receive(:table_exists?).and_return(true)
+    allow(Pgbus::DeployTask).to receive(:refresh_dependencies_column!)
+  end
 
   def run(triggered_by, revision: "rev-a", run_at: now - 300)
     double("Pgbus::DeployTaskRun", task_key: "backfill", triggered_by: triggered_by, revision: revision,

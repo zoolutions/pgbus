@@ -69,14 +69,19 @@ module Pgbus
     # One Outcome per (task_key, version, revision) of +keys+: whether any run
     # completed, whether the newest one failed without completing, and that
     # newest run's id.
+    # A run with an outcome counts even when recording its enqueue failed
+    # (no queue_name): the worker ran it.
     def self.outcomes_for(keys)
       return [] if keys.empty?
 
-      enqueued.where(task_key: keys).group(:task_key, :version, :revision).pluck(
-        :task_key, :version, :revision, Arel.sql("bool_or(completed_at IS NOT NULL)"),
-        Arel.sql("(array_agg(failed_at IS NOT NULL AND completed_at IS NULL ORDER BY id DESC))[1]"),
-        Arel.sql("MAX(id)")
-      ).map { |row| Outcome.new(*row) }
+      where("queue_name IS NOT NULL OR completed_at IS NOT NULL OR failed_at IS NOT NULL")
+        .where(task_key: keys).group(:task_key, :version, :revision).pluck(
+          :task_key, :version, :revision, Arel.sql("bool_or(completed_at IS NOT NULL)"),
+          Arel.sql("(array_agg(failed_at IS NOT NULL AND completed_at IS NULL ORDER BY id DESC))[1]"),
+          Arel.sql("MAX(id)")
+        ).map do |row|
+        Outcome.new(*row)
+      end
     end
   end
 end

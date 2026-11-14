@@ -24,12 +24,19 @@ RSpec.describe Pgbus::Web::DataSource::DeployTaskList, :integration do
 
   def row(key) = data_source.deploy_tasks.find { |r| r[:key] == key }
 
+  around do |example|
+    saved_logger = ActiveJob::Base.logger
+    ActiveJob::Base.logger = Logger.new(IO::NULL)
+    example.run
+  ensure
+    ActiveJob::Base.logger = saved_logger
+  end
+
   before do
     stub_const("DeployListDepsJob", Class.new(ActiveJob::Base) do
       self.queue_adapter = :pgbus
       def perform(*); end
     end)
-    ActiveJob::Base.logger = Logger.new(IO::NULL)
     Pgbus::Deploy::Schema.reset!
     Pgbus.client.ensure_queue(queue)
     Pgbus::DeployTask.sync_from_config!(

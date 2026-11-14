@@ -332,13 +332,23 @@ RSpec.describe Pgbus::Generators::MigrationDetector do
         expect(detector.missing_migrations).to include(:add_deploy_task_run_outcomes)
       end
 
-      it "does not queue add_deploy_task_run_outcomes once its columns exist" do
+      it "does not queue add_deploy_task_run_outcomes once its columns and index exist" do
+        add_table("pgbus_deploy_tasks")
+        add_table("pgbus_deploy_task_runs")
+        stub_columns("pgbus_deploy_task_runs", %w[id task_key completed_at failed_at])
+        stub_columns("pgbus_deploy_tasks", %w[id key dependencies])
+        stub_indexes("pgbus_deploy_task_runs", %w[idx_pgbus_deploy_task_runs_completed])
+
+        expect(detector.missing_migrations).not_to include(:add_deploy_task_run_outcomes)
+      end
+
+      it "queues add_deploy_task_run_outcomes when only its index is missing" do
         add_table("pgbus_deploy_tasks")
         add_table("pgbus_deploy_task_runs")
         stub_columns("pgbus_deploy_task_runs", %w[id task_key completed_at failed_at])
         stub_columns("pgbus_deploy_tasks", %w[id key dependencies])
 
-        expect(detector.missing_migrations).not_to include(:add_deploy_task_run_outcomes)
+        expect(detector.missing_migrations).to include(:add_deploy_task_run_outcomes)
       end
     end
 
