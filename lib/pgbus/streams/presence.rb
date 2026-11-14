@@ -292,7 +292,8 @@ module Pgbus
           Pgbus.logger&.warn(
             "[Pgbus::Streams::Presence] pgbus_presence_members has no seat columns (connection_id): presence " \
             "runs member-keyed, one row per member, and the schema keeps being re-checked. Run `#{SEATS_MIGRATION_FIX}` to get seats " \
-            "(`rails generate pgbus:add_presence` first if the table does not exist)."
+            "(if the table does not exist, run `rails generate pgbus:add_presence && rails db:migrate` instead: " \
+            "it already creates the seat columns)."
           )
         end
 

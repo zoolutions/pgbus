@@ -613,17 +613,23 @@ RSpec.describe Pgbus::Streams::Presence do
       end
 
       it "counts two concurrent negative probes as one step" do
-        nested = false
+        arrived = Queue.new
+        release = Queue.new
+        # Two connections of an unpinned pool: the adapter's lock is a NullLock.
+        allow(ar_connection).to receive(:lock).and_return(Class.new { def synchronize = yield }.new)
         allow(raw_connection).to receive(:exec_params) do |sql, _binds|
-          probes << clock.first if sql.include?("information_schema")
-          unless nested
-            nested = true
-            described_class.seats_supported? # a second thread probing at the same moment
+          if sql.include?("information_schema")
+            probes << clock.first
+            arrived << true
+            release.pop # both threads hold an unstored "no" before either stores it
           end
           []
         end
 
-        ask_at(100.0)
+        threads = Array.new(2) { Thread.new { described_class.seats_supported? } } # rubocop:disable ThreadSafety/NewThread -- joined below
+        2.times { arrived.pop }
+        release.close # wakes both, and lets later probes through
+        threads.each(&:join)
 
         expect(probes.size).to eq(2)
         expect { ask_at(129.0) }.not_to change(probes, :size)
