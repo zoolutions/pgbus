@@ -158,13 +158,18 @@ module Pgbus
 
         def default_listener_factory
           lambda do |dispatch_queue:|
-            build_connection = -> { Pgbus::DedicatedConnection.connect(@config.streams_connection_options) }
+            # TCP keepalives and the ack budget as on a per-worker listener:
+            # in :master scope this is the connection that LISTENs (issue #664).
+            build_connection = lambda do
+              Pgbus::DedicatedConnection.connect_with_keepalives(@config.streams_connection_options)
+            end
             conn = build_connection.call
             Pgbus::Process::PrimaryValidator.validate_primary!(conn)
             Listener.new(
               pg_connection: conn,
               dispatch_queue: dispatch_queue,
               health_check_ms: @config.streams_listen_health_check_ms,
+              ack_timeout_ms: @config.streams_listen_ack_timeout_ms,
               connection_factory: build_connection,
               dispatch_queue_limit: @config.streams_dispatch_queue_limit,
               logger: @logger

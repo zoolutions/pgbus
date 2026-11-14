@@ -190,12 +190,13 @@ module Pgbus
           return nil if socket_path.nil? || socket_path.empty?
 
           # The worker's ack deadline must exceed the master's own internal
-          # ensure_listening budget (its listener's health-check cycle + 1s).
+          # ensure_listening budget (its listener's ack budget), so it gets
+          # that plus 1 s. Independent of the keepalive (issue #664).
           failover = nil
           client = HubClient.new(
             socket_path: socket_path,
             dispatch_queue: @dispatch_queue,
-            ack_timeout: (@config.streams_listen_health_check_ms / 1000.0) + 2.0,
+            ack_timeout: (@config.streams_listen_ack_timeout_ms / 1000.0) + 1.0,
             # failover is assigned right below; a transport death in the gap
             # is caught by the FailoverListener's synchronous ensure path.
             on_failure: -> { failover&.fail_over! },
@@ -221,6 +222,7 @@ module Pgbus
             pg_connection: pg_connection,
             dispatch_queue: @dispatch_queue,
             health_check_ms: @config.streams_listen_health_check_ms,
+            ack_timeout_ms: @config.streams_listen_ack_timeout_ms,
             # Opt-in dispatch-queue backpressure (issue #315 item 3). 0 =
             # unbounded (default). The queue itself stays an unbounded
             # Queue.new so the request-thread Connect push and the dispatcher's
@@ -335,11 +337,12 @@ module Pgbus
         # runs its own PrimaryValidator (retrying on a replica) and skips the
         # probe to stay cheap, mirroring Pgbus::Process::NotifyListener.
         # String/Hash go through DedicatedConnection so a :session-mode
-        # `:variables` key never reaches PG.connect (issue #352).
+        # `:variables` key never reaches PG.connect (issue #352), with TCP
+        # keepalives so a dead socket errors between keepalives (issue #664).
         def build_raw_pg_connection
           opts = @config.streams_connection_options
           case opts
-          when String, Hash then Pgbus::DedicatedConnection.connect(opts)
+          when String, Hash then Pgbus::DedicatedConnection.connect_with_keepalives(opts)
           when Proc
             # The Proc branch in connection_options typically returns
             # ActiveRecord::Base.connection.raw_connection — a pooled
