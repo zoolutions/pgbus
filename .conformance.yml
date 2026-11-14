@@ -75,6 +75,9 @@ main_only:
   - name: Pgbus::EventBus::Registry.@singleton__mutex__
     reason: >-
       Ruby's Singleton lock for Registry.instance; the registry is built and read on the main Ractor
+  - name: Pgbus::Deploy::Schema.@mutex
+    reason: >-
+      guards the deploy task outcome-column probe (issue #660); taken by the scheduler, job threads stamping a deploy task run, the dispatcher's run pruning and dashboard requests, all on the main Ractor
   - name: Pgbus::FailedEventRecorder.@source_queue_column_mutex
     reason: >-
       guards the schema probe for the source_queue column; taken by job threads, event handlers and dashboard requests on the main Ractor

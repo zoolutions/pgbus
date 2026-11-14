@@ -25,7 +25,7 @@ RSpec.describe Pgbus::ActiveJob::Executor, "#execute with a deploy task run id" 
 
   before do
     allow(ActiveJob::Base).to receive(:deserialize).and_return(job_double)
-    allow(job_double).to receive(:successfully_enqueued?).and_return(nil)
+    allow(job_double).to receive(:try).with(:deploy_task_run_enqueued).and_return(nil)
     allow(Pgbus::Concurrency).to receive(:extract_key).and_return(nil)
     stub_const("Pgbus::JobStat", Class.new)
     allow(Pgbus::JobStat).to receive_messages(record!: nil, table_exists?: true)
@@ -42,15 +42,23 @@ RSpec.describe Pgbus::ActiveJob::Executor, "#execute with a deploy task run id" 
     expect(Pgbus::DeployTaskRun).not_to have_received(:mark_failed!)
   end
 
-  it "stamps nothing when the attempt re-enqueued itself (retry_on), then stamps on the final success" do
-    allow(job_double).to receive(:successfully_enqueued?).and_return(true)
+  it "stamps nothing when the attempt's retry_on retry is live, then stamps on the final success" do
+    allow(job_double).to receive(:try).with(:deploy_task_run_enqueued).and_return(true)
     expect(executor.execute(message, queue_name)).to eq(:success)
     expect(Pgbus::DeployTaskRun).not_to have_received(:mark_completed!)
 
-    allow(job_double).to receive(:successfully_enqueued?).and_return(nil)
+    allow(job_double).to receive(:try).with(:deploy_task_run_enqueued).and_return(nil)
     executor.execute(message, queue_name)
 
     expect(Pgbus::DeployTaskRun).to have_received(:mark_completed!).with(31).once
+  end
+
+  it "stamps failed_at when the adapter dropped the attempt's retry (nothing will run again)" do
+    allow(job_double).to receive(:try).with(:deploy_task_run_enqueued).and_return(false)
+
+    expect(executor.execute(message, queue_name)).to eq(:success)
+    expect(Pgbus::DeployTaskRun).to have_received(:mark_failed!).with(31)
+    expect(Pgbus::DeployTaskRun).not_to have_received(:mark_completed!)
   end
 
   it "stamps nothing when perform raises" do
@@ -100,7 +108,7 @@ RSpec.describe Pgbus::ActiveJob::Executor, "#execute with a deploy task run id" 
 
     expect(executor.execute(message(body: body), queue_name)).to eq(:success)
     expect(Pgbus::Deploy::Schema).not_to have_received(:outcomes?)
-    expect(job_double).not_to have_received(:successfully_enqueued?)
+    expect(job_double).not_to have_received(:try)
     expect(Pgbus::DeployTaskRun).not_to have_received(:mark_completed!)
   end
 end

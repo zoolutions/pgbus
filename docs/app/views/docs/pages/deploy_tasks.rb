@@ -123,10 +123,19 @@ class Views::Docs::Pages::DeployTasks < DocsUI::Page
         from the file therefore means removing it from its dependents' `after:` in
         the same change.
 
-        Each run records its outcome: the worker stamps `completed_at` when the job
-        succeeded and did not re-enqueue itself (a `retry_on` attempt leaves it to the
-        retry), and `failed_at` when the job is dead-lettered or discarded as a
-        duplicate. The run's page shows the outcome of each run.
+        Each run records its outcome. The worker stamps `completed_at` when `perform`
+        returned without re-enqueuing the job: success, but also a `discard_on`, or a
+        `retry_on` that gave up through its block, since both return normally. A
+        `retry_on` attempt whose retry is queued leaves the outcome to the retry. It
+        stamps `failed_at` when the job is dead-lettered, discarded as a
+        `:while_executing` duplicate, or its retry was dropped by the job's own
+        uniqueness or concurrency `on_conflict`. The task's page shows each run's
+        outcome.
+
+        A dependency whose run never gets an outcome (its worker was killed between
+        finishing and recording it, or its message was discarded from the dashboard)
+        keeps reading `running`: Run now the dependency, or Run now the waiting task
+        with **Ignore dependencies** ticked.
       MD
       DocsUI::Callout(:warning) do
         plain "Runs recorded before the outcome columns existed have no outcome, so they satisfy nothing. When an "
@@ -232,7 +241,8 @@ class Views::Docs::Pages::DeployTasks < DocsUI::Page
 
         The run row is what marks a version as done. It is written before the job is
         enqueued (the job carries its id, so the worker can record the outcome) and
-        deleted if the enqueue fails. It counts once the enqueue has been recorded on
+        deleted if the enqueue fails, including when the job's own uniqueness or
+        concurrency `on_conflict: :discard` / `:log` drops it. It counts once the enqueue has been recorded on
         it; if that write fails (logged and reported), the job still runs, but the
         next scheduler boot sees the version as owed and runs it again: make deploy
         tasks idempotent.

@@ -10,10 +10,16 @@ module Pgbus
     # Omitted when unset: an unmarked job's payload is byte-for-byte what it
     # was before this mixin existed. Plain methods, no Concern, so the runner
     # can also extend a single instance of a class that does not include it.
+    #
+    # deploy_task_run_enqueued is transient, never serialized: the pgbus
+    # adapter sets it on a marked instance it was asked to enqueue, true once
+    # the message is live (sent, or parked behind its concurrency limit),
+    # false when it dropped the job (uniqueness or concurrency on_conflict
+    # :discard / :log). nil means no enqueue of this instance was attempted.
     module DeployTaskRunId
       METADATA_KEY = "pgbus_deploy_task_run_id"
 
-      attr_accessor :deploy_task_run_id
+      attr_accessor :deploy_task_run_id, :deploy_task_run_enqueued
 
       def serialize
         data = super

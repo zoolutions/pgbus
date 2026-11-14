@@ -42,13 +42,20 @@ module Pgbus
       end
 
       # The valid declared tasks, in key order. A class: that does not resolve
-      # to an ActiveJob is skipped with a warning, like an invalid task.
+      # to an ActiveJob is skipped with a warning, like an invalid task. A
+      # failed schema probe (Deploy::Schema) raises out of here and leaves
+      # nothing memoized, so the next tick or sync retry loads them again.
       def tasks
         @tasks ||= load_tasks
       end
 
+      # The scheduler's heartbeat and boot log read this before the first
+      # tick: a failed schema probe must not stop it from booting, so it
+      # counts the declared entries instead.
       def task_count
         tasks.size
+      rescue StandardError
+        (@config.deploy_tasks || {}).size
       end
 
       # true once synced. A failure (a database blip at boot) is retried from
@@ -149,16 +156,19 @@ module Pgbus
         keys = due.flat_map(&:dependencies).uniq
         return if keys.empty?
 
-        by_key = tasks.index_by(&:key)
-        Dependencies.load(keys.filter_map { |key| by_key[key] }, revision: revision)
+        Dependencies.load(keys.filter_map { |key| tasks_by_key[key] }, revision: revision)
       end
 
       def waiting_on_dependencies?(task, dependencies)
         return false if task.dependencies.empty?
 
-        waiting = dependencies.waiting_on(task.dependencies, tasks.index_by(&:key))
+        waiting = dependencies.waiting_on(task.dependencies, tasks_by_key)
         log_dependencies(task, waiting)
         waiting.any?
+      end
+
+      def tasks_by_key
+        @tasks_by_key ||= tasks.index_by(&:key)
       end
 
       def log_dependencies(task, waiting)
@@ -280,7 +290,12 @@ module Pgbus
         # engine loaded) this instance alone is marked.
         job.extend(ActiveJob::DeployTaskRunId) unless job.respond_to?(:deploy_task_run_id=)
         job.deploy_task_run_id = run.id
-        return job if job.enqueue(job_options(task))
+        enqueued = job.enqueue(job_options(task))
+        # The pgbus adapter returns a job its uniqueness or concurrency
+        # on_conflict dropped without raising; nothing would run for this run.
+        raise EnqueueError, "the job was dropped by its uniqueness or concurrency on_conflict" if
+          enqueued && job.deploy_task_run_enqueued == false
+        return job if enqueued
 
         error = job.enqueue_error
         raise EnqueueError, error ? "#{error.class}: #{error.message}" : "the job was not enqueued (a before_enqueue callback aborted)"

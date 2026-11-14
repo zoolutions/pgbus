@@ -7,9 +7,11 @@ module Pgbus
     # pgbus_deploy_tasks.dependencies. Until then after: is rejected at load,
     # sync leaves dependencies alone and the executor writes no outcome.
     #
-    # A "yes" is kept for the process; a "no" (or a failed probe) stands for
-    # RECHECK_SECONDS, so a process started before the migration picks the
-    # columns up without a restart.
+    # A "yes" is kept for the process; a "no" stands for RECHECK_SECONDS, so a
+    # process started before the migration picks the columns up without a
+    # restart. A probe that raises (a database blip) is not an answer: the
+    # error reaches the caller and nothing is kept, so a scheduler booting
+    # through a blip does not skip its after: tasks as unmigrated.
     module Schema
       RECHECK_SECONDS = 60
 
@@ -52,9 +54,6 @@ module Pgbus
               conn.column_exists?(:pgbus_deploy_task_runs, :failed_at) &&
               conn.column_exists?(:pgbus_deploy_tasks, :dependencies)
           end
-        rescue StandardError => e
-          Pgbus.logger.debug { "[Pgbus] Deploy task outcome column probe failed: #{e.class}: #{e.message}" }
-          false
         end
 
         def monotonic_now

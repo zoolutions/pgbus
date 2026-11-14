@@ -463,6 +463,15 @@ RSpec.describe Pgbus::Deploy::Runner do
       expect(runs.sole).to be_deleted
     end
 
+    it "returns :failed and deletes the run when the adapter dropped the job (its on_conflict)" do
+      allow(adapter).to receive(:enqueue) { |job| job.deploy_task_run_enqueued = false }
+
+      expect(runner.enqueue(task, triggered_by: "manual", now: now)).to eq(:failed)
+      expect(runs.sole).to be_deleted
+      expect(Pgbus::ErrorReporter).to have_received(:report)
+        .with(having_attributes(message: /dropped by its uniqueness or concurrency on_conflict/), anything)
+    end
+
     it "creates the run row before the enqueue and fills in queue_name and msg_id after it" do
       allow(adapter).to receive(:enqueue).and_wrap_original do |original, job|
         order << :enqueue
@@ -556,6 +565,25 @@ RSpec.describe Pgbus::Deploy::Runner do
 
         expect(runner.tasks.map(&:key)).to eq(%w[widgets])
         expect(warnings.join).to include("totals", "rails g pgbus:add_deploy_task_run_outcomes")
+      end
+
+      it "memoizes nothing when the schema probe fails, so the next call loads every task" do
+        calls = 0
+        allow(Pgbus::Deploy::Schema).to receive(:outcomes?) do
+          calls += 1
+          raise StandardError, "db blip" if calls == 1
+
+          true
+        end
+
+        expect { runner.tasks }.to raise_error(StandardError, "db blip")
+        expect(runner.tasks.map(&:key)).to eq(%w[totals widgets])
+      end
+
+      it "counts the declared tasks when the schema probe fails, so the scheduler still boots" do
+        allow(Pgbus::Deploy::Schema).to receive(:outcomes?).and_raise(StandardError, "db blip")
+
+        expect(runner.task_count).to eq(2)
       end
 
       it "does not probe the schema when no task declares after:" do

@@ -165,8 +165,6 @@ class CreatePgbusTables < ActiveRecord::Migration<%= migration_version %>
     create_table :pgbus_recurring_executions do |t|
       t.string :task_key, null: false
       t.datetime :run_at, null: false
-      t.datetime :completed_at
-      t.datetime :failed_at
       t.datetime :created_at, null: false, default: -> { "CURRENT_TIMESTAMP" }
     end
 

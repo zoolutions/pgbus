@@ -95,7 +95,7 @@ module Pgbus
         Pgbus.logger.debug { "[Pgbus::Executor] deserialized #{log_tag(message, queue_name)} job_class=#{job_class}" }
         job_succeeded = false
         retried = false
-        deploy_run_retried = false
+        deploy_run_requeue = nil
 
         msg_id = message.msg_id.to_i
         instrument_payload = {
@@ -129,10 +129,12 @@ module Pgbus
           # this attempt is done (archive it) but the job is not — the retry
           # message carries the batch tag and signals on its own outcome.
           retried = Batch.retry_reenqueued?(payload["job_id"])
-          # The same for a deploy task's job, batch or not: the attempt that
-          # re-enqueued itself leaves the run's outcome to its retry. Asked
-          # only of a marked job, so an unmarked one pays one Hash lookup.
-          deploy_run_retried = job.successfully_enqueued? if payload.key?(DeployTaskRunId::METADATA_KEY)
+          # The same for a deploy task's job, batch or not: nil when perform
+          # did not re-enqueue it, true when its retry_on retry is live (the
+          # retry records the outcome), false when the adapter dropped that
+          # retry. Asked only of a marked job: an unmarked one pays one Hash
+          # lookup.
+          deploy_run_requeue = job.try(:deploy_task_run_enqueued) if payload.key?(DeployTaskRunId::METADATA_KEY)
           Pgbus.logger.debug { "[Pgbus::Executor] perform_returned #{log_tag(message, queue_name)} job_class=#{job_class}" }
           # Archiving is the exact-once claim on this execution.
           # :already_archived means another worker archived the message (our
@@ -206,7 +208,10 @@ module Pgbus
           # key if the first DELETE committed but the client raised afterward.
           signal_concurrency(payload)
           signal_batch_completed(payload) unless retried
-          record_deploy_task_run_outcome(payload, :completed) unless deploy_run_retried
+          case deploy_run_requeue
+          when nil then record_deploy_task_run_outcome(payload, :completed)
+          when false then record_deploy_task_run_outcome(payload, :failed)
+          end
         end
         Batch.clear_retry_reenqueued
       end

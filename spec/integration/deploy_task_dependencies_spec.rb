@@ -18,6 +18,8 @@ RSpec.describe "Deploy task dependencies (integration)", :integration do
     log = performed
     Class.new(ActiveJob::Base) do
       include Pgbus::ActiveJob::DeployTaskRunId
+      include Pgbus::Concurrency
+      include Pgbus::Uniqueness
 
       self.queue_adapter = :pgbus
       define_singleton_method(:name) { name }
@@ -102,6 +104,36 @@ RSpec.describe "Deploy task dependencies (integration)", :integration do
     expect(work_one).to eq(:success)
     expect(attempts.size).to eq(2)
     expect(run_for("widgets").completed_at).not_to be_nil
+  end
+
+  it "stamps failed_at when the adapter drops a retry_on retry (its concurrency limit, on_conflict: :discard)" do
+    stub_const("WidgetsJob", job_class("WidgetsJob") do
+      limits_concurrency to: 1, key: ->(*) { "deploy-deps-limited" }, on_conflict: :discard
+      retry_on RuntimeError, wait: 0, attempts: 3
+      define_method(:perform) { |*| raise "not yet" }
+    end)
+    runner.enqueue(Pgbus::Deploy::Task.from_configuration("widgets", class: "WidgetsJob", queue: queue),
+                   triggered_by: "manual")
+
+    expect(work_one).to eq(:success) # the attempt holds the slot, so its own retry is dropped
+    expect(Pgbus.client.read_batch(queue, qty: 1, vt: 30)).to be_empty
+    expect(run_for("widgets").failed_at).not_to be_nil
+    expect(run_for("widgets").completed_at).to be_nil
+  end
+
+  it "fails Run now, leaving no run, when the adapter drops the job as a uniqueness duplicate" do
+    stub_const("WidgetsJob", job_class("WidgetsJob") do
+      ensures_uniqueness strategy: :until_executed, key: ->(*) { "deploy-deps-unique" }, on_conflict: :discard
+    end)
+    WidgetsJob.perform_later # the duplicate already queued
+    allow(Pgbus::ErrorReporter).to receive(:report)
+
+    result = runner.enqueue(Pgbus::Deploy::Task.from_configuration("widgets", class: "WidgetsJob", queue: queue),
+                            triggered_by: "manual")
+
+    expect(result).to eq(:failed)
+    expect(Pgbus::DeployTaskRun.count).to eq(0)
+    expect(Pgbus::ErrorReporter).to have_received(:report).with(kind_of(Pgbus::EnqueueError), hash_including(task: "widgets"))
   end
 
   it "stamps failed_at when the job dead-letters" do

@@ -12,6 +12,7 @@ module Pgbus
         payload_hash = Uniqueness.inject_metadata(active_job, payload_hash)
         payload_hash = FairShare.inject_metadata(active_job, payload_hash)
         payload_hash = inject_batch_metadata(payload_hash, active_job)
+        note_deploy_task_run_enqueued(active_job, false)
 
         if uniqueness_rejected?(active_job, payload_hash, queue: queue)
           uncount_batch_job(payload_hash, active_job)
@@ -31,6 +32,7 @@ module Pgbus
         payload_hash = FairShare.inject_metadata(active_job, payload_hash)
         payload_hash = inject_batch_metadata(payload_hash, active_job)
         delay = [(timestamp - Time.current.to_f).ceil, 0].max
+        note_deploy_task_run_enqueued(active_job, false)
 
         if uniqueness_rejected?(active_job, payload_hash, queue: queue)
           uncount_batch_job(payload_hash, active_job)
@@ -125,6 +127,7 @@ module Pgbus
         # A retry re-enqueue that is now live (sent, or parked as a blocked
         # execution) must stop the original attempt from signalling completion.
         Batch.note_retry_reenqueued(payload_hash["job_id"]) if (msg_id || blocked) && retry_retagged?(payload_hash, active_job)
+        note_deploy_task_run_enqueued(active_job, true) if msg_id || blocked
         uniqueness_key = Thread.current[:pgbus_acquired_uniqueness_key]
         UniquenessKey.clear_bind_stamp!(uniqueness_key) if uniqueness_key
         Thread.current[:pgbus_acquired_uniqueness_key] = nil
@@ -159,6 +162,16 @@ module Pgbus
       # errors are counted as ambiguous too. That errs toward keeping a lock
       # and a batch count the reapers can reclaim, rather than dropping
       # bookkeeping for a message that turns out to be live.
+      # A deploy task's job (issue #660): whether this enqueue left a live
+      # message. Deploy::Runner reads it to tell a dropped enqueue from a sent
+      # one, the executor to tell a retry_on retry that will run from one the
+      # adapter dropped. Only a marked instance is touched.
+      def note_deploy_task_run_enqueued(active_job, value)
+        return unless active_job.respond_to?(:deploy_task_run_id) && active_job.deploy_task_run_id
+
+        active_job.deploy_task_run_enqueued = value
+      end
+
       def ambiguous_delivery?(error)
         (defined?(PGMQ::Errors::ConnectionError) && error.is_a?(PGMQ::Errors::ConnectionError)) ||
           (defined?(PG::Error) && error.is_a?(PG::Error))

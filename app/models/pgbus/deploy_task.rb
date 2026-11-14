@@ -46,7 +46,9 @@ module Pgbus
         queue_name: task.queue_name, priority: task.priority, version: task.version,
         every_deploy: task.every_deploy, description: task.description, static: true
       )
-      record.dependencies = JSON.generate(task.dependencies) if Deploy::Schema.outcomes?
+      # The column cache too: a process booted before the migration keeps
+      # the old column list until it restarts.
+      record.dependencies = JSON.generate(task.dependencies) if Deploy::Schema.outcomes? && record.has_attribute?(:dependencies)
       if owed?(task, revision)
         record.armed_at ||= now
         record.armed_for = task.armed_for(revision)
