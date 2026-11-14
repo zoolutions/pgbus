@@ -130,6 +130,18 @@ RSpec.describe Pgbus::ActiveJob::Executor, "#execute with a deploy task run id" 
       expect(Pgbus::DeployTaskRun).not_to have_received(:mark_completed!)
     end
 
+    it "stamps failed_at when it was discarded and has an unrelated deploy_task_run_id writer" do
+      plain_class.class_eval do
+        attr_accessor :deploy_task_run_id
+
+        discard_on ArgumentError
+        def perform = raise(ArgumentError, "bad row")
+      end
+
+      expect(executor.execute(real_message(plain_class), queue_name)).to eq(:success)
+      expect(Pgbus::DeployTaskRun).to have_received(:mark_failed!).with(31).once
+    end
+
     it "stamps completed_at when it performed" do
       plain_class.class_eval { def perform = nil }
 

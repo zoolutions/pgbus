@@ -125,8 +125,9 @@ class Views::Docs::Pages::DeployTasks < DocsUI::Page
 
         Each run records its outcome. The worker stamps `completed_at` when `perform`
         returned having done its work, without re-enqueuing the job. A `retry_on`
-        attempt whose retry is queued leaves the outcome to the retry. It stamps
-        `failed_at` when ActiveJob discarded the job (a `discard_on`, with or without a
+        attempt whose retry is queued leaves the outcome to the retry, and so does a
+        `discard_on` block that queues one. It stamps `failed_at` when ActiveJob
+        discarded the job without queuing a retry (a `discard_on`, with or without a
         block, or a `retry_on` that gave up through its block; one without a block
         re-raises, so the job fails and is retried until it is dead-lettered), when
         the job is dead-lettered or discarded as a `:while_executing` duplicate, or when

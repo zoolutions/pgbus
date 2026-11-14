@@ -289,7 +289,7 @@ module Pgbus
         job = job_class_for(task).new(*job_arguments(task))
         # The engine includes DeployTaskRunId on every job; without it (no
         # engine loaded) this instance alone is marked.
-        job.extend(ActiveJob::DeployTaskRunId) unless job.respond_to?(:deploy_task_run_id=)
+        job.extend(ActiveJob::DeployTaskRunId) unless job.is_a?(ActiveJob::DeployTaskRunId)
         job.deploy_task_run_id = run.id
         enqueued = job.enqueue(job_options(task))
         # The pgbus adapter returns a job its uniqueness or concurrency

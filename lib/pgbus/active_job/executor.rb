@@ -537,7 +537,7 @@ module Pgbus
       # enqueue side, so a discard is still seen and a retry still carries the
       # run id.
       def mark_deploy_task_job(job, payload)
-        return if job.respond_to?(:deploy_task_run_id=)
+        return if job.is_a?(DeployTaskRunId)
 
         job.extend(DeployTaskRunId)
         job.deploy_task_run_id = payload[DeployTaskRunId::METADATA_KEY]

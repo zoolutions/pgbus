@@ -490,6 +490,14 @@ RSpec.describe Pgbus::Deploy::Runner do
       expect(adapter.payloads.sole).to include("pgbus_deploy_task_run_id" => runs.sole.id)
     end
 
+    it "carries the run's id when the job has an unrelated deploy_task_run_id writer" do
+      job_class.attr_accessor :deploy_task_run_id
+
+      runner.enqueue(task, triggered_by: "manual", now: now)
+
+      expect(adapter.payloads.sole).to include("pgbus_deploy_task_run_id" => runs.sole.id)
+    end
+
     it "carries the run's id for a command task" do
       config.deploy_tasks = { "warm" => { "command" => "Cache.warm!" } }
 
