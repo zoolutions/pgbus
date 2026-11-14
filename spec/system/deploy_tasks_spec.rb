@@ -148,7 +148,7 @@ RSpec.describe "Deploy Tasks", type: :system do
       within("tr", text: "fix_currencies") { click_button "Run Now" }
 
       expect(page).to have_text("Deploy task enqueued")
-      expect(@stub_data_source.calls[:enqueue_deploy_task_now]).to eq([["3"]])
+      expect(@stub_data_source.calls[:enqueue_deploy_task_now]).to eq([["3", false]])
     end
 
     it "flashes the failure when it was not" do
@@ -158,6 +158,83 @@ RSpec.describe "Deploy Tasks", type: :system do
       within("tr", text: "fix_currencies") { click_button "Run Now" }
 
       expect(page).to have_text("The deploy task was not enqueued")
+    end
+  end
+
+  describe "after: dependencies (issue #660)" do
+    let(:waiting_on) do
+      [{ key: "backfill_totals", state: "running" }, { key: "warm_caches", state: "failed" },
+       { key: "fix_currencies", state: "not_run" }]
+    end
+
+    before do
+      @stub_data_source.deploy_tasks_list << task(5, "rebuild_counters", armed_at: now - 60, armed_for: "1",
+                                                                         dependencies: %w[backfill_totals warm_caches fix_currencies],
+                                                                         waiting_on: waiting_on)
+    end
+
+    it "says what an armed task waits on, with each dependency's state" do
+      visit "/pgbus/deploy_tasks"
+
+      within("tr", text: "rebuild_counters") do
+        expect(page).to have_text("Waiting")
+        expect(page).to have_text("Waiting for 3 dependencies to complete.")
+        expect(page).to have_text("Waiting on: backfill_totals (running), warm_caches (failed), fix_currencies (not run)")
+      end
+    end
+
+    it "says it in dark mode too" do
+      visit_dark "/pgbus/deploy_tasks/5"
+
+      expect(page).to have_text("Waiting on: backfill_totals (running), warm_caches (failed), fix_currencies (not run)")
+      expect(page).to have_text("backfill_totals, warm_caches, fix_currencies")
+    end
+
+    it "refuses Run now from the list, naming the dependencies, on the task's page" do
+      visit "/pgbus/deploy_tasks"
+
+      within("tr", text: "rebuild_counters") { click_button "Run Now" }
+
+      expect(page).to have_css("h1", text: "rebuild_counters")
+      expect(page).to have_text("Run now refused: this task waits on backfill_totals, warm_caches, fix_currencies.")
+      expect(@stub_data_source.calls[:enqueue_deploy_task_now]).to eq([["5", false]])
+    end
+
+    it "keeps the task page with the Ignore dependencies form accessible in both themes" do
+      visit_light "/pgbus/deploy_tasks/5"
+      expect(page).to be_accessible
+
+      visit_dark "/pgbus/deploy_tasks/5"
+      expect(page).to be_accessible
+    end
+
+    it "runs it when Ignore dependencies is ticked" do
+      visit "/pgbus/deploy_tasks/5"
+
+      check "Ignore dependencies"
+      click_button "Run Now"
+
+      expect(page).to have_text("Deploy task enqueued")
+      expect(page).to have_css("h1", text: "Deploy Tasks")
+      expect(@stub_data_source.calls[:enqueue_deploy_task_now]).to eq([["5", true]])
+    end
+
+    it "shows each run's outcome on the task's page" do
+      @stub_data_source.deploy_task_runs_list = [
+        { run_at: now - 60, revision: "rev-b", version: "1", triggered_by: "manual", queue_name: "low", msg_id: 9 },
+        { run_at: now - 600, revision: "rev-a", version: "1", triggered_by: "rollover", queue_name: "low", msg_id: 8,
+          failed_at: now - 300 },
+        { run_at: now - 900, revision: "rev-a", version: "1", triggered_by: "rollover", queue_name: "low", msg_id: 7,
+          completed_at: now - 840 }
+      ]
+
+      visit "/pgbus/deploy_tasks/5"
+
+      within("table", text: /outcome/i) do
+        expect(page).to have_text("No outcome yet")
+        expect(page).to have_text("Failed 5m ago")
+        expect(page).to have_text("Completed 14m ago")
+      end
     end
   end
 

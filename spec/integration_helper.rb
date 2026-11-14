@@ -245,6 +245,16 @@ def bootstrap_integration_tables(conn)
     SQL
   end
 
+  # Run outcomes and after: (issue #660) — mirrors
+  # add_deploy_task_run_outcomes.rb.erb, for a database bootstrapped before it.
+  conn.execute(<<~SQL)
+    ALTER TABLE pgbus_deploy_task_runs ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP;
+    ALTER TABLE pgbus_deploy_task_runs ADD COLUMN IF NOT EXISTS failed_at TIMESTAMP;
+    ALTER TABLE pgbus_deploy_tasks ADD COLUMN IF NOT EXISTS dependencies TEXT;
+    CREATE INDEX IF NOT EXISTS idx_pgbus_deploy_task_runs_completed
+      ON pgbus_deploy_task_runs (task_key, completed_at);
+  SQL
+
   # Workflows (issue #540) — mirrors lib/generators/pgbus/templates/
   # add_workflows.rb.erb, including the two partial unique indexes
   # (AlreadyRunning, idempotent start) and the cascading foreign keys

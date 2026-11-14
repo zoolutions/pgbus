@@ -24,6 +24,7 @@ module Pgbus
     # and never touches enabled; an arm already held keeps its armed_at and
     # takes the new armed_for (a later bump supersedes an unfired one).
     def self.sync_from_config!(tasks, revision:, now: Time.current)
+      refresh_dependencies_column!
       transaction do
         tasks.each { |task| sync_task!(task, revision: revision, now: now) }
         static_tasks.where.not(key: tasks.map(&:key)).delete_all
@@ -39,6 +40,15 @@ module Pgbus
       DeployTaskRun.last_rollover_for(task.key)&.revision != revision
     end
 
+    # A process that loaded this model before pgbus:add_deploy_task_run_outcomes
+    # was migrated keeps the old column list: reload it once the column
+    # exists, so dependencies are read and written (issue #660).
+    def self.refresh_dependencies_column!
+      return if column_names.include?("dependencies") || !Deploy::Schema.outcomes?
+
+      reset_column_information
+    end
+
     def self.sync_task!(task, revision:, now:)
       record = find_or_initialize_by(key: task.key)
       record.assign_attributes(
@@ -46,6 +56,9 @@ module Pgbus
         queue_name: task.queue_name, priority: task.priority, version: task.version,
         every_deploy: task.every_deploy, description: task.description, static: true
       )
+      # The column cache too: a process booted before the migration keeps
+      # the old column list until it restarts.
+      record.dependencies = JSON.generate(task.dependencies) if Deploy::Schema.outcomes? && record.has_attribute?(:dependencies)
       if owed?(task, revision)
         record.armed_at ||= now
         record.armed_for = task.armed_for(revision)
@@ -79,6 +92,14 @@ module Pgbus
       !armed_at.nil?
     end
 
+    # The after: keys; none before the outcomes migration or for a corrupt value.
+    def parsed_dependencies
+      value = has_attribute?(:dependencies) ? self[:dependencies] : nil
+      value.blank? ? [] : Array(JSON.parse(value))
+    rescue JSON::ParserError
+      []
+    end
+
     # For display: a corrupt value shows as no arguments.
     def parsed_arguments
       decoded_arguments
@@ -91,7 +112,8 @@ module Pgbus
     def to_task
       Deploy::Task.new(
         key: key, class_name: class_name, command: command, version: version, every_deploy: every_deploy,
-        queue_name: queue_name, arguments: decoded_arguments, priority: priority, description: description
+        queue_name: queue_name, arguments: decoded_arguments, priority: priority, description: description,
+        dependencies: parsed_dependencies
       )
     end
 

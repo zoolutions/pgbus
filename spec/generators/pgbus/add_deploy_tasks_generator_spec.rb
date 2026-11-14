@@ -52,6 +52,13 @@ RSpec.describe Pgbus::Generators::AddDeployTasksGenerator do
         expect(content).to include('name: "idx_pgbus_deploy_task_runs_cleanup"')
       end
     end
+
+    it "carries the run outcome and dependencies columns for a fresh install (issue #660)" do
+      generate_migration(described_class, basename: basename) do |_path, content|
+        expect(content).to include("t.text :dependencies", "t.datetime :completed_at", "t.datetime :failed_at")
+        expect(content).to include('name: "idx_pgbus_deploy_task_runs_completed"')
+      end
+    end
   end
 
   describe "deploy tasks config" do

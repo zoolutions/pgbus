@@ -260,9 +260,14 @@ nl:
         ready_html: 'Uitgerold: elk actief proces draait <code>%{revision}</code>. Klaargezette taken draaien bij de volgende tick van de scheduler.'
         unavailable_html: De uitrolstatus kon niet worden gelezen.
       default_queue: default
+      dependency_states:
+        failed: mislukt
+        not_run: niet uitgevoerd
+        running: bezig
       disable: Uitschakelen
       enable: Inschakelen
       enqueue:
+        blocked: 'Nu uitvoeren geweigerd: de taak wacht op %{tasks}. Vink "Afhankelijkheden negeren" aan om hem toch uit te voeren.'
         enqueued: Deploy-taak in de wachtrij gezet
         failed: 'De deploy-taak is niet in de wachtrij gezet: zie het log voor de reden'
       every_deploy: Bij elke deploy
@@ -272,6 +277,10 @@ nl:
           other: "%{count} taken gedeclareerd"
         title: Deploy-taken
       not_found: Deploy-taak niet gevonden
+      outcomes:
+        completed_html: Voltooid %{ago}
+        failed_html: Mislukt %{ago}
+        none: Nog geen uitkomst
       reasons:
         disabled_armed_html: 'Uitgeschakeld met een uitrolrun in afwachting: schakel hem in om hem te laten draaien.'
         disabled_html: 'Uitgeschakeld: de scheduler slaat hem over.'
@@ -279,6 +288,9 @@ nl:
         manual_html: "· draaide %{ago} (handmatig)"
         never_html: Nooit gedraaid na een uitrol.
         ran_html: Draaide %{ago} op <code>%{revision}</code> (uitrol).
+        waiting_dependencies_html:
+          one: Wacht tot 1 afhankelijkheid klaar is.
+          other: Wacht tot %{count} afhankelijkheden klaar zijn.
         waiting_lagging_html:
           one: 'Wacht op uitrol: 1 proces draait nog niet op <code>%{revision}</code>.'
           other: 'Wacht op uitrol: %{count} processen draaien nog niet op <code>%{revision}</code>.'
@@ -291,7 +303,9 @@ nl:
         armed_html: "%{armed_for}, klaargezet %{ago}"
         back: Terug
         configuration: Configuratie
+        ignore_dependencies: Afhankelijkheden negeren
         labels:
+          after: Na
           arguments: Argumenten
           armed: Openstaande run
           command: Commando
@@ -305,6 +319,7 @@ nl:
         recent_runs: Recente runs
         run_headers:
           enqueued_at: In wachtrij gezet
+          outcome: Uitkomst
           queue: Wachtrij
           revision: Revisie
           triggered_by: Gestart door
@@ -338,6 +353,9 @@ nl:
         manual: Handmatig
         rollover: Uitrol
       version: v%{version}
+      waiting_on:
+        dependency_html: "<code>%{key}</code> (%{state})"
+        label: 'Wacht op:'
     dialogs:
       cancel: Annuleren
       confirm: Bevestigen

@@ -44,6 +44,9 @@
             <td data-label="<%= t("pgbus.deploy_tasks.tasks_table.headers.state") %>" class="px-4 py-3">
               <%= pgbus_deploy_state_badge(result) %>
               <p class="mt-1 text-xs text-gray-600 dark:text-gray-300"><%= pgbus_deploy_task_reason(result) %></p>
+              <% if task[:waiting_on].present? %>
+                <p class="mt-1 text-xs text-gray-600 dark:text-gray-300" data-waiting-on><%= pgbus_deploy_waiting_on(task[:waiting_on]) %></p>
+              <% end %>
             </td>
             <td data-label="<%= t("pgbus.deploy_tasks.tasks_table.headers.actions") %>" class="px-4 py-3 text-right space-x-1">
               <%= pgbus_button_to task[:enabled] ? t("pgbus.deploy_tasks.disable") : t("pgbus.deploy_tasks.enable"),

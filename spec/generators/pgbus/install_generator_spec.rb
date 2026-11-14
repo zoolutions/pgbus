@@ -52,6 +52,16 @@ RSpec.describe Pgbus::Generators::InstallGenerator do
       expect(content.index("drop_table :pgbus_workflow_steps")).to be < content.index("drop_table :pgbus_workflows\n")
     end
 
+    it "puts the run outcome and dependencies columns on the deploy task tables only (issue #660)" do
+      content = File.read(template_path)
+      table_body = ->(table) { content[/create_table :#{table} do \|t\|\n(.*?)\n    end/m, 1] }
+
+      expect(table_body.call("pgbus_deploy_task_runs")).to include("t.datetime :completed_at", "t.datetime :failed_at")
+      expect(table_body.call("pgbus_deploy_tasks")).to include("t.text :dependencies")
+      expect(table_body.call("pgbus_recurring_executions")).not_to include("completed_at")
+      expect(content).to include('name: "idx_pgbus_deploy_task_runs_completed"')
+    end
+
     it "carries the waiting-step columns and the signals table (issue #541)" do
       content = File.read(template_path)
       expect(content).to include("t.datetime :timeout_at", "t.string :batch_id", "t.bigint :signal_id")

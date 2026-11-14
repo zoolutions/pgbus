@@ -188,6 +188,7 @@ class CreatePgbusTables < ActiveRecord::Migration<%= migration_version %>
       t.boolean :static, null: false, default: true
       t.boolean :enabled, null: false, default: true
       t.text :description
+      t.text :dependencies
       t.datetime :armed_at
       t.string :armed_for
       t.timestamps
@@ -206,6 +207,8 @@ class CreatePgbusTables < ActiveRecord::Migration<%= migration_version %>
       t.string :queue_name
       t.bigint :msg_id
       t.datetime :run_at, null: false
+      t.datetime :completed_at
+      t.datetime :failed_at
       t.datetime :created_at, null: false, default: -> { "CURRENT_TIMESTAMP" }
     end
 
@@ -213,6 +216,8 @@ class CreatePgbusTables < ActiveRecord::Migration<%= migration_version %>
       name: "idx_pgbus_deploy_task_runs_task"
     add_index :pgbus_deploy_task_runs, :run_at,
       name: "idx_pgbus_deploy_task_runs_cleanup"
+    add_index :pgbus_deploy_task_runs, [:task_key, :completed_at],
+      name: "idx_pgbus_deploy_task_runs_completed"
 
     # Workflows (Pgbus::Workflow): one row per run, one per step attempt, and
     # the append-only audit trail. At most one ongoing run per (class, subject).

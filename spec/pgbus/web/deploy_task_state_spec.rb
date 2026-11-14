@@ -28,6 +28,22 @@ RSpec.describe Pgbus::Web::DeployTaskState do
     expect(result).to have_attributes(state: "due", reason_key: "due", badge_tone: :indigo)
   end
 
+  it "waits on its dependencies when armed, the gate is open and one has not completed (issue #660)" do
+    waiting_on = [{ key: "widgets", state: "running" }, { key: "gadgets", state: "not_run" }]
+
+    result = described_class.present(row(armed_at: now, waiting_on: waiting_on), ready)
+
+    expect(result).to have_attributes(state: "waiting", reason_key: "waiting_dependencies", badge_tone: :yellow,
+                                      reason_args: { count: 2 })
+  end
+
+  it "keeps the gate's reason first while the gate is closed, dependencies or not" do
+    result = described_class.present(row(armed_at: now, waiting_on: [{ key: "widgets", state: "running" }]),
+                                     rollover(reason: :no_workers))
+
+    expect(result.reason_key).to eq("waiting_no_workers")
+  end
+
   it "waits with the gate's reason when armed and the gate is closed" do
     lagging = [{ kind: "worker", hostname: "h", pid: 1, revision: "rev-a" }] * 2
 

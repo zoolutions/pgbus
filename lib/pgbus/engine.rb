@@ -92,6 +92,7 @@ module Pgbus
         include Pgbus::Concurrency
         include Pgbus::Uniqueness
         include Pgbus::ActiveJob::BatchId
+        include Pgbus::ActiveJob::DeployTaskRunId
         include Pgbus::ActiveJob::CurrentAttributes
         include Pgbus::VisibilityHeartbeat::JobMixin
       end

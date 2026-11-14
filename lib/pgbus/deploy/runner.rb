@@ -8,9 +8,12 @@ module Pgbus
     #
     # A tick: cheap pending check → the rollover gate (at most every
     # ROLLOVER_CHECK_INTERVAL seconds) → for each declared, enabled, armed
-    # task in key order: claim the arm → perform_later → record the run. A
-    # failed enqueue re-arms the task, logs and reports. No surrounding
-    # transaction: the adapter defers an enqueue inside one to its commit.
+    # task in key order whose after: dependencies have completed (issue
+    # #660): claim the arm → record the run → perform_later. A task still
+    # waiting on a dependency keeps its arm and is not counted as a failure.
+    # A failed enqueue deletes its run, re-arms the task, logs and reports.
+    # No surrounding transaction: the adapter defers an enqueue inside one to
+    # its commit.
     class Runner
       ROLLOVER_CHECK_INTERVAL = 5 # seconds
       # A task whose enqueue failed is retried after 5 s, then 10, 20, … up to
@@ -35,16 +38,25 @@ module Pgbus
         @synced = nil
         @sync_failures = 0
         @sync_retry_at = nil
+        @logged_dependencies = {}
       end
 
       # The valid declared tasks, in key order. A class: that does not resolve
-      # to an ActiveJob is skipped with a warning, like an invalid task.
+      # to an ActiveJob is skipped with a warning, like an invalid task. A
+      # failed schema probe (Deploy::Schema) raises out of here and leaves
+      # nothing memoized, so the next tick or sync retry loads them again.
       def tasks
         @tasks ||= load_tasks
       end
 
+      # The scheduler's heartbeat and boot log read this before the first
+      # tick: a failed schema probe must not stop it from booting, so it
+      # counts the declared entries instead.
       def task_count
         tasks.size
+      rescue StandardError => e
+        Pgbus.logger.warn { "[Pgbus] Deploy tasks not loaded yet (#{e.class}: #{e.message}); counting the declared entries" }
+        (@config.deploy_tasks || {}).size
       end
 
       # true once synced. A failure (a database blip at boot) is retried from
@@ -83,21 +95,28 @@ module Pgbus
 
         @logged_wait = nil
         rows = DeployTask.where(key: tasks.map(&:key)).index_by(&:key)
-        tasks.each do |task|
+        due = tasks.select do |task|
           row = rows[task.key]
-          fire(task, row, now) if row&.enabled && row.armed? && !backing_off?(task.key)
+          row&.enabled && row.armed? && !backing_off?(task.key)
         end
+        dependencies = load_dependencies(due)
+        due.each { |task| fire(task, rows[task.key], now) unless waiting_on_dependencies?(task, dependencies) }
       end
 
-      # Enqueue +task+ through ActiveJob and record the run. :enqueued, or
-      # :failed (logged and reported) when perform_later raised or did not
-      # enqueue the job. Run now calls this directly: no gate, no claim.
+      # Record a run of +task+ and enqueue it through ActiveJob, carrying the
+      # run's id so the executor stamps its outcome. :enqueued, or :failed
+      # (logged and reported, the run deleted) when the run could not be
+      # created or perform_later raised or did not enqueue the job. Run now
+      # calls this directly: no gate, no claim, no dependency check.
       def enqueue(task, triggered_by:, now: Time.current)
+        run = DeployTaskRun.create!(task_key: task.key, version: task.version, revision: revision,
+                                    triggered_by: triggered_by, run_at: now)
         payload = { task: task.key, version: task.version, revision: revision, triggered_by: triggered_by }
-        job = Instrumentation.instrument("pgbus.deploy_task.enqueue", payload) { submit(task) }
-        record_run(task, job, triggered_by, now)
+        job = Instrumentation.instrument("pgbus.deploy_task.enqueue", payload) { submit(task, run) }
+        record_enqueue(task, run, job, triggered_by)
         :enqueued
       rescue StandardError => e
+        discard_run(task, run) if run
         Pgbus.logger.error do
           "[Pgbus] Deploy task #{task.key} (version #{task.version}, #{triggered_by}) was not enqueued: " \
             "#{e.class}: #{e.message}"
@@ -110,7 +129,55 @@ module Pgbus
       private
 
       def load_tasks
-        (@config.deploy_tasks || {}).filter_map { |key, options| build_task(key, options) }.sort_by(&:key)
+        declared = @config.deploy_tasks || {}
+        built = declared.filter_map { |key, options| build_task(key, options) }
+        built = reject_dependencies_without_schema(built)
+        valid, skipped = Dependencies.prune(built, declared.keys.map(&:to_s))
+        skipped.each { |key, reason| skip_task(key, reason) }
+        valid.sort_by(&:key)
+      end
+
+      # after: needs the run outcomes, so until they are migrated a task that
+      # declares it is skipped (and its dependents with it, by prune).
+      def reject_dependencies_without_schema(tasks)
+        return tasks if tasks.none? { |task| task.dependencies.any? } || Schema.outcomes?
+
+        tasks.reject do |task|
+          next false if task.dependencies.empty?
+
+          skip_task(task.key, "after: needs the deploy task run outcomes; run `rails g pgbus:add_deploy_task_run_outcomes` " \
+                              "(or pgbus:update) and migrate")
+          true
+        end
+      end
+
+      # The outcomes of the dependencies of +due+ (one query), or nil when
+      # none of them declares after:.
+      def load_dependencies(due)
+        keys = due.flat_map(&:dependencies).uniq
+        return if keys.empty?
+
+        Dependencies.load(keys.filter_map { |key| tasks_by_key[key] }, revision: revision)
+      end
+
+      def waiting_on_dependencies?(task, dependencies)
+        return false if task.dependencies.empty?
+
+        waiting = dependencies.waiting_on(task.dependencies, tasks_by_key)
+        log_dependencies(task, waiting)
+        waiting.any?
+      end
+
+      def tasks_by_key
+        @tasks_by_key ||= tasks.index_by(&:key)
+      end
+
+      def log_dependencies(task, waiting)
+        summary = waiting.map { |dep| "#{dep[:key]} (#{dep[:state].tr("_", " ")})" }.join(", ")
+        return if @logged_dependencies[task.key] == summary
+
+        @logged_dependencies[task.key] = summary
+        Pgbus.logger.info { "[Pgbus] Deploy task #{task.key} waits on #{summary}" } unless summary.empty?
       end
 
       def build_task(key, options)
@@ -218,9 +285,18 @@ module Pgbus
       # the job, and its enqueue_error, is in hand on every Rails version:
       # perform_later returns false on failure, and on Rails 7.1 a .set(...)
       # job never yields it to perform_later's block.
-      def submit(task)
+      def submit(task, run)
         job = job_class_for(task).new(*job_arguments(task))
-        return job if job.enqueue(job_options(task))
+        # The engine includes DeployTaskRunId on every job; without it (no
+        # engine loaded) this instance alone is marked.
+        job.extend(ActiveJob::DeployTaskRunId) unless job.respond_to?(:deploy_task_run_id=)
+        job.deploy_task_run_id = run.id
+        enqueued = job.enqueue(job_options(task))
+        # The pgbus adapter returns a job its uniqueness or concurrency
+        # on_conflict dropped without raising; nothing would run for this run.
+        raise EnqueueError, "the job was dropped by its uniqueness or concurrency on_conflict" if
+          enqueued && job.deploy_task_run_enqueued == false
+        return job if enqueued
 
         error = job.enqueue_error
         raise EnqueueError, error ? "#{error.class}: #{error.message}" : "the job was not enqueued (a before_enqueue callback aborted)"
@@ -244,15 +320,24 @@ module Pgbus
         task.command ? [task.command] : task.arguments
       end
 
-      def record_run(task, job, triggered_by, now)
-        DeployTaskRun.create!(task_key: task.key, version: task.version, revision: revision,
-                              triggered_by: triggered_by, queue_name: job.queue_name,
-                              msg_id: job.provider_job_id, run_at: now)
+      # queue_name marks the run as enqueued: until it is set, the run counts
+      # as no run (DeployTaskRun.enqueued), so a failure here leaves the
+      # version owed, as a missing run row did before #660.
+      def record_enqueue(task, run, job, triggered_by)
+        run.update_columns(queue_name: job.queue_name, msg_id: job.provider_job_id)
       rescue StandardError => e
         Pgbus.logger.error do
           "[Pgbus] Deploy task #{task.key} was enqueued but its run was not recorded: #{e.class}: #{e.message}"
         end
         ErrorReporter.report(e, { action: "deploy_task_record_run", task: task.key, triggered_by: triggered_by })
+      end
+
+      # A run whose enqueue failed. Left behind (this delete failed too) it
+      # still counts as no run, having no queue_name.
+      def discard_run(task, run)
+        run.delete
+      rescue StandardError => e
+        ErrorReporter.report(e, { action: "deploy_task_discard_run", task: task.key, run_id: run.id })
       end
     end
   end

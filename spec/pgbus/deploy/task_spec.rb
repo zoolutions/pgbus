@@ -39,6 +39,17 @@ RSpec.describe Pgbus::Deploy::Task do
 
       expect(task.arguments).to eq([42])
     end
+
+    it "reads after: as one key or a list of keys, defaulting to none" do
+      expect(described_class.from_configuration("b", class: "BJob", after: "a").dependencies).to eq(%w[a])
+      expect(described_class.from_configuration("c", class: "CJob", after: %w[a b a]).dependencies).to eq(%w[a b])
+      expect(described_class.from_configuration("d", class: "DJob", after: :a).dependencies).to eq(%w[a])
+      expect(described_class.from_configuration("e", class: "EJob").dependencies).to eq([])
+    end
+
+    it "freezes the dependencies" do
+      expect(described_class.from_configuration("b", class: "BJob", after: "a").dependencies).to be_frozen
+    end
   end
 
   describe "#valid?" do
@@ -89,6 +100,20 @@ RSpec.describe Pgbus::Deploy::Task do
 
       expect(task).not_to be_valid
       expect(task.errors).to include("every_deploy must be true or false")
+    end
+
+    it "rejects an after: entry that is not a task key" do
+      task = described_class.from_configuration("b", class: "BJob", after: ["a", { "x" => 1 }, " "])
+
+      expect(task).not_to be_valid
+      expect(task.errors).to include("after: must name task keys")
+    end
+
+    it "rejects a task that names itself in after:" do
+      task = described_class.from_configuration("a", class: "AJob", after: %w[b a])
+
+      expect(task).not_to be_valid
+      expect(task.errors).to include("after: cycle a \u2192 a")
     end
   end
 
@@ -146,7 +171,7 @@ RSpec.describe Pgbus::Deploy::Task do
 
       expect(task.to_h).to eq(
         key: "a", class_name: nil, command: "Cache.warm!", version: "1", every_deploy: true,
-        queue_name: "low", arguments: [], priority: 0, description: nil
+        queue_name: "low", arguments: [], priority: 0, description: nil, dependencies: []
       )
     end
   end

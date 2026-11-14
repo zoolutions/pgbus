@@ -6,8 +6,9 @@ module Pgbus
     # its row and the rollover the scheduler acts on (DataSource#deploy_rollover),
     # so the page prints the reason the scheduler waits for. Pure.
     #
-    # States: disabled, waiting (armed, gate closed, with the gate's reason),
-    # due (armed, gate open), ran (not armed, has a rollover run), never. A
+    # States: disabled, waiting (armed, gate closed, with the gate's reason;
+    # or gate open and an after: dependency not completed, issue #660), due
+    # (armed, gate open), ran (not armed, has a rollover run), never. A
     # manual run is appended to any state through manual_args.
     module DeployTaskState
       BADGE_TONES = { "disabled" => :gray, "waiting" => :yellow, "due" => :indigo, "ran" => :green,
@@ -27,7 +28,7 @@ module Pgbus
 
       def derive(row, rollover)
         return ["disabled", row[:armed_at] ? "disabled_armed" : "disabled", {}] unless row[:enabled]
-        return armed(rollover) if row[:armed_at]
+        return armed(rollover, row[:waiting_on] || []) if row[:armed_at]
 
         run = row[:last_rollover_run]
         return ["never", "never", {}] unless run
@@ -35,12 +36,13 @@ module Pgbus
         ["ran", "ran", { ago: run[:run_at], revision: run[:revision] }]
       end
 
-      def armed(rollover)
+      def armed(rollover, waiting_on)
         return ["waiting", "waiting_unknown", {}] unless rollover
         return ["waiting", "waiting_no_scheduler", {}] unless rollover[:scheduler]
 
         case rollover[:reason]
-        when :ready then ["due", "due", {}]
+        when :ready
+          waiting_on.empty? ? ["due", "due", {}] : ["waiting", "waiting_dependencies", { count: waiting_on.size }]
         when :lagging then ["waiting", "waiting_lagging", { count: rollover[:lagging].size, revision: rollover[:revision] }]
         when :no_workers then ["waiting", "waiting_no_workers", { revision: rollover[:revision] }]
         else ["waiting", "waiting_no_revision", {}]

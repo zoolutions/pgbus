@@ -260,9 +260,14 @@ sv:
         ready_html: 'Utrullad: varje aktiv process kör <code>%{revision}</code>. Väntande uppgifter körs vid schemaläggarens nästa tick.'
         unavailable_html: Utrullningsstatusen kunde inte läsas.
       default_queue: default
+      dependency_states:
+        failed: misslyckades
+        not_run: inte körd
+        running: körs
       disable: Inaktivera
       enable: Aktivera
       enqueue:
+        blocked: 'Kör nu nekades: uppgiften väntar på %{tasks}. Kryssa i "Ignorera beroenden" för att köra den ändå.'
         enqueued: Deploy-uppgiften köad
         failed: 'Deploy-uppgiften köades inte: se loggen för orsaken'
       every_deploy: Vid varje deploy
@@ -272,6 +277,10 @@ sv:
           other: "%{count} uppgifter deklarerade"
         title: Deploy-uppgifter
       not_found: Deploy-uppgiften hittades inte
+      outcomes:
+        completed_html: Slutförd %{ago}
+        failed_html: Misslyckades %{ago}
+        none: Inget utfall än
       reasons:
         disabled_armed_html: 'Inaktiverad med en väntande utrullningskörning: aktivera den för att låta den köras.'
         disabled_html: 'Inaktiverad: schemaläggaren hoppar över den.'
@@ -279,6 +288,9 @@ sv:
         manual_html: "· kördes %{ago} (manuellt)"
         never_html: Har aldrig körts efter en utrullning.
         ran_html: Kördes %{ago} på <code>%{revision}</code> (utrullning).
+        waiting_dependencies_html:
+          one: Väntar på att 1 beroende ska bli klart.
+          other: Väntar på att %{count} beroenden ska bli klara.
         waiting_lagging_html:
           one: 'Väntar på utrullning: 1 process kör ännu inte <code>%{revision}</code>.'
           other: 'Väntar på utrullning: %{count} processer kör ännu inte <code>%{revision}</code>.'
@@ -291,7 +303,9 @@ sv:
         armed_html: "%{armed_for}, förberedd %{ago}"
         back: Tillbaka
         configuration: Konfiguration
+        ignore_dependencies: Ignorera beroenden
         labels:
+          after: Efter
           arguments: Argument
           armed: Väntande körning
           command: Kommando
@@ -305,6 +319,7 @@ sv:
         recent_runs: Senaste körningar
         run_headers:
           enqueued_at: Köad
+          outcome: Utfall
           queue: Kö
           revision: Revision
           triggered_by: Startad av
@@ -338,6 +353,9 @@ sv:
         manual: Manuellt
         rollover: Utrullning
       version: v%{version}
+      waiting_on:
+        dependency_html: "<code>%{key}</code> (%{state})"
+        label: 'Väntar på:'
     dialogs:
       cancel: Avbryt
       confirm: Bekräfta

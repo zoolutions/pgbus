@@ -26,6 +26,26 @@ module Pgbus
       safe_join([reason, " ", translate("pgbus.deploy_tasks.reasons.manual_html", **pgbus_reason_args(result.manual_args))])
     end
 
+    # "Waiting on: widgets (running), gadgets (not run)" (issue #660).
+    def pgbus_deploy_waiting_on(waiting_on)
+      parts = waiting_on.map do |dep|
+        translate("pgbus.deploy_tasks.waiting_on.dependency_html",
+                  key: dep[:key], state: t("pgbus.deploy_tasks.dependency_states.#{dep[:state]}"))
+      end
+      safe_join([t("pgbus.deploy_tasks.waiting_on.label"), " ", safe_join(parts, ", ")])
+    end
+
+    # A run's outcome: completed or failed with when, or none yet.
+    def pgbus_deploy_run_outcome(run)
+      if run[:completed_at]
+        translate("pgbus.deploy_tasks.outcomes.completed_html", ago: pgbus_time(run[:completed_at]))
+      elsif run[:failed_at]
+        translate("pgbus.deploy_tasks.outcomes.failed_html", ago: pgbus_time(run[:failed_at]))
+      else
+        t("pgbus.deploy_tasks.outcomes.none")
+      end
+    end
+
     def pgbus_deploy_rollover_key(rollover)
       return "unavailable" unless rollover
       return "no_scheduler" unless rollover[:scheduler]

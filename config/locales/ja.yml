@@ -260,9 +260,14 @@ ja:
         ready_html: 'ロールオーバー完了: 稼働中のすべてのプロセスが <code>%{revision}</code> で動いています。待機中のタスクはスケジューラーの次のティックで実行されます。'
         unavailable_html: ロールオーバーの状態を読み取れませんでした。
       default_queue: default
+      dependency_states:
+        failed: 失敗
+        not_run: 未実行
+        running: 実行中
       disable: 無効にする
       enable: 有効にする
       enqueue:
+        blocked: '今すぐ実行は拒否されました: このタスクは %{tasks} を待っています。それでも実行するには「依存関係を無視」にチェックを入れてください。'
         enqueued: デプロイタスクをキューに追加しました
         failed: 'デプロイタスクはキューに追加されませんでした: 理由はログを確認してください'
       every_deploy: 毎回のデプロイ
@@ -272,6 +277,10 @@ ja:
           other: "%{count} 件のタスクが宣言されています"
         title: デプロイタスク
       not_found: デプロイタスクが見つかりません
+      outcomes:
+        completed_html: "%{ago}に完了"
+        failed_html: "%{ago}に失敗"
+        none: まだ結果がありません
       reasons:
         disabled_armed_html: '無効（ロールオーバー実行が保留中）: 実行させるには有効にしてください。'
         disabled_html: '無効: スケジューラーはスキップします。'
@@ -279,6 +288,9 @@ ja:
         manual_html: "· %{ago}に実行（手動）"
         never_html: ロールオーバー後に実行されたことはありません。
         ran_html: "%{ago}に <code>%{revision}</code> で実行（ロールオーバー）。"
+        waiting_dependencies_html:
+          one: 1 個の依存タスクの完了を待っています。
+          other: "%{count} 個の依存タスクの完了を待っています。"
         waiting_lagging_html:
           one: 'ロールオーバー待ち: 1 個のプロセスがまだ <code>%{revision}</code> で動いていません。'
           other: 'ロールオーバー待ち: %{count} 個のプロセスがまだ <code>%{revision}</code> で動いていません。'
@@ -291,7 +303,9 @@ ja:
         armed_html: "%{armed_for}（%{ago}に準備）"
         back: 戻る
         configuration: 設定
+        ignore_dependencies: 依存関係を無視
         labels:
+          after: 前提タスク
           arguments: 引数
           armed: 保留中の実行
           command: コマンド
@@ -305,6 +319,7 @@ ja:
         recent_runs: 最近の実行
         run_headers:
           enqueued_at: キュー追加日時
+          outcome: 結果
           queue: キュー
           revision: リビジョン
           triggered_by: 実行契機
@@ -338,6 +353,9 @@ ja:
         manual: 手動
         rollover: ロールオーバー
       version: v%{version}
+      waiting_on:
+        dependency_html: "<code>%{key}</code> (%{state})"
+        label: '待機対象:'
     dialogs:
       cancel: キャンセル
       confirm: 確認

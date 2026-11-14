@@ -260,9 +260,14 @@ it:
         ready_html: 'Passaggio completato: ogni processo attivo esegue <code>%{revision}</code>. Le attività armate partono al prossimo tick dello scheduler.'
         unavailable_html: Impossibile leggere lo stato del passaggio.
       default_queue: default
+      dependency_states:
+        failed: fallita
+        not_run: non eseguita
+        running: in esecuzione
       disable: Disattiva
       enable: Attiva
       enqueue:
+        blocked: 'Esegui ora rifiutato: l’attività attende %{tasks}. Spunta "Ignora dipendenze" per eseguirla comunque.'
         enqueued: Attività di deploy accodata
         failed: 'L''attività di deploy non è stata accodata: vedi il log per il motivo'
       every_deploy: A ogni deploy
@@ -272,6 +277,10 @@ it:
           other: "%{count} attività dichiarate"
         title: Attività di deploy
       not_found: Attività di deploy non trovata
+      outcomes:
+        completed_html: Completata %{ago}
+        failed_html: Fallita %{ago}
+        none: Nessun esito ancora
       reasons:
         disabled_armed_html: 'Disattivata con un''esecuzione di passaggio in sospeso: attivala per farla partire.'
         disabled_html: 'Disattivata: lo scheduler la salta.'
@@ -279,6 +288,9 @@ it:
         manual_html: "· eseguita %{ago} (manuale)"
         never_html: Mai eseguita dopo un passaggio.
         ran_html: Eseguita %{ago} su <code>%{revision}</code> (passaggio).
+        waiting_dependencies_html:
+          one: In attesa che 1 dipendenza venga completata.
+          other: In attesa che %{count} dipendenze vengano completate.
         waiting_lagging_html:
           one: 'In attesa del passaggio: 1 processo non esegue ancora <code>%{revision}</code>.'
           other: 'In attesa del passaggio: %{count} processi non eseguono ancora <code>%{revision}</code>.'
@@ -291,7 +303,9 @@ it:
         armed_html: "%{armed_for}, armata %{ago}"
         back: Indietro
         configuration: Configurazione
+        ignore_dependencies: Ignora dipendenze
         labels:
+          after: Dopo
           arguments: Argomenti
           armed: Esecuzione in sospeso
           command: Comando
@@ -305,6 +319,7 @@ it:
         recent_runs: Esecuzioni recenti
         run_headers:
           enqueued_at: Accodata il
+          outcome: Esito
           queue: Coda
           revision: Revisione
           triggered_by: Avviata da
@@ -338,6 +353,9 @@ it:
         manual: Manuale
         rollover: Passaggio
       version: v%{version}
+      waiting_on:
+        dependency_html: "<code>%{key}</code> (%{state})"
+        label: 'In attesa di:'
     dialogs:
       cancel: Annulla
       confirm: Conferma
