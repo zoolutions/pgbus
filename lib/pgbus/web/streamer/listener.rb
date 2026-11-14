@@ -193,8 +193,11 @@ module Pgbus
           # The listener thread is the sole owner of @conn and closes it in
           # run_loop's ensure; clearing @running above is the whole stop signal,
           # and the wake makes the thread see it at once. The join budget
-          # (the ack budget plus a grace) covers a thread inside a keepalive
-          # or a reconnect attempt rather than the select.
+          # (the ack budget plus a grace, 6.25 s by default) covers a thread
+          # inside a normal keepalive or reconnect attempt. A keepalive stuck
+          # on a dead socket can outlast it (libpq's TCP bound is ~11 s): #stop
+          # then logs "did not stop" and the thread exits on its own once
+          # libpq raises.
           wake
           joined = @thread.nil? || @thread.join(stop_join_timeout)
           # A thread past its budget stays referenced, so #start refuses to

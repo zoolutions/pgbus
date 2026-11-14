@@ -228,6 +228,15 @@ RSpec.describe Pgbus::DedicatedConnection do
           expect(captured[:args].first).to eq("postgres://u@h/db?fallback_application_name=pgbus-listen")
         end
 
+        it "treats a key=value conninfo with :// inside a value as key=value, not a URL" do
+          described_class.connect_with_keepalives("host=h password=a://b")
+
+          expect(captured[:args].first).to eq(
+            "host=h password=a://b keepalives=1 keepalives_idle=5 keepalives_interval=2 " \
+            "keepalives_count=3 tcp_user_timeout=11000 fallback_application_name=pgbus-listen"
+          )
+        end
+
         it "adds nothing through .connect" do
           described_class.connect("postgres://u@h/db")
 

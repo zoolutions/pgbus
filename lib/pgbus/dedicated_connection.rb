@@ -55,7 +55,7 @@ module Pgbus
     def with_app_name(conninfo)
       return conninfo if conninfo.include?("application_name")
 
-      if conninfo.include?("://")
+      if url?(conninfo)
         "#{conninfo}#{query_separator(conninfo)}fallback_application_name=#{APP_NAME}"
       else
         "#{conninfo} fallback_application_name=#{APP_NAME}".strip
@@ -108,11 +108,18 @@ module Pgbus
       missing = LISTEN_KEEPALIVES.reject { |key, _| set.include?(key.to_s) }
       return conninfo if missing.empty?
 
-      if conninfo.include?("://")
+      if url?(conninfo)
         "#{conninfo}#{query_separator(conninfo)}#{missing.map { |key, value| "#{key}=#{value}" }.join("&")}"
       else
         "#{conninfo} #{missing.map { |key, value| "#{key}=#{value}" }.join(" ")}".strip
       end
+    end
+
+    # A postgres:// or postgresql:// URL, as libpq tells them apart: by the
+    # prefix, so a key=value conninfo with :// inside a value (a password)
+    # stays key=value.
+    def url?(conninfo)
+      conninfo.start_with?("postgres://", "postgresql://")
     end
 
     # The keywords a conninfo String sets, or nil when libpq cannot parse it.

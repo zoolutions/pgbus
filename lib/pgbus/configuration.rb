@@ -601,9 +601,10 @@ module Pgbus
       # 5 s — the keepalive interval of the streamer's PG LISTEN
       # connection: one `SELECT 1` per idle cycle, and the bound on how
       # long a LISTEN the server dropped on a still-open socket goes
-      # unnoticed. A dead socket is caught sooner by the TCP keepalives
-      # on that connection (~11 s, libpq >= 12; not added to a connection
-      # that names a service, whose service file keeps them). Connects do not wait on
+      # unnoticed. A socket whose peer is gone is also detected, between
+      # keepalives, by the TCP keepalives on that connection: ~11 s by their
+      # settings (not measured; libpq >= 12; not added to a connection that
+      # names a service, whose service file keeps them). Connects do not wait on
       # this cycle: the listener wakes through a pipe (issue #630). Was
       # 250 ms, which ran 4 queries a second per web process (issue #664).
       @streams_listen_health_check_ms = 5_000
