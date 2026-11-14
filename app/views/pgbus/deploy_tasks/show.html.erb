@@ -10,7 +10,17 @@
       <%= pgbus_button_to @task[:enabled] ? t("pgbus.deploy_tasks.disable") : t("pgbus.deploy_tasks.enable"),
           pgbus.toggle_deploy_task_path(@task[:id]),
           variant: @task[:enabled] ? :warning : :success %>
-      <% if @task[:enabled] %>
+      <% if @task[:enabled] && @task[:waiting_on].present? %>
+        <%= form_with url: pgbus.enqueue_deploy_task_path(@task[:id]), method: :post, local: true,
+              class: "flex items-center space-x-2", data: { run_now_form: true } do %>
+          <label class="flex items-center space-x-2 text-sm text-gray-700 dark:text-gray-200">
+            <input type="checkbox" name="ignore_dependencies" value="1"
+                   class="h-4 w-4 rounded border-gray-300 text-indigo-600 dark:text-indigo-400 focus:ring-indigo-600">
+            <span><%= t("pgbus.deploy_tasks.show.ignore_dependencies") %></span>
+          </label>
+          <%= pgbus_button_tag t("pgbus.deploy_tasks.run_now"), variant: :primary %>
+        <% end %>
+      <% elsif @task[:enabled] %>
         <%= pgbus_button_to t("pgbus.deploy_tasks.run_now"), pgbus.enqueue_deploy_task_path(@task[:id]), variant: :primary %>
       <% end %>
       <%= pgbus_link_to t("pgbus.deploy_tasks.show.back"), pgbus.deploy_tasks_path, variant: :secondary %>
@@ -23,6 +33,9 @@
     <p class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.deploy_tasks.show.state") %></p>
     <p class="mt-1"><%= pgbus_deploy_state_badge(result) %></p>
     <p class="mt-1 text-xs text-gray-600 dark:text-gray-300"><%= pgbus_deploy_task_reason(result) %></p>
+    <% if @task[:waiting_on].present? %>
+      <p class="mt-1 text-xs text-gray-600 dark:text-gray-300" data-waiting-on><%= pgbus_deploy_waiting_on(@task[:waiting_on]) %></p>
+    <% end %>
   </div>
 
   <div class="rounded-lg bg-white dark:bg-gray-800 p-5 shadow ring-1 ring-gray-200 dark:ring-gray-700">
@@ -72,6 +85,12 @@
                 armed_for: @task[:every_deploy] ? @task[:armed_for] : t("pgbus.deploy_tasks.version", version: @task[:armed_for])) %></dd>
         </div>
       <% end %>
+      <% if @task[:dependencies].present? %>
+        <div>
+          <dt class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.deploy_tasks.show.labels.after") %></dt>
+          <dd class="mt-1 text-sm text-gray-900 dark:text-white font-mono text-xs"><%= @task[:dependencies].join(", ") %></dd>
+        </div>
+      <% end %>
       <% if @task[:arguments]&.any? %>
         <div class="sm:col-span-2">
           <dt class="text-sm font-medium text-gray-500 dark:text-gray-400"><%= t("pgbus.deploy_tasks.show.labels.arguments") %></dt>
@@ -104,6 +123,7 @@
         <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.deploy_tasks.show.run_headers.revision") %></th>
         <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.deploy_tasks.show.run_headers.queue") %></th>
         <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.deploy_tasks.show.run_headers.enqueued_at") %></th>
+        <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"><%= t("pgbus.deploy_tasks.show.run_headers.outcome") %></th>
       </tr>
     </thead>
     <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
@@ -124,10 +144,13 @@
           <td data-label="<%= t("pgbus.deploy_tasks.show.run_headers.enqueued_at") %>" class="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
             <%= pgbus_time(run[:run_at]) %>
           </td>
+          <td data-label="<%= t("pgbus.deploy_tasks.show.run_headers.outcome") %>" class="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
+            <%= pgbus_deploy_run_outcome(run) %>
+          </td>
         </tr>
       <% end %>
       <% if Array(@task[:runs]).empty? %>
-        <%= render "pgbus/shared/empty_row", colspan: 5, message: t("pgbus.deploy_tasks.show.no_runs") %>
+        <%= render "pgbus/shared/empty_row", colspan: 6, message: t("pgbus.deploy_tasks.show.no_runs") %>
       <% end %>
     </tbody>
   </table>

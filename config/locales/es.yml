@@ -260,9 +260,14 @@ es:
         ready_html: 'Transición completa: cada proceso activo ejecuta <code>%{revision}</code>. Las tareas armadas se ejecutan en el siguiente tick del planificador.'
         unavailable_html: No se pudo leer el estado de la transición.
       default_queue: default
+      dependency_states:
+        failed: fallida
+        not_run: no ejecutada
+        running: en ejecución
       disable: Desactivar
       enable: Activar
       enqueue:
+        blocked: 'Ejecutar ahora rechazado: la tarea espera a %{tasks}. Marca "Ignorar dependencias" para ejecutarla de todos modos.'
         enqueued: Tarea de despliegue encolada
         failed: 'La tarea de despliegue no se encoló: consulta el registro para ver el motivo'
       every_deploy: En cada despliegue
@@ -272,6 +277,10 @@ es:
           other: "%{count} tareas declaradas"
         title: Tareas de despliegue
       not_found: Tarea de despliegue no encontrada
+      outcomes:
+        completed_html: Completada %{ago}
+        failed_html: Fallida %{ago}
+        none: Sin resultado todavía
       reasons:
         disabled_armed_html: 'Desactivada con una ejecución de transición pendiente: actívala para que se ejecute.'
         disabled_html: 'Desactivada: el planificador la omite.'
@@ -279,6 +288,9 @@ es:
         manual_html: "· se ejecutó %{ago} (manual)"
         never_html: Nunca se ejecutó tras una transición.
         ran_html: Se ejecutó %{ago} en <code>%{revision}</code> (transición).
+        waiting_dependencies_html:
+          one: Esperando a que termine 1 dependencia.
+          other: Esperando a que terminen %{count} dependencias.
         waiting_lagging_html:
           one: 'Esperando la transición: 1 proceso aún no ejecuta <code>%{revision}</code>.'
           other: 'Esperando la transición: %{count} procesos aún no ejecutan <code>%{revision}</code>.'
@@ -291,7 +303,9 @@ es:
         armed_html: "%{armed_for}, armada %{ago}"
         back: Volver
         configuration: Configuración
+        ignore_dependencies: Ignorar dependencias
         labels:
+          after: Después de
           arguments: Argumentos
           armed: Ejecución pendiente
           command: Comando
@@ -305,6 +319,7 @@ es:
         recent_runs: Ejecuciones recientes
         run_headers:
           enqueued_at: Encolada el
+          outcome: Resultado
           queue: Cola
           revision: Revisión
           triggered_by: Lanzada por
@@ -338,6 +353,9 @@ es:
         manual: Manual
         rollover: Transición
       version: v%{version}
+      waiting_on:
+        dependency_html: "<code>%{key}</code> (%{state})"
+        label: 'Esperando a:'
     dialogs:
       cancel: Cancelar
       confirm: Confirmar

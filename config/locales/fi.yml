@@ -260,9 +260,14 @@ fi:
         ready_html: 'Käyttöönotto valmis: jokainen elävä prosessi ajaa versiota <code>%{revision}</code>. Odottavat tehtävät ajetaan ajastimen seuraavalla kierroksella.'
         unavailable_html: Käyttöönoton tilaa ei voitu lukea.
       default_queue: default
+      dependency_states:
+        failed: epäonnistui
+        not_run: ei ajettu
+        running: käynnissä
       disable: Poista käytöstä
       enable: Ota käyttöön
       enqueue:
+        blocked: 'Suorita nyt hylättiin: tehtävä odottaa tehtäviä %{tasks}. Valitse "Ohita riippuvuudet" suorittaaksesi sen silti.'
         enqueued: Deploy-tehtävä lisätty jonoon
         failed: 'Deploy-tehtävää ei lisätty jonoon: syy löytyy lokista'
       every_deploy: Jokaisessa deployssa
@@ -272,6 +277,10 @@ fi:
           other: "%{count} tehtävää määritelty"
         title: Deploy-tehtävät
       not_found: Deploy-tehtävää ei löytynyt
+      outcomes:
+        completed_html: Valmistui %{ago}
+        failed_html: Epäonnistui %{ago}
+        none: Ei vielä tulosta
       reasons:
         disabled_armed_html: 'Poistettu käytöstä, käyttöönottoajo odottaa: ota se käyttöön, jotta se ajetaan.'
         disabled_html: 'Poistettu käytöstä: ajastin ohittaa sen.'
@@ -279,6 +288,9 @@ fi:
         manual_html: "· ajettu %{ago} (manuaalisesti)"
         never_html: Ei koskaan ajettu käyttöönoton jälkeen.
         ran_html: Ajettu %{ago} versiossa <code>%{revision}</code> (käyttöönotto).
+        waiting_dependencies_html:
+          one: Odottaa, että 1 riippuvuus valmistuu.
+          other: Odottaa, että %{count} riippuvuutta valmistuu.
         waiting_lagging_html:
           one: 'Odotetaan käyttöönottoa: 1 prosessi ei vielä aja versiota <code>%{revision}</code>.'
           other: 'Odotetaan käyttöönottoa: %{count} prosessia ei vielä aja versiota <code>%{revision}</code>.'
@@ -291,7 +303,9 @@ fi:
         armed_html: "%{armed_for}, valmisteltu %{ago}"
         back: Takaisin
         configuration: Asetukset
+        ignore_dependencies: Ohita riippuvuudet
         labels:
+          after: Jälkeen
           arguments: Argumentit
           armed: Odottava ajo
           command: Komento
@@ -305,6 +319,7 @@ fi:
         recent_runs: Viimeisimmät ajot
         run_headers:
           enqueued_at: Lisätty jonoon
+          outcome: Tulos
           queue: Jono
           revision: Versio
           triggered_by: Käynnistäjä
@@ -338,6 +353,9 @@ fi:
         manual: Manuaalinen
         rollover: Käyttöönotto
       version: v%{version}
+      waiting_on:
+        dependency_html: "<code>%{key}</code> (%{state})"
+        label: 'Odottaa:'
     dialogs:
       cancel: Peruuta
       confirm: Vahvista

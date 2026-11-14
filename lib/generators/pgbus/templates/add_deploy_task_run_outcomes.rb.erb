@@ -1,0 +1,12 @@
+class AddPgbusDeployTaskRunOutcomes < ActiveRecord::Migration<%= migration_version %>
+  # if_not_exists throughout: pgbus:update queues this right after
+  # add_deploy_tasks, whose template already carries these columns.
+  def change
+    add_column :pgbus_deploy_task_runs, :completed_at, :datetime, if_not_exists: true
+    add_column :pgbus_deploy_task_runs, :failed_at, :datetime, if_not_exists: true
+    add_column :pgbus_deploy_tasks, :dependencies, :text, if_not_exists: true
+
+    add_index :pgbus_deploy_task_runs, [:task_key, :completed_at],
+      name: "idx_pgbus_deploy_task_runs_completed", if_not_exists: true
+  end
+end

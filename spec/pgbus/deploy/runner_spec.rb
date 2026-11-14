@@ -11,16 +11,18 @@ RSpec.describe Pgbus::Deploy::Runner do
   let(:adapter) { recording_adapter.new }
   let(:recording_adapter) do
     Class.new do
-      attr_reader :jobs
+      attr_reader :jobs, :payloads
 
       def self.name = "RecordingAdapter"
 
       def initialize
         @jobs = []
+        @payloads = []
       end
 
       def enqueue(job)
         job.provider_job_id = 4242 + @jobs.size
+        @payloads << job.serialize
         @jobs << job
       end
 
@@ -37,6 +39,27 @@ RSpec.describe Pgbus::Deploy::Runner do
   let(:ready) { status(:ready) }
   let(:rows) { {} }
   let(:runs) { [] }
+  let(:order) { [] }
+  # A DeployTaskRun stand-in: create! returns one, the runner fills in the
+  # enqueue's queue_name and msg_id, or deletes it when the enqueue failed.
+  let(:run_class) do
+    Class.new do
+      attr_reader :id, :attrs
+
+      def initialize(id, attrs)
+        @id = id
+        @attrs = attrs.dup
+        @deleted = false
+      end
+
+      def update_columns(values) = @attrs.merge!(values)
+      def delete = @deleted = true
+      def deleted? = @deleted
+      def [](key) = @attrs[key]
+    end
+  end
+
+  def live_runs = runs.reject(&:deleted?)
 
   def status(reason, lagging: [])
     Pgbus::Deploy::Rollover::Status.new(revision: "rev-b", lagging: lagging, workers_live: 1, reason: reason,
@@ -64,7 +87,10 @@ RSpec.describe Pgbus::Deploy::Runner do
                                             "priority" => 2, "args" => [{ "batch_size" => 500 }] } }
     allow(Pgbus::DeployTask).to receive_messages(pending?: true, owed?: false)
     allow(Pgbus::DeployTask).to receive(:where) { |key:| key.filter_map { |k| rows[k] } }
-    allow(Pgbus::DeployTaskRun).to receive(:create!) { |attrs| runs << attrs }
+    allow(Pgbus::DeployTaskRun).to receive(:create!) do |attrs|
+      order << :create
+      run_class.new(900 + runs.size, attrs).tap { |run| runs << run }
+    end
     allow(Pgbus::Deploy::Rollover).to receive(:check).and_return(ready)
     allow(Pgbus::ErrorReporter).to receive(:report)
   end
@@ -175,8 +201,8 @@ RSpec.describe Pgbus::Deploy::Runner do
       expect(job).to have_attributes(class: job_class, queue_name: "maintenance", priority: 2,
                                      arguments: [{ "batch_size" => 500 }])
       expect(backfill).to have_received(:claim!).with(armed_for: "1", now: now)
-      expect(runs.sole).to include(task_key: "backfill", version: "1", revision: "rev-b", triggered_by: "rollover",
-                                   queue_name: "maintenance", msg_id: 4242, run_at: now)
+      expect(runs.sole.attrs).to include(task_key: "backfill", version: "1", revision: "rev-b",
+                                         triggered_by: "rollover", queue_name: "maintenance", msg_id: 4242, run_at: now)
     end
 
     it "does nothing while the gate is closed, and logs the reason once" do
@@ -317,7 +343,7 @@ RSpec.describe Pgbus::Deploy::Runner do
       expect(first).to have_received(:rearm!).with(armed_for: "1", now: kind_of(Time))
       expect(Pgbus::ErrorReporter).to have_received(:report).with(kind_of(Pgbus::JobNotUnique), hash_including(task: "a"))
       expect(adapter.jobs.map(&:class)).to eq([Pgbus::Recurring::CommandJob])
-      expect(runs.map { |r| r[:task_key] }).to eq(["b"])
+      expect(live_runs.map { |r| r[:task_key] }).to eq(["b"])
     end
 
     it "re-arms when a before_enqueue callback aborts (perform_later returns false)" do
@@ -327,7 +353,7 @@ RSpec.describe Pgbus::Deploy::Runner do
       runner.tick(now)
 
       expect(backfill).to have_received(:rearm!)
-      expect(runs).to be_empty
+      expect(live_runs).to be_empty
       expect(Pgbus::ErrorReporter).to have_received(:report).with(kind_of(Pgbus::EnqueueError), hash_including(task: "backfill"))
     end
 
@@ -378,17 +404,32 @@ RSpec.describe Pgbus::Deploy::Runner do
 
       runner.tick(now)
 
-      expect(runs.sole).to include(version: "3")
+      expect(runs.sole[:version]).to eq("3")
     end
 
-    it "logs and reports a run-row insert failure after a successful enqueue" do
-      row("backfill")
+    it "enqueues nothing and re-arms when the run row cannot be created" do
+      backfill = row("backfill")
       allow(Pgbus::DeployTaskRun).to receive(:create!).and_raise(StandardError, "insert failed")
 
       runner.tick(now)
 
-      expect(adapter.jobs.size).to eq(1)
+      expect(adapter.jobs).to be_empty
+      expect(backfill).to have_received(:rearm!)
       expect(Pgbus::ErrorReporter).to have_received(:report).with(kind_of(StandardError), hash_including(task: "backfill"))
+    end
+
+    it "logs and reports a failure to record the enqueue on the run row, and counts the task as enqueued" do
+      row("backfill")
+      allow(run_class).to receive(:new).and_wrap_original do |original, *args|
+        original.call(*args).tap { |run| allow(run).to receive(:update_columns).and_raise(StandardError, "update failed") }
+      end
+
+      runner.tick(now)
+
+      expect(adapter.jobs.size).to eq(1)
+      expect(runner.send(:backing_off?, "backfill")).to be(false)
+      expect(Pgbus::ErrorReporter).to have_received(:report)
+        .with(kind_of(StandardError), hash_including(action: "deploy_task_record_run", task: "backfill"))
     end
 
     it "emits pgbus.deploy_task.enqueue" do
@@ -411,21 +452,198 @@ RSpec.describe Pgbus::Deploy::Runner do
 
       expect(runner.enqueue(task, triggered_by: "manual", now: now)).to eq(:enqueued)
       expect(adapter.jobs.size).to eq(1)
-      expect(runs.sole).to include(triggered_by: "manual")
+      expect(runs.sole[:triggered_by]).to eq("manual")
       expect(Pgbus::Deploy::Rollover).not_to have_received(:check)
     end
 
-    it "returns :failed when the job was not enqueued" do
+    it "returns :failed when the job was not enqueued, and deletes the run row" do
       job_class.before_enqueue { throw :abort }
 
       expect(runner.enqueue(task, triggered_by: "manual", now: now)).to eq(:failed)
-      expect(runs).to be_empty
+      expect(runs.sole).to be_deleted
+    end
+
+    it "creates the run row before the enqueue and fills in queue_name and msg_id after it" do
+      allow(adapter).to receive(:enqueue).and_wrap_original do |original, job|
+        order << :enqueue
+        original.call(job)
+      end
+
+      runner.enqueue(task, triggered_by: "manual", now: now)
+
+      expect(order).to eq(%i[create enqueue])
+      expect(runs.sole.attrs).to include(queue_name: "maintenance", msg_id: 4242)
+    end
+
+    it "carries the run's id in the job payload" do
+      runner.enqueue(task, triggered_by: "manual", now: now)
+
+      expect(adapter.payloads.sole).to include("pgbus_deploy_task_run_id" => runs.sole.id)
+    end
+
+    it "carries the run's id for a command task" do
+      config.deploy_tasks = { "warm" => { "command" => "Cache.warm!" } }
+
+      runner.enqueue(runner.tasks.first, triggered_by: "manual", now: now)
+
+      expect(adapter.payloads.sole).to include("pgbus_deploy_task_run_id" => runs.sole.id)
+    end
+
+    it "reports, and still returns :failed, when the failed enqueue's run row cannot be deleted" do
+      job_class.before_enqueue { throw :abort }
+      allow(run_class).to receive(:new).and_wrap_original do |original, *args|
+        original.call(*args).tap { |run| allow(run).to receive(:delete).and_raise(StandardError, "db down") }
+      end
+
+      expect(runner.enqueue(task, triggered_by: "manual", now: now)).to eq(:failed)
+      expect(Pgbus::ErrorReporter).to have_received(:report)
+        .with(kind_of(StandardError), hash_including(action: "deploy_task_discard_run"))
     end
 
     it "returns :failed for a class that no longer resolves" do
       missing = Pgbus::Deploy::Task.from_configuration("gone", class: "NoSuchDeployJob")
 
       expect(runner.enqueue(missing, triggered_by: "manual", now: now)).to eq(:failed)
+    end
+  end
+
+  describe "after: (issue #660)" do
+    let(:outcomes) { [] }
+    let(:warnings) { [] }
+
+    def outcome(key, version: "1", revision: "rev-b", completed: false, latest_failed: false)
+      Pgbus::DeployTaskRun::Outcome.new(task_key: key, version: version, revision: revision, completed: completed,
+                                        latest_failed: latest_failed, latest_id: 1)
+    end
+
+    before do
+      config.deploy_tasks = { "widgets" => { "class" => "DeployBackfillJob" },
+                              "totals" => { "class" => "DeployBackfillJob", "after" => "widgets" } }
+      allow(Pgbus::Deploy::Schema).to receive(:outcomes?).and_return(true)
+      allow(Pgbus::DeployTaskRun).to receive(:outcomes_for) { outcomes }
+      allow(Pgbus.logger).to receive(:warn) { |&blk| warnings << blk.call }
+    end
+
+    describe "#tasks" do
+      it "loads a task with a declared dependency" do
+        expect(runner.tasks.map(&:key)).to eq(%w[totals widgets])
+        expect(runner.tasks.first.dependencies).to eq(%w[widgets])
+      end
+
+      it "skips a task naming an unknown key, with a warning" do
+        config.deploy_tasks["totals"]["after"] = "gadgets"
+
+        expect(runner.tasks.map(&:key)).to eq(%w[widgets])
+        expect(warnings.join).to include("totals", "after: unknown task 'gadgets'")
+      end
+
+      it "skips a dependent of an invalid task" do
+        config.deploy_tasks["widgets"] = { "version" => 2 }
+
+        expect(runner.tasks).to be_empty
+        expect(warnings.join).to include("after: 'widgets' is skipped")
+      end
+
+      it "skips every task in a cycle" do
+        config.deploy_tasks["widgets"]["after"] = "totals"
+
+        expect(runner.tasks).to be_empty
+        expect(warnings.grep(/cycle totals \u2192 widgets \u2192 totals/).size).to eq(2)
+      end
+
+      it "skips a task with after: until the outcomes migration has run, naming the generator" do
+        allow(Pgbus::Deploy::Schema).to receive(:outcomes?).and_return(false)
+
+        expect(runner.tasks.map(&:key)).to eq(%w[widgets])
+        expect(warnings.join).to include("totals", "rails g pgbus:add_deploy_task_run_outcomes")
+      end
+
+      it "does not probe the schema when no task declares after:" do
+        config.deploy_tasks["totals"].delete("after")
+
+        runner.tasks
+
+        expect(Pgbus::Deploy::Schema).not_to have_received(:outcomes?)
+      end
+    end
+
+    describe "#tick" do
+      it "fires the dependency and keeps the dependent armed while the dependency has no run" do
+        totals = row("totals")
+        row("widgets")
+
+        runner.tick(now)
+
+        expect(runs.map { |r| r[:task_key] }).to eq(%w[widgets])
+        expect(totals).not_to have_received(:claim!)
+        expect(totals).not_to have_received(:rearm!)
+        expect(runner.send(:backing_off?, "totals")).to be(false)
+      end
+
+      it "keeps waiting while the dependency's run is running or failed" do
+        totals = row("totals")
+        outcomes << outcome("widgets")
+        runner.tick(now)
+        outcomes[0] = outcome("widgets", latest_failed: true)
+        runner.tick(now)
+
+        expect(totals).not_to have_received(:claim!)
+      end
+
+      it "fires on the first tick after the dependency completed" do
+        totals = row("totals")
+        runner.tick(now)
+        outcomes << outcome("widgets", revision: "rev-a", completed: true)
+
+        runner.tick(now)
+
+        expect(totals).to have_received(:claim!).once
+        expect(runs.sole[:task_key]).to eq("totals")
+      end
+
+      it "does not count a completed run at an older version" do
+        config.deploy_tasks["widgets"]["version"] = 2
+        totals = row("totals")
+        outcomes << outcome("widgets", version: "1", completed: true)
+
+        runner.tick(now)
+
+        expect(totals).not_to have_received(:claim!)
+      end
+
+      it "needs this revision for an every_deploy dependency" do
+        config.deploy_tasks["widgets"]["every_deploy"] = true
+        totals = row("totals")
+        outcomes << outcome("widgets", revision: "rev-a", completed: true)
+        runner.tick(now)
+        expect(totals).not_to have_received(:claim!)
+
+        outcomes << outcome("widgets", revision: "rev-b", completed: true)
+        runner.tick(now)
+        expect(totals).to have_received(:claim!)
+      end
+
+      it "logs the wait once per change of what it waits on" do
+        row("totals")
+        messages = []
+        allow(Pgbus.logger).to receive(:info) { |&blk| messages << blk.call }
+
+        2.times { runner.tick(now) }
+        outcomes << outcome("widgets")
+        runner.tick(now)
+
+        expect(messages.grep(/totals waits on/)).to eq(
+          ["[Pgbus] Deploy task totals waits on widgets (not run)", "[Pgbus] Deploy task totals waits on widgets (running)"]
+        )
+      end
+
+      it "reads no outcomes while no armed task has dependencies" do
+        row("widgets")
+
+        runner.tick(now)
+
+        expect(Pgbus::DeployTaskRun).not_to have_received(:outcomes_for)
+      end
     end
   end
 

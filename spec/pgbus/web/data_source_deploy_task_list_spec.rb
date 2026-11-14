@@ -11,14 +11,16 @@ RSpec.describe Pgbus::Web::DataSource::DeployTaskList do
     double("Pgbus::DeployTask", id: 7, key: "backfill", class_name: "BackfillJob", command: nil, version: "2",
                                 every_deploy: false, queue_name: "maintenance", priority: 0, description: "Totals",
                                 enabled: true, static: true, armed_at: now, armed_for: "2", created_at: now - 86_400,
-                                updated_at: now - 60, parsed_arguments: [{ "batch_size" => 500 }])
+                                updated_at: now - 60, parsed_arguments: [{ "batch_size" => 500 }],
+                                parsed_dependencies: [])
   end
 
   before { allow(Pgbus::DeployTask).to receive(:table_exists?).and_return(true) }
 
   def run(triggered_by, revision: "rev-a", run_at: now - 300)
     double("Pgbus::DeployTaskRun", task_key: "backfill", triggered_by: triggered_by, revision: revision,
-                                   version: "2", run_at: run_at, queue_name: "maintenance", msg_id: 42)
+                                   version: "2", run_at: run_at, queue_name: "maintenance", msg_id: 42,
+                                   has_attribute?: false)
   end
 
   describe "#deploy_tasks" do
@@ -35,7 +37,9 @@ RSpec.describe Pgbus::Web::DataSource::DeployTaskList do
 
       expect(row).to include(id: 7, key: "backfill", version: "2", every_deploy: false, queue_name: "maintenance",
                              enabled: true, armed_at: now, armed_for: "2")
-      expect(row[:last_rollover_run]).to eq(run_at: now - 300, revision: "rev-a", version: "2", triggered_by: "rollover")
+      expect(row[:last_rollover_run]).to eq(run_at: now - 300, revision: "rev-a", version: "2", triggered_by: "rollover",
+                                            completed_at: nil, failed_at: nil)
+      expect(row).to include(dependencies: [], waiting_on: [])
       expect(row[:last_manual_run]).to include(run_at: now - 60, triggered_by: "manual")
     end
 

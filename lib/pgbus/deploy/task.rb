@@ -5,12 +5,13 @@ module Pgbus
     # One declared deploy task (issue #536): an entry of
     # config/deploy_tasks.yml. The sibling of Recurring::Task without a
     # schedule: it runs once per (key, version) after a rollover, or after
-    # every rollover when every_deploy is set.
+    # every rollover when every_deploy is set. after: names the tasks it
+    # waits for (issue #660): see Deploy::Dependencies.
     class Task
       DEFAULT_VERSION = "1"
 
       attr_reader :key, :class_name, :command, :version, :every_deploy, :queue_name,
-                  :arguments, :priority, :description
+                  :arguments, :priority, :description, :dependencies
 
       def self.from_configuration(key, **options)
         options = options.transform_keys(&:to_sym)
@@ -24,12 +25,14 @@ module Pgbus
           queue_name: options[:queue],
           arguments: options[:args].is_a?(Hash) ? [options[:args]] : Array(options[:args]),
           priority: options.fetch(:priority, 0).to_i,
-          description: options[:description]
+          description: options[:description],
+          dependencies: options[:after]
         )
       end
 
       def initialize(key:, class_name: nil, command: nil, version: DEFAULT_VERSION, explicit_version: false,
-                     every_deploy: false, queue_name: nil, arguments: [], priority: 0, description: nil)
+                     every_deploy: false, queue_name: nil, arguments: [], priority: 0, description: nil,
+                     dependencies: nil)
         @key = key
         @class_name = class_name
         @command = command
@@ -40,6 +43,7 @@ module Pgbus
         @arguments = arguments || []
         @priority = priority || 0
         @description = description
+        @dependencies = dependency_list(dependencies)
         @errors = []
         @warnings = []
       end
@@ -74,7 +78,8 @@ module Pgbus
       def to_h
         {
           key: key, class_name: class_name, command: command, version: version, every_deploy: every_deploy,
-          queue_name: queue_name, arguments: arguments, priority: priority, description: description
+          queue_name: queue_name, arguments: arguments, priority: priority, description: description,
+          dependencies: dependencies
         }
       end
 
@@ -86,9 +91,22 @@ module Pgbus
         validate_target!
         @errors << "Version must not be blank" if version.empty?
         @errors << "every_deploy must be true or false" unless [true, false].include?(every_deploy)
+        validate_dependencies!
         return unless every_deploy == true && @explicit_version
 
         @warnings << "every_deploy is set, so version is ignored (it runs after every rollover)"
+      end
+
+      def validate_dependencies!
+        @errors << "after: must name task keys" unless dependencies.all? { |dep| dep.is_a?(String) && !dep.strip.empty? }
+        @errors << "after: cycle #{key} \u2192 #{key}" if dependencies.include?(key)
+      end
+
+      # nil, one key, or a list; a Symbol reads as its name. Anything else is
+      # kept as given, for validate_dependencies! to reject.
+      def dependency_list(value)
+        list = value.is_a?(Array) ? value : [value].compact
+        list.map { |dep| dep.is_a?(Symbol) ? dep.to_s : dep }.uniq.freeze
       end
 
       def validate_target!

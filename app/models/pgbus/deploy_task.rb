@@ -46,6 +46,7 @@ module Pgbus
         queue_name: task.queue_name, priority: task.priority, version: task.version,
         every_deploy: task.every_deploy, description: task.description, static: true
       )
+      record.dependencies = JSON.generate(task.dependencies) if Deploy::Schema.outcomes?
       if owed?(task, revision)
         record.armed_at ||= now
         record.armed_for = task.armed_for(revision)
@@ -79,6 +80,14 @@ module Pgbus
       !armed_at.nil?
     end
 
+    # The after: keys; none before the outcomes migration or for a corrupt value.
+    def parsed_dependencies
+      value = has_attribute?(:dependencies) ? self[:dependencies] : nil
+      value.blank? ? [] : Array(JSON.parse(value))
+    rescue JSON::ParserError
+      []
+    end
+
     # For display: a corrupt value shows as no arguments.
     def parsed_arguments
       decoded_arguments
@@ -91,7 +100,8 @@ module Pgbus
     def to_task
       Deploy::Task.new(
         key: key, class_name: class_name, command: command, version: version, every_deploy: every_deploy,
-        queue_name: queue_name, arguments: decoded_arguments, priority: priority, description: description
+        queue_name: queue_name, arguments: decoded_arguments, priority: priority, description: description,
+        dependencies: parsed_dependencies
       )
     end
 
