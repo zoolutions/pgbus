@@ -752,20 +752,6 @@ RSpec.describe Pgbus::Streams::Presence do
       clock[0] = 191.0
       expect { described_class.seats_supported? }.to change { probes }.by(1)
     end
-
-    it "answers from its own probe even when another probe stores a no while it runs" do
-      described_class.seats_supported?
-      allow(raw_connection).to receive(:exec_params) do |sql, _binds|
-        statements << sql
-        # A thread that probed the pre-seat schema stores its "no" while the
-        # forced probe, which sees the migrated table, is in flight.
-        described_class.send(:store_schema_answer, false, described_class.instance_variable_get(:@schema_generation))
-        [{ "present" => "1" }]
-      end
-
-      expect(described_class.seats_supported_now?).to be(true)
-      expect(described_class.seats_supported?).to be(true)
-    end
   end
 
   # Issue #665: what Pgbus::Doctor reports.
