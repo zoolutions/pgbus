@@ -1,0 +1,24 @@
+README.md
+  s_32f1905dad0a43::t_294c2a4241ab50 556
+CHANGELOG.md
+  s_32f1905dad0a43::t_fb0d432f521aca 9
+docs/app/views/docs/pages/running_workers.rb
+  s_32f1905dad0a43::t_fb0d432f521aca 401
+  s_32f1905dad0a43::t_294c2a4241ab50 407-410
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "d41cdbe11e713d6fe738068896278250f0225b2d",
+  "prompts": {},
+  "sessions": {
+    "s_32f1905dad0a43": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "adec1fec-d801-46d6-bafa-715640f4557f",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
