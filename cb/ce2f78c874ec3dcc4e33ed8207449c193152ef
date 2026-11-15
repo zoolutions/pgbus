@@ -1,0 +1,23 @@
+CHANGELOG.md
+  s_e5a077aaf4d041::t_1880efc102585d 3-6
+docs/performance.md
+  s_e5a077aaf4d041::t_1880efc102585d 1212-1291
+docs/concurrency.md
+  s_e5a077aaf4d041::t_1a5d2832944d88 93-96
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "cbce2f78c874ec3dcc4e33ed8207449c193152ef",
+  "prompts": {},
+  "sessions": {
+    "s_e5a077aaf4d041": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "640a8129-e9dd-4eb5-9d12-4102ce694f6c",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}

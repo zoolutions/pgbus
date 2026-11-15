@@ -1,0 +1,45 @@
+lib/pgbus/batch.rb
+  s_e5a077aaf4d041::t_6d9df7c2ca1d0c 363-365,431,448-453
+spec/integration/connection_lease_spec.rb
+  s_e5a077aaf4d041::t_a71c8500b8465b 14-16
+spec/support/bus_record_pool_stub.rb
+  s_e5a077aaf4d041::t_6d9df7c2ca1d0c 12-13,16,19-22
+docs/performance.md
+  s_e5a077aaf4d041::t_81d09c6f350f8d 1231-1235
+benchmarks/worker_profile_bench.rb
+  s_e5a077aaf4d041::t_73967fe6bc6d7f 226-227,285-286
+benchmarks/support/worker_profile_runner.rb
+  s_e5a077aaf4d041::t_73967fe6bc6d7f 32-33,38,46,140-141
+spec/pgbus/job_stat_spec.rb
+  s_e5a077aaf4d041::t_81d09c6f350f8d 13-24
+lib/pgbus/failed_event_recorder.rb
+  s_e5a077aaf4d041::t_6d9df7c2ca1d0c 199-201,203
+rubocop/cop/pgbus/bare_connection_lease.rb
+  s_e5a077aaf4d041::t_6d9df7c2ca1d0c 15,70,73-75
+spec/rubocop/cop/pgbus/bare_connection_lease_spec.rb
+  s_e5a077aaf4d041::t_6d9df7c2ca1d0c 54-60,161,163-165,167-170,172,180-183
+app/models/pgbus/batch_entry.rb
+  s_e5a077aaf4d041::t_6d9df7c2ca1d0c 64-66
+CHANGELOG.md
+  s_e5a077aaf4d041::t_81d09c6f350f8d 5
+app/models/pgbus/uniqueness_key.rb
+  s_e5a077aaf4d041::t_6d9df7c2ca1d0c 146-147
+benchmarks/support/fleet_profile_runner.rb
+  s_e5a077aaf4d041::t_73967fe6bc6d7f 107-108
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "0bafa18ce0ac6bb217ed331a633d297118655f79",
+  "prompts": {},
+  "sessions": {
+    "s_e5a077aaf4d041": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "640a8129-e9dd-4eb5-9d12-4102ce694f6c",
+        "model": "unknown"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}

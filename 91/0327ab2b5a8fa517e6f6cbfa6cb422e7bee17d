@@ -1,0 +1,33 @@
+docs/app/views/docs/pages/running_workers.rb
+  s_6f6be46f1a03ed::t_7d6ba296756a85 202-203,418-419
+CHANGELOG.md
+  s_6f6be46f1a03ed::t_d885fbdbcfcb2b 5-6
+docs/spec/requests/docs_spec.rb
+  s_6f6be46f1a03ed::t_5faed0a99f2cf8 31-38
+docs/app/views/docs/pages/performance_tuning.rb
+  s_6f6be46f1a03ed::t_ca8023989dabc4 45
+  s_6f6be46f1a03ed::t_9db30a8df1fb17 49-50
+  s_6f6be46f1a03ed::t_184511ebcf953b 29-32,34,38-44,46-48,51-151
+  s_6f6be46f1a03ed::t_d87d028063c924 10
+  s_6f6be46f1a03ed::t_cde67138df5956 13
+  s_6f6be46f1a03ed::t_454e82109c0b41 33,35-37
+docs/performance.md
+  s_6f6be46f1a03ed::t_d87d028063c924 16-19
+  s_6f6be46f1a03ed::t_06bcadfc8ec1c7 490-492
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "910327ab2b5a8fa517e6f6cbfa6cb422e7bee17d",
+  "prompts": {},
+  "sessions": {
+    "s_6f6be46f1a03ed": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c60b8ef6-a2ee-4a53-a9de-07b83ac1c707",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}

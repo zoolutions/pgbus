@@ -1,0 +1,19 @@
+spec/pgbus/client/stale_retry_reload_spec.rb
+  s_d42c0e9c2db5ca::t_ca7a79de54b63f 1-158
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "2df2ed9467f46deb8d3d02ee46c41f50c6868f8f",
+  "prompts": {},
+  "sessions": {
+    "s_d42c0e9c2db5ca": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "590696ce-042a-4f11-a776-16ef6e65f694",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}

@@ -1,0 +1,31 @@
+app/assets/javascripts/pgbus/stream_source_element.min.js.map
+  ai_agent 1
+docs/Dockerfile
+  s_5195f171f5a6c6::t_b84a07eb5f8b96 11
+app/frontend/pgbus/vendor/turbo.min.js.map
+  ai_agent 1
+CHANGELOG.md
+  ai_agent 9-10
+.bun-version
+  s_5195f171f5a6c6::t_a014e3454d9878 1
+app/frontend/pgbus/application.min.js.map
+  ai_agent 1
+app/frontend/pgbus/modules/charts.min.js.map
+  ai_agent 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "b38303201bfff646a704b757fd4b10080ac98dad",
+  "prompts": {},
+  "sessions": {
+    "s_5195f171f5a6c6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "59d3a1ae-355b-4200-b17b-ee92abc13ff1",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}

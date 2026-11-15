@@ -1,0 +1,9 @@
+spec/integration/queue_operations_spec.rb
+  ai_agent 115,134,144-147
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "009d01ba6746def3ae6f6f3c9eb29a3c8bb7f698",
+  "prompts": {}
+}

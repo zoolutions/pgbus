@@ -1,0 +1,65 @@
+spec/pgbus/process/worker_spec.rb
+  s_6f6be46f1a03ed::t_90bc9f79b747cb 359,369
+  s_6f6be46f1a03ed::t_53ee3205e8a68c 363-368
+spec/pgbus/configuration_spec.rb
+  s_6f6be46f1a03ed::t_cddbd6885fbe2a 278-299
+sig/pgbus/process/completer.rbs
+  s_6f6be46f1a03ed::t_90bc9f79b747cb 16-18
+sig/pgbus/configuration.rbs
+  s_6f6be46f1a03ed::t_33e41527e3a1f2 33-34
+spec/pgbus/batch_sweep_spec.rb
+  s_6f6be46f1a03ed::t_bc922d369c4a0a 155
+  s_6f6be46f1a03ed::t_74e53c324469b2 148-154,156-169
+benchmarks/support/worker_profile_harness.rb
+  s_6f6be46f1a03ed::t_1847ba27d49352 125-135
+docs/app/models/config_reference.rb
+  s_6f6be46f1a03ed::t_1aceebd5924917 45-46
+spec/pgbus/client/native_statements_spec.rb
+  s_6f6be46f1a03ed::t_9ad46c7eafde44 567
+spec/pgbus/active_job/executor_spec.rb
+  s_6f6be46f1a03ed::t_9ad46c7eafde44 374,581,775,1020
+  s_6f6be46f1a03ed::t_b952ce79b6e417 518-576
+benchmarks/worker_profile_bench.rb
+  s_6f6be46f1a03ed::t_1847ba27d49352 47-49,74,240
+spec/benchmarks/worker_profile_harness_spec.rb
+  s_6f6be46f1a03ed::t_1847ba27d49352 168-180
+lib/pgbus/active_job/executor.rb
+  s_6f6be46f1a03ed::t_3218332d64ddf9 9-11,17,124,154,430-434,443,449,451,467-468
+lib/pgbus/process/worker.rb
+  s_6f6be46f1a03ed::t_90bc9f79b747cb 108
+  s_6f6be46f1a03ed::t_53ee3205e8a68c 104-105
+  s_6f6be46f1a03ed::t_c49cc9c76c86d1 106-107,109
+lib/pgbus/configuration.rb
+  s_6f6be46f1a03ed::t_0f50b0adfb7a59 43-52,367,846-854
+lib/pgbus/process/completer.rb
+  s_6f6be46f1a03ed::t_3563eda2167b95 17,19-20,63-64,96-97,160,169
+  s_6f6be46f1a03ed::t_90bc9f79b747cb 18,65-68
+docs/app/views/docs/pages/performance_tuning.rb
+  s_6f6be46f1a03ed::t_8017164d930542 397
+  s_6f6be46f1a03ed::t_f526fd3d50574b 414-434
+spec/integration/completed_jobs_delete_spec.rb
+  s_6f6be46f1a03ed::t_13409578280131 1-154
+lib/pgbus/batch/sweep.rb
+  s_6f6be46f1a03ed::t_c2e0f9d44d0dde 50-51
+benchmarks/support/worker_profile_runner.rb
+  s_6f6be46f1a03ed::t_1847ba27d49352 54-56
+spec/pgbus/process/completer_spec.rb
+  s_6f6be46f1a03ed::t_90bc9f79b747cb 244-245,290-292
+  s_6f6be46f1a03ed::t_ce258f2fe44e73 241-243,246-289,293-294
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "4521e7d13351a5ff9cec97be91d9b0e04f3992e8",
+  "prompts": {},
+  "sessions": {
+    "s_6f6be46f1a03ed": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c60b8ef6-a2ee-4a53-a9de-07b83ac1c707",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}

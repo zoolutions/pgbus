@@ -1,0 +1,21 @@
+spec/pgbus/client/native_statements_spec.rb
+  s_e11fc43fbe7bf3::t_96d1daaad1ea67 544-547,549
+spec/support/real_pgmq_errors.rb
+  s_e11fc43fbe7bf3::t_eb38861860a97a 35-37,40
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "1ed1344f2ff9b2c4186113cbb3b05834bac8183b",
+  "prompts": {},
+  "sessions": {
+    "s_e11fc43fbe7bf3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "51453ee3-7256-4fd2-9b82-567a2e68642b",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}

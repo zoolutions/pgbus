@@ -1,0 +1,25 @@
+lib/pgbus/web/streamer/stream_event_dispatcher.rb
+  s_f7f0f606932d66::t_f9bfb3da0584df 383-385
+docs/performance.md
+  s_f7f0f606932d66::t_f9bfb3da0584df 1589-1591
+lib/pgbus/web/streamer/listener.rb
+  s_f7f0f606932d66::t_f9bfb3da0584df 320-321,323,406-409
+spec/pgbus/web/streamer/listener_spec.rb
+  s_f7f0f606932d66::t_8401064d78b934 573-575,577
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "a1bea27414799f0f408222e03d2ae67e768a6793",
+  "prompts": {},
+  "sessions": {
+    "s_f7f0f606932d66": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f21615f0-ca1d-43df-80e0-f58672e7ea31",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}

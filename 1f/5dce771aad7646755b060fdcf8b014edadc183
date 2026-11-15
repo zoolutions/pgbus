@@ -1,0 +1,21 @@
+spec/integration/batch_statement_count_spec.rb
+  s_e5a077aaf4d041::t_8d037223e652ed 1-52,55-75
+spec/pgbus/batch_execution_spec.rb
+  s_e5a077aaf4d041::t_5a976c710a9f2a 166-167
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "1f5dce771aad7646755b060fdcf8b014edadc183",
+  "prompts": {},
+  "sessions": {
+    "s_e5a077aaf4d041": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "640a8129-e9dd-4eb5-9d12-4102ce694f6c",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}

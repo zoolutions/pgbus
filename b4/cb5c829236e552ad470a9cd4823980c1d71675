@@ -1,0 +1,27 @@
+spec/benchmarks/fleet_profile_harness_spec.rb
+  s_6f6be46f1a03ed::t_d53a89300cd729 1-104,106-179
+benchmarks/support/fleet_profile_harness.rb
+  s_6f6be46f1a03ed::t_107eb6c34bdb6d 1-103,105-126
+spec/benchmarks/worker_profile_harness_spec.rb
+  s_6f6be46f1a03ed::t_0ee0c64801e139 144-152
+benchmarks/support/fleet_profile_runner.rb
+  s_6f6be46f1a03ed::t_97b0195e03e2cd 1-63,65-70,72-90,92-97,99-207,209,211-214,216-252
+CHANGELOG.md
+  s_6f6be46f1a03ed::t_caf6fbfe012482 3-6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "b4cb5c829236e552ad470a9cd4823980c1d71675",
+  "prompts": {},
+  "sessions": {
+    "s_6f6be46f1a03ed": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c60b8ef6-a2ee-4a53-a9de-07b83ac1c707",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}

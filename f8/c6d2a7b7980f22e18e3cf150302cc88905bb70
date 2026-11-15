@@ -1,0 +1,19 @@
+lib/pgbus/deploy/schema.rb
+  s_17660c96154c62::t_c351d82f42343c 1-66
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "f8c6d2a7b7980f22e18e3cf150302cc88905bb70",
+  "prompts": {},
+  "sessions": {
+    "s_17660c96154c62": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7ac4973c-590a-4dc4-8e33-858533d83799",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}

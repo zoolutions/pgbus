@@ -1,0 +1,26 @@
+lib/pgbus/batch.rb
+  s_6f6be46f1a03ed::t_4b8d77b2c2f445 429-432
+spec/pgbus/batch_spec.rb
+  s_6f6be46f1a03ed::t_b8d67e45472a90 479-508
+spec/pgbus/active_job/adapter_spec.rb
+  s_6f6be46f1a03ed::t_0ebec6f18a6d1b 868-891
+  s_6f6be46f1a03ed::t_e3aa314a5b435b 88-112
+benchmarks/integration_bench.rb
+  s_6f6be46f1a03ed::t_c4fd4d67923c8b 69-86
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "ad2920f4e1647a3d4be738a8df635e191ae02634",
+  "prompts": {},
+  "sessions": {
+    "s_6f6be46f1a03ed": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c60b8ef6-a2ee-4a53-a9de-07b83ac1c707",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}

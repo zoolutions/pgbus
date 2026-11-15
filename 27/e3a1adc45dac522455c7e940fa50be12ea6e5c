@@ -1,0 +1,23 @@
+rubocop/cop/pgbus/bare_connection_lease.rb
+  s_e5a077aaf4d041::t_9cf3be28f22aa5 27-30,51
+spec/rubocop/cop/pgbus/bare_connection_lease_spec.rb
+  s_e5a077aaf4d041::t_9cf3be28f22aa5 17,133-141
+  s_e5a077aaf4d041::t_226538c23d7bce 18
+  s_e5a077aaf4d041::t_bf1d9ac983ebcc 20-21
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "27e3a1adc45dac522455c7e940fa50be12ea6e5c",
+  "prompts": {},
+  "sessions": {
+    "s_e5a077aaf4d041": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "640a8129-e9dd-4eb5-9d12-4102ce694f6c",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}

@@ -1,0 +1,13 @@
+docs/app/views/docs/pages/performance_tuning.rb
+  ai_agent 421-423
+CHANGELOG.md
+  ai_agent 5
+docs/performance.md
+  ai_agent 837-838
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "4d7b03a6bb5c83a39498ad3bf25bbf17f9068e58",
+  "prompts": {}
+}

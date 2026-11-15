@@ -1,0 +1,21 @@
+lib/pgbus/batch.rb
+  s_e5a077aaf4d041::t_71b47792d5e97f 448-452,454,504-510
+spec/pgbus/batch_execution_spec.rb
+  s_e5a077aaf4d041::t_4f9935869625d8 109-121
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "4d86a874c27406c96718a7afa8f8069fa6d5ef3f",
+  "prompts": {},
+  "sessions": {
+    "s_e5a077aaf4d041": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "640a8129-e9dd-4eb5-9d12-4102ce694f6c",
+        "model": "unknown"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}

@@ -1,0 +1,9 @@
+docs/performance.md
+  ai_agent 1285
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "d7652f7943fee3144f4f3fcdb2ee781b1ad1435f",
+  "prompts": {}
+}

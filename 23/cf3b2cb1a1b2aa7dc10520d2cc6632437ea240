@@ -1,0 +1,44 @@
+spec/pgbus/client/native_statements_spec.rb
+  s_6f6be46f1a03ed::t_54747fc591c9d0 533,535,539,542,548-549,556-558,562-564,580-589,591-595
+  s_6f6be46f1a03ed::t_fea4ecef9aa570 546-547,550-555,559-561,565-579
+  s_6f6be46f1a03ed::t_8aaa22bb8171f3 590,596
+spec/pgbus/configuration_spec.rb
+  s_6f6be46f1a03ed::t_23675ffecbbd74 290-292
+spec/benchmarks/worker_profile_bench_knobs_spec.rb
+  s_6f6be46f1a03ed::t_23675ffecbbd74 15,60-69
+spec/pgbus/batch_sweep_spec.rb
+  s_6f6be46f1a03ed::t_23675ffecbbd74 155-156,164-166,173-181
+benchmarks/worker_profile_bench.rb
+  s_6f6be46f1a03ed::t_23675ffecbbd74 240
+docs/performance.md
+  s_6f6be46f1a03ed::t_23675ffecbbd74 782-786,805
+docs/app/models/config_reference.rb
+  s_6f6be46f1a03ed::t_23675ffecbbd74 45-46
+lib/pgbus/client/native_statements.rb
+  s_6f6be46f1a03ed::t_8aaa22bb8171f3 363
+  s_6f6be46f1a03ed::t_54747fc591c9d0 60
+  s_6f6be46f1a03ed::t_52d649c3a20bf0 359,366-368
+  s_6f6be46f1a03ed::t_fea4ecef9aa570 55-59,324,331,338,345,348-358,361-362,365
+  s_6f6be46f1a03ed::t_3b4bfecd84d7ab 360,364,369
+docs/app/views/docs/pages/performance_tuning.rb
+  s_6f6be46f1a03ed::t_23675ffecbbd74 418-424
+CHANGELOG.md
+  s_6f6be46f1a03ed::t_23675ffecbbd74 5
+  s_6f6be46f1a03ed::t_3509e70dca56e1 18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "23cf3b2cb1a1b2aa7dc10520d2cc6632437ea240",
+  "prompts": {},
+  "sessions": {
+    "s_6f6be46f1a03ed": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c60b8ef6-a2ee-4a53-a9de-07b83ac1c707",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}

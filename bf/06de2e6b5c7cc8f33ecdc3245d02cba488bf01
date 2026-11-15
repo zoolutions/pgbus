@@ -1,0 +1,26 @@
+docs/app/views/docs/pages/quick_start.rb
+  s_5dafd4410dff3a::t_7800100351d5d8 101
+spec/pgbus/event_spec.rb
+  s_5dafd4410dff3a::t_4c452f98b43406 63
+docs/app/views/docs/pages/event_bus.rb
+  s_5dafd4410dff3a::t_ba08c420a78a0e 63
+  s_5dafd4410dff3a::t_da039e9b487f14 73-75
+README.md
+  s_5dafd4410dff3a::t_79d7ea61c73242 209
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "bf06de2e6b5c7cc8f33ecdc3245d02cba488bf01",
+  "prompts": {},
+  "sessions": {
+    "s_5dafd4410dff3a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8ef8f5da-c2a7-4f38-b84a-a52cbcb5a0b5",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}

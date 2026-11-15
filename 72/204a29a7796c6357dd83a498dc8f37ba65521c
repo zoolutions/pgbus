@@ -1,0 +1,9 @@
+spec/pgbus/failed_event_recorder_spec.rb
+  ai_agent 12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "72204a29a7796c6357dd83a498dc8f37ba65521c",
+  "prompts": {}
+}

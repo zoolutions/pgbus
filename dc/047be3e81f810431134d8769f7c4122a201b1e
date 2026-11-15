@@ -1,0 +1,24 @@
+.github/workflows/main.yml
+  s_5dafd4410dff3a::t_405c73a5eeee97 178-180
+spec/pgbus/web/streamer/master_hub_spec.rb
+  s_5dafd4410dff3a::t_a502d160b22adc 74-88
+  s_5dafd4410dff3a::t_4751930e5302ff 128-129
+  s_5dafd4410dff3a::t_d9db49098f579a 110-111
+  s_5dafd4410dff3a::t_d738fcbc422bb3 112,115-116,122-123
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "dc047be3e81f810431134d8769f7c4122a201b1e",
+  "prompts": {},
+  "sessions": {
+    "s_5dafd4410dff3a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8ef8f5da-c2a7-4f38-b84a-a52cbcb5a0b5",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
