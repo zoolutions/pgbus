@@ -406,9 +406,10 @@ class Views::Docs::Pages::RunningWorkers < DocsUI::Page
         ActiveRecord `Proc` connection, whose socket pgbus does not own.
 
         With `connection_guc_mode: :session` and database.yml `variables`, a
-        connection the health check resets applies its session `SET`s again; one
-        whose `SET`s fail is closed, so the next checkout resets it and retries
-        (#671).
+        connection the health check resets applies its session `SET`s again. One
+        whose `SET`s fail is closed and the error reaches the caller; the next
+        checkout resets it and applies the `SET`s again. Only a stale-connection
+        error is retried (#671).
       MD
     end
   end

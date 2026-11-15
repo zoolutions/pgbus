@@ -126,7 +126,9 @@ module Pgbus
         Pgbus.logger.warn { "[Pgbus::Client] #{reason}, resetting the connection" }
         conn.reset
       rescue PG::Error => e
-        Pgbus.logger.warn { "[Pgbus::Client] Resetting the connection failed: #{e.message}" }
+        Pgbus.logger.warn do
+          "[Pgbus::Client] Resetting the connection or re-applying its session variables failed: #{e.message}"
+        end
       end
 
       # The failed BEGIN block (INERROR) is still open after the sync. A failed

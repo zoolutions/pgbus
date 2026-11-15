@@ -452,7 +452,7 @@ RSpec.describe Pgbus::Client::AsyncCommit do
 
       expect { client.archive_message("default", 9, job_completion: true) }.to raise_error(Interrupt)
       expect(conn.calls.last).to eq([:close])
-      expect(messages.last).to include("Resetting the connection failed: bad value")
+      expect(messages.last).to include("Resetting the connection or re-applying its session variables failed: bad value")
     end
 
     # A session the reset closed is left for pgmq-ruby's next checkout: leaving
