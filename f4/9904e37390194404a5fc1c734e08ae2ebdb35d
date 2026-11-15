@@ -1,0 +1,37 @@
+spec/pgbus/client/session_gucs_spec.rb
+  s_1ba7acc41a0553::t_0bb8d9e0c558e0 4
+  s_1ba7acc41a0553::t_3e88faf2d133d6 1-3,5-88
+lib/pgbus/client/async_commit.rb
+  s_1ba7acc41a0553::t_108bbbfdcb54b1 119-121,124,126
+lib/pgbus/client.rb
+  s_1ba7acc41a0553::t_108bbbfdcb54b1 2204-2205,2211-2212
+spec/integration/pooler_primary_affinity_spec.rb
+  s_1ba7acc41a0553::t_218036908f3c39 74-127
+docs/app/views/docs/pages/running_workers.rb
+  s_1ba7acc41a0553::t_204a9f2196044f 409-411
+CHANGELOG.md
+  s_1ba7acc41a0553::t_2634870b5c256e 7-12
+spec/pgbus/client/completion_commit_spec.rb
+  s_1ba7acc41a0553::t_abb261e11d5f40 429
+  s_1ba7acc41a0553::t_277bd25a0c8ea5 399-401,407,410,416,419,421,428
+lib/pgbus/client/session_gucs.rb
+  s_1ba7acc41a0553::t_36cabf1691b27a 1-49
+spec/pgbus/pg_connect_guard_spec.rb
+  s_1ba7acc41a0553::t_9d8035677de6da 17-18,21
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "f49904e37390194404a5fc1c734e08ae2ebdb35d",
+  "prompts": {},
+  "sessions": {
+    "s_1ba7acc41a0553": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "62abcae1-8b7b-4afb-bf1e-9fa3b40886ef",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
