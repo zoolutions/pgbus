@@ -103,8 +103,11 @@ module Pgbus
       # A connection back in the pool in pipeline mode would break the next
       # caller. A lost one is left as it is: pgmq-ruby resets a bad connection
       # at its next checkout, and a reset leaves pipeline mode. One that cannot
-      # leave (results left unread by an interrupted read) is reset here.
+      # leave (results left unread by an interrupted read) is reset here. One
+      # a failed reset closed (its :session SETs failed, SessionGucs) is left
+      # closed too: pgmq-ruby resets it at the next checkout.
       def leave_pipeline(conn)
+        return if conn.finished?
         return if conn.pipeline_status == PG::PQ_PIPELINE_OFF || conn.status == PG::CONNECTION_BAD
 
         conn.exit_pipeline_mode
@@ -128,8 +131,10 @@ module Pgbus
 
       # The failed BEGIN block (INERROR) is still open after the sync. A failed
       # COMMIT has already ended it (IDLE); a lost connection reports UNKNOWN
-      # and has nothing to roll back.
+      # and has nothing to roll back, as does one a reset closed.
       def rollback_async_commit(conn)
+        return if conn.finished?
+
         conn.exec("ROLLBACK") if [PG::PQTRANS_INERROR, PG::PQTRANS_INTRANS].include?(conn.transaction_status)
       end
     end

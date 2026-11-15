@@ -24,10 +24,15 @@ module Pgbus
         super()
         statements = variables.map { |name, value| "SET #{name} = '#{value}'" }.freeze
 
-        define_method(:pgbus_apply_session_gucs) do
+        # Runs the block (a reset, or nothing after a connect), then the SETs.
+        # One ensure covers both, so an async raise between the reset and the
+        # first SET also closes the connection.
+        define_method(:pgbus_with_session_gucs) do |&before|
           applied = false
+          before&.call
           statements.each { |sql| exec(sql) }
           applied = true
+          self
         ensure
           close unless applied || finished?
         end
@@ -37,17 +42,13 @@ module Pgbus
         # of the three calls another, so each reset applies the SETs once.
         %i[reset async_reset sync_reset].each do |name|
           define_method(name) do
-            super()
-            pgbus_apply_session_gucs
-            self
+            pgbus_with_session_gucs { super() }
           end
         end
       end
 
       def connect(pg_opts)
-        conn = PG.connect(pg_opts).extend(self)
-        conn.pgbus_apply_session_gucs
-        conn
+        PG.connect(pg_opts).extend(self).pgbus_with_session_gucs
       end
     end
   end

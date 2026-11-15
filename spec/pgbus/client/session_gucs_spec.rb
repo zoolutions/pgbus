@@ -85,6 +85,21 @@ RSpec.describe Pgbus::Client::SessionGucs do
       expect(conn.calls.last).to eq([:close])
     end
 
+    # An async raise (Thread#raise, a signal) can land after pg's reset has a
+    # CONNECTION_OK backend and before the first SET runs.
+    it "closes the connection when an interrupt lands as the reset returns" do
+      base = Module.new do
+        def reset
+          super
+          raise Interrupt
+        end
+      end
+      conn = base_connection_class.new.extend(base).extend(hook)
+
+      expect { conn.reset }.to raise_error(Interrupt)
+      expect(conn.calls).to eq([[:reset], [:close]])
+    end
+
     it "leaves a connection the failure already closed as it is" do
       allow(conn).to receive(:exec).and_wrap_original do |original, sql|
         conn.close

@@ -19,8 +19,9 @@ RSpec.describe Pgbus::Client::AsyncCommit do
   # result, then nil, then the sync).
   let(:fake_connection_class) do
     Class.new do
-      attr_reader :calls, :pipeline_status, :status
-      attr_accessor :transaction_status, :completion_result, :exec_prepared_result
+      attr_reader :calls
+      attr_accessor :completion_result, :exec_prepared_result
+      attr_writer :transaction_status
       attr_writer :failing
 
       def initialize(result_class)
@@ -45,16 +46,31 @@ RSpec.describe Pgbus::Client::AsyncCommit do
       # The next pipeline answers no sync: libpq runs out of results.
       def drop_sync! = (@drop_sync = true)
 
-      def finished? = false
+      # The next exit_pipeline_mode fails, results read or not.
+      def fail_exit_pipeline! = (@fail_exit_pipeline = true)
 
       # The next reset finds the server unreachable.
       def fail_reset! = (@fail_reset = true)
+
+      # As PG::Connection: closed, its state readers raise; a reset reopens it.
+      def finished? = @closed == true
+
+      def close
+        @calls << [:close]
+        @closed = true
+        nil
+      end
+
+      def pipeline_status = open! && @pipeline_status
+      def status = open! && @status
+      def transaction_status = open! && @transaction_status
 
       # PG::Connection#reset: a new session, out of pipeline mode.
       def reset
         @calls << [:reset]
         raise PG::ConnectionBad, "could not connect to server" if @fail_reset
 
+        @closed = false
         @status = PG::CONNECTION_OK
         @pipeline_status = PG::PQ_PIPELINE_OFF
       end
@@ -92,6 +108,11 @@ RSpec.describe Pgbus::Client::AsyncCommit do
         @calls << [:exit_pipeline_mode]
         raise PG::Error, "cannot exit pipeline mode with uncollected results" if @replies&.any?
 
+        if @fail_exit_pipeline
+          @fail_exit_pipeline = false
+          raise PG::Error, "could not exit pipeline mode"
+        end
+
         @pipeline_status = PG::PQ_PIPELINE_OFF
       end
 
@@ -122,6 +143,12 @@ RSpec.describe Pgbus::Client::AsyncCommit do
         end
 
         @replies.shift
+      end
+
+      def open!
+        raise PG::ConnectionBad, "connection is closed" if @closed
+
+        true
       end
 
       def columns_result
@@ -418,15 +445,41 @@ RSpec.describe Pgbus::Client::AsyncCommit do
 
     it "closes a session whose SETs fail after the reset, and logs it" do
       conn.interrupt_read!
-      allow(conn).to receive(:close)
       allow(conn).to receive(:exec).and_call_original
       allow(conn).to receive(:exec).with("SET lock_timeout = '5s'").and_raise(PG::InvalidParameterValue, "bad value")
       messages = []
       allow(Pgbus.logger).to receive(:warn) { |&blk| messages << blk.call }
 
       expect { client.archive_message("default", 9, job_completion: true) }.to raise_error(Interrupt)
-      expect(conn).to have_received(:close)
+      expect(conn.calls.last).to eq([:close])
       expect(messages.last).to include("Resetting the connection failed: bad value")
+    end
+
+    # A session the reset closed is left for pgmq-ruby's next checkout: leaving
+    # pipeline mode does not reset it a second time.
+    it "resets a pipeline that lost its sync once, even when its SETs fail" do
+      conn.drop_sync!
+      allow(conn).to receive(:exec).and_call_original
+      allow(conn).to receive(:exec).with("SET lock_timeout = '5s'").and_raise(PG::InvalidParameterValue, "bad value")
+      messages = []
+      allow(Pgbus.logger).to receive(:warn) { |&blk| messages << blk.call }
+
+      expect { client.archive_message("default", 9, job_completion: true) }
+        .to raise_error(PG::ConnectionBad, /pipeline ended before its sync/)
+      expect(conn.calls.count([:reset])).to eq(1)
+      expect(messages).not_to include(a_string_including("Could not leave pipeline mode"))
+    end
+
+    it "raises the statement's own error when the reset that left pipeline mode closed the session" do
+      conn.failing = [:completion, PG::QueryCanceled.new("canceling statement due to statement timeout")]
+      conn.fail_exit_pipeline!
+      allow(conn).to receive(:exec).and_call_original
+      allow(conn).to receive(:exec).with("SET lock_timeout = '5s'").and_raise(PG::InvalidParameterValue, "bad value")
+      allow(Pgbus.logger).to receive(:warn)
+
+      expect { client.archive_message("default", 9, job_completion: true) }
+        .to raise_error(PG::QueryCanceled, /statement timeout/)
+      expect(conn).to be_finished
     end
   end
 
