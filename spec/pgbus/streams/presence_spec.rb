@@ -666,6 +666,94 @@ RSpec.describe Pgbus::Streams::Presence do
     end
   end
 
+  # Issue #666: the heartbeat's member-keyed touch probed information_schema
+  # once per connection per tick on a table without seats.
+  describe "member-keyed calls on the real schema cache" do
+    let(:clock) { [100.0] }
+    let(:statements) { [] }
+    let(:seats_column) { [false] }
+
+    before do
+      allow(described_class).to receive(:seats_supported?).and_call_original
+      allow(described_class).to receive(:monotonic_now) { clock.first }
+      allow(Pgbus).to receive(:logger).and_return(instance_double(Logger, warn: nil, debug: nil))
+      allow(raw_connection).to receive(:exec_params) do |sql, _binds|
+        statements << sql
+        sql.include?("information_schema") && seats_column.first ? [{ "present" => "1" }] : []
+      end
+      described_class.reset_schema_cache!
+    end
+
+    after { described_class.reset_schema_cache! }
+
+    def probes = statements.count { |sql| sql.include?("information_schema") }
+    def updates = statements.grep(/UPDATE pgbus_presence_members/)
+    def deletes = statements.grep(/DELETE FROM pgbus_presence_members/)
+
+    it "touches with the cached no: three touches send no probe and no connection_id predicate" do
+      described_class.seats_supported?
+
+      expect { 3.times { presence.touch(member_id: 1) } }.not_to(change { probes })
+      expect(updates.size).to eq(3)
+      expect(updates).to all(satisfy { |sql| !sql.include?("connection_id") })
+    end
+
+    it "sends one probe for the issue's reproduction (reset, then three touches), not four" do
+      3.times { presence.touch(member_id: 1) }
+
+      expect(probes).to eq(1)
+    end
+
+    it "keeps AND connection_id IS NULL on touch when the table has seats" do
+      seats_column[0] = true
+
+      presence.touch(member_id: 1)
+
+      expect(updates.last).to include("AND connection_id IS NULL")
+    end
+
+    it "re-probes a cached no before leave(member_id:), and spares seat rows on a table migrated meanwhile" do
+      described_class.seats_supported?
+      seats_column[0] = true
+
+      expect { presence.leave(member_id: 1) }.to change { probes }.by(1)
+      expect(deletes.last).to include("AND connection_id IS NULL")
+    end
+
+    it "re-probes a cached no before sweep!, and spares seat rows on a table migrated meanwhile" do
+      described_class.seats_supported?
+      seats_column[0] = true
+
+      expect { presence.sweep!(older_than: Time.now) }.to change { probes }.by(1)
+      expect(deletes.last).to include("AND connection_id IS NULL")
+    end
+
+    it "does not restart the backoff on a forced re-probe that answers no: the next timed probe waits the doubled step" do
+      described_class.seats_supported? # at 100: a "no", re-checked after 30 s
+      clock[0] = 110.0
+      presence.leave(member_id: 1) # forced "no" at 110: the step doubles to 60
+
+      clock[0] = 169.0
+      expect { described_class.seats_supported? }.not_to(change { probes })
+      clock[0] = 170.0
+      expect { described_class.seats_supported? }.to change { probes }.by(1)
+    end
+
+    it "does not let a no probed before the forced re-probe stand in for it" do
+      described_class.seats_supported?
+      generation = described_class.instance_variable_get(:@schema_generation)
+      # A thread that probed the pre-seat schema stores its "no" right after
+      # the forced expiry; the table has been migrated since.
+      allow(described_class).to receive(:expire_schema_answer!).and_wrap_original do |original|
+        original.call
+        described_class.send(:store_schema_answer, false, generation)
+      end
+      seats_column[0] = true
+
+      expect(described_class.seats_supported_now?).to be(true)
+    end
+  end
+
   # Issue #665: what Pgbus::Doctor reports.
   describe ".seats_state" do
     let(:pool) { double("ConnectionPool") }

@@ -126,13 +126,15 @@ module Pgbus
         end
 
         # seats_supported?, but a cached "no seats" is probed again first.
-        # For the destructive member-keyed statements: on a table migrated
-        # under this process their SQL without `connection_id IS NULL`
-        # succeeds silently and deletes seat rows.
+        # For the destructive member-keyed statements (leave, sweep!): on a
+        # table migrated under this process their SQL without
+        # `connection_id IS NULL` succeeds silently and deletes seat rows.
+        # The re-probe keeps the backoff step: a "no" doubles it as a timed
+        # probe would (issue #666).
         def seats_supported_now?
           return true if seats_supported?
 
-          reset_schema_cache!
+          expire_schema_answer!
           seats_supported?
         end
 
@@ -245,6 +247,17 @@ module Pgbus
           record_base.connection_pool
         rescue ::ActiveRecord::ConnectionNotEstablished
           nil
+        end
+
+        # Makes the cached answer stale without forgetting it, so the next
+        # "no" is a further step of the backoff, not its first. The new
+        # generation keeps a probe that started before this from being
+        # stored as the fresh answer.
+        def expire_schema_answer!
+          @schema_mutex.synchronize do
+            @schema_generation += 1
+            @probed_at = nil
+          end
         end
 
         def schema_answer_fresh?(supported, probed_at, recheck_seconds)
@@ -416,6 +429,12 @@ module Pgbus
       # to stay in the member list, and a sweeper expires anyone who
       # hasn't pinged in N seconds.
       #
+      # Member-keyed, it trusts the cached schema answer (issue #666): the
+      # streamer touches once per connection per heartbeat. On a table
+      # migrated under this process it may also refresh that member's seat
+      # rows until the answer is re-checked (at most
+      # SCHEMA_RECHECK_MAX_SECONDS); it never deletes anything.
+      #
       # With `connection_id:` (a String or an Array of them) it refreshes
       # those connections' seat rows in one statement and returns the ids
       # it found — a missing id means the row was expired while the
@@ -429,7 +448,7 @@ module Pgbus
         exec_params(<<~SQL, [@stream.name, member_id])
           UPDATE pgbus_presence_members
           SET last_seen_at = NOW()
-          WHERE stream_name = $1 AND member_id = $2#{" AND connection_id IS NULL" if seats_now?}
+          WHERE stream_name = $1 AND member_id = $2#{" AND connection_id IS NULL" if seats?}
         SQL
       end
 
