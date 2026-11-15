@@ -27,7 +27,7 @@ RSpec.describe Pgbus::Streams::Presence do
     allow(ActiveRecord::Base).to receive(:connection).and_return(ar_connection)
     # The member-keyed specs below describe a table without the seat columns
     # (pre-#515 schema); the seat specs flip this to true.
-    allow(described_class).to receive(:seats_supported?).and_return(false)
+    allow(described_class).to receive_messages(seats_supported?: false, seats_supported_now?: false)
   end
 
   describe "#join" do
@@ -289,18 +289,8 @@ RSpec.describe Pgbus::Streams::Presence do
       expect(presence.sweep!(older_than: Time.now)).to eq(0)
     end
 
-    it "re-probes a cached no-seats answer so a table migrated under the process keeps its seat rows" do
-      allow(described_class).to receive(:seats_supported?).and_return(false, true)
-      allow(raw_connection).to receive(:exec_params).and_return([])
-
-      presence.sweep!(older_than: Time.now)
-
-      expect(raw_connection).to have_received(:exec_params)
-        .with(a_string_matching(/connection_id IS NULL/), anything)
-    end
-
     it "only sweeps member-keyed rows on a seat table (seats expire through the heartbeat)" do
-      allow(described_class).to receive(:seats_supported?).and_return(true)
+      allow(described_class).to receive_messages(seats_supported?: true, seats_supported_now?: true)
       allow(raw_connection).to receive(:exec_params).and_return([])
 
       presence.sweep!(older_than: Time.now)
@@ -311,7 +301,7 @@ RSpec.describe Pgbus::Streams::Presence do
   end
 
   describe "seats (issue #515)" do
-    before { allow(described_class).to receive(:seats_supported?).and_return(true) }
+    before { allow(described_class).to receive_messages(seats_supported?: true, seats_supported_now?: true) }
 
     let(:seat_row) do
       {
@@ -675,6 +665,7 @@ RSpec.describe Pgbus::Streams::Presence do
 
     before do
       allow(described_class).to receive(:seats_supported?).and_call_original
+      allow(described_class).to receive(:seats_supported_now?).and_call_original
       allow(described_class).to receive(:monotonic_now) { clock.first }
       allow(Pgbus).to receive(:logger).and_return(instance_double(Logger, warn: nil, debug: nil))
       allow(raw_connection).to receive(:exec_params) do |sql, _binds|
@@ -728,29 +719,52 @@ RSpec.describe Pgbus::Streams::Presence do
       expect(deletes.last).to include("AND connection_id IS NULL")
     end
 
-    it "does not restart the backoff on a forced re-probe that answers no: the next timed probe waits the doubled step" do
-      described_class.seats_supported? # at 100: a "no", re-checked after 30 s
-      clock[0] = 110.0
-      presence.leave(member_id: 1) # forced "no" at 110: the step doubles to 60
+    it "keeps the backoff's step and schedule however many forced re-probes answer no" do
+      [100.0, 130.0].each { |time| (clock[0] = time) && described_class.seats_supported? } # step now 60: next at 190
+      [150.0, 151.0, 152.0, 153.0, 154.0].each { |time| (clock[0] = time) && presence.leave(member_id: 1) }
 
-      clock[0] = 169.0
+      clock[0] = 189.0
       expect { described_class.seats_supported? }.not_to(change { probes })
-      clock[0] = 170.0
+      clock[0] = 190.0
+      expect { described_class.seats_supported? }.to change { probes }.by(1)
+      clock[0] = 309.0
+      expect { described_class.seats_supported? }.not_to(change { probes })
+      clock[0] = 310.0
       expect { described_class.seats_supported? }.to change { probes }.by(1)
     end
 
-    it "does not let a no probed before the forced re-probe stand in for it" do
+    it "probes once for a leave on a cold cache, and starts the backoff at 30 seconds" do
+      expect { presence.leave(member_id: 1) }.to change { probes }.by(1)
+
+      clock[0] = 129.0
+      expect { described_class.seats_supported? }.not_to(change { probes })
+      clock[0] = 130.0
+      expect { described_class.seats_supported? }.to change { probes }.by(1)
+    end
+
+    it "counts a leave after the cached no went stale as the timed re-check: one probe, one step" do
+      described_class.seats_supported? # at 100: next at 130
+      clock[0] = 131.0
+      expect { presence.sweep!(older_than: Time.now) }.to change { probes }.by(1) # step now 60: next at 191
+
+      clock[0] = 190.0
+      expect { described_class.seats_supported? }.not_to(change { probes })
+      clock[0] = 191.0
+      expect { described_class.seats_supported? }.to change { probes }.by(1)
+    end
+
+    it "answers from its own probe even when another probe stores a no while it runs" do
       described_class.seats_supported?
-      generation = described_class.instance_variable_get(:@schema_generation)
-      # A thread that probed the pre-seat schema stores its "no" right after
-      # the forced expiry; the table has been migrated since.
-      allow(described_class).to receive(:expire_schema_answer!).and_wrap_original do |original|
-        original.call
-        described_class.send(:store_schema_answer, false, generation)
+      allow(raw_connection).to receive(:exec_params) do |sql, _binds|
+        statements << sql
+        # A thread that probed the pre-seat schema stores its "no" while the
+        # forced probe, which sees the migrated table, is in flight.
+        described_class.send(:store_schema_answer, false, described_class.instance_variable_get(:@schema_generation))
+        [{ "present" => "1" }]
       end
-      seats_column[0] = true
 
       expect(described_class.seats_supported_now?).to be(true)
+      expect(described_class.seats_supported?).to be(true)
     end
   end
 

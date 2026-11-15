@@ -38,7 +38,7 @@ RSpec.describe Pgbus::Streams::Presence do
     allow(Pgbus.configuration).to receive(:connects_to).and_return(nil)
     stub_const("ActiveRecord::Base", Class.new)
     allow(ActiveRecord::Base).to receive(:connection).and_return(ar_connection)
-    allow(described_class).to receive(:seats_supported?).and_return(true)
+    allow(described_class).to receive_messages(seats_supported?: true, seats_supported_now?: true)
   end
 
   describe "every statement" do
