@@ -1,0 +1,25 @@
+spec/pgbus/streams/presence_spec.rb
+  s_0f3c1357a81030::t_be80267173230e 745,755-773
+README.md
+  s_0f3c1357a81030::t_1e365e9ffa8a8c 1965
+spec/pgbus/streams/presence_adapter_lock_spec.rb
+  s_0f3c1357a81030::t_be80267173230e 86-102
+lib/pgbus/streams/presence.rb
+  s_0f3c1357a81030::t_1e365e9ffa8a8c 129-131,133-137,139-141
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "5831bf4c8f204080915fe188e868d36b03ea61f3",
+  "prompts": {},
+  "sessions": {
+    "s_0f3c1357a81030": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9c927cf3-d701-4e5e-85a8-26f3a4e157a9",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
