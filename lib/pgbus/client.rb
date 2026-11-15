@@ -1123,7 +1123,9 @@ module Pgbus
           @pgmq.produce_topic(
             routing_key,
             serialize(payload),
-            headers: headers && serialize(headers),
+            # pgmq-ruby 0.9.0 rejects headers that are neither a String nor
+            # nil; `false` was dropped before and still is.
+            headers: headers ? serialize(headers) : nil,
             delay: delay
           )
         end
@@ -1987,7 +1989,8 @@ module Pgbus
     #      WEDGED-SOCKET RECOVERY (issue #354): when (3) fires on a genuinely
     #      hung socket, libpq may leave the pooled PG::Connection reporting
     #      CONNECTION_OK while it will in fact re-hang on reuse, and pgmq-ruby's
-    #      checkout health check won't discard it (it isn't CONNECTION_BAD). So
+    #      checkout health check won't discard it (it still reports
+    #      CONNECTION_OK). So
     #      the Timeout raises WedgedReadTimeout (a ReadTimeoutError subclass)
     #      and the rescue below drops every pooled connection via @pgmq.reload
     #      (pgmq-ruby >= 0.7.1) — the pool rebuilds lazily on next checkout.
