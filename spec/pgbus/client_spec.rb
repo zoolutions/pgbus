@@ -2366,6 +2366,19 @@ RSpec.describe Pgbus::Client do
         delay: 3
       )
     end
+
+    # pgmq-ruby 0.9.0 rejects headers that are neither a String nor nil;
+    # before, produce_topic dropped `false`. pgbus keeps dropping it.
+    it "passes headers: false as nil" do
+      client.publish_to_topic("orders.created", "body", headers: false)
+
+      expect(mock_pgmq).to have_received(:produce_topic).with(
+        "orders.created",
+        "body",
+        headers: nil,
+        delay: 0
+      )
+    end
   end
 
   describe "stale pgmq connection recovery" do

@@ -391,17 +391,23 @@ class Views::Docs::Pages::RunningWorkers < DocsUI::Page
         timeouts are never retried.
 
         The first retry relies on pgmq-ruby's checkout health check, which
-        replaces a closed connection. On a dedicated connection (`database_url`
-        or `connection_params`), before the last retry, pgbus drops the idle
-        connections of both pools (job and streams) and logs `Dropping pooled
-        connections before the last stale-connection retry`. This recovers a
-        connection the health check keeps handing out, such as one a
-        `Thread#raise` left half-way through a reset (`CONNECTION_STARTED`).
+        resets a pooled connection that is not healthy: one the server closed,
+        or one a `Thread#raise` left half-way through a reset
+        (`CONNECTION_STARTED`, recovered at checkout since pgmq-ruby 0.9.0). On
+        a dedicated connection (`database_url` or `connection_params`), before
+        the last retry, pgbus drops the idle connections of both pools (job and
+        streams) and logs `Dropping pooled connections before the last
+        stale-connection retry`. This recovers a connection that still fails
+        after the health check passed it.
 
         A read interrupted by the Ruby `Timeout` fallback above reloads the job
         pool the same way. `Pgbus.client.reload` drops the idle connections of
         both pools by hand. None of these reload anything on the shared
         ActiveRecord `Proc` connection, whose socket pgbus does not own.
+
+        With `connection_guc_mode: :session` and database.yml `variables`, a
+        connection the health check resets comes back without its session
+        `SET`s (#671).
       MD
     end
   end

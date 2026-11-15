@@ -1123,7 +1123,9 @@ module Pgbus
           @pgmq.produce_topic(
             routing_key,
             serialize(payload),
-            headers: headers && serialize(headers),
+            # pgmq-ruby 0.9.0 rejects headers that are neither a String nor
+            # nil; `false` was dropped before and still is.
+            headers: headers ? serialize(headers) : nil,
             delay: delay
           )
         end
@@ -1896,15 +1898,15 @@ module Pgbus
     # still gets a second, backed-off chance rather than failing an enqueue
     # the caller may never retry.
     #
-    # The last retry runs on freshly reloaded pools (issue #645). A reset that
-    # Thread#raise interrupted mid-poll leaves the pooled PG::Connection in
-    # CONNECTION_STARTED: neither finished? nor CONNECTION_BAD, so pgmq-ruby's
-    # checkout health check keeps handing it out and libpq refuses every send
-    # ("no connection to the server"). The first retry still goes through that
-    # health check alone, which replaces a socket the server closed without
-    # touching the rest of the pool; only when it fails too are both pools'
-    # idle connections dropped (reload_pools_before_last_stale_retry), as the
-    # #354 wedged-read path does.
+    # The last retry runs on freshly reloaded pools (issue #645). The first
+    # retry goes through pgmq-ruby's checkout health check alone, which resets
+    # a socket the server closed without touching the rest of the pool, and
+    # since pgmq-ruby 0.9.0 also a connection left in any other non-OK state,
+    # such as the CONNECTION_STARTED a reset interrupted by Thread#raise leaves
+    # (before 0.9.0 that one was handed out again and libpq refused every send,
+    # "no connection to the server"). Only when the first retry fails too are
+    # both pools' idle connections dropped
+    # (reload_pools_before_last_stale_retry), as the #354 wedged-read path does.
     STALE_RETRY_ATTEMPTS = 2
     private_constant :STALE_RETRY_ATTEMPTS
 
@@ -1987,7 +1989,8 @@ module Pgbus
     #      WEDGED-SOCKET RECOVERY (issue #354): when (3) fires on a genuinely
     #      hung socket, libpq may leave the pooled PG::Connection reporting
     #      CONNECTION_OK while it will in fact re-hang on reuse, and pgmq-ruby's
-    #      checkout health check won't discard it (it isn't CONNECTION_BAD). So
+    #      checkout health check won't discard it (it still reports
+    #      CONNECTION_OK). So
     #      the Timeout raises WedgedReadTimeout (a ReadTimeoutError subclass)
     #      and the rescue below drops every pooled connection via @pgmq.reload
     #      (pgmq-ruby >= 0.7.1) — the pool rebuilds lazily on next checkout.
