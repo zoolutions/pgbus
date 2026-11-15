@@ -1896,15 +1896,15 @@ module Pgbus
     # still gets a second, backed-off chance rather than failing an enqueue
     # the caller may never retry.
     #
-    # The last retry runs on freshly reloaded pools (issue #645). A reset that
-    # Thread#raise interrupted mid-poll leaves the pooled PG::Connection in
-    # CONNECTION_STARTED: neither finished? nor CONNECTION_BAD, so pgmq-ruby's
-    # checkout health check keeps handing it out and libpq refuses every send
-    # ("no connection to the server"). The first retry still goes through that
-    # health check alone, which replaces a socket the server closed without
-    # touching the rest of the pool; only when it fails too are both pools'
-    # idle connections dropped (reload_pools_before_last_stale_retry), as the
-    # #354 wedged-read path does.
+    # The last retry runs on freshly reloaded pools (issue #645). The first
+    # retry goes through pgmq-ruby's checkout health check alone, which resets
+    # a socket the server closed without touching the rest of the pool, and
+    # since pgmq-ruby 0.9.0 also a connection left in any other non-OK state,
+    # such as the CONNECTION_STARTED a reset interrupted by Thread#raise leaves
+    # (before 0.9.0 that one was handed out again and libpq refused every send,
+    # "no connection to the server"). Only when the first retry fails too are
+    # both pools' idle connections dropped
+    # (reload_pools_before_last_stale_retry), as the #354 wedged-read path does.
     STALE_RETRY_ATTEMPTS = 2
     private_constant :STALE_RETRY_ATTEMPTS
 

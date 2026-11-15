@@ -3,11 +3,12 @@
 require "spec_helper"
 
 # Issue #645: a pooled PG::Connection whose reset was interrupted mid-poll sits
-# in CONNECTION_STARTED. pgmq-ruby's checkout health check only resets a
-# finished or CONNECTION_BAD connection, so every stale retry got the same
-# socket back. Before the LAST stale retry, with_stale_connection_retry drops
-# both pools' idle connections (dedicated path only), so that retry checks out
-# a fresh one.
+# in CONNECTION_STARTED. Before pgmq-ruby 0.9.0 its checkout health check reset
+# only a finished or CONNECTION_BAD connection, so every stale retry got the
+# same socket back; 0.9.0 resets any non-OK connection at checkout. Before the
+# LAST stale retry, with_stale_connection_retry still drops both pools' idle
+# connections (dedicated path only), so that retry checks out a fresh one when
+# a connection keeps failing after the health check passed it.
 RSpec.describe Pgbus::Client do
   describe "pool reload before the last stale-connection retry" do
     before do
