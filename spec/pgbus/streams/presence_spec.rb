@@ -27,7 +27,7 @@ RSpec.describe Pgbus::Streams::Presence do
     allow(ActiveRecord::Base).to receive(:connection).and_return(ar_connection)
     # The member-keyed specs below describe a table without the seat columns
     # (pre-#515 schema); the seat specs flip this to true.
-    allow(described_class).to receive(:seats_supported?).and_return(false)
+    allow(described_class).to receive_messages(seats_supported?: false, seats_supported_now?: false)
   end
 
   describe "#join" do
@@ -289,18 +289,8 @@ RSpec.describe Pgbus::Streams::Presence do
       expect(presence.sweep!(older_than: Time.now)).to eq(0)
     end
 
-    it "re-probes a cached no-seats answer so a table migrated under the process keeps its seat rows" do
-      allow(described_class).to receive(:seats_supported?).and_return(false, true)
-      allow(raw_connection).to receive(:exec_params).and_return([])
-
-      presence.sweep!(older_than: Time.now)
-
-      expect(raw_connection).to have_received(:exec_params)
-        .with(a_string_matching(/connection_id IS NULL/), anything)
-    end
-
     it "only sweeps member-keyed rows on a seat table (seats expire through the heartbeat)" do
-      allow(described_class).to receive(:seats_supported?).and_return(true)
+      allow(described_class).to receive_messages(seats_supported?: true, seats_supported_now?: true)
       allow(raw_connection).to receive(:exec_params).and_return([])
 
       presence.sweep!(older_than: Time.now)
@@ -311,7 +301,7 @@ RSpec.describe Pgbus::Streams::Presence do
   end
 
   describe "seats (issue #515)" do
-    before { allow(described_class).to receive(:seats_supported?).and_return(true) }
+    before { allow(described_class).to receive_messages(seats_supported?: true, seats_supported_now?: true) }
 
     let(:seat_row) do
       {
@@ -663,6 +653,124 @@ RSpec.describe Pgbus::Streams::Presence do
 
         expect(logger).not_to have_received(:warn)
       end
+    end
+  end
+
+  # Issue #666: the heartbeat's member-keyed touch probed information_schema
+  # once per connection per tick on a table without seats.
+  describe "member-keyed calls on the real schema cache" do
+    let(:clock) { [100.0] }
+    let(:statements) { [] }
+    let(:seats_column) { [false] }
+
+    before do
+      allow(described_class).to receive(:seats_supported?).and_call_original
+      allow(described_class).to receive(:seats_supported_now?).and_call_original
+      allow(described_class).to receive(:monotonic_now) { clock.first }
+      allow(Pgbus).to receive(:logger).and_return(instance_double(Logger, warn: nil, debug: nil))
+      allow(raw_connection).to receive(:exec_params) do |sql, _binds|
+        statements << sql
+        sql.include?("information_schema") && seats_column.first ? [{ "present" => "1" }] : []
+      end
+      described_class.reset_schema_cache!
+    end
+
+    after { described_class.reset_schema_cache! }
+
+    def probes = statements.count { |sql| sql.include?("information_schema") }
+    def updates = statements.grep(/UPDATE pgbus_presence_members/)
+    def deletes = statements.grep(/DELETE FROM pgbus_presence_members/)
+
+    it "touches with the cached no: three touches send no probe and no connection_id predicate" do
+      described_class.seats_supported?
+
+      expect { 3.times { presence.touch(member_id: 1) } }.not_to(change { probes })
+      expect(updates.size).to eq(3)
+      expect(updates).to all(satisfy { |sql| !sql.include?("connection_id") })
+    end
+
+    it "sends one probe for the issue's reproduction (reset, then three touches), not four" do
+      3.times { presence.touch(member_id: 1) }
+
+      expect(probes).to eq(1)
+    end
+
+    it "keeps AND connection_id IS NULL on touch when the table has seats" do
+      seats_column[0] = true
+
+      presence.touch(member_id: 1)
+
+      expect(updates.last).to include("AND connection_id IS NULL")
+    end
+
+    it "re-probes a cached no before leave(member_id:), and spares seat rows on a table migrated meanwhile" do
+      described_class.seats_supported?
+      seats_column[0] = true
+
+      expect { presence.leave(member_id: 1) }.to change { probes }.by(1)
+      expect(deletes.last).to include("AND connection_id IS NULL")
+    end
+
+    it "re-probes a cached no before sweep!, and spares seat rows on a table migrated meanwhile" do
+      described_class.seats_supported?
+      seats_column[0] = true
+
+      expect { presence.sweep!(older_than: Time.now) }.to change { probes }.by(1)
+      expect(deletes.last).to include("AND connection_id IS NULL")
+    end
+
+    it "keeps the backoff's step and schedule however many forced re-probes answer no" do
+      [100.0, 130.0].each { |time| (clock[0] = time) && described_class.seats_supported? } # step now 60: next at 190
+      [150.0, 151.0, 152.0, 153.0, 154.0].each { |time| (clock[0] = time) && presence.leave(member_id: 1) }
+
+      clock[0] = 189.0
+      expect { described_class.seats_supported? }.not_to(change { probes })
+      clock[0] = 190.0
+      expect { described_class.seats_supported? }.to change { probes }.by(1)
+      clock[0] = 309.0
+      expect { described_class.seats_supported? }.not_to(change { probes })
+      clock[0] = 310.0
+      expect { described_class.seats_supported? }.to change { probes }.by(1)
+    end
+
+    it "probes once for a leave on a cold cache, and starts the backoff at 30 seconds" do
+      expect { presence.leave(member_id: 1) }.to change { probes }.by(1)
+
+      clock[0] = 129.0
+      expect { described_class.seats_supported? }.not_to(change { probes })
+      clock[0] = 130.0
+      expect { described_class.seats_supported? }.to change { probes }.by(1)
+    end
+
+    it "counts a sweep! after the cached no went stale as the timed re-check: one probe, one step" do
+      described_class.seats_supported? # at 100: next at 130
+      clock[0] = 131.0
+      expect { presence.sweep!(older_than: Time.now) }.to change { probes }.by(1) # step now 60: next at 191
+
+      clock[0] = 190.0
+      expect { described_class.seats_supported? }.not_to(change { probes })
+      clock[0] = 191.0
+      expect { described_class.seats_supported? }.to change { probes }.by(1)
+    end
+
+    # A reset (a join that hit the migrated index) while the forced probe was
+    # in flight means its "no" may predate the migration: probe again.
+    it "probes again when a reset overtook the forced probe, so leave keeps seat rows" do
+      described_class.seats_supported?
+      answers = [[], [{ "present" => "1" }]]
+      allow(raw_connection).to receive(:exec_params) do |sql, _binds|
+        statements << sql
+        next [] unless sql.include?("information_schema")
+
+        answer = answers.shift
+        described_class.reset_schema_cache! if answers.size == 1
+        answer
+      end
+
+      presence.leave(member_id: 1)
+
+      expect(answers).to be_empty
+      expect(deletes.last).to include("AND connection_id IS NULL")
     end
   end
 

@@ -99,6 +99,38 @@ RSpec.describe "Streams: presence seats", :integration do
     expect(presence.seats?).to be(true)
   end
 
+  # Issue #666: leave(member_id:) and sweep! do not trust a cached "no seats"
+  # (#515), while member-keyed touch does.
+  describe "member-keyed calls on a process that probed the table before the migration" do
+    let(:klass) { Pgbus::Streams::Presence }
+
+    before do
+      presence.join(member_id: "7", connection_id: "c1", seat: "s1")
+      presence.join(member_id: "7")
+      klass.instance_variable_set(:@seats_supported, false)
+      klass.instance_variable_set(:@probed_at, klass.monotonic_now)
+    end
+
+    def seat_rows = presence.members.select { |member| member["connection_id"] }
+
+    it "leave(member_id:) deletes the member-keyed row and keeps the seat row" do
+      expect(presence.leave(member_id: "7")).to include("id" => "7")
+      expect(seat_rows.map { |member| member["connection_id"] }).to eq(["c1"])
+    end
+
+    it "sweep! expires the member-keyed row and keeps the seat row" do
+      expect(presence.sweep!(older_than: Time.now + 60)).to eq(1)
+      expect(seat_rows.map { |member| member["connection_id"] }).to eq(["c1"])
+    end
+
+    it "touch(member_id:) keeps the cached answer and deletes nothing" do
+      presence.touch(member_id: "7")
+
+      expect(klass.instance_variable_get(:@seats_supported)).to be(false)
+      expect(presence.count).to eq(2)
+    end
+  end
+
   it "reports joins and leaves through the change hook" do
     presence.join(member_id: "7", connection_id: "c1", seat: "s1")
     presence.leave(connection_id: "c1")

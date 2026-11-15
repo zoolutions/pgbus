@@ -38,7 +38,7 @@ RSpec.describe Pgbus::Streams::Presence do
     allow(Pgbus.configuration).to receive(:connects_to).and_return(nil)
     stub_const("ActiveRecord::Base", Class.new)
     allow(ActiveRecord::Base).to receive(:connection).and_return(ar_connection)
-    allow(described_class).to receive(:seats_supported?).and_return(true)
+    allow(described_class).to receive_messages(seats_supported?: true, seats_supported_now?: true)
   end
 
   describe "every statement" do
@@ -79,6 +79,23 @@ RSpec.describe Pgbus::Streams::Presence do
       end
 
       expect(described_class.seats_supported?).to be(true)
+      expect(held).to eq([true])
+    ensure
+      described_class.reset_schema_cache!
+    end
+
+    # leave(member_id:) and sweep! force this probe (issue #666); the shared
+    # stub above answers seats_supported_now? without it.
+    it "runs the forced seat-schema probe while holding the adapter's lock" do
+      allow(described_class).to receive(:seats_supported_now?).and_call_original
+      described_class.reset_schema_cache!
+      held = []
+      allow(raw_connection).to receive(:exec_params) do
+        held << adapter_lock.mon_owned?
+        [{ "present" => "1" }]
+      end
+
+      expect(described_class.seats_supported_now?).to be(true)
       expect(held).to eq([true])
     ensure
       described_class.reset_schema_cache!

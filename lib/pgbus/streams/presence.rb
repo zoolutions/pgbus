@@ -114,26 +114,31 @@ module Pgbus
           end
           return cached unless cached.nil?
 
-          rows = exec_params(<<~SQL, [])
-            SELECT 1 AS present FROM information_schema.columns
-            WHERE table_name = 'pgbus_presence_members' AND column_name = 'connection_id'
-              AND table_schema = ANY (current_schemas(false))
-          SQL
-          supported = !rows.to_a.empty?
-          answer, warn = store_schema_answer(supported, generation)
-          warn_seats_missing if warn
-          answer
+          probe_seats(generation)
         end
 
-        # seats_supported?, but a cached "no seats" is probed again first.
-        # For the destructive member-keyed statements: on a table migrated
-        # under this process their SQL without `connection_id IS NULL`
-        # succeeds silently and deletes seat rows.
+        # seats_supported?, but a cached "no seats" is not trusted: anything
+        # short of a cached true is probed, once, and this probe's own answer
+        # is returned. For the destructive member-keyed statements (leave,
+        # sweep!): on a table migrated under this process their SQL without
+        # `connection_id IS NULL` succeeds silently and deletes seat rows.
+        #
+        # Its "no" is stored like any probe's (issue #666): over a fresh "no"
+        # it changes nothing, so the backoff keeps its step and its schedule
+        # however many calls force a probe; over a stale or missing answer it
+        # is the timed re-check, one step. A reset_schema_cache! during the
+        # probe (a join that hit the migrated index) means its "no" may
+        # predate the migration, so it probes again.
         def seats_supported_now?
-          return true if seats_supported?
+          loop do
+            cached, generation = @schema_mutex.synchronize do
+              [@seats_supported == true && schema_answer_fresh?(true, @probed_at, @recheck_seconds), @schema_generation]
+            end
+            return true if cached
 
-          reset_schema_cache!
-          seats_supported?
+            answer = probe_seats(generation)
+            return answer if answer || @schema_mutex.synchronize { generation == @schema_generation }
+          end
         end
 
         def reset_schema_cache!
@@ -247,6 +252,20 @@ module Pgbus
           nil
         end
 
+        # Probes the schema (outside @schema_mutex, issue #566), stores the
+        # answer and returns the answer to give.
+        def probe_seats(generation)
+          rows = exec_params(<<~SQL, [])
+            SELECT 1 AS present FROM information_schema.columns
+            WHERE table_name = 'pgbus_presence_members' AND column_name = 'connection_id'
+              AND table_schema = ANY (current_schemas(false))
+          SQL
+          supported = !rows.to_a.empty?
+          answer, warn = store_schema_answer(supported, generation)
+          warn_seats_missing if warn
+          answer
+        end
+
         def schema_answer_fresh?(supported, probed_at, recheck_seconds)
           return false if supported.nil? || probed_at.nil?
 
@@ -257,9 +276,10 @@ module Pgbus
         # Returns the answer to give and whether to log the missing-seats
         # warning (the first "no" of the process).
         #
-        # A "no" over a fresh "no" (two threads probed at once) keeps the
-        # first one's time and step, so concurrent probes are one step. A
-        # true answer is never taken back.
+        # A "no" over a fresh "no" (two threads probed at once, or a forced
+        # probe from seats_supported_now?) keeps the first one's time and
+        # step, so concurrent and forced probes add no step. A true answer is
+        # never taken back.
         def store_schema_answer(supported, generation)
           @schema_mutex.synchronize do
             next [supported, false] unless generation == @schema_generation
@@ -416,6 +436,12 @@ module Pgbus
       # to stay in the member list, and a sweeper expires anyone who
       # hasn't pinged in N seconds.
       #
+      # Member-keyed, it trusts the cached schema answer (issue #666): the
+      # streamer touches once per connection per heartbeat. On a table
+      # migrated under this process it may also refresh that member's seat
+      # rows until the answer is re-checked (at most
+      # SCHEMA_RECHECK_MAX_SECONDS); it never deletes anything.
+      #
       # With `connection_id:` (a String or an Array of them) it refreshes
       # those connections' seat rows in one statement and returns the ids
       # it found — a missing id means the row was expired while the
@@ -429,7 +455,7 @@ module Pgbus
         exec_params(<<~SQL, [@stream.name, member_id])
           UPDATE pgbus_presence_members
           SET last_seen_at = NOW()
-          WHERE stream_name = $1 AND member_id = $2#{" AND connection_id IS NULL" if seats_now?}
+          WHERE stream_name = $1 AND member_id = $2#{" AND connection_id IS NULL" if seats?}
         SQL
       end
 
