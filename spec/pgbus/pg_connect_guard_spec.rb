@@ -14,8 +14,11 @@ require "spec_helper"
 RSpec.describe "PG.connect guard (issue #352)" do
   it "confines raw PG connects to Client (pgmq pools) and DedicatedConnection" do
     lib = File.expand_path("../../lib", __dir__)
+    # Client::SessionGucs is the pools' :session-mode connect, handed options
+    # Client#wrap_session_gucs already stripped of :variables (issue #671).
     approved = [
       File.join(lib, "pgbus/client.rb"),
+      File.join(lib, "pgbus/client/session_gucs.rb"),
       File.join(lib, "pgbus/dedicated_connection.rb")
     ]
     pattern = /PG\s*\.\s*connect|PG::Connection\.(new|open|connect)/
@@ -37,11 +40,11 @@ RSpec.describe "PG.connect guard (issue #352)" do
   it "keeps the approved modules honest — the detector still sees their call sites" do
     # If the detector regex rots (say PG.connect moves behind indirection it
     # can't see), the guard above would pass vacuously. Assert it still
-    # detects the two known-legitimate call sites.
+    # detects the known-legitimate call sites.
     lib = File.expand_path("../../lib", __dir__)
     pattern = /PG\s*\.\s*connect|PG::Connection\.(new|open|connect)/
 
-    %w[pgbus/client.rb pgbus/dedicated_connection.rb].each do |path|
+    %w[pgbus/client.rb pgbus/client/session_gucs.rb pgbus/dedicated_connection.rb].each do |path|
       lines = File.readlines(File.join(lib, path))
       expect(lines.any? { |line| !line.match?(/\A\s*#/) && line.match?(pattern) })
         .to be(true), "expected #{path} to contain a raw PG connect (detector may have rotted)"

@@ -19,8 +19,9 @@ RSpec.describe Pgbus::Client::AsyncCommit do
   # result, then nil, then the sync).
   let(:fake_connection_class) do
     Class.new do
-      attr_reader :calls, :pipeline_status, :status
-      attr_accessor :transaction_status, :completion_result, :exec_prepared_result
+      attr_reader :calls
+      attr_accessor :completion_result, :exec_prepared_result
+      attr_writer :transaction_status
       attr_writer :failing
 
       def initialize(result_class)
@@ -45,16 +46,31 @@ RSpec.describe Pgbus::Client::AsyncCommit do
       # The next pipeline answers no sync: libpq runs out of results.
       def drop_sync! = (@drop_sync = true)
 
-      def finished? = false
+      # The next exit_pipeline_mode fails, results read or not.
+      def fail_exit_pipeline! = (@fail_exit_pipeline = true)
 
       # The next reset finds the server unreachable.
       def fail_reset! = (@fail_reset = true)
+
+      # As PG::Connection: closed, its state readers raise; a reset reopens it.
+      def finished? = @closed == true
+
+      def close
+        @calls << [:close]
+        @closed = true
+        nil
+      end
+
+      def pipeline_status = open! && @pipeline_status
+      def status = open! && @status
+      def transaction_status = open! && @transaction_status
 
       # PG::Connection#reset: a new session, out of pipeline mode.
       def reset
         @calls << [:reset]
         raise PG::ConnectionBad, "could not connect to server" if @fail_reset
 
+        @closed = false
         @status = PG::CONNECTION_OK
         @pipeline_status = PG::PQ_PIPELINE_OFF
       end
@@ -92,6 +108,11 @@ RSpec.describe Pgbus::Client::AsyncCommit do
         @calls << [:exit_pipeline_mode]
         raise PG::Error, "cannot exit pipeline mode with uncollected results" if @replies&.any?
 
+        if @fail_exit_pipeline
+          @fail_exit_pipeline = false
+          raise PG::Error, "could not exit pipeline mode"
+        end
+
         @pipeline_status = PG::PQ_PIPELINE_OFF
       end
 
@@ -122,6 +143,12 @@ RSpec.describe Pgbus::Client::AsyncCommit do
         end
 
         @replies.shift
+      end
+
+      def open!
+        raise PG::ConnectionBad, "connection is closed" if @closed
+
+        true
       end
 
       def columns_result
@@ -396,24 +423,27 @@ RSpec.describe Pgbus::Client::AsyncCommit do
   end
 
   # connection_guc_mode :session applies database.yml variables with SET after
-  # connect; PG::Connection#reset reconnects without them, so a reset session
-  # gets them again.
+  # connect; PG::Connection#reset reconnects without them. The pool's connect
+  # lambda extends each connection with SessionGucs, whose reset applies them
+  # again (issue #671), so the conn here carries it as a pooled one would.
   context "with database.yml variables applied per session" do
     before do
       config.database_url = nil
       config.connection_guc_mode = :session
       config.connection_params = { host: "localhost", dbname: "pgbus_test", variables: { "lock_timeout" => "5s" } }
+      conn.extend(Pgbus::Client::SessionGucs.new("lock_timeout" => "5s"))
     end
 
-    it "sets them again on a session it had to reset" do
+    it "sets them once on a session it had to reset" do
       conn.interrupt_read!
       allow(Pgbus.logger).to receive(:warn)
 
       expect { client.archive_message("default", 9, job_completion: true) }.to raise_error(Interrupt)
       expect(conn.calls.last(3)).to eq([[:exit_pipeline_mode], [:reset], [:exec, "SET lock_timeout = '5s'"]])
+      expect(conn.calls.count([:exec, "SET lock_timeout = '5s'"])).to eq(1)
     end
 
-    it "logs a SET that fails after the reset as that, not as a failed reset" do
+    it "closes a session whose SETs fail after the reset, and logs it" do
       conn.interrupt_read!
       allow(conn).to receive(:exec).and_call_original
       allow(conn).to receive(:exec).with("SET lock_timeout = '5s'").and_raise(PG::InvalidParameterValue, "bad value")
@@ -421,7 +451,35 @@ RSpec.describe Pgbus::Client::AsyncCommit do
       allow(Pgbus.logger).to receive(:warn) { |&blk| messages << blk.call }
 
       expect { client.archive_message("default", 9, job_completion: true) }.to raise_error(Interrupt)
-      expect(messages.last).to match(/Re-applying the session's database.yml variables after the reset failed: bad value/)
+      expect(conn.calls.last).to eq([:close])
+      expect(messages.last).to include("Resetting the connection or re-applying its session variables failed: bad value")
+    end
+
+    # A session the reset closed is left for pgmq-ruby's next checkout: leaving
+    # pipeline mode does not reset it a second time.
+    it "resets a pipeline that lost its sync once, even when its SETs fail" do
+      conn.drop_sync!
+      allow(conn).to receive(:exec).and_call_original
+      allow(conn).to receive(:exec).with("SET lock_timeout = '5s'").and_raise(PG::InvalidParameterValue, "bad value")
+      messages = []
+      allow(Pgbus.logger).to receive(:warn) { |&blk| messages << blk.call }
+
+      expect { client.archive_message("default", 9, job_completion: true) }
+        .to raise_error(PG::ConnectionBad, /pipeline ended before its sync/)
+      expect(conn.calls.count([:reset])).to eq(1)
+      expect(messages).not_to include(a_string_including("Could not leave pipeline mode"))
+    end
+
+    it "raises the statement's own error when the reset that left pipeline mode closed the session" do
+      conn.failing = [:completion, PG::QueryCanceled.new("canceling statement due to statement timeout")]
+      conn.fail_exit_pipeline!
+      allow(conn).to receive(:exec).and_call_original
+      allow(conn).to receive(:exec).with("SET lock_timeout = '5s'").and_raise(PG::InvalidParameterValue, "bad value")
+      allow(Pgbus.logger).to receive(:warn)
+
+      expect { client.archive_message("default", 9, job_completion: true) }
+        .to raise_error(PG::QueryCanceled, /statement timeout/)
+      expect(conn).to be_finished
     end
   end
 

@@ -103,8 +103,11 @@ module Pgbus
       # A connection back in the pool in pipeline mode would break the next
       # caller. A lost one is left as it is: pgmq-ruby resets a bad connection
       # at its next checkout, and a reset leaves pipeline mode. One that cannot
-      # leave (results left unread by an interrupted read) is reset here.
+      # leave (results left unread by an interrupted read) is reset here. One
+      # a failed reset closed (its :session SETs failed, SessionGucs) is left
+      # closed too: pgmq-ruby resets it at the next checkout.
       def leave_pipeline(conn)
+        return if conn.finished?
         return if conn.pipeline_status == PG::PQ_PIPELINE_OFF || conn.status == PG::CONNECTION_BAD
 
         conn.exit_pipeline_mode
@@ -116,32 +119,24 @@ module Pgbus
       # fails (the server is gone) is logged and left there, so the error the
       # caller is already raising is the one that surfaces; pgmq-ruby resets a
       # bad connection at its next checkout.
-      # A reset reconnects with the same conninfo (the read bounds ride in it)
-      # but does not re-run the connect lambda, so the :session-mode SETs are
-      # applied again here.
+      # A reset reconnects with the same conninfo (the read bounds ride in it);
+      # in :session GUC mode the connection's own reset applies the SETs again
+      # and closes it when they fail (SessionGucs, issue #671).
       def discard_session(conn, reason)
         Pgbus.logger.warn { "[Pgbus::Client] #{reason}, resetting the connection" }
-        begin
-          conn.reset
-        rescue PG::Error => e
-          Pgbus.logger.warn { "[Pgbus::Client] Resetting the connection failed: #{e.message}" }
-          return
-        end
-        reapply_session_gucs(conn)
-      end
-
-      def reapply_session_gucs(conn)
-        apply_session_gucs(conn, @session_gucs) if @session_gucs
+        conn.reset
       rescue PG::Error => e
         Pgbus.logger.warn do
-          "[Pgbus::Client] Re-applying the session's database.yml variables after the reset failed: #{e.message}"
+          "[Pgbus::Client] Resetting the connection or re-applying its session variables failed: #{e.message}"
         end
       end
 
       # The failed BEGIN block (INERROR) is still open after the sync. A failed
       # COMMIT has already ended it (IDLE); a lost connection reports UNKNOWN
-      # and has nothing to roll back.
+      # and has nothing to roll back, as does one a reset closed.
       def rollback_async_commit(conn)
+        return if conn.finished?
+
         conn.exec("ROLLBACK") if [PG::PQTRANS_INERROR, PG::PQTRANS_INTRANS].include?(conn.transaction_status)
       end
     end
