@@ -15,10 +15,13 @@ module Pgbus
     #
     # A connection whose SETs did not all complete is closed before the error
     # propagates: it is never pooled CONNECTION_OK without them. The next
-    # checkout sees it finished? and resets it, which tries again.
+    # checkout sees it finished? and resets it, which tries again (pg 1.5.9 and
+    # later reset a closed connection; an older pg raises, and the pool reload
+    # before the last stale-connection retry replaces it).
     #
     # One instance per pool, built at Client construction; it holds only the
-    # frozen SET statements, so concurrent connections share it safely.
+    # SET statements, in a frozen array nothing mutates, so concurrent
+    # connections share it safely.
     class SessionGucs < Module
       def initialize(variables)
         super()
