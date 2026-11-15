@@ -126,14 +126,19 @@ module Pgbus
         # Its "no" is stored like any probe's (issue #666): over a fresh "no"
         # it changes nothing, so the backoff keeps its step and its schedule
         # however many calls force a probe; over a stale or missing answer it
-        # is the timed re-check, one step.
+        # is the timed re-check, one step. A reset_schema_cache! during the
+        # probe (a join that hit the migrated index) means its "no" may
+        # predate the migration, so it probes again.
         def seats_supported_now?
-          cached, generation = @schema_mutex.synchronize do
-            [@seats_supported == true && schema_answer_fresh?(true, @probed_at, @recheck_seconds), @schema_generation]
-          end
-          return true if cached
+          loop do
+            cached, generation = @schema_mutex.synchronize do
+              [@seats_supported == true && schema_answer_fresh?(true, @probed_at, @recheck_seconds), @schema_generation]
+            end
+            return true if cached
 
-          probe_seats(generation)
+            answer = probe_seats(generation)
+            return answer if answer || @schema_mutex.synchronize { generation == @schema_generation }
+          end
         end
 
         def reset_schema_cache!

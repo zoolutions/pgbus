@@ -742,7 +742,7 @@ RSpec.describe Pgbus::Streams::Presence do
       expect { described_class.seats_supported? }.to change { probes }.by(1)
     end
 
-    it "counts a leave after the cached no went stale as the timed re-check: one probe, one step" do
+    it "counts a sweep! after the cached no went stale as the timed re-check: one probe, one step" do
       described_class.seats_supported? # at 100: next at 130
       clock[0] = 131.0
       expect { presence.sweep!(older_than: Time.now) }.to change { probes }.by(1) # step now 60: next at 191
@@ -751,6 +751,26 @@ RSpec.describe Pgbus::Streams::Presence do
       expect { described_class.seats_supported? }.not_to(change { probes })
       clock[0] = 191.0
       expect { described_class.seats_supported? }.to change { probes }.by(1)
+    end
+
+    # A reset (a join that hit the migrated index) while the forced probe was
+    # in flight means its "no" may predate the migration: probe again.
+    it "probes again when a reset overtook the forced probe, so leave keeps seat rows" do
+      described_class.seats_supported?
+      answers = [[], [{ "present" => "1" }]]
+      allow(raw_connection).to receive(:exec_params) do |sql, _binds|
+        statements << sql
+        next [] unless sql.include?("information_schema")
+
+        answer = answers.shift
+        described_class.reset_schema_cache! if answers.size == 1
+        answer
+      end
+
+      presence.leave(member_id: 1)
+
+      expect(answers).to be_empty
+      expect(deletes.last).to include("AND connection_id IS NULL")
     end
   end
 
