@@ -10,8 +10,8 @@ module Pgbus
     # checkout (finished?, CONNECTION_BAD, and since 0.9.0 an intermediate
     # state such as CONNECTION_STARTED), and AsyncCommit#discard_session resets
     # one whose pipeline state cannot be trusted. So each connection #connect
-    # opens is extended with this module, whose #reset applies the SETs again
-    # (issue #671).
+    # opens is extended with this module, whose #reset (and #async_reset,
+    # #sync_reset) applies the SETs again (issue #671).
     #
     # A connection whose SETs did not all complete is closed before the error
     # propagates: it is never pooled CONNECTION_OK without them. The next
@@ -32,10 +32,15 @@ module Pgbus
           close unless applied || finished?
         end
 
-        define_method(:reset) do
-          super()
-          pgbus_apply_session_gucs
-          self
+        # pg's async_reset is an alias bound to PG::Connection#reset and its
+        # sync_reset is C, so a hook on reset alone would not see either. None
+        # of the three calls another, so each reset applies the SETs once.
+        %i[reset async_reset sync_reset].each do |name|
+          define_method(name) do
+            super()
+            pgbus_apply_session_gucs
+            self
+          end
         end
       end
 

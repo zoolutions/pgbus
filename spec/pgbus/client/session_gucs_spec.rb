@@ -16,6 +16,8 @@ RSpec.describe Pgbus::Client::SessionGucs do
 
       def initialize = @calls = []
       def reset = (@calls << [:reset]) && self
+      def async_reset = (@calls << [:async_reset]) && self
+      def sync_reset = (@calls << [:sync_reset]) && self
       def finished? = @calls.include?([:close])
 
       def exec(sql)
@@ -56,6 +58,15 @@ RSpec.describe Pgbus::Client::SessionGucs do
     it "resets, then applies each variable again" do
       expect(conn.reset).to be(conn)
       expect(conn.calls).to eq([[:reset], *set_statements])
+    end
+
+    # pg defines async_reset as an alias of reset, bound to PG::Connection's
+    # own method, and sync_reset in C: each would bypass a hook on reset alone.
+    it "applies them again after async_reset and sync_reset too" do
+      conn.async_reset
+      conn.sync_reset
+
+      expect(conn.calls).to eq([[:async_reset], *set_statements, [:sync_reset], *set_statements])
     end
 
     it "closes the connection when a SET fails, so it is never pooled without them" do
