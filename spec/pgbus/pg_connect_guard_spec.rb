@@ -14,8 +14,11 @@ require "spec_helper"
 RSpec.describe "PG.connect guard (issue #352)" do
   it "confines raw PG connects to Client (pgmq pools) and DedicatedConnection" do
     lib = File.expand_path("../../lib", __dir__)
+    # Client::SessionGucs is the pools' :session-mode connect, handed options
+    # Client#wrap_session_gucs already stripped of :variables (issue #671).
     approved = [
       File.join(lib, "pgbus/client.rb"),
+      File.join(lib, "pgbus/client/session_gucs.rb"),
       File.join(lib, "pgbus/dedicated_connection.rb")
     ]
     pattern = /PG\s*\.\s*connect|PG::Connection\.(new|open|connect)/

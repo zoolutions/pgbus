@@ -116,26 +116,14 @@ module Pgbus
       # fails (the server is gone) is logged and left there, so the error the
       # caller is already raising is the one that surfaces; pgmq-ruby resets a
       # bad connection at its next checkout.
-      # A reset reconnects with the same conninfo (the read bounds ride in it)
-      # but does not re-run the connect lambda, so the :session-mode SETs are
-      # applied again here.
+      # A reset reconnects with the same conninfo (the read bounds ride in it);
+      # in :session GUC mode the connection's own reset applies the SETs again
+      # and closes it when they fail (SessionGucs, issue #671).
       def discard_session(conn, reason)
         Pgbus.logger.warn { "[Pgbus::Client] #{reason}, resetting the connection" }
-        begin
-          conn.reset
-        rescue PG::Error => e
-          Pgbus.logger.warn { "[Pgbus::Client] Resetting the connection failed: #{e.message}" }
-          return
-        end
-        reapply_session_gucs(conn)
-      end
-
-      def reapply_session_gucs(conn)
-        apply_session_gucs(conn, @session_gucs) if @session_gucs
+        conn.reset
       rescue PG::Error => e
-        Pgbus.logger.warn do
-          "[Pgbus::Client] Re-applying the session's database.yml variables after the reset failed: #{e.message}"
-        end
+        Pgbus.logger.warn { "[Pgbus::Client] Resetting the connection failed: #{e.message}" }
       end
 
       # The failed BEGIN block (INERROR) is still open after the sync. A failed

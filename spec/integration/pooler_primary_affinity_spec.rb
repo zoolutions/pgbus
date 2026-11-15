@@ -71,5 +71,59 @@ RSpec.describe "Pooler primary-affinity (integration)", :integration do
     ensure
       client&.close
     end
+
+    # pgmq-ruby's checkout health check resets an unhealthy pooled connection
+    # (finished?, CONNECTION_BAD, or an intermediate state since 0.9.0). A reset
+    # opens a new backend and does not re-run the connect lambda, so the SETs
+    # are re-applied by the reset itself (issue #671). A closed connection takes
+    # the same conn.reset path as the intermediate states.
+    context "when pgmq-ruby resets a pooled connection at checkout (issue #671)" do
+      let(:session_config) do
+        uri = URI.parse(PGBUS_DATABASE_URL)
+        config.database_url = nil
+        config.connection_guc_mode = :session
+        config.pool_size = 1
+        config.streams_pool_size = 1
+        config.connection_params = {
+          host: uri.host, port: uri.port, dbname: uri.path.delete_prefix("/"),
+          user: uri.user, password: uri.password,
+          variables: { "statement_timeout" => "34567" }
+        }.compact
+        config
+      end
+
+      it "keeps the database.yml variables on the job pool" do
+        client = Pgbus::Client.new(session_config, schema_ensured: true)
+        pgmq = client.instance_variable_get(:@pgmq)
+        first_pid = pgmq.with_connection do |conn|
+          conn.backend_pid.tap { conn.close }
+        end
+
+        pid, applied = pgmq.with_connection do |conn|
+          [conn.backend_pid, conn.exec("SHOW statement_timeout").getvalue(0, 0)]
+        end
+
+        expect(pid).not_to eq(first_pid)
+        expect(applied).to eq("34567ms")
+      ensure
+        client&.close
+      end
+
+      it "keeps the database.yml variables on the streams pool" do
+        client = Pgbus::Client.new(session_config, schema_ensured: true)
+        first_pid = client.send(:with_streams_connection) do |conn|
+          conn.backend_pid.tap { conn.close }
+        end
+
+        pid, applied = client.send(:with_streams_connection) do |conn|
+          [conn.backend_pid, conn.exec("SHOW statement_timeout").getvalue(0, 0)]
+        end
+
+        expect(pid).not_to eq(first_pid)
+        expect(applied).to eq("34567ms")
+      ensure
+        client&.close
+      end
+    end
   end
 end

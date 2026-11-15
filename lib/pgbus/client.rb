@@ -138,9 +138,6 @@ module Pgbus
         # safe on this dedicated-connection branch — never on the shared-AR Proc
         # path, where statement_timeout would leak into application queries.
         conn_opts = apply_connection_bounds(conn_opts)
-        # What the connect lambda SETs per session (:session GUC mode), kept so
-        # a session reset after a failed completion pipeline gets it again.
-        @session_gucs = session_gucs(conn_opts)
         conn_opts = wrap_session_gucs(conn_opts)
         @pgmq = PGMQ::Client.new(conn_opts, pool_size: config.resolved_pool_size, pool_timeout: config.pool_timeout)
         @pgmq_mutex = nil
@@ -2204,17 +2201,15 @@ module Pgbus
     # PG::Connection each call (pgmq guards against a shared object). Applies to
     # a Hash with `:variables` only — a String URL or no variables passes through
     # unchanged, as does :options mode (where forward_connection_variables
-    # already baked the GUCs into `options`). See issue #332.
+    # already baked the GUCs into `options`). See issue #332. Each connection
+    # re-applies the SETs when it is reset (issue #671, SessionGucs).
     def wrap_session_gucs(conn_opts)
       variables = session_gucs(conn_opts)
       return conn_opts unless variables
 
       pg_opts = conn_opts.except(:variables)
-      lambda do
-        conn = PG.connect(pg_opts)
-        apply_session_gucs(conn, variables)
-        conn
-      end
+      gucs = SessionGucs.new(variables)
+      -> { gucs.connect(pg_opts) }
     end
 
     # The database.yml variables :session GUC mode applies with SET after
@@ -2224,10 +2219,6 @@ module Pgbus
 
       variables = conn_opts[:variables]
       variables unless variables.nil? || variables.empty?
-    end
-
-    def apply_session_gucs(conn, variables)
-      variables.each { |name, value| conn.exec("SET #{name} = '#{value}'") }
     end
 
     def apply_connection_bounds(conn_opts)
