@@ -398,14 +398,16 @@ class Views::Docs::Pages::RunningWorkers < DocsUI::Page
         the last retry, pgbus drops the idle connections of both pools (job and
         streams) and logs `Dropping pooled connections before the last
         stale-connection retry`. This recovers a connection that still fails
-        after the health check passed it. With `connection_guc_mode: :session`
-        and database.yml `variables`, a connection the health check resets
-        comes back without its session `SET`s (#671).
+        after the health check passed it.
 
         A read interrupted by the Ruby `Timeout` fallback above reloads the job
         pool the same way. `Pgbus.client.reload` drops the idle connections of
         both pools by hand. None of these reload anything on the shared
         ActiveRecord `Proc` connection, whose socket pgbus does not own.
+
+        With `connection_guc_mode: :session` and database.yml `variables`, a
+        connection the health check resets comes back without its session
+        `SET`s (#671).
       MD
     end
   end
