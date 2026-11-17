@@ -346,8 +346,9 @@ module Pgbus
     end
 
     # Send +name+ to every process's on_signal blocks. Inside an open
-    # ActiveRecord transaction it is sent at COMMIT, never on rollback.
-    # +payload+ is an optional String under NOTIFY's 7999-byte cap.
+    # ActiveRecord transaction it is sent at COMMIT, never on rollback (a
+    # `transaction(joinable: false)` block sends at once). +payload+ is an
+    # optional String under NOTIFY's 7999-byte cap.
     #
     #   Pgbus.signal(:widgets_changed)
     #   Pgbus.signal(:widgets_changed, "id=42")

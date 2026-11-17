@@ -142,14 +142,18 @@ module Pgbus
       end
 
       # Called by Pgbus::Signals.publish instead of a NOTIFY when the mode is
-      # :fake or :inline.
+      # :fake or :inline. Recorded (and, inline, delivered) when the NOTIFY
+      # would be sent: at the COMMIT of an open joinable transaction, never on
+      # its rollback. Inline delivery runs on the caller's thread without the
+      # Rails executor, so the caller's CurrentAttributes survive it.
       def record_signal(name, payload)
         record = SignalRecord.new(name: name.to_s, payload: payload)
-        @signals_lock.synchronize { @signals = [*@signals, record].freeze }
-        return unless inline?
-
-        deliver = -> { Pgbus::Signals.deliver(name.to_s, payload) }
-        deliver.call unless Pgbus::OpenTransaction.defer(&deliver)
+        inline = inline?
+        commit = lambda do
+          @signals_lock.synchronize { @signals = [*@signals, record].freeze }
+          Pgbus::Signals.deliver(record.name, payload, executor: false) if inline
+        end
+        commit.call unless Pgbus::OpenTransaction.defer(&commit)
       end
 
       private

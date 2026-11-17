@@ -111,6 +111,9 @@ main_only:
   - name: Pgbus::Signals.@start_lock
     reason: >-
       guards the once-per-process eager start of the streamer for process signals (issue #674); taken by request threads on the main Ractor
+  - name: Pgbus::Signals.@started_pid
+    reason: >-
+      the pid whose streamer started for process signals (issue #674), read lock-free by request threads and set by the starter thread on the main Ractor
   - name: Pgbus::StreamQueue.@names_lock
     reason: >-
       guards the stream-queue name memo (a frozen Set replaced whole); taken by broadcast and dispatcher threads on the main Ractor

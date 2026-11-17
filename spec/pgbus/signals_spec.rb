@@ -90,6 +90,12 @@ RSpec.describe Pgbus::Signals do
       expect(client).to have_received(:notify_signal).with("widgets_changed", nil)
     end
 
+    it "sends an empty payload as none, as a NOTIFY delivers it" do
+      Pgbus.signal(:widgets_changed, "")
+
+      expect(client).to have_received(:notify_signal).with("widgets_changed", nil)
+    end
+
     it "rejects a payload that is not a String" do
       expect { Pgbus.signal(:widgets_changed, { id: 1 }) }.to raise_error(ArgumentError, /String/)
     end
@@ -120,6 +126,18 @@ RSpec.describe Pgbus::Signals do
       described_class.deliver("widgets_changed", "id=1")
 
       expect(seen).to eq([[:a, "id=1"], [:b, "id=1"]])
+    end
+
+    it "runs each subscriber inside the Rails executor by default, and outside it with executor: false" do
+      executor = double("executor")
+      allow(executor).to receive(:wrap).and_yield
+      stub_const("Rails", double("Rails", application: double("app", executor: executor)))
+      Pgbus.on_signal(:widgets_changed) { nil }
+
+      described_class.deliver("widgets_changed", nil)
+      described_class.deliver("widgets_changed", nil, executor: false)
+
+      expect(executor).to have_received(:wrap).once
     end
 
     it "reports a raising subscriber and still runs the others" do
@@ -172,16 +190,22 @@ RSpec.describe Pgbus::Signals do
   describe ".start_listening!" do
     let(:config) { Pgbus.configuration }
     let!(:saved) { [config.streams_enabled, config.streams_test_mode] }
+    let(:starts) { Queue.new }
 
     before do
-      allow(Pgbus::Web::Streamer).to receive(:current)
+      allow(Pgbus::Web::Streamer).to receive(:current) { starts << Thread.current }
       allow(Pgbus).to receive(:database_task?).and_return(false)
+      allow(Pgbus::ErrorReporter).to receive(:report)
       config.streams_enabled = true
       config.streams_test_mode = false
-      described_class.instance_variable_set(:@started_pid, nil)
     end
 
     after { config.streams_enabled, config.streams_test_mode = saved }
+
+    def wait_for(timeout: 2)
+      deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + timeout
+      sleep 0.01 until yield || Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
+    end
 
     it "does nothing without a subscriber" do
       described_class.start_listening!
@@ -189,12 +213,34 @@ RSpec.describe Pgbus::Signals do
       expect(Pgbus::Web::Streamer).not_to have_received(:current)
     end
 
-    it "starts the streamer once per process when a subscriber exists" do
+    it "starts the streamer once per process, off the request thread" do
       Pgbus.on_signal(:a) { nil }
 
       described_class.start_listening!
+      starter = starts.pop(timeout: 2)
+      wait_for { described_class.instance_variable_get(:@started_pid).get == Process.pid }
       described_class.start_listening!
+      sleep 0.05
 
+      expect(starter).not_to eq(Thread.current)
+      expect(Pgbus::Web::Streamer).to have_received(:current).once
+    end
+
+    # A connect to an unreachable streams host must not stall the site.
+    it "never makes a request wait on a start in flight" do
+      gate = Queue.new
+      allow(Pgbus::Web::Streamer).to receive(:current) { gate.pop }
+      Pgbus.on_signal(:a) { nil }
+
+      elapsed = Array.new(3) do
+        t0 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        described_class.start_listening!
+        Process.clock_gettime(Process::CLOCK_MONOTONIC) - t0
+      end
+      gate << :go
+
+      expect(elapsed.max).to be < 0.1
+      wait_for { described_class.instance_variable_get(:@started_pid).get == Process.pid }
       expect(Pgbus::Web::Streamer).to have_received(:current).once
     end
 
@@ -209,18 +255,29 @@ RSpec.describe Pgbus::Signals do
       config.streams_enabled = true
       allow(Pgbus).to receive(:database_task?).and_return(true)
       described_class.start_listening!
+      sleep 0.05
 
       expect(Pgbus::Web::Streamer).not_to have_received(:current)
     end
 
-    it "reports a failed start once and never raises into the request" do
-      allow(Pgbus::ErrorReporter).to receive(:report)
-      allow(Pgbus::Web::Streamer).to receive(:current).and_raise(Pgbus::ConfigurationError, "no dedicated connection")
+    it "reports a failed start, never raises into the request, and retries only after the retry window" do
+      allow(Pgbus::Web::Streamer).to receive(:current) do
+        starts << :attempt
+        raise Pgbus::ConfigurationError, "no dedicated connection"
+      end
       Pgbus.on_signal(:a) { nil }
 
-      expect { 2.times { described_class.start_listening! } }.not_to raise_error
+      expect { described_class.start_listening! }.not_to raise_error
+      starts.pop(timeout: 2)
+      wait_for { described_class.instance_variable_get(:@failed_at) }
+      described_class.start_listening!
+      sleep 0.05
       expect(Pgbus::Web::Streamer).to have_received(:current).once
-      expect(Pgbus::ErrorReporter).to have_received(:report).once
+      expect(Pgbus::ErrorReporter).to have_received(:report).with(an_instance_of(Pgbus::ConfigurationError), { action: "signals_start" })
+
+      described_class.instance_variable_set(:@failed_at, described_class.send(:monotonic_now) - 31)
+      described_class.start_listening!
+      expect(starts.pop(timeout: 2)).to eq(:attempt)
     end
   end
 end

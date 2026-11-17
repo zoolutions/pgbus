@@ -183,4 +183,72 @@ RSpec.describe Pgbus::Web::Streamer::FailoverListener do
       expect(local_listener).to have_received(:ensure_signal_listening).with("pgbus_signal_a").at_least(:once)
     end
   end
+
+  describe "rebuild after a double fault (issue #674)" do
+    subject(:failover) do
+      described_class.new(
+        hub_client: hub_client, local_listener_factory: flaky_factory,
+        on_gap: -> { gaps << :gap }, rebuild_interval: 0.05, logger: logger
+      )
+    end
+
+    let(:gaps) { Queue.new }
+    let(:failures_left) { [2] }
+    let(:hub_client) do
+      instance_double(Pgbus::Web::Streamer::HubClient,
+                      ensure_listening: :done, ensure_signal_listening: :done, remove_listening: nil,
+                      stop: nil, threads: [])
+    end
+    let(:local_listener) do
+      instance_double(Pgbus::Web::Streamer::Listener,
+                      ensure_listening: :done, ensure_signal_listening: :done, remove_listening: nil,
+                      stop: nil, threads: [])
+    end
+    let(:flaky_factory) do
+      lambda do
+        factory_calls << :attempt
+        if failures_left[0].positive?
+          failures_left[0] -= 1
+          raise PG::ConnectionBad, "could not connect" if defined?(PG::ConnectionBad)
+
+          raise StandardError, "could not connect"
+        end
+        local_listener
+      end
+    end
+
+    def wait_until(timeout: 2)
+      deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + timeout
+      sleep 0.01 until yield || Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
+    end
+
+    it "keeps retrying the local build in the background, then replays everything and reports the gap" do
+      failover.ensure_signal_listening("pgbus_signal_a")
+      failover.ensure_listening("pgbus_stream_chat")
+
+      failover.fail_over!
+
+      expect(gaps.pop(timeout: 2)).to eq(:gap)
+      expect(factory_calls.size).to eq(3)
+      expect(local_listener).to have_received(:ensure_signal_listening).with("pgbus_signal_a")
+      expect(local_listener).to have_received(:ensure_listening).with("pgbus_stream_chat")
+      expect(failover.ensure_listening("pgbus_stream_other")).to eq(:done)
+      wait_until { failover.threads.empty? }
+      expect(failover.threads).to eq([])
+    end
+
+    it "lists the retry thread while it runs and stops it on #stop" do
+      failures_left[0] = 1_000
+
+      failover.fail_over!
+      wait_until { failover.threads.any? }
+      expect(failover.threads.size).to eq(1)
+      retry_thread = failover.threads.first
+
+      failover.stop
+
+      expect(retry_thread.join(1)).to be_truthy
+      expect(hub_client).to have_received(:stop)
+    end
+  end
 end

@@ -760,6 +760,16 @@ RSpec.describe Pgbus::Web::Streamer::Instance do
       expect(listens("LISTEN")).to eq([%(LISTEN "#{channel}")])
     end
 
+    it "runs every on_gap once its first LISTEN is in place (signals sent before it were never seen)" do
+      gaps = Queue.new
+      Pgbus.on_signal(:widgets, on_gap: -> { gaps << :gap }) { nil }
+
+      streamer.start
+
+      expect(gaps.pop(timeout: 2)).to eq(:gap)
+      expect(gaps.pop(timeout: 0.2)).to be_nil
+    end
+
     it "LISTENs on a channel registered after it started" do
       streamer.start
       channel = Pgbus::Signals.channel_for(:late)

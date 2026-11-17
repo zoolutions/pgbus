@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "concurrent/atomic/atomic_reference"
+
 module Pgbus
   # Process signals (issue #674): run a block in every web process when any
   # process sends a signal — the "drop your in-memory cache now" message.
@@ -20,12 +22,14 @@ module Pgbus
   #
   # The registry is process-local, like Pgbus::Streams.filters: register in an
   # initializer. With at least one subscriber, the first request a process
-  # serves starts the streamer (Signals::Middleware), so a process that never
-  # served an SSE connection still listens; with none, nothing changes.
+  # serves starts the streamer on a background thread (Signals::Middleware),
+  # so a process that never served an SSE connection still listens and no
+  # request waits on the connect; with none, nothing changes.
   #
   # Delivery is at-most-once: a NOTIFY sent while a process was not LISTENing
-  # (a reconnect, a hub failover) is lost. After such a gap every subscriber's
-  # `on_gap` runs once, once the new LISTEN is in place, so it can assume it
+  # (before its streamer started, a reconnect, a hub failover) is lost. Every
+  # subscriber's `on_gap` runs once after each such gap, once the LISTEN is in
+  # place (the first LISTEN of a process included), so it can assume it
   # missed signals.
   module Signals
     NAME_PATTERN = /\A[a-z0-9_]+\z/
@@ -38,13 +42,16 @@ module Pgbus
 
     # Built at load, never `||=` (AGENTS.md, Never Do 5). @lock guards
     # @subscribers (a frozen Hash of name → frozen Array of Subscriber,
-    # replaced whole on write, so a reader iterates a snapshot). @start_lock guards the eager-start
-    # bookkeeping and is held across Streamer.current, whose Instance#start
-    # reads the registry: two locks, so that read never waits on itself.
+    # replaced whole on write, so a reader iterates a snapshot). @started_pid
+    # is the pid whose streamer started (an atomic, so the per-request check
+    # takes no lock once started). @start_lock guards the rest of the
+    # eager-start bookkeeping and is only held for constant-time work: the
+    # connect runs on a starter thread, outside it.
     @lock = Mutex.new
     @start_lock = Mutex.new
     @subscribers = {}.freeze
-    @started_pid = nil
+    @started_pid = Concurrent::AtomicReference.new(nil)
+    @starting_pid = nil
     @failed_at = nil
 
     class << self
@@ -65,10 +72,13 @@ module Pgbus
       end
 
       # Pgbus.signal. Sends the NOTIFY now, or at the COMMIT of the caller's
-      # open ActiveRecord transaction (nothing is sent on rollback). Returns nil.
+      # open, joinable ActiveRecord transaction (nothing is sent on its
+      # rollback; OpenTransaction.defer explains joinable). Returns nil.
       def publish(name, payload = nil)
         name = validate_name!(name)
         validate_payload!(payload)
+        # A NOTIFY delivers an empty payload as none: the same in every mode.
+        payload = nil if payload == ""
         return testing_signal(name, payload) if testing?
 
         send_now = -> { Pgbus.client.notify_signal(name, payload) }
@@ -104,12 +114,16 @@ module Pgbus
         names.find { |name| channel_for(name) == channel }
       end
 
-      # Runs every subscriber of +name+ with +payload+, in registration order,
-      # each in the Rails executor. Called on the streamer's signal delivery
-      # thread (or inline by Pgbus::Testing). Never raises.
-      def deliver(name, payload)
+      # Runs every subscriber of +name+ with +payload+, in registration order.
+      # On the streamer's signal delivery thread each runs in the Rails
+      # executor; Pgbus::Testing's inline mode passes executor: false, since it
+      # runs on the caller's thread, whose CurrentAttributes the executor's
+      # completion would reset. Never raises.
+      def deliver(name, payload, executor: true)
         subscribers_of(name).each do |subscriber|
-          run_safely(action: "signal_subscriber", signal: name) { subscriber.callback.call(payload) }
+          run_safely({ action: "signal_subscriber", signal: name }, executor: executor) do
+            subscriber.callback.call(payload)
+          end
         end
         nil
       end
@@ -120,34 +134,34 @@ module Pgbus
         all.each do |subscriber|
           next unless subscriber.on_gap
 
-          run_safely(action: "signal_on_gap", signal: subscriber.name) { subscriber.on_gap.call }
+          run_safely({ action: "signal_on_gap", signal: subscriber.name }, executor: true) { subscriber.on_gap.call }
         end
         nil
       end
 
       # The eager start Signals::Middleware runs on every request: with a
-      # subscriber, start this process's streamer once, so it LISTENs before
-      # the request reads anything a signal would invalidate. A no-op in tests
-      # (streams_test_mode), with streams disabled, and in a schema rake task.
-      # Never raises into the request: a failure is reported, and the next
-      # request START_RETRY_SECONDS later tries again.
+      # subscriber, start this process's streamer once, on a background
+      # thread, so no request waits on the LISTEN connect (a connect to an
+      # unreachable streams host can take as long as the OS lets it). The
+      # streamer runs every on_gap once its first LISTEN is in place, which
+      # covers whatever the process cached before. A no-op under
+      # streams_test_mode (Pgbus::Testing.fake!/inline!), with streams
+      # disabled, and in a schema rake task. Never raises into the request: a
+      # failure is reported, and a request START_RETRY_SECONDS later tries
+      # again. Once started, it costs one atomic read.
       def start_listening!
-        return if started_here?
+        pid = ::Process.pid
+        return if started_pid == pid
         return unless subscribed? && startable?
 
-        pid = ::Process.pid
         @start_lock.synchronize do
-          return if @started_pid == pid
+          return if started_pid == pid || @starting_pid == pid
           return if @failed_at && (monotonic_now - @failed_at) < START_RETRY_SECONDS
 
-          begin
-            Pgbus::Web::Streamer.current
-            @started_pid = pid
-            @failed_at = nil
-          rescue StandardError => e
-            @failed_at = monotonic_now
-            Pgbus::ErrorReporter.report(e, { action: "signals_start" })
-          end
+          @starting_pid = pid
+          # One short-lived starter thread per attempt, owned by this
+          # module: it ends when Streamer.current returns or raises.
+          Thread.new { start_streamer(pid) } # rubocop:disable ThreadSafety/NewThread
         end
         nil
       end
@@ -156,15 +170,33 @@ module Pgbus
       def reset!
         @lock.synchronize { @subscribers = {}.freeze }
         @start_lock.synchronize do
-          @started_pid = nil
+          @started_pid.set(nil)
+          @starting_pid = nil
           @failed_at = nil
         end
       end
 
       private
 
-      def started_here?
-        @start_lock.synchronize { @started_pid == ::Process.pid }
+      def started_pid
+        # An AtomicReference built at load and never reassigned: reading it
+        # takes no lock (the per-request fast path).
+        @started_pid.get # rubocop:disable ThreadSafety/ClassInstanceVariable
+      end
+
+      def start_streamer(pid)
+        Pgbus::Web::Streamer.current
+        @start_lock.synchronize do
+          @started_pid.set(pid)
+          @starting_pid = nil
+          @failed_at = nil
+        end
+      rescue StandardError => e
+        @start_lock.synchronize do
+          @starting_pid = nil
+          @failed_at = monotonic_now
+        end
+        Pgbus::ErrorReporter.report(e, { action: "signals_start" })
       end
 
       def startable?
@@ -204,8 +236,8 @@ module Pgbus
         raise ArgumentError, "A signal payload is #{payload.bytesize} bytes; NOTIFY caps it at #{limit}"
       end
 
-      def run_safely(context, &)
-        with_executor(&)
+      def run_safely(context, executor:, &)
+        executor ? with_executor(&) : yield
       rescue StandardError => e
         Pgbus::ErrorReporter.report(e, context)
       end

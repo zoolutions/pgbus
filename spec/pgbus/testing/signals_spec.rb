@@ -55,6 +55,25 @@ RSpec.describe "Pgbus::Testing and process signals (issue #674)" do # rubocop:di
     expect(seen).to eq([nil])
   end
 
+  it "records nothing when the transaction rolls back" do
+    allow(Pgbus::OpenTransaction).to receive(:defer).and_return(:transaction) # the commit never comes
+    Pgbus::Testing.inline!
+
+    Pgbus.signal(:widgets_changed)
+
+    expect(Pgbus::Testing.signals).to eq([])
+    expect(seen).to eq([])
+  end
+
+  it "runs inline subscribers without the Rails executor, so the caller's CurrentAttributes survive" do
+    allow(Pgbus::Signals).to receive(:deliver).and_call_original
+    Pgbus::Testing.inline!
+
+    Pgbus.signal(:widgets_changed, "x")
+
+    expect(Pgbus::Signals).to have_received(:deliver).with("widgets_changed", "x", executor: false)
+  end
+
   it "sends the NOTIFY in disabled mode" do
     Pgbus::Testing.disabled!
     allow(Pgbus::OpenTransaction).to receive(:defer).and_return(nil)

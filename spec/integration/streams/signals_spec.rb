@@ -99,6 +99,8 @@ RSpec.describe "Process signals (issue #674)", :integration do
       start_instance
       listener_pids = listen_backend_pids - baseline
       expect(listener_pids.size).to eq(1)
+      # The first LISTEN is a gap of its own: nothing before it was seen.
+      expect(pop_all(gaps, 1, within: 2).size).to eq(1)
 
       ActiveRecord::Base.connection.select_value("SELECT pg_terminate_backend(#{Integer(listener_pids.first)})")
 
@@ -107,6 +109,28 @@ RSpec.describe "Process signals (issue #674)", :integration do
 
       Pgbus.signal(signal_name, "after the gap")
       expect(pop_all(seen, 1, within: 2.0).map(&:last)).to eq(["after the gap"])
+    end
+
+    # AC3: a process that never served an SSE connection, through the
+    # engine's middleware, the way a host app's first request reaches it.
+    it "starts listening on a process's first request, without the request waiting, and receives signals" do
+      saved_test_mode = Pgbus.configuration.streams_test_mode
+      Pgbus.configuration.streams_test_mode = false
+      baseline = listen_backend_pids
+      subscribe
+      app = Pgbus::Signals::Middleware.new(->(_env) { [200, {}, ["ok"]] })
+
+      expect(app.call({})).to eq([200, {}, ["ok"]])
+      expect(pop_all(gaps, 1, within: 5).size).to eq(1) # the first LISTEN is in place
+      expect((listen_backend_pids - baseline).size).to eq(1)
+      app.call({}) # a second request starts nothing more
+
+      Pgbus.signal(signal_name, "first request")
+      expect(pop_all(seen, 1, within: 1.0).map(&:last)).to eq(["first request"])
+      expect((listen_backend_pids - baseline).size).to eq(1)
+    ensure
+      Pgbus.configuration.streams_test_mode = saved_test_mode
+      Pgbus::Web::Streamer.reset!
     end
 
     it "reports a raising subscriber and still runs the others and wakes nothing else" do
@@ -151,6 +175,7 @@ RSpec.describe "Process signals (issue #674)", :integration do
       worker_a = start_instance
       worker_b = start_instance
       expect([worker_a.listener, worker_b.listener]).to all(be_a(Pgbus::Web::Streamer::FailoverListener))
+      pop_all(gaps, 2, within: 2) # each worker's first LISTEN
 
       # No worker opened a LISTEN connection of its own.
       expect((listen_backend_pids - baseline).size).to eq(1)

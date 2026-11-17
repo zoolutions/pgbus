@@ -100,8 +100,13 @@ module Pgbus
           @heartbeat.start
           @peer_close_watcher&.start
           # Every process signal registered so far (issue #674); one
-          # registered later arrives through #listen_signal.
-          Pgbus::Signals.channels.each { |channel| @listener.ensure_signal_listening(channel) }
+          # registered later arrives through #listen_signal. Signals sent
+          # before this first LISTEN never reached the process (it may have
+          # cached since boot, or since a fork under preload_app!): that is a
+          # gap like any other, so every on_gap runs once.
+          channels = Pgbus::Signals.channels
+          channels.each { |channel| @listener.ensure_signal_listening(channel) }
+          @signal_delivery.gap if channels.any?
           self
         end
 

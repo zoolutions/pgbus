@@ -531,21 +531,23 @@ class Views::Docs::Pages::Streams < DocsUI::Page
       RUBY
       md <<~'MD'
         The signal is a `NOTIFY` on `<queue_prefix>_signal_<name>`, sent at
-        `COMMIT` inside an open ActiveRecord transaction and never on rollback,
-        with an optional String payload under NOTIFY's 7999-byte cap. Under
+        `COMMIT` inside an open ActiveRecord transaction and never on rollback
+        (a `transaction(joinable: false)` block sends at once), with an
+        optional String payload under NOTIFY's 7999-byte cap. Under
         `streams_listen_scope :master` the master hub LISTENs and fans it out to
         every worker; under `:process` each worker's own listener does. With a
-        subscriber registered, a process's first request starts the listener,
-        so a process that never served an SSE connection still receives
-        signals; with none, nothing changes.
+        subscriber registered, a process's first request starts the listener
+        on a background thread, so a process that never served an SSE
+        connection still receives signals; with none, nothing changes.
 
         Blocks run on a dedicated thread inside the Rails executor; one that
         raises is reported and the others run. Delivery is at most once: after
-        a LISTEN gap (a reconnect, a hub failover) every `on_gap` runs once, so
-        a subscriber can assume it missed signals. Web processes only.
+        each LISTEN gap (the first LISTEN of a process, a reconnect, a hub
+        failover) every `on_gap` runs once, so a subscriber can assume it
+        missed signals. Web processes only.
       MD
       DocsUI::Callout(:note) do
-        plain "In tests, Pgbus::Testing.fake! records signals in Pgbus::Testing.signals; Pgbus::Testing.inline! also runs the blocks synchronously, at the commit of a transaction block."
+        plain "In tests, Pgbus::Testing.fake! records signals in Pgbus::Testing.signals; Pgbus::Testing.inline! also runs the blocks synchronously, at the commit of a transaction block. Set a mode in your suite: with Pgbus::Testing.disabled! and an on_signal registered, the first request spec starts a real streamer."
       end
     end
   end

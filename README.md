@@ -2003,13 +2003,13 @@ class Widget < ApplicationRecord
 end
 ```
 
-- `Pgbus.signal(name, payload = nil)` sends a `NOTIFY` on `<queue_prefix>_signal_<name>`. Inside an open ActiveRecord transaction it is sent at `COMMIT`, and never on rollback. The payload is an optional String under NOTIFY's 7999-byte cap.
+- `Pgbus.signal(name, payload = nil)` sends a `NOTIFY` on `<queue_prefix>_signal_<name>`. Inside an open ActiveRecord transaction it is sent at `COMMIT`, and never on rollback. The exception is a `transaction(joinable: false)` block (the kind transactional tests open around each example): there it is sent at once. The payload is an optional String under NOTIFY's 7999-byte cap; an empty String arrives as `nil`.
 - `Pgbus.on_signal(name) { |payload| ... }` registers a block in this process (register in an initializer, like `Pgbus::Streams.filters`). Names are lowercase letters, digits and underscores, and the channel must fit the queue-name budget.
-- The signal rides the streamer's LISTEN connection: one per web process under `streams_listen_scope :process`, the master hub's under `:master` (fanned out to every worker, so no worker opens a LISTEN connection of its own). With at least one subscriber, a process's first request starts that listener (`Pgbus::Signals::Middleware`, installed by the engine), so a process that never served an SSE connection still receives signals. Without a subscriber nothing changes: no connection, no thread.
+- The signal rides the streamer's LISTEN connection: one per web process under `streams_listen_scope :process`, the master hub's under `:master` (fanned out to every worker, so no worker opens a LISTEN connection of its own). With at least one subscriber, a process's first request starts that listener on a background thread (`Pgbus::Signals::Middleware`, installed by the engine; no request waits on the connect), so a process that never served an SSE connection still receives signals. A failed start is reported and retried by a request 30 s later. Without a subscriber nothing changes: no connection, no thread. Under `:master`, a worker that starts before the master hub has bound its socket uses a LISTEN connection of its own until it recycles, as an SSE-started worker does.
 - Blocks run on a dedicated thread (not the LISTEN thread, not the stream dispatcher), each inside the Rails executor. A block that raises is reported through `error_reporters` and the other blocks still run.
-- Delivery is at most once, within about a second. A signal sent while a process was not listening (its LISTEN connection reconnected, or a worker failed over from the master hub) is lost: after such a gap every `on_gap` runs once, once the new LISTEN is in place, so it can assume it missed signals.
+- Delivery is at most once, within about a second. A signal sent while a process was not listening is lost: before its first LISTEN (whatever it cached at boot, or before a fork under `preload_app!`), while its LISTEN connection reconnected, or while a worker failed over from the master hub. After each such gap, the first LISTEN included, every `on_gap` runs once, once the LISTEN is in place, so it can assume it missed signals. A worker whose hub died and whose own listener cannot connect retries every 5 s and runs `on_gap` when it succeeds.
 - Web processes only: pgbus worker processes do not receive signals. Signals need `streams_enabled` (the default) and a dedicated streams connection (a `database_url` or `connection_params`, as SSE does).
-- In tests, `Pgbus::Testing.fake!` records signals in `Pgbus::Testing.signals` without sending them, and `Pgbus::Testing.inline!` also runs the blocks synchronously (at the commit of a `transaction do ... end` block; the fixture transaction of transactional tests is not waited for).
+- In tests, `Pgbus::Testing.fake!` records signals in `Pgbus::Testing.signals` without sending them, and `Pgbus::Testing.inline!` also runs the blocks synchronously on the calling thread, without the Rails executor, so `Current` attributes survive. Both record when the NOTIFY would be sent: at the commit of a `transaction do ... end` block, never on its rollback (the fixture transaction of transactional tests is not waited for). Set a mode in your suite (`config.before { Pgbus::Testing.fake! }`, as for SSE): with `Pgbus::Testing.disabled!` and an `on_signal` registered, the first request spec starts a real streamer, with a LISTEN connection and threads outside the test transaction.
 
 ## Testing
 
@@ -2046,6 +2046,7 @@ RSpec.configure do |config|
   config.append_after do
     Pgbus::Testing.disabled!
     Pgbus::Testing.store.clear!
+    Pgbus::Testing.clear_signals!
   end
 end
 ```
@@ -2058,6 +2059,7 @@ RSpec.configure do |config|
   config.append_after(:each, :pgbus) do
     Pgbus::Testing.disabled!
     Pgbus::Testing.store.clear!
+    Pgbus::Testing.clear_signals!
   end
 end
 
