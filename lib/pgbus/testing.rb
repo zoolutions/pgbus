@@ -14,6 +14,11 @@ module Pgbus
   #   :fake     — capture published events in an in-memory store (default for tests)
   #   :inline   — capture AND immediately dispatch to matching handlers
   #   :disabled — pass through to the real publisher (production behavior)
+  #
+  # Process signals (Pgbus.signal, issue #674) follow the same modes: :fake
+  # records them in `Pgbus::Testing.signals`, :inline records them and runs the
+  # process's on_signal blocks synchronously (at the COMMIT of an open
+  # transaction, as the NOTIFY would be sent), :disabled sends the NOTIFY.
   module Testing
     MODES = %i[fake inline disabled].freeze
     MODE_KEY = :__pgbus_test_mode
@@ -68,8 +73,15 @@ module Pgbus
       end
     end
 
+    # One Pgbus.signal captured in fake or inline mode.
+    SignalRecord = Data.define(:name, :payload)
+
     # Eagerly initialize the store so concurrent access never races on creation.
     @store = EventStore.new
+    # Signals captured in fake/inline mode: a frozen Array replaced whole
+    # under its own lock.
+    @signals_lock = Mutex.new
+    @signals = [].freeze
 
     # The process-wide mode (`fake!` with no block). A module ivar under a lock
     # built at load, not `Thread.main[]`: that reads the main thread's CURRENT
@@ -119,6 +131,26 @@ module Pgbus
       def disabled? = mode == :disabled
 
       attr_reader :store
+
+      # The signals Pgbus.signal captured in fake or inline mode, oldest first.
+      def signals
+        @signals_lock.synchronize { @signals }
+      end
+
+      def clear_signals!
+        @signals_lock.synchronize { @signals = [].freeze }
+      end
+
+      # Called by Pgbus::Signals.publish instead of a NOTIFY when the mode is
+      # :fake or :inline.
+      def record_signal(name, payload)
+        record = SignalRecord.new(name: name.to_s, payload: payload)
+        @signals_lock.synchronize { @signals = [*@signals, record].freeze }
+        return unless inline?
+
+        deliver = -> { Pgbus::Signals.deliver(name.to_s, payload) }
+        deliver.call unless Pgbus::OpenTransaction.defer(&deliver)
+      end
 
       private
 

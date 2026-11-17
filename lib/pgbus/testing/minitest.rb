@@ -25,6 +25,7 @@ module Pgbus
       def before_setup
         Pgbus::Testing.fake!
         Pgbus::Testing.store.clear!
+        Pgbus::Testing.clear_signals!
         super
       end
     end

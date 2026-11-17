@@ -37,6 +37,7 @@ module Pgbus
     def native_ready?: (String full_name) -> bool
     def notify_enabled?: (untyped queue_name) -> bool
     def notify_stream: (untyped stream_name, untyped payload) -> untyped
+    def notify_signal: (Symbol | String name, ?String? payload) -> untyped
     def oldest_claimable_ages: (?untyped queue_name) -> untyped
     def pgmq: () -> untyped
     def pgmq_installed?: () -> bool

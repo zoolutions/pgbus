@@ -157,4 +157,70 @@ RSpec.describe Pgbus::Web::Streamer::HubClient do
       expect(failures).to be_empty
     end
   end
+
+  describe "process signals (issue #674)" do
+    subject(:client) do
+      described_class.new(
+        socket_path: socket_path, dispatch_queue: dispatch_queue, ack_timeout: 0.5,
+        on_failure: -> { failures << :failed }, signal_sink: sink, logger: logger
+      )
+    end
+
+    let(:sink) do
+      Class.new do
+        attr_reader :received
+
+        def initialize = (@received = Queue.new)
+        def signal(channel, payload) = @received << [:signal, channel, payload]
+        def gap = @received << [:gap]
+      end.new
+    end
+
+    it "ensure_signal_listening sends an ssub frame and blocks until the master's sack" do
+      master = accept_master { client.connect }
+      acker = Thread.new do
+        frame = master_read(master)
+        master_send(master, { "t" => "sack", "c" => frame["c"] }) if frame["t"] == "ssub"
+        frame
+      end
+
+      expect(client.ensure_signal_listening("pgbus_signal_a")).to eq(:done)
+      expect(acker.value).to eq({ "t" => "ssub", "c" => "pgbus_signal_a" })
+    end
+
+    # A master from before signals logs the unknown frame and never acks.
+    it "fails over when the master never acks the signal subscription" do
+      accept_master { client.connect }
+
+      expect { client.ensure_signal_listening("pgbus_signal_a") }
+        .to raise_error(described_class::HubUnavailableError)
+      wait_until { failures.any? }
+      expect(failures).to eq([:failed])
+    end
+
+    it "hands signal and gap frames to the signal sink, not the dispatch queue" do
+      master = accept_master { client.connect }
+
+      master_send(master, { "t" => "signal", "c" => "pgbus_signal_a", "p" => "id=1" })
+      master_send(master, { "t" => "signal", "c" => "pgbus_signal_a", "p" => nil })
+      master_send(master, { "t" => "gap" })
+
+      expect(sink.received.pop(timeout: 2)).to eq([:signal, "pgbus_signal_a", "id=1"])
+      expect(sink.received.pop(timeout: 2)).to eq([:signal, "pgbus_signal_a", nil])
+      expect(sink.received.pop(timeout: 2)).to eq([:gap])
+      expect(dispatch_queue.size).to eq(0)
+    end
+
+    it "keeps the transport alive when the sink raises" do
+      allow(sink).to receive(:signal).and_raise("sink boom")
+      master = accept_master { client.connect }
+
+      master_send(master, { "t" => "signal", "c" => "pgbus_signal_a", "p" => nil })
+      master_send(master, { "t" => "wake", "q" => "pgbus_stream_chat", "p" => nil })
+
+      expect(dispatch_queue.pop(timeout: 2)&.queue_name).to eq("pgbus_stream_chat")
+      expect(client.dead?).to be(false)
+      expect(failures).to be_empty
+    end
+  end
 end

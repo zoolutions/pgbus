@@ -160,6 +160,14 @@ module Pgbus
       app.middleware.use Pgbus::Streams::WatermarkCacheMiddleware if Pgbus.configuration.streams_enabled
     end
 
+    # Process signals (issue #674): start the streamer's LISTEN before a
+    # process's first request when a signal is registered. Installed whenever
+    # streams are enabled, since on_signal usually runs in an initializer after
+    # this one; with no subscriber it does nothing.
+    initializer "pgbus.signals.middleware" do |app|
+      app.middleware.use Pgbus::Signals::Middleware if Pgbus.configuration.streams_enabled
+    end
+
     # Make the <pgbus-stream-source> element available to the host app's
     # asset pipeline (Propshaft or Sprockets). The importmap pin points at
     # the minified build (rake frontend:js). Propshaft rewrites its

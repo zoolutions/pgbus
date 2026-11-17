@@ -22,7 +22,7 @@ module Pgbus
       # defaults from the configuration.
       class Instance
         attr_reader :registry, :listener, :dispatcher, :heartbeat, :dispatch_queue, :stream_counter, :pump,
-                    :autoscaler, :peer_close_watcher
+                    :autoscaler, :peer_close_watcher, :signal_delivery
 
         def initialize(
           client: Pgbus.client,
@@ -50,6 +50,10 @@ module Pgbus
             if @config.streams_pool_autoscale && !@client.shared_connection?
               Pgbus::Streams::PoolAutoscaler.new(client: @client, config: @config, logger: @logger)
             end
+          # Runs process-signal subscribers (issue #674) on a thread of its
+          # own, started by the first signal: the listener and the hub client
+          # only hand it NOTIFYs and gaps.
+          @signal_delivery = SignalDelivery.new(logger: @logger)
           @listener = build_listener(pg_connection, connection_factory)
           # Off-thread durable fanout writer (issue #321). Built only when
           # streams_writer_threads > 0; nil means fanout writes stay inline on
@@ -95,7 +99,19 @@ module Pgbus
           @dispatcher.start
           @heartbeat.start
           @peer_close_watcher&.start
+          # Every process signal registered so far (issue #674); one
+          # registered later arrives through #listen_signal.
+          Pgbus::Signals.channels.each { |channel| @listener.ensure_signal_listening(channel) }
           self
+        end
+
+        # LISTEN on a process signal channel registered after #start (issue
+        # #674). Before #start, or after #shutdown!, nothing: #start
+        # subscribes every registered channel.
+        def listen_signal(channel)
+          return unless @shutdown_mutex.synchronize { @started }
+
+          @listener.ensure_signal_listening(channel)
         end
 
         # Enqueue a new SSE client. The dispatcher picks this up on its next
@@ -161,6 +177,7 @@ module Pgbus
             safely { @listener.stop }
             safely { @dispatcher.stop }
             safely { @pump&.stop }
+            safely { @signal_delivery.stop }
             leaked = threads.select { |_, list| list.any?(&:alive?) }.keys
             report_leaked_threads(leaked) if leaked.any?
             close_all_connections
@@ -200,6 +217,7 @@ module Pgbus
             # failover is assigned right below; a transport death in the gap
             # is caught by the FailoverListener's synchronous ensure path.
             on_failure: -> { failover&.fail_over! },
+            signal_sink: @signal_delivery,
             logger: @logger
           )
           client.connect
@@ -208,6 +226,7 @@ module Pgbus
             local_listener_factory: lambda do
               build_local_listener(build_pg_connection, connection_factory).tap(&:start)
             end,
+            on_gap: -> { @signal_delivery.gap },
             logger: @logger
           )
         rescue HubClient::HubUnavailableError => e
@@ -229,6 +248,7 @@ module Pgbus
             # own prune_dead self-post never block.
             dispatch_queue_limit: @config.streams_dispatch_queue_limit,
             maintenance: build_autoscale_maintenance,
+            signal_sink: @signal_delivery,
             logger: @logger,
             # On reconnect the Listener rebuilds its OWN connection via this
             # factory (fresh connect re-resolves DNS, converges on the promoted
@@ -256,7 +276,8 @@ module Pgbus
             "peer_close_watcher" => @peer_close_watcher ? @peer_close_watcher.threads : [],
             "listener" => @listener.threads,
             "dispatcher" => @dispatcher.threads,
-            "pump" => @pump ? @pump.threads : []
+            "pump" => @pump ? @pump.threads : [],
+            "signal_delivery" => @signal_delivery.threads
           }
         end
 

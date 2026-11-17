@@ -391,46 +391,10 @@ module Pgbus
         end
       end
 
-      # Returns the current AR transaction if one is open, nil otherwise.
-      # Guarded by defined? so the streams subsystem stays usable in
-      # non-Rails contexts. AR's NullTransaction yields immediately from
-      # after_commit, so we have to check #open? explicitly — otherwise
-      # every call path would hit the "deferred" branch and we'd lose the
-      # msg_id return value.
-      #
-      # The probe must only inspect a connection the calling thread/fiber
-      # ALREADY leases — `connection_pool.active_connection?`, never
-      # `ActiveRecord::Base.connection`. On Rails 7.2+ `.connection` takes a
-      # sticky executor-scoped lease: on a non-executor thread (the
-      # Coalescer's flush thread, app worker threads) it is never released —
-      # one pool connection pinned per thread — and inside
-      # `with_connection` the sticky flag defeats the block-exit release, so
-      # the CALLER's connection leaks when its thread dies. Both variants
-      # exhausted an exactly-sized pool deterministically (Zazu fan-out
-      # incident, 2026-08-05). Semantics are unchanged: a transaction is
-      # per-lease, so a thread holding no connection can have no open
-      # transaction to defer on — the old code's fresh checkout always
-      # answered nil anyway, at the price of the leak.
+      # The caller's open AR transaction, or nil (Pgbus::OpenTransaction.current
+      # explains the lease-safe probe).
       def current_open_transaction
-        return nil unless defined?(::ActiveRecord::Base)
-
-        connection = ::ActiveRecord::Base.connection_pool.active_connection?
-        return nil unless connection
-
-        transaction = connection.current_transaction
-        transaction if transaction.open?
-      rescue StandardError => e
-        # Defensive: if AR is loaded but not yet connected (e.g. a
-        # Rake task invoked before Rails boot), don't let the transaction
-        # probe break the broadcast. Debug-logged so a misconfigured
-        # app can diagnose "why aren't my transactional broadcasts
-        # deferring?" without impacting production performance
-        # (debug is off by default).
-        Pgbus.logger.debug do
-          "[Pgbus::Streams::Stream] transaction probe failed (#{e.class}: #{e.message}); " \
-            "falling back to synchronous broadcast"
-        end
-        nil
+        OpenTransaction.current
       end
     end
   end

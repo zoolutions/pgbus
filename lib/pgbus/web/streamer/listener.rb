@@ -43,6 +43,14 @@ module Pgbus
       #   PG_NOTIFY('pgmq.' || TG_TABLE_NAME || '.' || TG_OP, NULL)
       # For a queue named `pgbus_stream_chat` the trigger table is
       # `q_pgbus_stream_chat`, so the channel is `pgmq.q_pgbus_stream_chat.INSERT`.
+      #
+      # Process signals (issue #674) LISTEN on raw channels beside those
+      # (ensure_signal_listening, `<queue_prefix>_signal_<name>`). A NOTIFY on
+      # a channel outside the pgmq pattern goes to the `signal_sink:`, never to
+      # the dispatch queue and never dropped; a reconnect that re-LISTENed a
+      # signal channel tells the sink once (#gap), since NOTIFYs sent while the
+      # connection was down are lost. The sink runs on this thread: it only
+      # hands off (a queue push).
       class Listener
         # Kept Ractor-shareable (issue #527): the hand-off to the dispatcher
         # is the seam a Ractor dispatcher would pass by reference. The Strings
@@ -63,6 +71,10 @@ module Pgbus
         CHANNEL_SUFFIX = Pgbus::Process::NotifyListener::CHANNEL_SUFFIX
 
         RECONNECT_BACKOFF_SECONDS = 0.5
+
+        # A process signal channel (issue #674): `<queue_prefix>_signal_<name>`,
+        # within PostgreSQL's 63-byte identifier limit.
+        SIGNAL_CHANNEL_PATTERN = /\A[a-z0-9_]{1,63}\z/
 
         # Grace added to the ack budget when #stop joins the listener thread.
         # See #stop_join_timeout.
@@ -93,9 +105,12 @@ module Pgbus
         # `ack_timeout_ms:` bounds how long ensure_listening waits for this
         # thread's ack, and (plus a grace) how long #stop joins it
         # (streams_listen_ack_timeout_ms; issue #664).
+        # `signal_sink:` receives process signals (issue #674): #signal(channel,
+        # payload) per NOTIFY on a signal channel and #gap after a reconnect
+        # that re-LISTENed one. nil: such NOTIFYs are ignored.
         def initialize(pg_connection:, dispatch_queue:, health_check_ms:,
                        connection_factory:, ack_timeout_ms: DEFAULT_ACK_TIMEOUT_MS, dispatch_queue_limit: 0,
-                       maintenance: nil, logger: Pgbus.logger, clock: nil)
+                       maintenance: nil, signal_sink: nil, logger: Pgbus.logger, clock: nil)
           raise ArgumentError, "connection_factory is required" unless connection_factory.respond_to?(:call)
 
           @conn = pg_connection
@@ -106,6 +121,7 @@ module Pgbus
           @connection_factory = connection_factory
           @dispatch_queue_limit = dispatch_queue_limit
           @maintenance = maintenance
+          @signal_sink = signal_sink
           @clock = clock || -> { ::Process.clock_gettime(::Process::CLOCK_MONOTONIC) }
           @maintenance_last = nil
           @dropped_wakes = 0
@@ -225,19 +241,21 @@ module Pgbus
         # default 1.25 s; issue #664), so a stuck listener can't hang the
         # dispatcher forever.
         def ensure_listening(queue_name)
-          # A connect the dispatcher drains during shutdown (Instance#shutdown!
-          # stops the listener first) must not wait out the ack budget.
-          return nil if @stopped
+          request_listen(:listen, queue_name)
+        end
 
-          ack = Queue.new
-          @commands << [:listen, queue_name, ack]
+        # Synchronously LISTEN on a process signal's raw channel (issue #674),
+        # with ensure_listening's ack contract: once acked, a NOTIFY on it
+        # reaches the signal sink.
+        def ensure_signal_listening(channel)
+          request_listen(:listen_channel, validate_signal_channel!(channel))
+        end
+
+        # Asynchronous UNLISTEN of a signal channel (the master hub, when its
+        # last worker subscriber leaves).
+        def remove_signal_listening(channel)
+          @commands << [:unlisten_channel, validate_signal_channel!(channel)]
           wake
-          # A stop that landed between the check above and the push may have
-          # let the thread release its queue and exit before the push: no ack
-          # would ever come. Pushed before that release, the command is acked.
-          return nil if @stopped
-
-          ack.pop(timeout: ack_timeout)
         end
 
         # Asynchronous: lazy GC of LISTENs whose subscriber count
@@ -249,6 +267,31 @@ module Pgbus
         end
 
         private
+
+        # The channel is interpolated into LISTEN "…": only the identifier
+        # characters Pgbus::Signals.channel_for produces may reach it (a hub
+        # worker's frame included).
+        def validate_signal_channel!(channel)
+          return channel if channel.is_a?(String) && SIGNAL_CHANNEL_PATTERN.match?(channel)
+
+          raise ArgumentError, "invalid signal channel #{channel.inspect}"
+        end
+
+        def request_listen(kind, name)
+          # A connect the dispatcher drains during shutdown (Instance#shutdown!
+          # stops the listener first) must not wait out the ack budget.
+          return nil if @stopped
+
+          ack = Queue.new
+          @commands << [kind, name, ack]
+          wake
+          # A stop that landed between the check above and the push may have
+          # let the thread release its queue and exit before the push: no ack
+          # would ever come. Pushed before that release, the command is acked.
+          return nil if @stopped
+
+          ack.pop(timeout: ack_timeout)
+        end
 
         def run_loop
           schedule_health_check
@@ -379,7 +422,7 @@ module Pgbus
         def release_pending_acks
           loop do
             cmd = @commands.pop(true)
-            cmd[2]&.push(:done) if cmd[0] == :listen
+            cmd[2]&.push(:done) if %i[listen listen_channel].include?(cmd[0])
           end
         rescue ThreadError
           nil
@@ -399,10 +442,10 @@ module Pgbus
             run_health_check unless (@health_check_due_at - @clock.call).positive?
             cmd = @commands.pop(true)
             case cmd[0]
-            when :listen
+            when :listen, :listen_channel
               ack = cmd[2]
               begin
-                do_listen(cmd[1])
+                do_listen_channel(cmd[0] == :listen ? channel_for(cmd[1]) : cmd[1])
               rescue StandardError
                 # The connection failed under the LISTEN. run_loop
                 # reconnects, and reconnect! re-LISTENs this channel with the
@@ -414,7 +457,8 @@ module Pgbus
               ensure
                 ack&.push(:done)
               end
-            when :unlisten then do_unlisten(cmd[1])
+            when :unlisten then do_unlisten_channel(channel_for(cmd[1]))
+            when :unlisten_channel then do_unlisten_channel(cmd[1])
             end
           rescue ThreadError
             # empty queue
@@ -447,8 +491,7 @@ module Pgbus
         # no-second-wait rule rests on that, issue #630). The exception is a
         # thread on its way out (stop, or an unexpected error): run_loop's
         # ensure releases every waiting caller with nothing LISTENed.
-        def do_listen(queue_name)
-          channel = channel_for(queue_name)
+        def do_listen_channel(channel)
           return if @listening_to.include?(channel)
 
           @listening_to.add(channel)
@@ -457,8 +500,7 @@ module Pgbus
 
         # The channel leaves @listening_to BEFORE the exec, so a reconnect
         # after a failed UNLISTEN does not LISTEN it again.
-        def do_unlisten(queue_name)
-          channel = channel_for(queue_name)
+        def do_unlisten_channel(channel)
           return unless @listening_to.include?(channel)
 
           @listening_to.delete(channel)
@@ -467,7 +509,7 @@ module Pgbus
 
         def handle_notify(channel, payload = nil)
           queue_name = queue_name_from(channel)
-          return unless queue_name
+          return handle_signal(channel, payload) unless queue_name
 
           # Backpressure applies ONLY to durable wakes (payload nil): they
           # self-heal because the next durable wake for the stream re-reads
@@ -490,6 +532,26 @@ module Pgbus
           end
 
           @dispatch_queue << WakeMessage.new(queue_name: queue_name, payload: payload)
+        end
+
+        # A NOTIFY outside the pgmq pattern: only signal channels are LISTENed
+        # besides those. Never dropped, and a raising sink never stops the loop.
+        def handle_signal(channel, payload)
+          @signal_sink&.signal(channel, payload)
+        rescue StandardError => e
+          @logger.error { "[Pgbus::Streamer::Listener] signal sink raised: #{e.class}: #{e.message}" }
+        end
+
+        # After a reconnect: NOTIFYs on a signal channel sent while the
+        # connection was down are lost, so the sink hears about the gap once
+        # the new LISTENs are in place. Stream channels need no such report
+        # (a durable wake re-reads from the cursor).
+        def report_gap(channels)
+          return unless @signal_sink && channels.any? { |channel| !pgmq_channel?(channel) }
+
+          @signal_sink.gap
+        rescue StandardError => e
+          @logger.error { "[Pgbus::Streamer::Listener] signal sink gap raised: #{e.class}: #{e.message}" }
         end
 
         # The next keepalive is due one cycle after this one ENDS: scheduled
@@ -561,6 +623,7 @@ module Pgbus
 
             @conn = new_conn
             @listening_to = Set.new(channels)
+            report_gap(channels)
             return
           end
         ensure
@@ -579,8 +642,12 @@ module Pgbus
           "#{CHANNEL_PREFIX}#{queue_name}#{CHANNEL_SUFFIX}"
         end
 
+        def pgmq_channel?(channel)
+          channel.start_with?(CHANNEL_PREFIX) && channel.end_with?(CHANNEL_SUFFIX)
+        end
+
         def queue_name_from(channel)
-          return nil unless channel.start_with?(CHANNEL_PREFIX) && channel.end_with?(CHANNEL_SUFFIX)
+          return nil unless pgmq_channel?(channel)
 
           channel[CHANNEL_PREFIX.length..-(CHANNEL_SUFFIX.length + 1)]
         end

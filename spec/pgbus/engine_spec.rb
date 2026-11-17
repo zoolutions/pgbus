@@ -40,6 +40,10 @@ RSpec.describe Pgbus::Engine do
       expect(names).to include("Pgbus::Streams::WatermarkCacheMiddleware")
     end
 
+    it "installs the process signals middleware when streams are enabled (issue #674)" do
+      expect(Rails.application.middleware.map(&:name)).to include("Pgbus::Signals::Middleware")
+    end
+
     it "appends the engine's locale files to the i18n load path" do
       pgbus_locales = I18n.load_path.select do |path|
         path.include?("pgbus") && path.include?("locales") && path.end_with?(".yml")

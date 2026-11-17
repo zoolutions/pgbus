@@ -15,9 +15,13 @@ module Pgbus
       # Message shapes (JSON objects; "t" is the discriminator):
       #   worker → master: {t:"sub", q:}   subscribe, synchronous — master acks
       #                    {t:"unsub", q:} unsubscribe, fire-and-forget
+      #                    {t:"ssub", c:}  subscribe a process signal channel (issue #674), master sacks
       #   master → worker: {t:"ack", q:}                 sub acknowledged (LISTEN active)
       #                    {t:"wake", q:, p: <String|nil>} durable (p:nil) or ephemeral wake
       #                    {t:"status", healthy: <bool>}   listener health broadcast
+      #                    {t:"sack", c:}                  ssub acknowledged (LISTEN active)
+      #                    {t:"signal", c:, p: <String|nil>} a process signal, never dropped
+      #                    {t:"gap"}                       the hub's LISTEN reconnected: signals may be lost
       #
       # Reads are blocking (each side owns a dedicated reader thread); a short
       # read means the peer died mid-frame and is reported as EOF (nil), never

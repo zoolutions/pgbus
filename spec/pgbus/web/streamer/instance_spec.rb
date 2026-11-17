@@ -740,4 +740,68 @@ RSpec.describe Pgbus::Web::Streamer::Instance do
       expect(instance.listener).to be_a(Pgbus::Web::Streamer::Listener)
     end
   end
+
+  describe "process signals (issue #674)" do
+    before do
+      Pgbus::Signals.reset!
+      allow(Pgbus::Web::Streamer).to receive(:listen_signal)
+    end
+
+    after { Pgbus::Signals.reset! }
+
+    def listens(sql_prefix) = fake_pg.executed.select { |sql| sql.start_with?(sql_prefix) }
+
+    it "LISTENs on every registered signal channel when it starts" do
+      Pgbus.on_signal(:widgets) { nil }
+      channel = Pgbus::Signals.channel_for(:widgets)
+
+      streamer.start
+
+      expect(listens("LISTEN")).to eq([%(LISTEN "#{channel}")])
+    end
+
+    it "LISTENs on a channel registered after it started" do
+      streamer.start
+      channel = Pgbus::Signals.channel_for(:late)
+
+      streamer.listen_signal(channel)
+
+      expect(listens("LISTEN")).to eq([%(LISTEN "#{channel}")])
+    end
+
+    it "does not LISTEN on a channel before it starts" do
+      streamer.listen_signal(Pgbus::Signals.channel_for(:early))
+
+      expect(listens("LISTEN")).to eq([])
+    end
+
+    it "LISTENs on nothing new and starts no delivery thread without a subscriber" do
+      streamer.start
+
+      expect(listens("LISTEN")).to eq([])
+      expect(streamer.signal_delivery.threads).to eq([])
+    end
+
+    it "hands the listener its signal delivery as the signal sink" do
+      captured = nil
+      allow(Pgbus::Web::Streamer::Listener).to receive(:new).and_wrap_original do |orig, **kwargs|
+        captured = kwargs
+        orig.call(**kwargs)
+      end
+
+      instance = described_class.new(client: client, config: config, pg_connection: fake_pg, logger: Logger.new(IO::NULL))
+
+      expect(captured[:signal_sink]).to be(instance.signal_delivery)
+    end
+
+    it "stops the signal delivery thread on shutdown! and reports it if it leaks" do
+      Pgbus.on_signal(:widgets) { nil }
+      streamer.start
+      streamer.signal_delivery.signal(Pgbus::Signals.channel_for(:widgets), nil)
+      thread = streamer.signal_delivery.threads.first
+
+      expect(streamer.shutdown!).to eq([])
+      expect(thread.join(1)).to be_truthy
+    end
+  end
 end

@@ -22,10 +22,16 @@ module Pgbus
       # double failure (hub dead AND local build failing — e.g. DB down) it
       # logs and returns nil, matching the Listener's own ack-timeout
       # contract, which the dispatcher already tolerates.
+      #
+      # Process signal channels (issue #674) are recorded and replayed the
+      # same way. NOTIFYs sent between the hub's death and the local LISTEN
+      # are lost, so once a failover has re-LISTENed a signal channel it calls
+      # `on_gap` (the worker's signal delivery runs every on_gap block).
       class FailoverListener
-        def initialize(hub_client:, local_listener_factory:, logger: Pgbus.logger)
+        def initialize(hub_client:, local_listener_factory:, on_gap: nil, logger: Pgbus.logger)
           @hub_client = hub_client
           @local_listener_factory = local_listener_factory
+          @on_gap = on_gap
           @logger = logger
           # @state_mutex guards the cheap shared state (@subscriptions, @impl,
           # @failed_over) and is only ever held for constant-time work — the
@@ -36,6 +42,7 @@ module Pgbus
           @state_mutex = Mutex.new
           @failover_mutex = Mutex.new
           @subscriptions = Set.new
+          @signal_subscriptions = Set.new
           @impl = hub_client
           @failed_over = false
         end
@@ -60,6 +67,19 @@ module Pgbus
           end
         end
 
+        # Same failover contract as ensure_listening, for a signal channel.
+        def ensure_signal_listening(channel)
+          @state_mutex.synchronize { @signal_subscriptions.add(channel) }
+          current_impl.ensure_signal_listening(channel)
+        rescue HubClient::HubUnavailableError
+          fail_over!
+          begin
+            current_impl.ensure_signal_listening(channel)
+          rescue HubClient::HubUnavailableError
+            nil
+          end
+        end
+
         def remove_listening(queue)
           @state_mutex.synchronize { @subscriptions.delete(queue) }
           current_impl.remove_listening(queue)
@@ -80,11 +100,14 @@ module Pgbus
         # ensure/remove/stop calls never stall behind it.
         def fail_over!
           local = nil
+          signal_channels = nil
           @failover_mutex.synchronize do
             return if @state_mutex.synchronize { @failed_over }
 
             local = @local_listener_factory.call
             @state_mutex.synchronize { @subscriptions.dup }.each { |q| local.ensure_listening(q) }
+            signal_channels = @state_mutex.synchronize { @signal_subscriptions.dup }
+            signal_channels.each { |channel| local.ensure_signal_listening(channel) }
             # Subscriptions recorded between the snapshot and this swap arrive
             # via their own retried ensure_listening call on the new impl.
             @state_mutex.synchronize do
@@ -94,6 +117,7 @@ module Pgbus
             # Ownership transferred to @impl — the rescue must not stop it.
             local = nil
           end
+          report_gap if signal_channels&.any?
         rescue StandardError => e
           # A listener the factory STARTED but that never swapped in (the
           # replay raised) would otherwise leak its thread and LISTEN
@@ -127,6 +151,13 @@ module Pgbus
         end
 
         private
+
+        # Signals sent while the hub was dying never reached this worker.
+        def report_gap
+          @on_gap&.call
+        rescue StandardError => e
+          @logger.error { "[Pgbus::Streamer::FailoverListener] on_gap raised: #{e.class}: #{e.message}" }
+        end
 
         def current_impl
           @state_mutex.synchronize { @impl }

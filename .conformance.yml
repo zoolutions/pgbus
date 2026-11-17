@@ -105,6 +105,12 @@ main_only:
   - name: Pgbus::ProcessedEvent.@completion_column_mutex
     reason: >-
       guards the schema probe for the completion column; taken by event handlers on the main Ractor
+  - name: Pgbus::Signals.@lock
+    reason: >-
+      guards the process-signal subscriber registry (app callables in a frozen Hash replaced whole, issue #674); registered at boot and read by the streamer's signal delivery thread on the main Ractor
+  - name: Pgbus::Signals.@start_lock
+    reason: >-
+      guards the once-per-process eager start of the streamer for process signals (issue #674); taken by request threads on the main Ractor
   - name: Pgbus::StreamQueue.@names_lock
     reason: >-
       guards the stream-queue name memo (a frozen Set replaced whole); taken by broadcast and dispatcher threads on the main Ractor
@@ -126,6 +132,9 @@ main_only:
   - name: Pgbus::Testing.@mode_lock
     reason: >-
       guards the process-wide test mode; the test suite runs on the main Ractor
+  - name: Pgbus::Testing.@signals_lock
+    reason: >-
+      guards the process signals the test helpers recorded (a frozen Array replaced whole, issue #674); the test suite runs on the main Ractor
   - name: Pgbus::Testing.@store
     reason: >-
       the in-memory event store of the test helpers (a lock and a list); the test suite runs on the main Ractor

@@ -47,6 +47,7 @@ PostgreSQL-native job processing and event bus for Rails, built on [PGMQ](https:
   - [Health endpoints (liveness / readiness)](#health-endpoints-liveness--readiness)
   - [Boot diagnostics banner](#boot-diagnostics-banner)
 - [Real-time broadcasts](#real-time-broadcasts-turbo-streams-replacement)
+  - [Process signals](#process-signals)
 - [Testing](#testing)
   - [RSpec setup](#rspec-setup)
   - [Minitest / TestUnit setup](#minitest--testunit-setup)
@@ -1987,6 +1988,29 @@ The Insights tab gains a "Real-time Streams" section with counts of broadcasts /
 
 Overhead on a real Puma + PGMQ setup (`bundle exec rake bench:streams`): the most visible cost is an INSERT per connect/disconnect pair, which shows up under thundering-herd connect scenarios (K=50 concurrent connects: ~+20% per-connect latency). Steady-state broadcast and fanout numbers stay in the run-to-run noise band. Enable it if Insights is useful; leave it off if the write traffic worries you.
 
+### Process signals
+
+Run a block in every web process when any process sends a signal: the way to tell every Puma worker "drop your in-memory cache now" when the data behind it changes.
+
+```ruby
+# config/initializers/widgets.rb
+WIDGETS = Concurrent::Map.new
+
+Pgbus.on_signal(:widgets_changed, on_gap: -> { WIDGETS.clear }) { |_payload| WIDGETS.clear }
+
+class Widget < ApplicationRecord
+  after_commit { Pgbus.signal(:widgets_changed) }
+end
+```
+
+- `Pgbus.signal(name, payload = nil)` sends a `NOTIFY` on `<queue_prefix>_signal_<name>`. Inside an open ActiveRecord transaction it is sent at `COMMIT`, and never on rollback. The payload is an optional String under NOTIFY's 7999-byte cap.
+- `Pgbus.on_signal(name) { |payload| ... }` registers a block in this process (register in an initializer, like `Pgbus::Streams.filters`). Names are lowercase letters, digits and underscores, and the channel must fit the queue-name budget.
+- The signal rides the streamer's LISTEN connection: one per web process under `streams_listen_scope :process`, the master hub's under `:master` (fanned out to every worker, so no worker opens a LISTEN connection of its own). With at least one subscriber, a process's first request starts that listener (`Pgbus::Signals::Middleware`, installed by the engine), so a process that never served an SSE connection still receives signals. Without a subscriber nothing changes: no connection, no thread.
+- Blocks run on a dedicated thread (not the LISTEN thread, not the stream dispatcher), each inside the Rails executor. A block that raises is reported through `error_reporters` and the other blocks still run.
+- Delivery is at most once, within about a second. A signal sent while a process was not listening (its LISTEN connection reconnected, or a worker failed over from the master hub) is lost: after such a gap every `on_gap` runs once, once the new LISTEN is in place, so it can assume it missed signals.
+- Web processes only: pgbus worker processes do not receive signals. Signals need `streams_enabled` (the default) and a dedicated streams connection (a `database_url` or `connection_params`, as SSE does).
+- In tests, `Pgbus::Testing.fake!` records signals in `Pgbus::Testing.signals` without sending them, and `Pgbus::Testing.inline!` also runs the blocks synchronously (at the commit of a `transaction do ... end` block; the fixture transaction of transactional tests is not waited for).
+
 ## Testing
 
 Pgbus ships opt-in test helpers for both RSpec and Minitest. The testing module is **never autoloaded** by Zeitwerk -- you must `require` it explicitly, so it cannot leak into production.
@@ -2161,6 +2185,8 @@ Pgbus::Testing.disabled? # => true/false
 ```
 
 The `:inline` mode skips delayed publishes (`delay: > 0`) -- those are captured in the store but not dispatched. Use `Pgbus::Testing.store.drain!` to manually dispatch all captured events including delayed ones.
+
+`Pgbus.signal` follows the same modes: `:fake` records `Pgbus::Testing::SignalRecord`s (`name`, `payload`) in `Pgbus::Testing.signals` (`Pgbus::Testing.clear_signals!` empties it), `:inline` records them and runs the process's `on_signal` blocks synchronously, and `:disabled` sends the NOTIFY. See [Process signals](#process-signals).
 
 ### SSE streams in tests
 

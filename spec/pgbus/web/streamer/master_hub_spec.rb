@@ -373,4 +373,136 @@ RSpec.describe Pgbus::Web::Streamer::MasterHub do
       expect(File.stat(socket_path).mode & 0o777).to eq(0o600)
     end
   end
+
+  describe "process signals (issue #674)" do
+    let(:fake_listener) do
+      instance_double(
+        Pgbus::Web::Streamer::Listener,
+        ensure_listening: :done, remove_listening: nil, ensure_signal_listening: :done,
+        remove_signal_listening: nil, stop: nil, alive?: true, connected?: true
+      )
+    end
+
+    def subscribe_signal(sock, channel)
+      send_frame(sock, { "t" => "ssub", "c" => channel })
+      read_frame_of_type(sock, "sack")
+    end
+
+    def forwarder = Pgbus::Web::Streamer::MasterHub::SignalForwarder.new(captured[:dispatch_queue])
+
+    # The frame types +sock+ receives within +seconds+ (status rebroadcasts
+    # included), for asserting that something did NOT arrive.
+    def frame_types_within(sock, seconds)
+      types = []
+      deadline = Time.now + seconds
+      while (remaining = deadline - Time.now).positive?
+        break unless sock.wait_readable(remaining)
+
+        frame = Pgbus::Web::Streamer::HubProtocol.read_frame(sock)
+        break unless frame
+
+        types << frame["t"]
+      end
+      types
+    end
+
+    it "LISTENs before it acks a signal subscription" do
+      hub.start
+      worker = connect_worker
+
+      frame = subscribe_signal(worker, "pgbus_test_signal_a")
+
+      expect(frame).to eq({ "t" => "sack", "c" => "pgbus_test_signal_a" })
+      expect(fake_listener).to have_received(:ensure_signal_listening).with("pgbus_test_signal_a")
+    ensure
+      worker&.close
+    end
+
+    it "fans a signal out to every subscribed worker, payload intact, and not to others" do
+      hub.start
+      worker_a = connect_worker
+      worker_b = connect_worker
+      bystander = connect_worker
+      subscribe_signal(worker_a, "pgbus_test_signal_a")
+      subscribe_signal(worker_b, "pgbus_test_signal_a")
+      send_frame(bystander, { "t" => "sub", "q" => "pgbus_test_chat" })
+      read_frame_of_type(bystander, "ack")
+
+      forwarder.signal("pgbus_test_signal_a", "id=1")
+
+      expected = { "t" => "signal", "c" => "pgbus_test_signal_a", "p" => "id=1" }
+      expect(read_frame_of_type(worker_a, "signal")).to eq(expected)
+      expect(read_frame_of_type(worker_b, "signal")).to eq(expected)
+      expect(frame_types_within(bystander, 0.3)).not_to include("signal")
+    ensure
+      [worker_a, worker_b, bystander].each { |s| s&.close }
+    end
+
+    it "never drops a payload-less signal at the durable cap" do
+      capped = described_class.new(
+        config: config, socket_path: socket_path, listener_factory: listener_factory,
+        status_interval: 60, durable_queue_limit: 0, logger: logger
+      )
+      capped.start
+      worker = connect_worker
+      subscribe_signal(worker, "pgbus_test_signal_a")
+
+      forwarder.signal("pgbus_test_signal_a", nil)
+
+      expect(read_frame_of_type(worker, "signal")["p"]).to be_nil
+    ensure
+      worker&.close
+      capped&.stop
+    end
+
+    it "sends a gap frame to every worker with a signal subscription" do
+      hub.start
+      subscriber = connect_worker
+      streams_only = connect_worker
+      subscribe_signal(subscriber, "pgbus_test_signal_a")
+      send_frame(streams_only, { "t" => "sub", "q" => "pgbus_test_chat" })
+      read_frame_of_type(streams_only, "ack")
+
+      forwarder.gap
+
+      expect(read_frame_of_type(subscriber, "gap")).to eq({ "t" => "gap" })
+      expect(frame_types_within(streams_only, 0.3)).not_to include("gap")
+    ensure
+      [subscriber, streams_only].each { |s| s&.close }
+    end
+
+    it "UNLISTENs a signal channel when its last subscribed worker disconnects" do
+      unlistened = Queue.new
+      allow(fake_listener).to receive(:remove_signal_listening) { |channel| unlistened << channel }
+      hub.start
+      worker_a = connect_worker
+      worker_b = connect_worker
+      subscribe_signal(worker_a, "pgbus_test_signal_a")
+      subscribe_signal(worker_b, "pgbus_test_signal_a")
+
+      worker_a.close
+      expect(unlistened.pop(timeout: 0.3)).to be_nil
+
+      worker_b.close
+      expect(unlistened.pop(timeout: 2)).to eq("pgbus_test_signal_a")
+    end
+
+    it "wires a SignalForwarder into the default listener" do
+      built = {}
+      allow(Pgbus::DedicatedConnection).to receive(:connect_with_keepalives).and_return(Object.new)
+      allow(Pgbus::Process::PrimaryValidator).to receive(:validate_primary!) { |conn| conn }
+      allow(Pgbus::Web::Streamer::Listener).to receive(:new) do |**kwargs|
+        built[:kwargs] = kwargs
+        fake_listener
+      end
+      allow(fake_listener).to receive(:start).and_return(fake_listener)
+      default_hub = described_class.new(config: config, socket_path: socket_path, status_interval: 60, logger: logger)
+
+      default_hub.start
+
+      expect(built[:kwargs][:signal_sink]).to be_a(described_class::SignalForwarder)
+    ensure
+      default_hub&.stop
+    end
+  end
 end

@@ -130,4 +130,57 @@ RSpec.describe Pgbus::Web::Streamer::FailoverListener do
       expect(local_listener).to have_received(:stop)
     end
   end
+
+  describe "process signals (issue #674)" do
+    subject(:failover) do
+      described_class.new(
+        hub_client: hub_client, local_listener_factory: local_listener_factory,
+        on_gap: -> { gaps << :gap }, logger: logger
+      )
+    end
+
+    let(:gaps) { [] }
+    let(:hub_client) do
+      instance_double(Pgbus::Web::Streamer::HubClient,
+                      ensure_listening: :done, ensure_signal_listening: :done, remove_listening: nil, stop: nil)
+    end
+    let(:local_listener) do
+      instance_double(Pgbus::Web::Streamer::Listener,
+                      ensure_listening: :done, ensure_signal_listening: :done, remove_listening: nil, stop: nil)
+    end
+
+    it "subscribes a signal channel through the hub" do
+      expect(failover.ensure_signal_listening("pgbus_signal_a")).to eq(:done)
+      expect(hub_client).to have_received(:ensure_signal_listening).with("pgbus_signal_a")
+    end
+
+    it "replays every signal channel on the local listener at failover, then reports one gap" do
+      failover.ensure_signal_listening("pgbus_signal_a")
+      failover.ensure_listening("pgbus_stream_chat")
+
+      failover.fail_over!
+      failover.fail_over!
+
+      expect(local_listener).to have_received(:ensure_signal_listening).with("pgbus_signal_a")
+      expect(local_listener).to have_received(:ensure_listening).with("pgbus_stream_chat")
+      expect(gaps).to eq([:gap])
+    end
+
+    it "reports no gap at a failover without signal channels" do
+      failover.ensure_listening("pgbus_stream_chat")
+
+      failover.fail_over!
+
+      expect(gaps).to eq([])
+    end
+
+    it "fails over when the hub cannot ack a signal subscription, and subscribes locally" do
+      allow(hub_client).to receive(:ensure_signal_listening)
+        .and_raise(Pgbus::Web::Streamer::HubClient::HubUnavailableError, "ack timeout")
+
+      expect(failover.ensure_signal_listening("pgbus_signal_a")).to eq(:done)
+      expect(factory_calls).to eq([:built])
+      expect(local_listener).to have_received(:ensure_signal_listening).with("pgbus_signal_a").at_least(:once)
+    end
+  end
 end
