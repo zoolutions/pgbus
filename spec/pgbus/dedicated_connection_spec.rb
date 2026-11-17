@@ -119,7 +119,8 @@ RSpec.describe Pgbus::DedicatedConnection do
     context "with .connect_with_keepalives (issue #664)" do
       let(:captured) { {} }
       let(:keepalive_keys) do
-        { keepalives: 1, keepalives_idle: 5, keepalives_interval: 2, keepalives_count: 3, tcp_user_timeout: 11_000 }
+        { keepalives: 1, keepalives_idle: 5, keepalives_interval: 2, keepalives_count: 3, tcp_user_timeout: 11_000,
+          connect_timeout: 10 }
       end
 
       before do
@@ -152,7 +153,7 @@ RSpec.describe Pgbus::DedicatedConnection do
 
           expect(captured[:args].first).to eq(
             "postgres://u@h/db?keepalives=1&keepalives_idle=5&keepalives_interval=2&keepalives_count=3" \
-            "&tcp_user_timeout=11000&fallback_application_name=pgbus-listen"
+            "&tcp_user_timeout=11000&connect_timeout=10&fallback_application_name=pgbus-listen"
           )
         end
 
@@ -167,7 +168,7 @@ RSpec.describe Pgbus::DedicatedConnection do
 
           expect(captured[:args].first).to eq(
             "host=db.example dbname=app keepalives=1 keepalives_idle=5 keepalives_interval=2 " \
-            "keepalives_count=3 tcp_user_timeout=11000 fallback_application_name=pgbus-listen"
+            "keepalives_count=3 tcp_user_timeout=11000 connect_timeout=10 fallback_application_name=pgbus-listen"
           )
         end
 
@@ -186,7 +187,7 @@ RSpec.describe Pgbus::DedicatedConnection do
 
           expect(captured[:args].first).to eq(
             "host=h application_name='x tcp_user_timeout=1' keepalives=1 keepalives_idle=5 " \
-            "keepalives_interval=2 keepalives_count=3 tcp_user_timeout=11000"
+            "keepalives_interval=2 keepalives_count=3 tcp_user_timeout=11000 connect_timeout=10"
           )
         end
 
@@ -195,7 +196,7 @@ RSpec.describe Pgbus::DedicatedConnection do
 
           expect(captured[:args].first).to eq(
             "postgres://u@h/db?keepalives=1&keepalives_idle=5&keepalives_interval=2&keepalives_count=3" \
-            "&tcp_user_timeout=11000&fallback_application_name=pgbus-listen"
+            "&tcp_user_timeout=11000&connect_timeout=10&fallback_application_name=pgbus-listen"
           )
         end
 
@@ -233,7 +234,7 @@ RSpec.describe Pgbus::DedicatedConnection do
 
           expect(captured[:args].first).to eq(
             "host=h password=a://b keepalives=1 keepalives_idle=5 keepalives_interval=2 " \
-            "keepalives_count=3 tcp_user_timeout=11000 fallback_application_name=pgbus-listen"
+            "keepalives_count=3 tcp_user_timeout=11000 connect_timeout=10 fallback_application_name=pgbus-listen"
           )
         end
 

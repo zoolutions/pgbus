@@ -27,14 +27,18 @@ module Pgbus
     # probing starts after 5 idle seconds, every 2 s, 3 times, so a dead
     # socket errors within ~11 s even between the listener's own keepalive
     # queries; tcp_user_timeout bounds data the peer never acknowledges by
-    # the same 11 s. Client-side keywords: never in the startup packet, so a
-    # pooler cannot reject them.
+    # the same 11 s. connect_timeout bounds the connect itself (issue #674:
+    # a streamer starting for process signals, and a hub worker rebuilding
+    # its own listener, otherwise wait on an unreachable host as long as the
+    # OS lets the TCP handshake retry). Client-side keywords: never in the
+    # startup packet, so a pooler cannot reject them.
     LISTEN_KEEPALIVES = {
       keepalives: 1,
       keepalives_idle: 5,
       keepalives_interval: 2,
       keepalives_count: 3,
-      tcp_user_timeout: 11_000
+      tcp_user_timeout: 11_000,
+      connect_timeout: 10
     }.freeze
 
     def connect(opts)

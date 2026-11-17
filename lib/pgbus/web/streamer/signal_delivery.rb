@@ -20,11 +20,14 @@ module Pgbus
           @logger = logger
           @signals = signals
           @queue = Queue.new
-          # Guards @thread and @stopped: the first signal starts the thread,
-          # #stop ends it, from different threads.
+          # Guards @thread, @stopped and @gap_pending: the first signal starts
+          # the thread, #stop ends it, from different threads.
           @lock = Mutex.new
           @thread = nil
           @stopped = false
+          # A gap queued and not yet run: a second gap before it runs (a
+          # failover during the first LISTEN, say) adds nothing.
+          @gap_pending = false
         end
 
         # Sink API, called on the listener (or hub reader) thread: a queue
@@ -38,6 +41,13 @@ module Pgbus
 
         def gap
           return unless @signals.gap_handlers?
+
+          already_queued = @lock.synchronize do
+            pending = @gap_pending
+            @gap_pending = true
+            pending
+          end
+          return if already_queued
 
           enqueue([:gap])
         end
@@ -84,7 +94,9 @@ module Pgbus
             case kind
             when :stop then break
             when :signal then @signals.deliver(name, payload)
-            when :gap then @signals.deliver_gap
+            when :gap
+              @lock.synchronize { @gap_pending = false }
+              @signals.deliver_gap
             end
           rescue StandardError => e
             # deliver never raises; a bug here must not end delivery.

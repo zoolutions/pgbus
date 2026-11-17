@@ -244,6 +244,29 @@ RSpec.describe Pgbus::Signals do
       expect(Pgbus::Web::Streamer).to have_received(:current).once
     end
 
+    it "reports a starter thread that cannot be spawned, without raising into the request" do
+      allow(Thread).to receive(:new).and_raise(ThreadError, "can't create Thread: Resource temporarily unavailable")
+      Pgbus.on_signal(:a) { nil }
+
+      expect { described_class.start_listening! }.not_to raise_error
+      expect(Pgbus::ErrorReporter).to have_received(:report).with(an_instance_of(ThreadError), { action: "signals_start" })
+      expect(described_class.instance_variable_get(:@starting_pid)).to be_nil
+    end
+
+    it "lets a later request retry after the starter thread is killed" do
+      allow(Pgbus::Web::Streamer).to receive(:current) do
+        starts << Thread.current
+        sleep
+      end
+      Pgbus.on_signal(:a) { nil }
+      described_class.start_listening!
+      starter = starts.pop(timeout: 2)
+
+      starter.kill.join(1)
+
+      expect(described_class.instance_variable_get(:@starting_pid)).to be_nil
+    end
+
     it "does nothing under streams_test_mode, with streams disabled, or in a database task" do
       Pgbus.on_signal(:a) { nil }
 

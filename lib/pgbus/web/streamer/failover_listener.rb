@@ -118,7 +118,7 @@ module Pgbus
 
             signals = swap_in_local!
           end
-          report_gap if signals
+          report_gap if signals == true
         rescue StandardError => e
           # Hub dead AND the local listener can't be built (DB down, config
           # broken). Mark failed-over so callers stop rebuilding
@@ -149,30 +149,44 @@ module Pgbus
           end
           @stop_signal << :stop
           rebuild&.join(REBUILD_JOIN_SECONDS)
-          # Waits out a rebuild already swapping, then stops what it swapped in.
-          @failover_mutex.synchronize { current_impl.stop }
+          # Never waits on a connect in flight: a rebuild that finishes after
+          # this sees @stopped and stops its own listener instead of swapping.
+          current_impl.stop
         end
 
         private
 
         # Builds a started local listener, replays every subscription on it
         # and swaps it in. Returns true when it re-LISTENed a signal channel
-        # (the caller reports the gap). Raises when the build or the replay
-        # fails, after stopping a listener that never swapped in (it would
-        # leak its thread and LISTEN connection beside the dead client).
-        # Called under @failover_mutex.
+        # (the caller reports the gap), false when it re-LISTENed none, and
+        # :stopped when #stop came first (the listener is stopped, not
+        # swapped). Raises when the build or the replay fails, after stopping
+        # a listener that never swapped in (it would leak its thread and
+        # LISTEN connection beside the dead client). Holds no lock across the
+        # build or the replay.
         def swap_in_local!
           local = @local_listener_factory.call
           queues, signal_channels = @state_mutex.synchronize { [@subscriptions.dup, @signal_subscriptions.dup] }
           queues.each { |q| local.ensure_listening(q) }
           signal_channels.each { |channel| local.ensure_signal_listening(channel) }
-          # Subscriptions recorded between the snapshot and this swap arrive
-          # via their own retried ensure_listening call on the new impl.
-          @state_mutex.synchronize do
+          swapped = @state_mutex.synchronize do
+            next false if @stopped
+
             @impl = local
             @failed_over = true
           end
-          signal_channels.any?
+          unless swapped
+            local.stop
+            return :stopped
+          end
+          # Subscriptions recorded during the replay went to the old impl;
+          # replay them on the new one.
+          late_queues, late_signals = @state_mutex.synchronize do
+            [@subscriptions - queues, @signal_subscriptions - signal_channels]
+          end
+          late_queues.each { |q| local.ensure_listening(q) }
+          late_signals.each { |channel| local.ensure_signal_listening(channel) }
+          signal_channels.any? || late_signals.any?
         rescue StandardError
           begin
             local&.stop
@@ -196,11 +210,12 @@ module Pgbus
           loop do
             break if @stop_signal.pop(timeout: @rebuild_interval)
 
-            # [signals?] once swapped; nil when #stop came first.
-            swapped = @failover_mutex.synchronize { [swap_in_local!] unless stopped? }
-            break unless swapped
+            # No @failover_mutex here: a connect in flight must not hold up
+            # #stop, nor fail_over! (which finds @failed_over set and returns).
+            result = swap_in_local!
+            break if result == :stopped
 
-            report_gap if swapped.first
+            report_gap if result
             @logger.info { "[Pgbus::Streamer::FailoverListener] fallback listener built; streams and process signals restored" }
             break
           rescue StandardError => e
@@ -208,10 +223,6 @@ module Pgbus
               "[Pgbus::Streamer::FailoverListener] fallback listener still failing to build (#{e.class}: #{e.message})"
             end
           end
-        end
-
-        def stopped?
-          @state_mutex.synchronize { @stopped }
         end
 
         # Signals sent while the hub was dying never reached this worker.

@@ -53,6 +53,23 @@ RSpec.describe Pgbus::Web::Streamer::SignalDelivery do
     expect(seen.pop(timeout: 2)).to eq(:gap)
   end
 
+  it "runs on_gap once for gaps that arrive before the first one ran, and again for a later gap" do
+    gate = Queue.new
+    Pgbus.on_signal(:widgets, on_gap: lambda {
+      gate.pop
+      seen << :gap
+    }) { nil }
+
+    delivery.gap # starts running, parks on the gate
+    sleep 0.05
+    delivery.gap # queued
+    delivery.gap # coalesced with the queued one
+    2.times { gate << :go }
+
+    expect([seen.pop(timeout: 2), seen.pop(timeout: 2)]).to eq(%i[gap gap])
+    expect(seen.pop(timeout: 0.2)).to be_nil
+  end
+
   it "starts no thread on a gap when no subscriber has an on_gap" do
     Pgbus.on_signal(:widgets) { nil }
 

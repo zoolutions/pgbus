@@ -159,9 +159,16 @@ module Pgbus
           return if @failed_at && (monotonic_now - @failed_at) < START_RETRY_SECONDS
 
           @starting_pid = pid
-          # One short-lived starter thread per attempt, owned by this
-          # module: it ends when Streamer.current returns or raises.
-          Thread.new { start_streamer(pid) } # rubocop:disable ThreadSafety/NewThread
+          begin
+            # One short-lived starter thread per attempt, owned by this
+            # module: it ends when Streamer.current returns or raises.
+            Thread.new { start_streamer(pid) } # rubocop:disable ThreadSafety/NewThread
+          rescue ThreadError => e
+            # At the process's thread limit: not this request's problem.
+            @starting_pid = nil
+            @failed_at = monotonic_now
+            Pgbus::ErrorReporter.report(e, { action: "signals_start" })
+          end
         end
         nil
       end
@@ -188,15 +195,15 @@ module Pgbus
         Pgbus::Web::Streamer.current
         @start_lock.synchronize do
           @started_pid.set(pid)
-          @starting_pid = nil
           @failed_at = nil
         end
       rescue StandardError => e
-        @start_lock.synchronize do
-          @starting_pid = nil
-          @failed_at = monotonic_now
-        end
+        @start_lock.synchronize { @failed_at = monotonic_now }
         Pgbus::ErrorReporter.report(e, { action: "signals_start" })
+      ensure
+        # Also for a starter killed by a non-StandardError, so a later
+        # request can try again.
+        @start_lock.synchronize { @starting_pid = nil }
       end
 
       def startable?

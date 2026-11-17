@@ -237,6 +237,43 @@ RSpec.describe Pgbus::Web::Streamer::FailoverListener do
       expect(failover.threads).to eq([])
     end
 
+    # The first factory call fails (fail_over! falls back to the rebuild);
+    # the next parks on the returned gate, then builds the returned listener.
+    def gated_factory!
+      failures_left[0] = 1
+      gate = Queue.new
+      built = []
+      slow_listener = instance_double(Pgbus::Web::Streamer::Listener,
+                                      ensure_listening: :done, ensure_signal_listening: :done, stop: nil, threads: [])
+      slow_factory = flaky_factory
+      failover.instance_variable_set(:@local_listener_factory, lambda do
+        result = slow_factory.call
+        gate.pop
+        built << slow_listener
+        result && slow_listener
+      end)
+      [gate, built, slow_listener]
+    end
+
+    it "does not make #stop wait on a connect in flight, and stops what that connect built" do
+      gate, built, slow_listener = gated_factory!
+      failover.ensure_signal_listening("pgbus_signal_a")
+      failover.fail_over!
+      wait_until { failover.threads.any? }
+      sleep 0.1 # the rebuild is inside the factory now
+
+      t0 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      failover.stop
+      stop_took = Process.clock_gettime(Process::CLOCK_MONOTONIC) - t0
+      gate << :go
+
+      expect(stop_took).to be < (described_class::REBUILD_JOIN_SECONDS + 0.5)
+      wait_until { built.any? }
+      sleep 0.1 # the replay and the stopped check follow the build
+      expect(slow_listener).to have_received(:stop)
+      expect(gaps.size).to eq(0)
+    end
+
     it "lists the retry thread while it runs and stops it on #stop" do
       failures_left[0] = 1_000
 
