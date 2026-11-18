@@ -74,12 +74,16 @@ RSpec.describe Pgbus::Web::Streamer::SignalDelivery do
   it "drops a signal past the backlog limit and reports a gap instead" do
     stub_const("#{described_class}::BACKLOG_LIMIT", 2)
     gate = Queue.new
+    parked = Queue.new
     Pgbus.on_signal(:widgets, on_gap: -> { seen << :gap }) do |payload|
-      gate.pop if payload == "slow"
+      if payload == "slow"
+        parked << true
+        gate.pop
+      end
       seen << payload
     end
     delivery.signal(channel(:widgets), "slow")
-    sleep 0.05 # the thread took "slow" and parks on the gate
+    parked.pop(timeout: 2) # the thread took "slow" and parks on the gate
 
     delivery.signal(channel(:widgets), "a")
     delivery.signal(channel(:widgets), "b") # backlog: a + b
@@ -87,6 +91,31 @@ RSpec.describe Pgbus::Web::Streamer::SignalDelivery do
     gate << :go
 
     expect(Array.new(4) { seen.pop(timeout: 2) }).to eq(["slow", "a", "b", :gap])
+  end
+
+  it "warns once per overflow episode, not once per dropped signal" do
+    stub_const("#{described_class}::BACKLOG_LIMIT", 1)
+    logger = instance_double(Logger, warn: nil, error: nil)
+    quiet = described_class.new(logger: logger)
+    gate = Queue.new
+    parked = Queue.new
+    Pgbus.on_signal(:widgets, on_gap: -> { seen << :gap }) do |payload|
+      if payload == "slow"
+        parked << true
+        gate.pop
+      end
+    end
+    quiet.signal(channel(:widgets), "slow")
+    parked.pop(timeout: 2)
+    quiet.signal(channel(:widgets), "queued")
+
+    3.times { quiet.signal(channel(:widgets), "dropped") }
+    gate << :go
+
+    expect(seen.pop(timeout: 2)).to eq(:gap)
+    expect(logger).to have_received(:warn).once
+  ensure
+    quiet&.stop
   end
 
   it "lets a later gap through when the first could not be queued" do
@@ -102,16 +131,22 @@ RSpec.describe Pgbus::Web::Streamer::SignalDelivery do
 
   it "drops what is still queued at stop instead of running it" do
     gate = Queue.new
+    parked = Queue.new
     Pgbus.on_signal(:widgets) do |payload|
-      gate.pop if payload == "slow"
+      if payload == "slow"
+        parked << true
+        gate.pop
+      end
       seen << payload
     end
     delivery.signal(channel(:widgets), "slow")
-    sleep 0.05
+    parked.pop(timeout: 2)
     delivery.signal(channel(:widgets), "queued")
 
     stopper = Thread.new { delivery.stop } # rubocop:disable ThreadSafety/NewThread -- joined below
-    sleep 0.05
+    # stop has cleared the queue once it marked itself stopped (both under one lock)
+    deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 2
+    sleep 0.01 until delivery.instance_variable_get(:@stopped) || Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
     gate << :go
     stopper.join(3)
 

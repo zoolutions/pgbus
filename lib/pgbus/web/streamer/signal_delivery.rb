@@ -103,7 +103,11 @@ module Pgbus
           end
         end
 
+        # One warning per overflow episode: while a gap is already pending it
+        # covers every signal dropped behind it.
         def overflow(name)
+          return gap if @lock.synchronize { @gap_pending }
+
           @logger.warn do
             "[Pgbus::Streamer::SignalDelivery] #{BACKLOG_LIMIT} signals waiting on a slow subscriber; " \
               "dropped #{name.inspect} and reporting a gap"

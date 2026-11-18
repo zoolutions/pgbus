@@ -119,6 +119,10 @@ RSpec.describe Pgbus::Web::Streamer::Instance do
     it "uses streams_connection_options so the listener can be pointed at a different port" do
       require "pg"
       allow(PG).to receive(:library_version).and_return(110_000) # old libpq: connect_timeout only
+      # Hermetic: an exported PGCONNECT_TIMEOUT or PGSERVICE changes the keywords added.
+      allow(ENV).to receive(:fetch).and_call_original
+      allow(ENV).to receive(:fetch).with("PGCONNECT_TIMEOUT", nil).and_return(nil)
+      allow(ENV).to receive(:fetch).with("PGSERVICE", nil).and_return(nil)
       captured = nil
       allow(PG).to receive(:connect) do |**kwargs|
         captured = kwargs
