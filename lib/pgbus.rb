@@ -335,6 +335,27 @@ module Pgbus
       EventBus::Publisher.publish_later(routing_key, payload, delay: delay, headers: headers)
     end
 
+    # Run a block in every web process when any process sends +name+ (issue
+    # #674) — see Pgbus::Signals. Register in an initializer. `on_gap:` runs
+    # once after a LISTEN gap (reconnect, hub failover), when signals may have
+    # been missed.
+    #
+    #   Pgbus.on_signal(:widgets_changed, on_gap: -> { WIDGETS.clear }) { |_payload| WIDGETS.clear }
+    def on_signal(name, on_gap: nil, &)
+      Signals.subscribe(name, on_gap: on_gap, &)
+    end
+
+    # Send +name+ to every process's on_signal blocks. Inside an open
+    # ActiveRecord transaction it is sent at COMMIT, never on rollback (a
+    # `transaction(joinable: false)` block sends at once). +payload+ is an
+    # optional String under NOTIFY's 7999-byte cap.
+    #
+    #   Pgbus.signal(:widgets_changed)
+    #   Pgbus.signal(:widgets_changed, "id=42")
+    def signal(name, payload = nil)
+      Signals.publish(name, payload)
+    end
+
     # A fresh configuration (never nil, so readers need no lock) and no client.
     def reset!
       @state_lock.synchronize do

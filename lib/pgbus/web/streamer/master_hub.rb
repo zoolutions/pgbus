@@ -41,7 +41,38 @@ module Pgbus
       # is guarded by @table_mutex; each worker's outbox by its own mutex.
       # All socket WRITES go through that worker's writer thread (frames must
       # never interleave).
+      #
+      # Process signals (issue #674): a worker subscribes a signal channel
+      # with an "ssub" frame (register first, LISTEN second, "sack" last, as
+      # for a stream), refcounted per channel like the queues. The listener
+      # hands each signal NOTIFY and each reconnect gap to a SignalForwarder,
+      # which queues them for the fanout thread beside the wakes: "signal"
+      # frames go to the channel's subscribers and "gap" frames to every
+      # worker with a signal subscription, never dropped. The master runs no
+      # subscriber blocks itself; the workers subscribe what their own
+      # registries hold.
       class MasterHub
+        # A signal NOTIFY the hub's listener received, for the fanout thread.
+        SignalMessage = Data.define(:channel, :payload)
+        # The hub listener reconnected with signal channels: tell the workers.
+        SIGNAL_GAP = :signal_gap
+
+        # The hub listener's signal sink: queue pushes only (it runs on the
+        # listener thread).
+        class SignalForwarder
+          def initialize(dispatch_queue)
+            @dispatch_queue = dispatch_queue
+          end
+
+          def signal(channel, payload)
+            @dispatch_queue << SignalMessage.new(channel: channel, payload: payload)
+          end
+
+          def gap
+            @dispatch_queue << SIGNAL_GAP
+          end
+        end
+
         DEFAULT_DURABLE_QUEUE_LIMIT = 256
         DEFAULT_HARD_QUEUE_LIMIT = 1024
         # Status is rebroadcast every REBROADCAST_TICKS status intervals even
@@ -76,6 +107,8 @@ module Pgbus
           # already-unsubscribed channel (in-flight NOTIFYs after the last
           # unsub, per-record stream names → unbounded, review on #384).
           @queue_refs = {}
+          # channel → Set of worker ids, like @queue_refs (issue #674).
+          @signal_refs = {}
           @stop_signal = Queue.new
           @next_id = 0
           @dropped_durable_wakes = 0
@@ -91,7 +124,9 @@ module Pgbus
           @table_mutex.synchronize { @evicted_workers }
         end
 
-        # The factory must return a STARTED listener wired to +dispatch_queue+.
+        # The factory must return a STARTED listener wired to +dispatch_queue+,
+        # with a SignalForwarder.new(dispatch_queue) as its signal_sink for
+        # process signals.
         # If any step after the listener exists fails (bad socket path, chmod,
         # thread spawn), the listener — and its dedicated LISTEN connection,
         # the exact resource this hub conserves — is stopped before the error
@@ -172,6 +207,7 @@ module Pgbus
               ack_timeout_ms: @config.streams_listen_ack_timeout_ms,
               connection_factory: build_connection,
               dispatch_queue_limit: @config.streams_dispatch_queue_limit,
+              signal_sink: SignalForwarder.new(dispatch_queue),
               logger: @logger
             ).tap(&:start)
           end
@@ -201,7 +237,7 @@ module Pgbus
 
         def register_worker(sock)
           entry = {
-            sock: sock, subs: Set.new, outbox: [], durable_count: 0, open: true,
+            sock: sock, subs: Set.new, signals: Set.new, outbox: [], durable_count: 0, open: true,
             outbox_mutex: Mutex.new, outbox_cond: ConditionVariable.new
           }
           id = @table_mutex.synchronize do
@@ -240,6 +276,7 @@ module Pgbus
           case frame["t"]
           when "sub" then handle_sub(id, entry, frame["q"])
           when "unsub" then handle_unsub(id, frame["q"])
+          when "ssub" then handle_signal_sub(id, entry, frame["c"])
           else
             @logger.warn { "[Pgbus::Streamer::MasterHub] worker #{id} sent unknown frame: #{frame["t"].inspect}" }
           end
@@ -256,6 +293,16 @@ module Pgbus
           end
           @listener.ensure_listening(queue)
           enqueue_frame(id, entry, { "t" => "ack", "q" => queue }, droppable: false)
+        end
+
+        # The same ordering for a process signal channel.
+        def handle_signal_sub(id, entry, channel)
+          @table_mutex.synchronize do
+            entry[:signals].add(channel)
+            (@signal_refs[channel] ||= Set.new).add(id)
+          end
+          @listener.ensure_signal_listening(channel)
+          enqueue_frame(id, entry, { "t" => "sack", "c" => channel }, droppable: false)
         end
 
         def handle_unsub(id, queue)
@@ -278,6 +325,9 @@ module Pgbus
         end
 
         def deliver(message)
+          return deliver_signal(message) if message.is_a?(SignalMessage)
+          return deliver_signal_gap if message == SIGNAL_GAP
+
           frame = { "t" => "wake", "q" => message.queue_name, "p" => message.payload }
           droppable = message.payload.nil?
           targets = @table_mutex.synchronize do
@@ -285,6 +335,20 @@ module Pgbus
             refs ? refs.filter_map { |id| [id, @workers[id]] if @workers[id] } : []
           end
           targets.each { |id, entry| enqueue_frame(id, entry, frame, droppable: droppable) }
+        end
+
+        def deliver_signal(message)
+          frame = { "t" => "signal", "c" => message.channel, "p" => message.payload }
+          targets = @table_mutex.synchronize do
+            refs = @signal_refs[message.channel]
+            refs ? refs.filter_map { |id| [id, @workers[id]] if @workers[id] } : []
+          end
+          targets.each { |id, entry| enqueue_frame(id, entry, frame, droppable: false) }
+        end
+
+        def deliver_signal_gap
+          targets = @table_mutex.synchronize { @workers.select { |_, entry| entry[:signals].any? }.to_a }
+          targets.each { |id, entry| enqueue_frame(id, entry, { "t" => "gap" }, droppable: false) }
         end
 
         # Non-blocking enqueue with the drop/evict policy. Never blocks the
@@ -397,6 +461,7 @@ module Pgbus
           end
           close_quietly(entry[:sock])
           release_queue_refs(id, entry[:subs].to_a)
+          release_signal_refs(id, entry[:signals].to_a)
         end
 
         # Decrement refcounts; UNLISTEN queues that hit zero (async — no
@@ -412,6 +477,26 @@ module Pgbus
             end
           end
           released.each { |q| @listener.remove_listening(q) }
+        end
+
+        # The UNLISTEN is queued under @table_mutex, with the last ref's
+        # removal: a new "ssub" for the channel registers under the same
+        # mutex and queues its LISTEN after it, so an acked subscriber can
+        # never be UNLISTENed by a cleanup that lost the race (the listener
+        # runs its commands in order). remove_signal_listening only queues.
+        def release_signal_refs(id, channels)
+          @table_mutex.synchronize do
+            channels.each do |channel|
+              refs = @signal_refs[channel]
+              next unless refs
+
+              refs.delete(id)
+              next unless refs.empty?
+
+              @signal_refs.delete(channel)
+              @listener.remove_signal_listening(channel)
+            end
+          end
         end
 
         def close_quietly(io)

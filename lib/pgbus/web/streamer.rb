@@ -37,6 +37,14 @@ module Pgbus
           @current_mutex.synchronize { @current = instance }
         end
 
+        # A signal registered after this process's streamer started (issue
+        # #674): LISTEN on its channel now. No streamer yet: nothing to do, a
+        # streamer started later subscribes every registered channel.
+        def listen_signal(channel)
+          instance = @current_mutex.synchronize { @current }
+          instance&.listen_signal(channel)
+        end
+
         def stream_counter
           @current_mutex.synchronize { @current&.stream_counter }
         end
@@ -50,6 +58,8 @@ module Pgbus
             instance = @current
             @current = nil
           end
+          # A later request must start a fresh streamer for process signals.
+          Pgbus::Signals.streamer_reset! if instance
           instance&.shutdown!
         end
       end

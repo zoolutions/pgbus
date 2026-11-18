@@ -1056,4 +1056,156 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
       expect(dispatch_queue.size).to be >= 1
     end
   end
+
+  describe "process signals (issue #674)" do
+    before { stub_const("#{described_class}::RECONNECT_BACKOFF_SECONDS", 0.01) }
+
+    let(:sink) do
+      Class.new do
+        attr_reader :signals, :gaps, :threads
+
+        def initialize
+          @signals = Queue.new
+          @gaps = 0
+          @threads = []
+        end
+
+        def signal(channel, payload)
+          @threads << Thread.current
+          @signals << [channel, payload]
+        end
+
+        def gap = (@gaps += 1)
+      end.new
+    end
+    let(:signalled) { build_listener(signal_sink: sink) }
+
+    after { signalled.stop }
+
+    it "LISTENs on the raw channel, acked, and routes its NOTIFY to the sink, not the dispatch queue" do
+      signalled.start
+
+      expect(signalled.ensure_signal_listening("pgbus_signal_widgets")).to eq(:done)
+      expect(fake_pg.executed).to include(%(LISTEN "pgbus_signal_widgets"))
+
+      fake_pg.push_notify("pgbus_signal_widgets", "id=1")
+      fake_pg.push_notify("pgbus_signal_widgets")
+
+      expect(sink.signals.pop(timeout: 2)).to eq(["pgbus_signal_widgets", "id=1"])
+      expect(sink.signals.pop(timeout: 2)).to eq(["pgbus_signal_widgets", nil])
+      expect(dispatch_queue.size).to eq(0)
+    end
+
+    it "keeps routing stream wakes to the dispatch queue beside a signal channel" do
+      signalled.start
+      signalled.ensure_signal_listening("pgbus_signal_widgets")
+      signalled.ensure_listening("chat")
+
+      fake_pg.push_notify("pgmq.q_chat.INSERT")
+
+      expect(dispatch_queue.pop(timeout: 2)&.queue_name).to eq("chat")
+      expect(sink.signals.size).to eq(0)
+    end
+
+    # A signal is never a droppable durable wake (it has no archive to replay).
+    it "never drops a signal at the dispatch-queue cap" do
+      capped = build_listener(signal_sink: sink, dispatch_queue_limit: 1)
+      dispatch_queue << :filler
+      capped.start
+      capped.ensure_signal_listening("pgbus_signal_widgets")
+
+      fake_pg.push_notify("pgbus_signal_widgets")
+
+      expect(sink.signals.pop(timeout: 2)).to eq(["pgbus_signal_widgets", nil])
+      expect(capped.dropped_wakes).to eq(0)
+    ensure
+      capped&.stop
+    end
+
+    it "UNLISTENs a signal channel" do
+      signalled.start
+      signalled.ensure_signal_listening("pgbus_signal_widgets")
+
+      signalled.remove_signal_listening("pgbus_signal_widgets")
+
+      wait_until { fake_pg.executed.include?(%(UNLISTEN "pgbus_signal_widgets")) }
+      expect(signalled.listening_to).to be_empty
+    end
+
+    it "re-LISTENs the signal channel after a reconnect and reports the gap once, after the LISTEN" do
+      new_pg = fake_pg_class.new
+      factory_conns << new_pg
+      signalled.start
+      signalled.ensure_signal_listening("pgbus_signal_widgets")
+
+      fake_pg.push_error(PG::Error.new("connection reset"))
+
+      wait_until { sink.gaps == 1 }
+      expect(new_pg.executed).to include(%(LISTEN "pgbus_signal_widgets"))
+      new_pg.push_notify("pgbus_signal_widgets")
+      expect(sink.signals.pop(timeout: 2)).to eq(["pgbus_signal_widgets", nil])
+      expect(sink.gaps).to eq(1)
+    end
+
+    it "reports no gap after a reconnect that re-LISTENed stream channels only" do
+      new_pg = fake_pg_class.new
+      factory_conns << new_pg
+      signalled.start
+      signalled.ensure_listening("chat")
+
+      fake_pg.push_error(PG::Error.new("connection reset"))
+
+      wait_until { listens(new_pg) >= 1 }
+      expect(sink.gaps).to eq(0)
+    end
+
+    it "keeps listening when the sink raises" do
+      raising = Class.new do
+        def signal(*) = raise("sink boom")
+        def gap = nil
+      end.new
+      fragile = build_listener(signal_sink: raising)
+      fragile.start
+      fragile.ensure_signal_listening("pgbus_signal_widgets")
+      fragile.ensure_listening("chat")
+
+      fake_pg.push_notify("pgbus_signal_widgets")
+      fake_pg.push_notify("pgmq.q_chat.INSERT")
+
+      expect(dispatch_queue.pop(timeout: 2)&.queue_name).to eq("chat")
+      expect(fragile.threads.first).to be_alive
+    ensure
+      fragile&.stop
+    end
+
+    it "reports a gap when a signal LISTEN lands after its caller stopped waiting" do
+      fake_pg.gate_exec!(%(LISTEN "pgbus_signal_widgets"))
+      slow = build_listener(signal_sink: sink, ack_timeout_ms: 50)
+      slow.start
+
+      expect(slow.ensure_signal_listening("pgbus_signal_widgets")).to be_nil
+      fake_pg.release_exec!
+
+      wait_until { sink.gaps == 1 }
+      expect(sink.gaps).to eq(1)
+      expect(slow.listening_to).to include("pgbus_signal_widgets")
+    ensure
+      slow&.stop
+    end
+
+    it "refuses a channel that is not a signal channel identifier" do
+      expect { signalled.ensure_signal_listening(%(x"; DROP TABLE t; --)) }.to raise_error(ArgumentError)
+      expect { signalled.remove_signal_listening("Upper") }.to raise_error(ArgumentError)
+    end
+
+    it "ignores a non-pgmq NOTIFY without a sink" do
+      listener.start
+      listener.ensure_signal_listening("pgbus_signal_widgets")
+
+      fake_pg.push_notify("pgbus_signal_widgets")
+      fake_pg.push_notify("pgmq.q_chat.INSERT")
+
+      expect(dispatch_queue.pop(timeout: 2)&.queue_name).to eq("chat")
+    end
+  end
 end

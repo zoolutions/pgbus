@@ -118,7 +118,11 @@ RSpec.describe Pgbus::Web::Streamer::Instance do
 
     it "uses streams_connection_options so the listener can be pointed at a different port" do
       require "pg"
-      allow(PG).to receive(:library_version).and_return(110_000) # no keepalive keywords on old libpq
+      allow(PG).to receive(:library_version).and_return(110_000) # old libpq: connect_timeout only
+      # Hermetic: an exported PGCONNECT_TIMEOUT or PGSERVICE changes the keywords added.
+      allow(ENV).to receive(:fetch).and_call_original
+      allow(ENV).to receive(:fetch).with("PGCONNECT_TIMEOUT", nil).and_return(nil)
+      allow(ENV).to receive(:fetch).with("PGSERVICE", nil).and_return(nil)
       captured = nil
       allow(PG).to receive(:connect) do |**kwargs|
         captured = kwargs
@@ -128,7 +132,7 @@ RSpec.describe Pgbus::Web::Streamer::Instance do
       described_class.new(client: client, config: streamer_config, logger: Logger.new(IO::NULL))
 
       expect(captured).to eq(host: "pooler.example", port: 5432, dbname: "app", user: "app",
-                             fallback_application_name: "pgbus-listen")
+                             connect_timeout: 10, fallback_application_name: "pgbus-listen")
     end
 
     # A dead LISTEN socket errors within ~11 s even between keepalives
@@ -738,6 +742,112 @@ RSpec.describe Pgbus::Web::Streamer::Instance do
       )
 
       expect(instance.listener).to be_a(Pgbus::Web::Streamer::Listener)
+    end
+  end
+
+  describe "process signals (issue #674)" do
+    before do
+      Pgbus::Signals.reset!
+      allow(Pgbus::Web::Streamer).to receive(:listen_signal)
+    end
+
+    after { Pgbus::Signals.reset! }
+
+    def listens(sql_prefix) = fake_pg.executed.select { |sql| sql.start_with?(sql_prefix) }
+
+    it "LISTENs on every registered signal channel when it starts" do
+      Pgbus.on_signal(:widgets) { nil }
+      channel = Pgbus::Signals.channel_for(:widgets)
+
+      streamer.start
+
+      expect(listens("LISTEN")).to eq([%(LISTEN "#{channel}")])
+    end
+
+    it "runs every on_gap once its first LISTEN is in place (signals sent before it were never seen)" do
+      gaps = Queue.new
+      Pgbus.on_signal(:widgets, on_gap: -> { gaps << :gap }) { nil }
+
+      streamer.start
+
+      expect(gaps.pop(timeout: 2)).to eq(:gap)
+      expect(gaps.pop(timeout: 0.2)).to be_nil
+    end
+
+    # An Instance in :master scope over fakes; returns it and the on_gap it
+    # handed its FailoverListener.
+    def build_hub_instance_capturing_on_gap
+      on_gap = nil
+      allow(Pgbus::Web::Streamer::FailoverListener).to receive(:new) do |**kwargs|
+        on_gap = kwargs[:on_gap]
+        instance_double(Pgbus::Web::Streamer::FailoverListener, start: nil, threads: [], stop: nil,
+                                                                ensure_signal_listening: :done)
+      end
+      allow(Pgbus::Web::Streamer::HubClient).to receive(:new)
+        .and_return(instance_double(Pgbus::Web::Streamer::HubClient, connect: nil))
+      config.streams_listen_scope = :master
+      ENV["PGBUS_STREAMS_HUB_SOCKET"] = "/nonexistent/hub.sock"
+      [described_class.new(client: client, config: config, logger: Logger.new(IO::NULL)), on_gap]
+    end
+
+    it "reports a hub failover's gap only once #start has run its own first-LISTEN gap" do
+      gaps = []
+      Pgbus.on_signal(:widgets, on_gap: -> { gaps << :gap }) { nil }
+      hub_instance, on_gap = build_hub_instance_capturing_on_gap
+      allow(hub_instance.signal_delivery).to receive(:gap) { gaps << :delivery_gap }
+
+      on_gap.call # a failover during #start
+      expect(gaps).to eq([])
+      hub_instance.start
+      on_gap.call # a failover after #start
+      expect(gaps).to eq(%i[delivery_gap delivery_gap])
+    ensure
+      ENV.delete("PGBUS_STREAMS_HUB_SOCKET")
+      hub_instance&.shutdown!
+    end
+
+    it "LISTENs on a channel registered after it started" do
+      streamer.start
+      channel = Pgbus::Signals.channel_for(:late)
+
+      streamer.listen_signal(channel)
+
+      expect(listens("LISTEN")).to eq([%(LISTEN "#{channel}")])
+    end
+
+    it "does not LISTEN on a channel before it starts" do
+      streamer.listen_signal(Pgbus::Signals.channel_for(:early))
+
+      expect(listens("LISTEN")).to eq([])
+    end
+
+    it "LISTENs on nothing new and starts no delivery thread without a subscriber" do
+      streamer.start
+
+      expect(listens("LISTEN")).to eq([])
+      expect(streamer.signal_delivery.threads).to eq([])
+    end
+
+    it "hands the listener its signal delivery as the signal sink" do
+      captured = nil
+      allow(Pgbus::Web::Streamer::Listener).to receive(:new).and_wrap_original do |orig, **kwargs|
+        captured = kwargs
+        orig.call(**kwargs)
+      end
+
+      instance = described_class.new(client: client, config: config, pg_connection: fake_pg, logger: Logger.new(IO::NULL))
+
+      expect(captured[:signal_sink]).to be(instance.signal_delivery)
+    end
+
+    it "stops the signal delivery thread on shutdown!" do
+      Pgbus.on_signal(:widgets) { nil }
+      streamer.start
+      streamer.signal_delivery.signal(Pgbus::Signals.channel_for(:widgets), nil)
+      thread = streamer.signal_delivery.threads.first
+
+      expect(streamer.shutdown!).to eq([])
+      expect(thread.join(1)).to be_truthy
     end
   end
 end

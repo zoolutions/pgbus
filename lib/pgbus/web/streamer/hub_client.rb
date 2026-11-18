@@ -18,6 +18,13 @@ module Pgbus
       # the FailoverListener's cue to swap in a per-worker Listener. One-way:
       # once a worker has fallen back it stays local until it recycles
       # (settled on #382 — no flap-back complexity).
+      #
+      # Process signals (issue #674): ensure_signal_listening subscribes a
+      # signal channel with the same ack contract ("ssub" → "sack"); the
+      # master's "signal" and "gap" frames go to the `signal_sink:` (the
+      # worker's SignalDelivery). A master from before signals never acks an
+      # "ssub", so the ack deadline fails this worker over to its own LISTEN:
+      # mixed versions during a rolling restart degrade, they do not go deaf.
       class HubClient
         class HubUnavailableError < StandardError; end
 
@@ -25,9 +32,10 @@ module Pgbus
         # NotifyListener: a just-connected worker isn't treated as degraded
         # before the hub has said anything.
         def initialize(socket_path:, dispatch_queue:, ack_timeout: 2.0,
-                       on_failure: nil, logger: Pgbus.logger)
+                       on_failure: nil, signal_sink: nil, logger: Pgbus.logger)
           @socket_path = socket_path
           @dispatch_queue = dispatch_queue
+          @signal_sink = signal_sink
           @ack_timeout = ack_timeout
           @on_failure = on_failure
           @logger = logger
@@ -73,21 +81,12 @@ module Pgbus
         # transport — a hub that can't ack in time can't be trusted with the
         # no-lost-broadcast contract either).
         def ensure_listening(queue)
-          raise HubUnavailableError, "master hub transport is dead" if @dead
+          await_ack(queue, { "t" => "sub", "q" => queue }, queue)
+        end
 
-          waiter = Queue.new
-          @ack_mutex.synchronize { @pending_acks[queue] << waiter }
-          write_frame({ "t" => "sub", "q" => queue })
-
-          result = waiter.pop(timeout: @ack_timeout)
-          if result.nil?
-            discard_waiter(queue, waiter)
-            mark_dead("sub ack for #{queue} not received within #{@ack_timeout}s")
-            raise HubUnavailableError, "master hub ack timeout for #{queue}"
-          end
-          raise HubUnavailableError, "master hub died while awaiting ack for #{queue}" if result == :dead
-
-          :done
+        # The same contract for a process signal channel (issue #674).
+        def ensure_signal_listening(channel)
+          await_ack([:signal, channel], { "t" => "ssub", "c" => channel }, "signal #{channel}")
         end
 
         # Lazy GC, fire-and-forget — no correctness path waits on UNLISTEN
@@ -118,6 +117,24 @@ module Pgbus
 
         private
 
+        def await_ack(key, frame, label)
+          raise HubUnavailableError, "master hub transport is dead" if @dead
+
+          waiter = Queue.new
+          @ack_mutex.synchronize { @pending_acks[key] << waiter }
+          write_frame(frame)
+
+          result = waiter.pop(timeout: @ack_timeout)
+          if result.nil?
+            discard_waiter(key, waiter)
+            mark_dead("sub ack for #{label} not received within #{@ack_timeout}s")
+            raise HubUnavailableError, "master hub ack timeout for #{label}"
+          end
+          raise HubUnavailableError, "master hub died while awaiting ack for #{label}" if result == :dead
+
+          :done
+        end
+
         def reader_loop
           loop do
             frame = HubProtocol.read_frame(@sock)
@@ -143,11 +160,25 @@ module Pgbus
             @dispatch_queue << Listener::WakeMessage.new(queue_name: frame["q"], payload: frame["p"])
           when "ack"
             @ack_mutex.synchronize { @pending_acks[frame["q"]].shift }&.push(:ack)
+          when "sack"
+            @ack_mutex.synchronize { @pending_acks[[:signal, frame["c"]]].shift }&.push(:ack)
+          when "signal"
+            to_signal_sink { |sink| sink.signal(frame["c"], frame["p"]) }
+          when "gap"
+            to_signal_sink(&:gap)
           when "status"
             @hub_healthy = frame["healthy"]
           else
             @logger.warn { "[Pgbus::Streamer::HubClient] unknown frame from master: #{frame["t"].inspect}" }
           end
+        end
+
+        # A raising sink must not reach reader_loop's rescue, which would mark
+        # a healthy transport dead.
+        def to_signal_sink
+          yield @signal_sink if @signal_sink
+        rescue StandardError => e
+          @logger.error { "[Pgbus::Streamer::HubClient] signal sink raised: #{e.class}: #{e.message}" }
         end
 
         # Frames must never interleave — all writes go through one mutex

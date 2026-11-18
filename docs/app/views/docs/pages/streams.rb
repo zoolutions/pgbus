@@ -19,6 +19,7 @@ class Views::Docs::Pages::Streams < DocsUI::Page
     typed_events
     coalescing
     presence
+    process_signals
     stream_keys
     reconciliation
     consumer
@@ -506,6 +507,49 @@ class Views::Docs::Pages::Streams < DocsUI::Page
         DocsUI::Callout(:note) do
           plain "Keep each ttl above streams_heartbeat_interval (pgbus warns at boot otherwise). On a seat table sweep! only expires member-keyed rows. A raising hook is logged, not propagated. Probe for support with Pgbus::Streams::Presence.seats_supported? (the table) and Presence#join accepting connection_id: (the gem)."
         end
+      end
+    end
+  end
+
+  def process_signals
+    DocsUI::Section("Process signals", description: "Run a block in every web process when a message arrives.") do
+      md <<~'MD'
+        A small in-memory cache per web process (a lookup table read on every
+        request, changed a few times a month) needs a way to tell every Puma
+        worker "drop it now". `Pgbus.on_signal` registers a block in each
+        process; `Pgbus.signal` runs it in all of them, within about a second,
+        over the LISTEN connection the streamer already owns.
+      MD
+      DocsUI::Code(<<~RUBY, filename: "config/initializers/widgets.rb")
+        WIDGETS = Concurrent::Map.new
+
+        Pgbus.on_signal(:widgets_changed, on_gap: -> { WIDGETS.clear }) { |_payload| WIDGETS.clear }
+
+        class Widget < ApplicationRecord
+          after_commit { Pgbus.signal(:widgets_changed) } # or Pgbus.signal(:widgets_changed, "id=42")
+        end
+      RUBY
+      md <<~'MD'
+        The signal is a `NOTIFY` on `<queue_prefix>_signal_<name>`, sent at
+        `COMMIT` inside an open ActiveRecord transaction and never on rollback
+        (a `transaction(joinable: false)` block sends at once), with an
+        optional String payload under NOTIFY's 7999-byte cap (an empty String
+        arrives as `nil`). Under
+        `streams_listen_scope :master` the master hub LISTENs and fans it out to
+        every worker; under `:process` each worker's own listener does. With a
+        subscriber registered, a process's first request starts the listener
+        on a background thread, so a process that never served an SSE
+        connection still receives signals; with none, nothing changes.
+
+        Blocks run on a dedicated thread inside the Rails executor; one that
+        raises is reported and the others run. Delivery is at most once: after
+        each LISTEN gap (the first LISTEN of a process, a reconnect, a hub
+        failover) every `on_gap` runs, so a subscriber can assume it missed
+        signals; gaps that arrive while one is still waiting to run share
+        that run. Web processes only.
+      MD
+      DocsUI::Callout(:note) do
+        plain "In tests, Pgbus::Testing.fake! records signals in Pgbus::Testing.signals; Pgbus::Testing.inline! also runs the blocks synchronously, at the commit of a transaction block. Set a mode in your suite: with Pgbus::Testing.disabled! and an on_signal registered, the first request spec starts a real streamer."
       end
     end
   end

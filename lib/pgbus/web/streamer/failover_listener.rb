@@ -21,12 +21,28 @@ module Pgbus
       # relies on it. ensure_listening NEVER raises to the dispatcher: on a
       # double failure (hub dead AND local build failing — e.g. DB down) it
       # logs and returns nil, matching the Listener's own ack-timeout
-      # contract, which the dispatcher already tolerates.
+      # contract, which the dispatcher already tolerates, and a background
+      # thread retries the local build every `rebuild_interval` seconds until
+      # it succeeds or #stop (issue #674: a process signal has no later
+      # ensure_listening call to retry it).
+      #
+      # Process signal channels (issue #674) are recorded and replayed the
+      # same way. NOTIFYs sent between the hub's death and the local LISTEN
+      # are lost, so once a failover has re-LISTENed a signal channel it calls
+      # `on_gap` (the worker's signal delivery runs every on_gap block).
       class FailoverListener
-        def initialize(hub_client:, local_listener_factory:, logger: Pgbus.logger)
+        REBUILD_INTERVAL_SECONDS = 5
+        REBUILD_JOIN_SECONDS = 2
+
+        def initialize(hub_client:, local_listener_factory:, on_gap: nil,
+                       rebuild_interval: REBUILD_INTERVAL_SECONDS, logger: Pgbus.logger)
           @hub_client = hub_client
           @local_listener_factory = local_listener_factory
+          @on_gap = on_gap
+          @rebuild_interval = rebuild_interval
           @logger = logger
+          # #stop wakes the rebuild thread's wait through this queue.
+          @stop_signal = Queue.new
           # @state_mutex guards the cheap shared state (@subscriptions, @impl,
           # @failed_over) and is only ever held for constant-time work — the
           # dispatcher's ensure/remove path must never wait behind a failover
@@ -36,8 +52,12 @@ module Pgbus
           @state_mutex = Mutex.new
           @failover_mutex = Mutex.new
           @subscriptions = Set.new
+          @signal_subscriptions = Set.new
           @impl = hub_client
           @failed_over = false
+          # Guarded by @state_mutex.
+          @stopped = false
+          @rebuild_thread = nil
         end
 
         # Interface parity with Listener for Instance#start: the hub client
@@ -56,6 +76,19 @@ module Pgbus
           rescue HubClient::HubUnavailableError
             # fail_over! itself failed (factory raised) and @impl is still the
             # dead client — reported there; honor the nil-on-timeout contract.
+            nil
+          end
+        end
+
+        # Same failover contract as ensure_listening, for a signal channel.
+        def ensure_signal_listening(channel)
+          @state_mutex.synchronize { @signal_subscriptions.add(channel) }
+          current_impl.ensure_signal_listening(channel)
+        rescue HubClient::HubUnavailableError
+          fail_over!
+          begin
+            current_impl.ensure_signal_listening(channel)
+          rescue HubClient::HubUnavailableError
             nil
           end
         end
@@ -79,54 +112,126 @@ module Pgbus
         # The blocking build + replay runs OUTSIDE @state_mutex so concurrent
         # ensure/remove/stop calls never stall behind it.
         def fail_over!
-          local = nil
+          signals = nil
           @failover_mutex.synchronize do
             return if @state_mutex.synchronize { @failed_over }
 
-            local = @local_listener_factory.call
-            @state_mutex.synchronize { @subscriptions.dup }.each { |q| local.ensure_listening(q) }
-            # Subscriptions recorded between the snapshot and this swap arrive
-            # via their own retried ensure_listening call on the new impl.
-            @state_mutex.synchronize do
-              @impl = local
-              @failed_over = true
-            end
-            # Ownership transferred to @impl — the rescue must not stop it.
-            local = nil
+            signals = swap_in_local!
           end
+          report_gap if signals == true
         rescue StandardError => e
-          # A listener the factory STARTED but that never swapped in (the
-          # replay raised) would otherwise leak its thread and LISTEN
-          # connection alongside the dead hub client.
-          begin
-            local&.stop
-          rescue StandardError
-            nil
-          end
           # Hub dead AND the local listener can't be built (DB down, config
-          # broken). Mark failed-over so callers stop rebuilding; @impl stays
-          # on the dead client — every ensure_listening resolves nil and the
-          # dispatcher rides its existing timeout tolerance until the worker
-          # recycles.
+          # broken). Mark failed-over so callers stop rebuilding
+          # synchronously; @impl stays on the dead client — every
+          # ensure_listening resolves nil and the dispatcher rides its
+          # existing timeout tolerance — while the rebuild thread retries.
           @state_mutex.synchronize { @failed_over = true }
           @logger.error do
             "[Pgbus::Streamer::FailoverListener] fallback listener failed to build " \
-              "(#{e.class}: #{e.message}) — streams degraded until this worker recycles"
+              "(#{e.class}: #{e.message}) — streams and process signals degraded; " \
+              "retrying every #{@rebuild_interval}s"
           end
+          start_rebuild
         end
 
         # Snapshot of this component's live thread(s). Instance#shutdown! captures
         # it BEFORE calling #stop so a join that timed out is still observable
         # after #stop has cleared the reference (issue #443).
         def threads
-          current_impl.threads
+          rebuild = @state_mutex.synchronize { @rebuild_thread }
+          rebuild&.alive? ? [*current_impl.threads, rebuild] : current_impl.threads
         end
 
         def stop
+          rebuild = @state_mutex.synchronize do
+            @stopped = true
+            @rebuild_thread
+          end
+          @stop_signal << :stop
+          rebuild&.join(REBUILD_JOIN_SECONDS)
+          # Never waits on a connect in flight: a rebuild that finishes after
+          # this sees @stopped and stops its own listener instead of swapping.
           current_impl.stop
         end
 
         private
+
+        # Builds a started local listener, replays every subscription on it
+        # and swaps it in. Returns true when it re-LISTENed a signal channel
+        # (the caller reports the gap), false when it re-LISTENed none, and
+        # :discarded when #stop came first or another build already swapped
+        # in (the listener is stopped, not swapped: only the hub client is
+        # ever replaced, so a live local listener is never orphaned). Raises when the build or the replay fails, after stopping
+        # a listener that never swapped in (it would leak its thread and
+        # LISTEN connection beside the dead client). Holds no lock across the
+        # build or the replay.
+        def swap_in_local!
+          local = @local_listener_factory.call
+          queues, signal_channels = @state_mutex.synchronize { [@subscriptions.dup, @signal_subscriptions.dup] }
+          queues.each { |q| local.ensure_listening(q) }
+          signal_channels.each { |channel| local.ensure_signal_listening(channel) }
+          swapped = @state_mutex.synchronize do
+            next false if @stopped || !@impl.equal?(@hub_client)
+
+            @impl = local
+            @failed_over = true
+          end
+          unless swapped
+            local.stop
+            return :discarded
+          end
+          # Subscriptions recorded during the replay went to the old impl;
+          # replay them on the new one.
+          late_queues, late_signals = @state_mutex.synchronize do
+            [@subscriptions - queues, @signal_subscriptions - signal_channels]
+          end
+          late_queues.each { |q| local.ensure_listening(q) }
+          late_signals.each { |channel| local.ensure_signal_listening(channel) }
+          signal_channels.any? || late_signals.any?
+        rescue StandardError
+          begin
+            local&.stop
+          rescue StandardError
+            nil
+          end
+          raise
+        end
+
+        def start_rebuild
+          @state_mutex.synchronize do
+            return if @stopped || @rebuild_thread&.alive?
+
+            # The retry thread, owned by this object: it ends once a local
+            # listener swaps in or #stop signals it; #stop joins it.
+            @rebuild_thread = Thread.new { rebuild_loop } # rubocop:disable ThreadSafety/NewThread
+          end
+        end
+
+        def rebuild_loop
+          loop do
+            break if @stop_signal.pop(timeout: @rebuild_interval)
+
+            # No @failover_mutex here: a connect in flight must not hold up
+            # #stop, nor fail_over! (which finds @failed_over set and returns).
+            result = swap_in_local!
+            break if result == :discarded
+
+            report_gap if result
+            @logger.info { "[Pgbus::Streamer::FailoverListener] fallback listener built; streams and process signals restored" }
+            break
+          rescue StandardError => e
+            @logger.warn do
+              "[Pgbus::Streamer::FailoverListener] fallback listener still failing to build (#{e.class}: #{e.message})"
+            end
+          end
+        end
+
+        # Signals sent while the hub was dying never reached this worker.
+        def report_gap
+          @on_gap&.call
+        rescue StandardError => e
+          @logger.error { "[Pgbus::Streamer::FailoverListener] on_gap raised: #{e.class}: #{e.message}" }
+        end
 
         def current_impl
           @state_mutex.synchronize { @impl }

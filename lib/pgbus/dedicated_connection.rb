@@ -27,14 +27,18 @@ module Pgbus
     # probing starts after 5 idle seconds, every 2 s, 3 times, so a dead
     # socket errors within ~11 s even between the listener's own keepalive
     # queries; tcp_user_timeout bounds data the peer never acknowledges by
-    # the same 11 s. Client-side keywords: never in the startup packet, so a
-    # pooler cannot reject them.
+    # the same 11 s. connect_timeout bounds the connect itself (issue #674:
+    # a streamer starting for process signals, and a hub worker rebuilding
+    # its own listener, otherwise wait on an unreachable host as long as the
+    # OS lets the TCP handshake retry). Client-side keywords: never in the
+    # startup packet, so a pooler cannot reject them.
     LISTEN_KEEPALIVES = {
       keepalives: 1,
       keepalives_idle: 5,
       keepalives_interval: 2,
       keepalives_count: 3,
-      tcp_user_timeout: 11_000
+      tcp_user_timeout: 11_000,
+      connect_timeout: 10
     }.freeze
 
     def connect(opts)
@@ -76,20 +80,29 @@ module Pgbus
       defined?(::PG) && ::PG.respond_to?(:library_version) && ::PG.library_version >= 120_000
     end
 
+    # LISTEN_KEEPALIVES, without connect_timeout when PGCONNECT_TIMEOUT is set:
+    # a conninfo keyword beats the environment, and the operator's value wins.
+    def listen_keywords
+      keywords = libpq_supports_socket_bounds? ? LISTEN_KEEPALIVES : LISTEN_KEEPALIVES.slice(:connect_timeout)
+      return keywords if ENV.fetch("PGCONNECT_TIMEOUT", nil).to_s.empty?
+
+      keywords.except(:connect_timeout)
+    end
+
     # Fill in the LISTEN_KEEPALIVES keywords the options do not already set.
-    # Unchanged on libpq < 12 (see libpq_supports_socket_bounds?), and for a
+    # Only connect_timeout on libpq < 12 (see libpq_supports_socket_bounds?;
+    # connect_timeout is older than that), and nothing for a
     # connection that names a service (service=, or PGSERVICE): libpq applies
     # the service file only to keywords the conninfo leaves unset, so an added
     # keyword would override the service's own.
     def with_keepalives(opts)
-      return opts unless libpq_supports_socket_bounds?
       return opts if ENV.fetch("PGSERVICE", nil).to_s != ""
 
       case opts
       when Hash
         return opts if opts.key?(:service) || opts.key?("service")
 
-        missing = LISTEN_KEEPALIVES.reject { |key, _| opts.key?(key) || opts.key?(key.to_s) }
+        missing = listen_keywords.reject { |key, _| opts.key?(key) || opts.key?(key.to_s) }
         opts.merge(missing)
       when String then append_keepalives(opts)
       else opts
@@ -105,7 +118,7 @@ module Pgbus
       set = conninfo_keywords(conninfo)
       return conninfo if set.nil? || set.include?("service")
 
-      missing = LISTEN_KEEPALIVES.reject { |key, _| set.include?(key.to_s) }
+      missing = listen_keywords.reject { |key, _| set.include?(key.to_s) }
       return conninfo if missing.empty?
 
       if url?(conninfo)

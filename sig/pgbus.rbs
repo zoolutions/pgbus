@@ -49,6 +49,15 @@ module Pgbus
     end
   end
 
+  # Partial: only the type Pgbus.on_signal returns.
+  module Signals
+    class Subscriber
+      attr_reader name: String
+      attr_reader callback: Proc
+      attr_reader on_gap: untyped
+    end
+  end
+
   # Partial: only the types Pgbus.batch names. Batch's own methods are not
   # covered by spec/pgbus/rbs_spec.rb yet.
   class Batch
@@ -113,6 +122,10 @@ module Pgbus
   # delay: seconds, as a Numeric or an ActiveSupport::Duration (1.hour).
   def self.publish: (String routing_key, untyped payload, ?headers: Hash[String, untyped]?, ?delay: Numeric | _ToI) -> untyped
   def self.publish_later: (String routing_key, untyped payload, delay: Numeric | _ToI, ?headers: Hash[String, untyped]?) -> untyped
+  # Process signals (issue #674): on_signal registers a block run in every web
+  # process when any process calls signal(name); on_gap runs after a LISTEN gap.
+  def self.on_signal: (Symbol | String name, ?on_gap: (^() -> void)?) { (String? payload) -> void } -> Signals::Subscriber
+  def self.signal: (Symbol | String name, ?String? payload) -> nil
   def self.reset!: () -> void
   def self.reset_client!: () -> void
   def self.stopping: () -> bool

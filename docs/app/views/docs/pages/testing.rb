@@ -32,6 +32,7 @@ class Views::Docs::Pages::Testing < DocsUI::Page
           config.append_after do
             Pgbus::Testing.disabled!
             Pgbus::Testing.store.clear!
+            Pgbus::Testing.clear_signals!
           end
         end
       RUBY

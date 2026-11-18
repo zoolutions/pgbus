@@ -182,4 +182,26 @@ RSpec.describe Pgbus::Client::NotifyStream do
       end
     end
   end
+
+  describe "#notify_signal" do
+    it "sends a NOTIFY on the signal's prefixed channel with the payload" do
+      client.notify_signal("widgets_changed", "id=42")
+
+      expect(raw_conn).to have_received(:exec_params)
+        .with("SELECT pg_notify($1, $2)", ["pgbus_test_signal_widgets_changed", "id=42"])
+    end
+
+    it "sends a NULL payload when there is none" do
+      client.notify_signal("widgets_changed")
+
+      expect(raw_conn).to have_received(:exec_params)
+        .with("SELECT pg_notify($1, $2)", ["pgbus_test_signal_widgets_changed", nil])
+    end
+
+    it "does not create a PGMQ queue" do
+      client.notify_signal("widgets_changed")
+
+      expect(mock_pgmq).not_to have_received(:create)
+    end
+  end
 end

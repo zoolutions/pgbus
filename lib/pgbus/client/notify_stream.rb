@@ -44,6 +44,22 @@ module Pgbus
         end
       end
 
+      # Fire-and-forget NOTIFY for a process signal (issue #674) on its channel,
+      # `<queue_prefix>_signal_<name>` (Pgbus::Signals validates the name and
+      # the payload: a String within the cap, or nil for none).
+      def notify_signal(name, payload = nil)
+        channel = config.queue_name("signal_#{name}")
+        Instrumentation.instrument("pgbus.signal.notify", signal: name.to_s, bytes: payload.to_s.bytesize) do
+          with_stale_connection_retry do
+            synchronized do
+              @pgmq.__send__(:with_connection) do |conn|
+                conn.exec_params("SELECT pg_notify($1, $2)", [channel, payload])
+              end
+            end
+          end
+        end
+      end
+
       private
 
       def validate_notify_payload_size!(stream_name, json)
