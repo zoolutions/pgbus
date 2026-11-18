@@ -770,6 +770,38 @@ RSpec.describe Pgbus::Web::Streamer::Instance do
       expect(gaps.pop(timeout: 0.2)).to be_nil
     end
 
+    # An Instance in :master scope over fakes; returns it and the on_gap it
+    # handed its FailoverListener.
+    def build_hub_instance_capturing_on_gap
+      on_gap = nil
+      allow(Pgbus::Web::Streamer::FailoverListener).to receive(:new) do |**kwargs|
+        on_gap = kwargs[:on_gap]
+        instance_double(Pgbus::Web::Streamer::FailoverListener, start: nil, threads: [], stop: nil,
+                                                                ensure_signal_listening: :done)
+      end
+      allow(Pgbus::Web::Streamer::HubClient).to receive(:new)
+        .and_return(instance_double(Pgbus::Web::Streamer::HubClient, connect: nil))
+      config.streams_listen_scope = :master
+      ENV["PGBUS_STREAMS_HUB_SOCKET"] = "/nonexistent/hub.sock"
+      [described_class.new(client: client, config: config, logger: Logger.new(IO::NULL)), on_gap]
+    end
+
+    it "reports a hub failover's gap only once #start has run its own first-LISTEN gap" do
+      gaps = []
+      Pgbus.on_signal(:widgets, on_gap: -> { gaps << :gap }) { nil }
+      hub_instance, on_gap = build_hub_instance_capturing_on_gap
+      allow(hub_instance.signal_delivery).to receive(:gap) { gaps << :delivery_gap }
+
+      on_gap.call # a failover during #start
+      expect(gaps).to eq([])
+      hub_instance.start
+      on_gap.call # a failover after #start
+      expect(gaps).to eq(%i[delivery_gap delivery_gap])
+    ensure
+      ENV.delete("PGBUS_STREAMS_HUB_SOCKET")
+      hub_instance&.shutdown!
+    end
+
     it "LISTENs on a channel registered after it started" do
       streamer.start
       channel = Pgbus::Signals.channel_for(:late)

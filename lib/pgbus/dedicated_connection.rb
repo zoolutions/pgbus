@@ -80,6 +80,14 @@ module Pgbus
       defined?(::PG) && ::PG.respond_to?(:library_version) && ::PG.library_version >= 120_000
     end
 
+    # LISTEN_KEEPALIVES, without connect_timeout when PGCONNECT_TIMEOUT is set:
+    # a conninfo keyword beats the environment, and the operator's value wins.
+    def listen_keywords
+      return LISTEN_KEEPALIVES if ENV.fetch("PGCONNECT_TIMEOUT", nil).to_s.empty?
+
+      LISTEN_KEEPALIVES.except(:connect_timeout)
+    end
+
     # Fill in the LISTEN_KEEPALIVES keywords the options do not already set.
     # Unchanged on libpq < 12 (see libpq_supports_socket_bounds?), and for a
     # connection that names a service (service=, or PGSERVICE): libpq applies
@@ -93,7 +101,7 @@ module Pgbus
       when Hash
         return opts if opts.key?(:service) || opts.key?("service")
 
-        missing = LISTEN_KEEPALIVES.reject { |key, _| opts.key?(key) || opts.key?(key.to_s) }
+        missing = listen_keywords.reject { |key, _| opts.key?(key) || opts.key?(key.to_s) }
         opts.merge(missing)
       when String then append_keepalives(opts)
       else opts
@@ -109,7 +117,7 @@ module Pgbus
       set = conninfo_keywords(conninfo)
       return conninfo if set.nil? || set.include?("service")
 
-      missing = LISTEN_KEEPALIVES.reject { |key, _| set.include?(key.to_s) }
+      missing = listen_keywords.reject { |key, _| set.include?(key.to_s) }
       return conninfo if missing.empty?
 
       if url?(conninfo)

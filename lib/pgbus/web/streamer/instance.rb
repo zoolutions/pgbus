@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "concurrent/atomic/atomic_boolean"
+
 module Pgbus
   module Web
     module Streamer
@@ -54,6 +56,10 @@ module Pgbus
           # own, started by the first signal: the listener and the hub client
           # only hand it NOTIFYs and gaps.
           @signal_delivery = SignalDelivery.new(logger: @logger)
+          # Set once #start has run its first-LISTEN gap: a hub failover
+          # during #start (an old master never acks "ssub") is covered by that
+          # gap, so it reports none of its own.
+          @signals_listening = Concurrent::AtomicBoolean.new(false)
           @listener = build_listener(pg_connection, connection_factory)
           # Off-thread durable fanout writer (issue #321). Built only when
           # streams_writer_threads > 0; nil means fanout writes stay inline on
@@ -107,6 +113,7 @@ module Pgbus
           channels = Pgbus::Signals.channels
           channels.each { |channel| @listener.ensure_signal_listening(channel) }
           @signal_delivery.gap if channels.any?
+          @signals_listening.make_true
           self
         end
 
@@ -231,7 +238,7 @@ module Pgbus
             local_listener_factory: lambda do
               build_local_listener(build_pg_connection, connection_factory).tap(&:start)
             end,
-            on_gap: -> { @signal_delivery.gap },
+            on_gap: -> { @signal_delivery.gap if @signals_listening.true? },
             logger: @logger
           )
         rescue HubClient::HubUnavailableError => e

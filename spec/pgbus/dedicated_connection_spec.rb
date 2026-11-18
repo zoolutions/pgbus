@@ -142,6 +142,18 @@ RSpec.describe Pgbus::DedicatedConnection do
           )
         end
 
+        it "leaves connect_timeout to PGCONNECT_TIMEOUT when the environment sets it" do
+          original = ENV.fetch("PGCONNECT_TIMEOUT", nil)
+          ENV["PGCONNECT_TIMEOUT"] = "3"
+
+          described_class.connect_with_keepalives({ host: "db.example" })
+
+          expect(captured[:kwargs]).not_to have_key(:connect_timeout)
+          expect(captured[:kwargs]).to include(keepalives: 1, tcp_user_timeout: 11_000)
+        ensure
+          original ? ENV["PGCONNECT_TIMEOUT"] = original : ENV.delete("PGCONNECT_TIMEOUT")
+        end
+
         it "keeps a keepalive keyword the Hash already sets" do
           described_class.connect_with_keepalives({ host: "db.example", keepalives_idle: 60 })
 

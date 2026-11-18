@@ -274,6 +274,24 @@ RSpec.describe Pgbus::Web::Streamer::FailoverListener do
       expect(gaps.size).to eq(0)
     end
 
+    it "never replaces a local listener another build already swapped in" do
+      gate, built, slow_listener = gated_factory!
+      failover.fail_over! # fails; the rebuild parks in the factory
+      wait_until { failover.threads.any? }
+      sleep 0.1
+      live = instance_double(Pgbus::Web::Streamer::Listener, stop: nil, threads: [], ensure_listening: :done)
+      failover.instance_variable_get(:@state_mutex).synchronize { failover.instance_variable_set(:@impl, live) }
+
+      gate << :go
+      wait_until { built.any? }
+      sleep 0.1
+
+      expect(slow_listener).to have_received(:stop)
+      expect(failover.ensure_listening("pgbus_stream_chat")).to eq(:done)
+      expect(live).to have_received(:ensure_listening).with("pgbus_stream_chat")
+      expect(gaps.size).to eq(0)
+    end
+
     it "lists the retry thread while it runs and stops it on #stop" do
       failures_left[0] = 1_000
 

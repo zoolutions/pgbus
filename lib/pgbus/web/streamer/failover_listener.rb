@@ -159,8 +159,9 @@ module Pgbus
         # Builds a started local listener, replays every subscription on it
         # and swaps it in. Returns true when it re-LISTENed a signal channel
         # (the caller reports the gap), false when it re-LISTENed none, and
-        # :stopped when #stop came first (the listener is stopped, not
-        # swapped). Raises when the build or the replay fails, after stopping
+        # :discarded when #stop came first or another build already swapped
+        # in (the listener is stopped, not swapped: only the hub client is
+        # ever replaced, so a live local listener is never orphaned). Raises when the build or the replay fails, after stopping
         # a listener that never swapped in (it would leak its thread and
         # LISTEN connection beside the dead client). Holds no lock across the
         # build or the replay.
@@ -170,14 +171,14 @@ module Pgbus
           queues.each { |q| local.ensure_listening(q) }
           signal_channels.each { |channel| local.ensure_signal_listening(channel) }
           swapped = @state_mutex.synchronize do
-            next false if @stopped
+            next false if @stopped || !@impl.equal?(@hub_client)
 
             @impl = local
             @failed_over = true
           end
           unless swapped
             local.stop
-            return :stopped
+            return :discarded
           end
           # Subscriptions recorded during the replay went to the old impl;
           # replay them on the new one.
@@ -213,7 +214,7 @@ module Pgbus
             # No @failover_mutex here: a connect in flight must not hold up
             # #stop, nor fail_over! (which finds @failed_over set and returns).
             result = swap_in_local!
-            break if result == :stopped
+            break if result == :discarded
 
             report_gap if result
             @logger.info { "[Pgbus::Streamer::FailoverListener] fallback listener built; streams and process signals restored" }
