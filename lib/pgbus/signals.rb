@@ -78,7 +78,9 @@ module Pgbus
         name = validate_name!(name)
         validate_payload!(payload)
         # A NOTIFY delivers an empty payload as none: the same in every mode.
-        payload = nil if payload == ""
+        # A frozen copy, so a caller mutating its String afterwards changes
+        # neither a deferred NOTIFY nor a test recording.
+        payload = payload.empty? ? nil : payload.dup.freeze if payload
         return testing_signal(name, payload) if testing?
 
         send_now = -> { Pgbus.client.notify_signal(name, payload) }
@@ -171,6 +173,12 @@ module Pgbus
           end
         end
         nil
+      end
+
+      # Streamer.reset! tore this process's streamer down: the next request
+      # starts a new one.
+      def streamer_reset!
+        @start_lock.synchronize { @started_pid.set(nil) }
       end
 
       # A fresh registry. Tests only.

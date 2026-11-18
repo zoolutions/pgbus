@@ -533,7 +533,8 @@ class Views::Docs::Pages::Streams < DocsUI::Page
         The signal is a `NOTIFY` on `<queue_prefix>_signal_<name>`, sent at
         `COMMIT` inside an open ActiveRecord transaction and never on rollback
         (a `transaction(joinable: false)` block sends at once), with an
-        optional String payload under NOTIFY's 7999-byte cap. Under
+        optional String payload under NOTIFY's 7999-byte cap (an empty String
+        arrives as `nil`). Under
         `streams_listen_scope :master` the master hub LISTENs and fans it out to
         every worker; under `:process` each worker's own listener does. With a
         subscriber registered, a process's first request starts the listener
@@ -543,8 +544,9 @@ class Views::Docs::Pages::Streams < DocsUI::Page
         Blocks run on a dedicated thread inside the Rails executor; one that
         raises is reported and the others run. Delivery is at most once: after
         each LISTEN gap (the first LISTEN of a process, a reconnect, a hub
-        failover) every `on_gap` runs once, so a subscriber can assume it
-        missed signals. Web processes only.
+        failover) every `on_gap` runs, so a subscriber can assume it missed
+        signals; gaps that arrive while one is still waiting to run share
+        that run. Web processes only.
       MD
       DocsUI::Callout(:note) do
         plain "In tests, Pgbus::Testing.fake! records signals in Pgbus::Testing.signals; Pgbus::Testing.inline! also runs the blocks synchronously, at the commit of a transaction block. Set a mode in your suite: with Pgbus::Testing.disabled! and an on_signal registered, the first request spec starts a real streamer."

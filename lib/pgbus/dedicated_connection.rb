@@ -83,18 +83,19 @@ module Pgbus
     # LISTEN_KEEPALIVES, without connect_timeout when PGCONNECT_TIMEOUT is set:
     # a conninfo keyword beats the environment, and the operator's value wins.
     def listen_keywords
-      return LISTEN_KEEPALIVES if ENV.fetch("PGCONNECT_TIMEOUT", nil).to_s.empty?
+      keywords = libpq_supports_socket_bounds? ? LISTEN_KEEPALIVES : LISTEN_KEEPALIVES.slice(:connect_timeout)
+      return keywords if ENV.fetch("PGCONNECT_TIMEOUT", nil).to_s.empty?
 
-      LISTEN_KEEPALIVES.except(:connect_timeout)
+      keywords.except(:connect_timeout)
     end
 
     # Fill in the LISTEN_KEEPALIVES keywords the options do not already set.
-    # Unchanged on libpq < 12 (see libpq_supports_socket_bounds?), and for a
+    # Only connect_timeout on libpq < 12 (see libpq_supports_socket_bounds?;
+    # connect_timeout is older than that), and nothing for a
     # connection that names a service (service=, or PGSERVICE): libpq applies
     # the service file only to keywords the conninfo leaves unset, so an added
     # keyword would override the service's own.
     def with_keepalives(opts)
-      return opts unless libpq_supports_socket_bounds?
       return opts if ENV.fetch("PGSERVICE", nil).to_s != ""
 
       case opts

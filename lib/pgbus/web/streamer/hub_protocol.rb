@@ -20,7 +20,9 @@ module Pgbus
       #                    {t:"wake", q:, p: <String|nil>} durable (p:nil) or ephemeral wake
       #                    {t:"status", healthy: <bool>}   listener health broadcast
       #                    {t:"sack", c:}                  ssub acknowledged (LISTEN active)
-      #                    {t:"signal", c:, p: <String|nil>} a process signal, never dropped
+      #                    {t:"signal", c:, p: <String|nil>} a process signal, never dropped by the
+      #                                                    backpressure policy (an evicted worker
+      #                                                    loses its socket, fails over, and reports a gap)
       #                    {t:"gap"}                       the hub's LISTEN reconnected: signals may be lost
       #
       # Reads are blocking (each side owns a dedicated reader thread); a short

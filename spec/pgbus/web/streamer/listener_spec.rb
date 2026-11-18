@@ -1178,6 +1178,21 @@ RSpec.describe Pgbus::Web::Streamer::Listener do
       fragile&.stop
     end
 
+    it "reports a gap when a signal LISTEN lands after its caller stopped waiting" do
+      fake_pg.gate_exec!(%(LISTEN "pgbus_signal_widgets"))
+      slow = build_listener(signal_sink: sink, ack_timeout_ms: 50)
+      slow.start
+
+      expect(slow.ensure_signal_listening("pgbus_signal_widgets")).to be_nil
+      fake_pg.release_exec!
+
+      wait_until { sink.gaps == 1 }
+      expect(sink.gaps).to eq(1)
+      expect(slow.listening_to).to include("pgbus_signal_widgets")
+    ensure
+      slow&.stop
+    end
+
     it "refuses a channel that is not a signal channel identifier" do
       expect { signalled.ensure_signal_listening(%(x"; DROP TABLE t; --)) }.to raise_error(ArgumentError)
       expect { signalled.remove_signal_listening("Upper") }.to raise_error(ArgumentError)

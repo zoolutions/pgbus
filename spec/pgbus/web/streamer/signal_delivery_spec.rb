@@ -56,17 +56,66 @@ RSpec.describe Pgbus::Web::Streamer::SignalDelivery do
   it "runs on_gap once for gaps that arrive before the first one ran, and again for a later gap" do
     gate = Queue.new
     Pgbus.on_signal(:widgets, on_gap: lambda {
+      seen << :running
       gate.pop
       seen << :gap
     }) { nil }
 
     delivery.gap # starts running, parks on the gate
-    sleep 0.05
+    expect(seen.pop(timeout: 2)).to eq(:running)
     delivery.gap # queued
     delivery.gap # coalesced with the queued one
     2.times { gate << :go }
 
-    expect([seen.pop(timeout: 2), seen.pop(timeout: 2)]).to eq(%i[gap gap])
+    expect([seen.pop(timeout: 2), seen.pop(timeout: 2), seen.pop(timeout: 2)]).to eq(%i[gap running gap])
+    expect(seen.pop(timeout: 0.2)).to be_nil
+  end
+
+  it "drops a signal past the backlog limit and reports a gap instead" do
+    stub_const("#{described_class}::BACKLOG_LIMIT", 2)
+    gate = Queue.new
+    Pgbus.on_signal(:widgets, on_gap: -> { seen << :gap }) do |payload|
+      gate.pop if payload == "slow"
+      seen << payload
+    end
+    delivery.signal(channel(:widgets), "slow")
+    sleep 0.05 # the thread took "slow" and parks on the gate
+
+    delivery.signal(channel(:widgets), "a")
+    delivery.signal(channel(:widgets), "b") # backlog: a + b
+    delivery.signal(channel(:widgets), "dropped")
+    gate << :go
+
+    expect(Array.new(4) { seen.pop(timeout: 2) }).to eq(["slow", "a", "b", :gap])
+  end
+
+  it "lets a later gap through when the first could not be queued" do
+    Pgbus.on_signal(:widgets, on_gap: -> { seen << :gap }) { nil }
+    allow(Thread).to receive(:new).and_raise(ThreadError, "can't create Thread")
+
+    expect { delivery.gap }.to raise_error(ThreadError)
+    allow(Thread).to receive(:new).and_call_original
+    delivery.gap
+
+    expect(seen.pop(timeout: 2)).to eq(:gap)
+  end
+
+  it "drops what is still queued at stop instead of running it" do
+    gate = Queue.new
+    Pgbus.on_signal(:widgets) do |payload|
+      gate.pop if payload == "slow"
+      seen << payload
+    end
+    delivery.signal(channel(:widgets), "slow")
+    sleep 0.05
+    delivery.signal(channel(:widgets), "queued")
+
+    stopper = Thread.new { delivery.stop } # rubocop:disable ThreadSafety/NewThread -- joined below
+    sleep 0.05
+    gate << :go
+    stopper.join(3)
+
+    expect(seen.pop(timeout: 1)).to eq("slow")
     expect(seen.pop(timeout: 0.2)).to be_nil
   end
 

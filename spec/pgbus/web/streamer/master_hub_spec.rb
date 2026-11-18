@@ -407,15 +407,37 @@ RSpec.describe Pgbus::Web::Streamer::MasterHub do
     end
 
     it "LISTENs before it acks a signal subscription" do
+      reached = Queue.new
+      gate = Queue.new
+      allow(fake_listener).to receive(:ensure_signal_listening) do |_channel|
+        reached << true
+        gate.pop(timeout: 5)
+        :done
+      end
       hub.start
       worker = connect_worker
+      send_frame(worker, { "t" => "ssub", "c" => "pgbus_test_signal_a" })
+      raise "ssub never reached ensure_signal_listening" unless reached.pop(timeout: 2)
 
-      frame = subscribe_signal(worker, "pgbus_test_signal_a")
+      expect(frame_types_within(worker, 0.3)).not_to include("sack")
+      gate << :go
 
-      expect(frame).to eq({ "t" => "sack", "c" => "pgbus_test_signal_a" })
-      expect(fake_listener).to have_received(:ensure_signal_listening).with("pgbus_test_signal_a")
+      expect(read_frame_of_type(worker, "sack")).to eq({ "t" => "sack", "c" => "pgbus_test_signal_a" })
     ensure
       worker&.close
+    end
+
+    it "queues the UNLISTEN under the table lock, so a new subscription's LISTEN always follows it" do
+      held = Queue.new
+      table_mutex = hub.instance_variable_get(:@table_mutex)
+      allow(fake_listener).to receive(:remove_signal_listening) { |_channel| held << table_mutex.owned? }
+      hub.start
+      worker = connect_worker
+      subscribe_signal(worker, "pgbus_test_signal_a")
+
+      worker.close
+
+      expect(held.pop(timeout: 2)).to be(true)
     end
 
     it "fans a signal out to every subscribed worker, payload intact, and not to others" do

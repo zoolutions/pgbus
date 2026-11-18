@@ -90,6 +90,21 @@ RSpec.describe Pgbus::Signals do
       expect(client).to have_received(:notify_signal).with("widgets_changed", nil)
     end
 
+    it "sends a frozen copy of the payload, so a later mutation changes nothing" do
+      payload = +"id=1"
+      deferred = nil
+      allow(Pgbus::OpenTransaction).to receive(:defer) do |&block|
+        deferred = block
+        :transaction
+      end
+
+      Pgbus.signal(:widgets_changed, payload)
+      payload << "-changed"
+      deferred.call
+
+      expect(client).to have_received(:notify_signal).with("widgets_changed", "id=1")
+    end
+
     it "sends an empty payload as none, as a NOTIFY delivers it" do
       Pgbus.signal(:widgets_changed, "")
 
@@ -187,6 +202,25 @@ RSpec.describe Pgbus::Signals do
     end
   end
 
+  describe ".streamer_reset!" do
+    it "lets the next request start a new streamer" do
+      described_class.instance_variable_get(:@started_pid).set(Process.pid)
+
+      described_class.streamer_reset!
+
+      expect(described_class.instance_variable_get(:@started_pid).get).to be_nil
+    end
+
+    it "runs when Streamer.reset! tears a streamer down" do
+      allow(described_class).to receive(:streamer_reset!)
+      Pgbus::Web::Streamer.current = instance_double(Pgbus::Web::Streamer::Instance, shutdown!: [])
+
+      Pgbus::Web::Streamer.reset!
+
+      expect(described_class).to have_received(:streamer_reset!)
+    end
+  end
+
   describe ".start_listening!" do
     let(:config) { Pgbus.configuration }
     let!(:saved) { [config.streams_enabled, config.streams_test_mode] }
@@ -239,7 +273,9 @@ RSpec.describe Pgbus::Signals do
       end
       gate << :go
 
-      expect(elapsed.max).to be < 0.1
+      # The starter is parked on the gate for good: a request that waited
+      # on it would not return at all.
+      expect(elapsed.max).to be < 1.0
       wait_for { described_class.instance_variable_get(:@started_pid).get == Process.pid }
       expect(Pgbus::Web::Streamer).to have_received(:current).once
     end

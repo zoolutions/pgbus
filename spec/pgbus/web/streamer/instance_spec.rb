@@ -118,7 +118,7 @@ RSpec.describe Pgbus::Web::Streamer::Instance do
 
     it "uses streams_connection_options so the listener can be pointed at a different port" do
       require "pg"
-      allow(PG).to receive(:library_version).and_return(110_000) # no keepalive keywords on old libpq
+      allow(PG).to receive(:library_version).and_return(110_000) # old libpq: connect_timeout only
       captured = nil
       allow(PG).to receive(:connect) do |**kwargs|
         captured = kwargs
@@ -128,7 +128,7 @@ RSpec.describe Pgbus::Web::Streamer::Instance do
       described_class.new(client: client, config: streamer_config, logger: Logger.new(IO::NULL))
 
       expect(captured).to eq(host: "pooler.example", port: 5432, dbname: "app", user: "app",
-                             fallback_application_name: "pgbus-listen")
+                             connect_timeout: 10, fallback_application_name: "pgbus-listen")
     end
 
     # A dead LISTEN socket errors within ~11 s even between keepalives
@@ -836,7 +836,7 @@ RSpec.describe Pgbus::Web::Streamer::Instance do
       expect(captured[:signal_sink]).to be(instance.signal_delivery)
     end
 
-    it "stops the signal delivery thread on shutdown! and reports it if it leaks" do
+    it "stops the signal delivery thread on shutdown!" do
       Pgbus.on_signal(:widgets) { nil }
       streamer.start
       streamer.signal_delivery.signal(Pgbus::Signals.channel_for(:widgets), nil)

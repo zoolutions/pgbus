@@ -58,6 +58,8 @@ module Pgbus
             instance = @current
             @current = nil
           end
+          # A later request must start a fresh streamer for process signals.
+          Pgbus::Signals.streamer_reset! if instance
           instance&.shutdown!
         end
       end

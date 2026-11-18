@@ -124,7 +124,7 @@ module Pgbus
   def self.publish_later: (String routing_key, untyped payload, delay: Numeric | _ToI, ?headers: Hash[String, untyped]?) -> untyped
   # Process signals (issue #674): on_signal registers a block run in every web
   # process when any process calls signal(name); on_gap runs after a LISTEN gap.
-  def self.on_signal: (Symbol | String name, ?on_gap: ^() -> void | nil) { (String? payload) -> void } -> Signals::Subscriber
+  def self.on_signal: (Symbol | String name, ?on_gap: (^() -> void)?) { (String? payload) -> void } -> Signals::Subscriber
   def self.signal: (Symbol | String name, ?String? payload) -> nil
   def self.reset!: () -> void
   def self.reset_client!: () -> void

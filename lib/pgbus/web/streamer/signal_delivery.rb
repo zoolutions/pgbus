@@ -15,6 +15,10 @@ module Pgbus
       # to a stopped process is.
       class SignalDelivery
         STOP_JOIN_SECONDS = 2
+        # Signals waiting behind a slow or stuck subscriber. Past this, a
+        # signal is dropped and reported as a gap instead (on_gap is the
+        # recovery for a missed signal), so the backlog never grows unbounded.
+        BACKLOG_LIMIT = 1_000
 
         def initialize(logger: Pgbus.logger, signals: Pgbus::Signals)
           @logger = logger
@@ -35,6 +39,7 @@ module Pgbus
         def signal(channel, payload)
           name = @signals.name_for(channel)
           return unless name
+          return overflow(name) if @queue.size >= BACKLOG_LIMIT
 
           enqueue([:signal, name, payload])
         end
@@ -49,7 +54,14 @@ module Pgbus
           end
           return if already_queued
 
-          enqueue([:gap])
+          begin
+            enqueue([:gap])
+          rescue StandardError
+            # Never queued (the delivery thread could not start): a later gap
+            # must not be coalesced into this one.
+            @lock.synchronize { @gap_pending = false }
+            raise
+          end
         end
 
         def threads
@@ -57,13 +69,16 @@ module Pgbus
         end
 
         def stop
+          # Under @lock with enqueue's push: nothing lands behind the sentinel,
+          # and what is still queued is dropped rather than run at shutdown.
           thread = @lock.synchronize do
             @stopped = true
+            @queue.clear
+            @queue << [:stop] if @thread
             @thread
           end
           return unless thread
 
-          @queue << [:stop]
           joined = thread.join(STOP_JOIN_SECONDS)
           if joined
             @lock.synchronize { @thread = nil }
@@ -84,8 +99,16 @@ module Pgbus
             # The delivery thread, owned by this object: started once, on the
             # first message, under @lock; #stop ends and joins it.
             @thread ||= Thread.new { run_loop } # rubocop:disable ThreadSafety/NewThread
+            @queue << message
           end
-          @queue << message
+        end
+
+        def overflow(name)
+          @logger.warn do
+            "[Pgbus::Streamer::SignalDelivery] #{BACKLOG_LIMIT} signals waiting on a slow subscriber; " \
+              "dropped #{name.inspect} and reporting a gap"
+          end
+          gap
         end
 
         def run_loop

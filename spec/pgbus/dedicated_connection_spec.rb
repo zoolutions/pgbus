@@ -129,6 +129,9 @@ RSpec.describe Pgbus::DedicatedConnection do
           captured[:kwargs] = kwargs
           fake_conn
         end
+        # Hermetic: an exported PGCONNECT_TIMEOUT drops connect_timeout.
+        allow(ENV).to receive(:fetch).and_call_original
+        allow(ENV).to receive(:fetch).with("PGCONNECT_TIMEOUT", nil).and_return(nil)
       end
 
       context "when libpq is 12 or newer" do
@@ -143,15 +146,12 @@ RSpec.describe Pgbus::DedicatedConnection do
         end
 
         it "leaves connect_timeout to PGCONNECT_TIMEOUT when the environment sets it" do
-          original = ENV.fetch("PGCONNECT_TIMEOUT", nil)
-          ENV["PGCONNECT_TIMEOUT"] = "3"
+          allow(ENV).to receive(:fetch).with("PGCONNECT_TIMEOUT", nil).and_return("3")
 
           described_class.connect_with_keepalives({ host: "db.example" })
 
           expect(captured[:kwargs]).not_to have_key(:connect_timeout)
           expect(captured[:kwargs]).to include(keepalives: 1, tcp_user_timeout: 11_000)
-        ensure
-          original ? ENV["PGCONNECT_TIMEOUT"] = original : ENV.delete("PGCONNECT_TIMEOUT")
         end
 
         it "keeps a keepalive keyword the Hash already sets" do
@@ -260,22 +260,25 @@ RSpec.describe Pgbus::DedicatedConnection do
       context "when libpq is older than 12" do
         before { allow(PG).to receive(:library_version).and_return(110_000) }
 
-        it "omits them from a Hash" do
+        # connect_timeout predates libpq 12; the keepalive keywords do not.
+        it "adds only connect_timeout to a Hash" do
           described_class.connect_with_keepalives({ host: "db.example" })
 
-          expect(captured[:kwargs]).to eq(host: "db.example", fallback_application_name: "pgbus-listen")
+          expect(captured[:kwargs]).to eq(host: "db.example", connect_timeout: 10,
+                                          fallback_application_name: "pgbus-listen")
         end
 
-        it "omits them from a URL" do
+        it "adds only connect_timeout to a URL" do
           described_class.connect_with_keepalives("postgres://u@h/db")
 
-          expect(captured[:args].first).to eq("postgres://u@h/db?fallback_application_name=pgbus-listen")
+          expect(captured[:args].first)
+            .to eq("postgres://u@h/db?connect_timeout=10&fallback_application_name=pgbus-listen")
         end
 
-        it "omits them from a key=value conninfo string" do
+        it "adds only connect_timeout to a key=value conninfo string" do
           described_class.connect_with_keepalives("host=db.example")
 
-          expect(captured[:args].first).to eq("host=db.example fallback_application_name=pgbus-listen")
+          expect(captured[:args].first).to eq("host=db.example connect_timeout=10 fallback_application_name=pgbus-listen")
         end
       end
     end

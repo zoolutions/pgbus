@@ -290,7 +290,12 @@ module Pgbus
           # would ever come. Pushed before that release, the command is acked.
           return nil if @stopped
 
-          ack.pop(timeout: ack_timeout)
+          result = ack.pop(timeout: ack_timeout)
+          # Abandoned: the thread sees the closed queue when it gets to the
+          # command, and a signal LISTEN that lands this late reports a gap
+          # (the caller already went on as if it were listening).
+          ack.close if result.nil?
+          result
         end
 
         def run_loop
@@ -412,7 +417,7 @@ module Pgbus
         # Acks held back by a LISTEN that raised: the reconnect that
         # re-LISTENed their channel is done (or the thread is exiting).
         def release_held_acks
-          @acks_after_reconnect.each { |ack| ack.push(:done) }
+          @acks_after_reconnect.each { |ack| release_ack(ack) }
           @acks_after_reconnect.clear
         end
 
@@ -422,7 +427,7 @@ module Pgbus
         def release_pending_acks
           loop do
             cmd = @commands.pop(true)
-            cmd[2]&.push(:done) if %i[listen listen_channel].include?(cmd[0])
+            release_ack(cmd[2]) if cmd[2] && %i[listen listen_channel].include?(cmd[0])
           end
         rescue ThreadError
           nil
@@ -446,6 +451,7 @@ module Pgbus
               ack = cmd[2]
               begin
                 do_listen_channel(cmd[0] == :listen ? channel_for(cmd[1]) : cmd[1])
+                report_late_signal_listen if cmd[0] == :listen_channel && ack&.closed?
               rescue StandardError
                 # The connection failed under the LISTEN. run_loop
                 # reconnects, and reconnect! re-LISTENs this channel with the
@@ -455,7 +461,7 @@ module Pgbus
                 ack = nil
                 raise
               ensure
-                ack&.push(:done)
+                release_ack(ack) if ack
               end
             when :unlisten then do_unlisten_channel(channel_for(cmd[1]))
             when :unlisten_channel then do_unlisten_channel(cmd[1])
@@ -532,6 +538,22 @@ module Pgbus
           end
 
           @dispatch_queue << WakeMessage.new(queue_name: queue_name, payload: payload)
+        end
+
+        # A waiter that timed out closed its queue (request_listen).
+        def release_ack(ack)
+          ack.push(:done) unless ack.closed?
+        rescue ClosedQueueError
+          nil
+        end
+
+        # ensure_signal_listening timed out before this LISTEN ran, so its
+        # caller went on as if the channel were live: whatever was sent in
+        # between is a gap.
+        def report_late_signal_listen
+          @signal_sink&.gap
+        rescue StandardError => e
+          @logger.error { "[Pgbus::Streamer::Listener] signal sink gap raised: #{e.class}: #{e.message}" }
         end
 
         # A NOTIFY outside the pgmq pattern: only signal channels are LISTENed

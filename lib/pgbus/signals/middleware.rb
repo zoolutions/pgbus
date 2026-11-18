@@ -2,12 +2,13 @@
 
 module Pgbus
   module Signals
-    # Starts this process's streamer before its first request runs, when a
-    # process signal is registered (issue #674), so a web process that never
-    # served an SSE connection still receives signals, and is LISTENing
-    # before the request reads anything a signal would invalidate. After the
-    # first request (or without a subscriber) it costs a lock and a pid
-    # comparison. Installed by Pgbus::Engine when streams are enabled.
+    # Starts this process's streamer, on a background thread, at its first
+    # request when a process signal is registered (issue #674), so a web
+    # process that never served an SSE connection still receives signals. The
+    # request does not wait for the LISTEN: what it (or anything before it)
+    # read before the LISTEN is covered by the on_gap the streamer runs once
+    # its first LISTEN is in place. After that it costs one atomic read.
+    # Installed by Pgbus::Engine when streams are enabled.
     class Middleware
       def initialize(app)
         @app = app

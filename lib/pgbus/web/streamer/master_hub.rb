@@ -479,17 +479,24 @@ module Pgbus
           released.each { |q| @listener.remove_listening(q) }
         end
 
+        # The UNLISTEN is queued under @table_mutex, with the last ref's
+        # removal: a new "ssub" for the channel registers under the same
+        # mutex and queues its LISTEN after it, so an acked subscriber can
+        # never be UNLISTENed by a cleanup that lost the race (the listener
+        # runs its commands in order). remove_signal_listening only queues.
         def release_signal_refs(id, channels)
-          released = @table_mutex.synchronize do
-            channels.select do |channel|
+          @table_mutex.synchronize do
+            channels.each do |channel|
               refs = @signal_refs[channel]
-              next false unless refs
+              next unless refs
 
               refs.delete(id)
-              @signal_refs.delete(channel) if refs.empty?
+              next unless refs.empty?
+
+              @signal_refs.delete(channel)
+              @listener.remove_signal_listening(channel)
             end
           end
-          released.each { |channel| @listener.remove_signal_listening(channel) }
         end
 
         def close_quietly(io)

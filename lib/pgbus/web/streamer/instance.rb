@@ -112,8 +112,10 @@ module Pgbus
           # gap like any other, so every on_gap runs once.
           channels = Pgbus::Signals.channels
           channels.each { |channel| @listener.ensure_signal_listening(channel) }
-          @signal_delivery.gap if channels.any?
+          # The gate first: a failover gap from here on is reported (and
+          # coalesces with this one while it is still queued).
           @signals_listening.make_true
+          @signal_delivery.gap if channels.any?
           self
         end
 
