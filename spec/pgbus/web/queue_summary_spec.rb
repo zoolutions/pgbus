@@ -128,6 +128,15 @@ RSpec.describe Pgbus::Web::QueueSummary do
 
       expect(keys(lines)).to include("empty")
     end
+
+    it "says the metrics are unavailable, not that nothing is waiting (issue #677)" do
+      unknown = detail.merge(queue_visible_length: nil, parked_length: nil, metrics_unavailable: true)
+      lines = present(detail: unknown)
+
+      expect(keys(lines)).to include("metrics_unavailable")
+      expect(keys(lines)).not_to include("empty")
+      expect(line(lines, "metrics_unavailable").tone).to eq(:yellow)
+    end
   end
 
   describe "priority line" do

@@ -112,7 +112,7 @@ module Pgbus
         end
 
         def priority_siblings(name, logical)
-          queues_with_metrics.map { |q| q[:name] }.select do |n|
+          queue_names.select do |n|
             n != name && n.match?(Pgbus::Web::QueueSummary::PRIORITY_LEVEL) && logical_queue_name(n) == logical
           end
         end

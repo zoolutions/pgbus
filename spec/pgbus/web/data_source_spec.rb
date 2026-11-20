@@ -19,6 +19,8 @@ RSpec.describe Pgbus::Web::DataSource do
 
   before do
     allow(Pgbus::BusRecord).to receive(:connection).and_return(mock_connection)
+    # Each queue-metrics chunk runs in its own savepoint (issue #677).
+    allow(mock_connection).to receive(:transaction).with(requires_new: true).and_yield
     # Several DataSource methods touch AR model classes (QueueState, RecurringTask)
     # as side paths — e.g. #summary_stats reads recurring_tasks_count and
     # fetch_queues_with_metrics reads paused_queue_names. These specs mock only
@@ -274,6 +276,33 @@ RSpec.describe Pgbus::Web::DataSource do
       expect(stats[:failed_count]).to eq(3)
       expect(stats).to have_key(:total_dead_tuples)
       expect(stats).to have_key(:oldest_transaction_age_sec)
+    end
+
+    context "when a queue's metrics are unavailable (issue #677)" do
+      let(:healthy) { { name: "pgbus_default", queue_length: 10, queue_visible_length: 8, total_messages: 100 } }
+      let(:unavailable) do
+        { name: "pgbus_default_dlq", queue_length: nil, queue_visible_length: nil, total_messages: nil,
+          metrics_unavailable: true }
+      end
+
+      it "counts the queue but adds none of its unknown depth" do
+        allow(data_source).to receive(:queues_with_metrics).and_return([healthy, unavailable])
+
+        stats = data_source.summary_stats
+
+        expect(stats).to include(total_queues: 2, total_depth: 10, total_visible: 8, dlq_depth: 0)
+      end
+
+      it "reports no throughput and keeps the last complete snapshot for the next read" do
+        allow(data_source).to receive(:queues_with_metrics).and_return([healthy])
+        data_source.summary_stats
+        allow(data_source).to receive(:queues_with_metrics).and_return([healthy, unavailable])
+
+        expect(data_source.summary_stats[:throughput_rate]).to eq(0.0)
+
+        allow(data_source).to receive(:queues_with_metrics).and_return([healthy.merge(total_messages: 160)])
+        expect(data_source.summary_stats[:throughput_rate]).to be_positive
+      end
     end
   end
 

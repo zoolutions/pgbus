@@ -8,12 +8,17 @@ RSpec.describe "Pgbus::Integrations::Appsignal::Probe" do
     # rubocop:disable-next ThreadSafety/ClassAndModuleAttributes
     Class.new do
       class << self
-        attr_accessor :gauges
+        attr_accessor :gauges, :counters
       end
       self.gauges = []
+      self.counters = []
 
       def self.set_gauge(name, value, tags = {})
         gauges << [name, value, tags]
+      end
+
+      def self.increment_counter(name, value, tags = {})
+        counters << [name, value, tags]
       end
     end
   end
@@ -105,6 +110,30 @@ RSpec.describe "Pgbus::Integrations::Appsignal::Probe" do
 
     depth_gauge = appsignal_class.gauges.find { |g| g[0] == "pgbus_queue_depth" && g[2][:queue] == "pgbus_default" }
     expect(depth_gauge[2]).to eq(queue: "pgbus_default")
+  end
+
+  context "when a queue's metrics are unavailable (issue #677)" do
+    let(:flagged_data_source) do
+      Class.new do
+        def queues_with_metrics
+          [{ name: "pgbus_default", queue_length: 4, queue_visible_length: 4, oldest_msg_age_sec: 2,
+             oldest_claimable_age_sec: 2, paused: false },
+           { name: "pgbus_mailers", queue_length: nil, queue_visible_length: nil, oldest_msg_age_sec: nil,
+             oldest_claimable_age_sec: nil, paused: false, metrics_unavailable: true }]
+        end
+      end.new
+    end
+
+    before { Pgbus::Integrations::Appsignal::Probe::Runner.new(data_source: flagged_data_source).call }
+
+    it "records no gauge for the unmeasured queue" do
+      expect(appsignal_class.gauges.select { |g| g[2][:queue] == "pgbus_mailers" }).to eq([])
+      expect(appsignal_class.gauges).to include(["pgbus_queue_depth", 4, { queue: "pgbus_default" }])
+    end
+
+    it "counts it in queue_metrics_unavailable instead" do
+      expect(appsignal_class.counters).to eq([["pgbus_queue_metrics_unavailable", 1, { queue: "pgbus_mailers" }]])
+    end
   end
 
   it "records queue latency from the claimable age, not the raw message age" do

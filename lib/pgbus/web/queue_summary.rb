@@ -70,7 +70,11 @@ module Pgbus
         line("drained_by", :gray, capsules: capsules.join(", "), count: live)
       end
 
+      # A queue whose metrics could not be read (issue #677) has no backlog to
+      # describe: nil counts are unknown, not "Nothing waiting".
       def backlog_line(detail)
+        return line("metrics_unavailable", :yellow) if detail[:metrics_unavailable]
+
         visible = detail[:queue_visible_length].to_i
         parked = detail[:parked_length].to_i
         if visible.positive?

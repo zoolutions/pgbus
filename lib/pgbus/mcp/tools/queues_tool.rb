@@ -20,6 +20,9 @@ module Pgbus
           with a future visibility timeout. A queue whose oldest_msg_age_sec
           keeps growing while oldest_claimable_age_sec stays nil has no
           starving backlog — nothing is waiting for a worker.
+          A queue with metrics_unavailable: true could not be measured (its
+          metrics query failed or timed out): its counts and ages are null,
+          meaning unknown, not zero; pgbus_health reports it as DEGRADED.
         DESC
 
         input_schema(properties: {}, required: [])

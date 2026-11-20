@@ -973,6 +973,7 @@ pt:
             other: Esvaziada por uma cápsula de workers curinga (%{count} workers saudáveis)
           empty_html: Nada à espera
           handler_html: Fila de handler de eventos — esvaziada pelos consumidores (%{count} saudáveis)
+          metrics_unavailable_html: 'Métricas indisponíveis: a consulta de métricas falhou ou expirou'
           no_consumers_html:
             one: Fila de handler de eventos sem consumidor saudável — %{count} evento espera
             other: Fila de handler de eventos sem consumidor saudável — %{count} eventos esperam

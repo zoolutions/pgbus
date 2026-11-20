@@ -27,6 +27,9 @@ RSpec.describe Pgbus::Web::DataSource::DeadLetter do
       instance_double(ActiveRecord::Relation, pluck: [])
     )
     allow(Pgbus::RecurringTask).to receive(:count).and_return(0)
+    # The names follow whichever metrics a block stubs (issue #677: the DLQ
+    # selection reads queue_names, the counts read queues_with_metrics).
+    allow(data_source).to receive(:queue_names) { data_source.queues_with_metrics.map { |q| q[:name] } }
   end
 
   describe "#dlq_messages (SQL pagination pushdown)" do
@@ -237,6 +240,14 @@ RSpec.describe Pgbus::Web::DataSource::DeadLetter do
       expect(detail[:queue_name]).to eq("pgbus_orders_dlq")
     end
 
+    it "selects the DLQs from queue_names without reading queue metrics (issue #677)" do
+      allow(data_source).to receive(:queue_names).and_return(%w[pgbus_default pgbus_orders_dlq])
+      allow(mock_connection).to receive(:select_one).and_return({ "msg_id" => 5, "message" => "{}" })
+
+      expect(data_source.dlq_message_detail(5)[:queue_name]).to eq("pgbus_orders_dlq")
+      expect(data_source).not_to have_received(:queues_with_metrics)
+    end
+
     it "finds nothing for a queue_name that is not a known DLQ" do
       allow(mock_connection).to receive(:select_one)
 
@@ -253,6 +264,15 @@ RSpec.describe Pgbus::Web::DataSource::DeadLetter do
       )
 
       expect(data_source.dlq_counts_by_queue).to eq("pgbus_default_dlq" => 5, "pgbus_orders_dlq" => 2)
+    end
+
+    it "keeps a DLQ whose metrics are unavailable, counted as 0 (issue #677)" do
+      allow(data_source).to receive(:queues_with_metrics).and_return(
+        [{ name: "pgbus_default_dlq", queue_length: nil, metrics_unavailable: true },
+         { name: "pgbus_orders_dlq", queue_length: 2 }]
+      )
+
+      expect(data_source.dlq_counts_by_queue).to eq("pgbus_default_dlq" => 0, "pgbus_orders_dlq" => 2)
     end
   end
 

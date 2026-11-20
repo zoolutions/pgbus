@@ -973,6 +973,7 @@ da:
             other: Tømmes af en wildcard-worker-kapsel (%{count} sunde workers)
           empty_html: Intet venter
           handler_html: Event handler-kø — tømmes af consumers (%{count} sunde)
+          metrics_unavailable_html: 'Metrikker utilgængelige: metrikforespørgslen fejlede eller fik timeout'
           no_consumers_html:
             one: Event handler-kø uden sund consumer — %{count} event venter
             other: Event handler-kø uden sund consumer — %{count} events venter

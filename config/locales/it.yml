@@ -973,6 +973,7 @@ it:
             other: Svuotata da una capsula di worker jolly (%{count} worker sani)
           empty_html: Niente in attesa
           handler_html: Coda del gestore di eventi — svuotata dai consumer (%{count} sani)
+          metrics_unavailable_html: 'Metriche non disponibili: la query delle metriche non è riuscita o è scaduta'
           no_consumers_html:
             one: Coda del gestore di eventi senza consumer sano — %{count} evento in attesa
             other: Coda del gestore di eventi senza consumer sano — %{count} eventi in attesa

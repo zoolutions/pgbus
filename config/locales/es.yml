@@ -973,6 +973,7 @@ es:
             other: La vacía una cápsula de workers comodín (%{count} workers sanos)
           empty_html: Nada en espera
           handler_html: Cola de manejador de eventos — la vacían los consumidores (%{count} sanos)
+          metrics_unavailable_html: 'Métricas no disponibles: la consulta de métricas falló o agotó el tiempo de espera'
           no_consumers_html:
             one: Cola de manejador de eventos sin consumidor sano — %{count} evento espera
             other: Cola de manejador de eventos sin consumidor sano — %{count} eventos esperan

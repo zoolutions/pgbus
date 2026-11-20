@@ -973,6 +973,7 @@ fi:
             other: Tyhjentää jokerimerkki-worker-kapseli (%{count} tervettä workeria)
           empty_html: Mitään ei odota
           handler_html: Tapahtumankäsittelijän jono — consumerit tyhjentävät (%{count} tervettä)
+          metrics_unavailable_html: 'Mittarit eivät ole saatavilla: mittarikysely epäonnistui tai aikakatkaistiin'
           no_consumers_html:
             one: Tapahtumankäsittelijän jono ilman tervettä consumeria — %{count} tapahtuma odottaa
             other: Tapahtumankäsittelijän jono ilman tervettä consumeria — %{count} tapahtumaa odottaa

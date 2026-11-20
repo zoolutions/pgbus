@@ -28,6 +28,12 @@ module Pgbus
       # sweep picks up whatever is left on its next pass.
       PROMOTE_CAP = 100
 
+      # The metrics of a queue whose chunk could not be read (issue #677):
+      # unknown, so nil rather than zero, next to metrics_unavailable: true.
+      UNAVAILABLE_METRICS = %i[queue_length queue_visible_length parked_length oldest_msg_age_sec
+                               oldest_claimable_age_sec newest_msg_age_sec total_messages max_read_ct
+                               visible_unread_length oldest_unread_claimable_age_sec].to_h { |k| [k, nil] }.freeze
+
       def initialize(client: Pgbus.client)
         @client = client
         @last_throughput_snapshot = nil
@@ -37,10 +43,12 @@ module Pgbus
       # Dashboard summary
       def summary_stats
         queues = queues_with_metrics
-        total_depth = queues.sum { |q| q[:queue_length] }
-        total_visible = queues.sum { |q| q[:queue_visible_length] }
+        # A queue with metrics_unavailable (issue #677) has nil counts: it adds
+        # nothing it cannot vouch for.
+        total_depth = queues.sum { |q| q[:queue_length].to_i }
+        total_visible = queues.sum { |q| q[:queue_visible_length].to_i }
         dlq_suffix = Pgbus::DEAD_LETTER_SUFFIX
-        dlq_depth = queues.select { |q| q[:name].end_with?(dlq_suffix) }.sum { |q| q[:queue_length] }
+        dlq_depth = queues.select { |q| q[:name].end_with?(dlq_suffix) }.sum { |q| q[:queue_length].to_i }
 
         throughput = compute_throughput(queues)
 
@@ -67,12 +75,27 @@ module Pgbus
       # responses would freeze at the first read. Both call this per iteration
       # / per tool call.
       def reset_cache!
+        @queue_names = nil
         @queues_with_metrics = nil
+        @queue_metrics_errors = nil
         @concurrency_summary = nil
         @queue_health_stats = nil
         @process_rows = nil
         @stream_queue_names = nil
         self
+      end
+
+      # Every queue's physical name, from pgmq.meta alone: no queue table is
+      # read (issue #677). Callers that need only names (the job list scope,
+      # the DLQ selection, priority siblings) use this instead of paying for
+      # queues_with_metrics. Memoized like it, cleared by reset_cache!, and
+      # shared with it, so a page that wants both reads pgmq.meta once. A
+      # failed read is logged and answers [] without memoizing.
+      def queue_names
+        @queue_names ||= read_queue_names
+      rescue StandardError => e
+        Pgbus.logger.error { "[Pgbus::Web] Error reading queue names: #{e.class}: #{e.message}" }
+        []
       end
 
       # Queues — query via ActiveRecord for reliability in web processes
@@ -84,23 +107,45 @@ module Pgbus
       # message rows and the total count); without the memo each call re-runs
       # the meta query + batched metrics. Mutations redirect to a fresh request
       # with a new instance, so a per-request memo never serves stale data.
+      #
+      # A queue whose metrics could not be read (its chunk failed or hit
+      # statement_timeout, issue #677) stays in the list with
+      # metrics_unavailable: true and nil counts; queue_metrics_errors says why.
       def queues_with_metrics
         @queues_with_metrics ||= fetch_queues_with_metrics
       end
 
+      # Why the last queues_with_metrics read is incomplete: [] when every
+      # queue reported, else one { queues: [names], error: "Class: message" }
+      # per failed statement (queues: [] when pgmq.meta itself could not be
+      # read). Runs that read when none has run yet. An empty
+      # queues_with_metrics with no errors is an empty system; with errors it
+      # is an unknown one.
+      def queue_metrics_errors
+        queues_with_metrics
+        @queue_metrics_errors || []
+      end
+
       def fetch_queues_with_metrics
-        queue_names = connection.select_values("SELECT queue_name FROM pgmq.meta ORDER BY queue_name")
-        return [] if queue_names.empty?
+        @queue_metrics_errors = []
+        names = @queue_names ||= read_queue_names
+        return [] if names.empty?
 
         paused_queues = paused_queue_names.to_set
-        batched_queue_metrics(queue_names).map do |q|
+        batched_queue_metrics(names).map do |q|
           q.merge(paused: paused_queues.include?(logical_queue_name(q[:name])))
         end
       rescue StandardError => e
         Pgbus.logger.error { "[Pgbus::Web] Error fetching queue metrics: #{e.class}: #{e.message}" }
+        @queue_metrics_errors << { queues: [], error: "#{e.class}: #{e.message}" }
         []
       end
       private :fetch_queues_with_metrics
+
+      def read_queue_names
+        connection.select_values("SELECT queue_name FROM pgmq.meta ORDER BY queue_name")
+      end
+      private :read_queue_names
 
       # Physical queue names known to back streams: the pgbus_stream_queues
       # registry plus any dormant pre-registry queues discovered by the
@@ -248,20 +293,20 @@ module Pgbus
       def discard_all_enqueued
         dlq_suffix = Pgbus::DEAD_LETTER_SUFFIX
         handlers = handler_queue_physical_names
-        queues = queues_with_metrics.reject { |q| q[:name].end_with?(dlq_suffix) || handlers.include?(q[:name]) }
+        names = queue_names.reject { |n| n.end_with?(dlq_suffix) || handlers.include?(n) }
         total = 0
 
-        queues.each do |q|
-          messages = query_queue_messages_raw(q[:name], 10_000, 0)
+        names.each do |name|
+          messages = query_queue_messages_raw(name, 10_000, 0)
           next if messages.empty?
 
           release_locks_for_messages(messages)
 
           ids = messages.map { |m| m[:msg_id].to_i }
-          @client.archive_batch(q[:name], ids, prefixed: false)
+          @client.archive_batch(name, ids, prefixed: false)
           total += ids.size
         rescue StandardError => e
-          Pgbus.logger.debug { "[Pgbus::Web] Error discarding enqueued messages from #{q[:name]}: #{e.message}" }
+          Pgbus.logger.debug { "[Pgbus::Web] Error discarding enqueued messages from #{name}: #{e.message}" }
         end
 
         total
@@ -1280,8 +1325,7 @@ module Pgbus
 
       def all_queue_messages(limit, offset)
         dlq_suffix = Pgbus::DEAD_LETTER_SUFFIX
-        queues = queues_with_metrics.reject { |q| q[:name].end_with?(dlq_suffix) }
-        paginated_queue_messages(queues.map { |q| q[:name] }, limit, offset)
+        paginated_queue_messages(queue_names.reject { |n| n.end_with?(dlq_suffix) }, limit, offset)
       end
 
       # Returns messages from multiple PGMQ queues in a single paginated
@@ -1324,53 +1368,87 @@ module Pgbus
         end.join("\nUNION ALL\n")
       end
 
+      # Every queue's metrics, web_queue_metrics_chunk_size queues per
+      # statement (issue #677). Each queue's table is scanned once, by one
+      # aggregate, so a statement's cost grows with its chunk, not with the
+      # whole fleet. Each chunk runs in its own savepoint: a chunk that fails
+      # (statement_timeout included) rolls back to it, so a caller's open
+      # transaction stays usable, and only that chunk's queues come back as
+      # unavailable. Rows follow +queue_names+ order.
       def batched_queue_metrics(queue_names)
-        return [] if queue_names.empty?
+        chunk_size = Pgbus.configuration.web_queue_metrics_chunk_size
+        queue_names.each_slice(chunk_size).flat_map { |chunk| chunk_queue_metrics(chunk) }
+      end
 
-        unions = queue_names.filter_map do |name|
-          sanitized = sanitize_name(name)
-          qtable = "q_#{sanitized}"
-          seq_name = "#{qtable}_msg_id_seq"
-          <<~SQL
-            SELECT
-              #{connection.quote(name)} AS queue_name,
-              (SELECT count(*) FROM pgmq.#{qtable}) AS queue_length,
-              (SELECT count(*) FROM pgmq.#{qtable} WHERE vt <= NOW()) AS queue_visible_length,
-              (SELECT EXTRACT(epoch FROM (NOW() - max(enqueued_at)))::int FROM pgmq.#{qtable}) AS newest_msg_age_sec,
-              (SELECT EXTRACT(epoch FROM (NOW() - min(enqueued_at)))::int FROM pgmq.#{qtable}) AS oldest_msg_age_sec,
-              (SELECT CASE WHEN is_called THEN last_value ELSE 0 END FROM pgmq.#{seq_name}) AS total_messages,
-              (SELECT max(read_ct) FROM pgmq.#{qtable}) AS max_read_ct,
-              (SELECT count(*) FROM pgmq.#{qtable} WHERE vt <= NOW() AND read_ct = 0) AS visible_unread_length,
-              (SELECT EXTRACT(epoch FROM (NOW() - min(vt)))::int FROM pgmq.#{qtable} WHERE vt <= NOW()) AS oldest_claimable_age_sec,
-              (SELECT EXTRACT(epoch FROM (NOW() - min(vt)))::int FROM pgmq.#{qtable} WHERE vt <= NOW() AND read_ct = 0) AS oldest_unread_claimable_age_sec
-          SQL
+      def chunk_queue_metrics(chunk)
+        selects = chunk.filter_map do |name|
+          [name, queue_metrics_select(name)]
         rescue StandardError => e
           Pgbus.logger.debug { "[Pgbus::Web] Skipping queue metrics for #{name}: #{e.message}" }
           nil
         end
+        return [] if selects.empty?
 
-        return [] if unions.empty?
-
-        sql = unions.join(" UNION ALL ")
-        rows = connection.select_all(sql, "Pgbus Batched Queue Metrics")
-        rows.to_a.map do |row|
-          {
-            name: row["queue_name"],
-            queue_length: row["queue_length"].to_i,
-            queue_visible_length: row["queue_visible_length"].to_i,
-            parked_length: row["queue_length"].to_i - row["queue_visible_length"].to_i,
-            oldest_msg_age_sec: row["oldest_msg_age_sec"]&.to_i,
-            oldest_claimable_age_sec: row["oldest_claimable_age_sec"]&.to_i,
-            newest_msg_age_sec: row["newest_msg_age_sec"]&.to_i,
-            total_messages: row["total_messages"].to_i,
-            max_read_ct: row["max_read_ct"]&.to_i,
-            visible_unread_length: row["visible_unread_length"].to_i,
-            oldest_unread_claimable_age_sec: row["oldest_unread_claimable_age_sec"]&.to_i
-          }
+        names = selects.map(&:first)
+        sql = selects.map { |(_, select)| "(#{select})" }.join("\nUNION ALL\n")
+        rows = connection.transaction(requires_new: true) do
+          connection.select_all(sql, "Pgbus Batched Queue Metrics").to_a
         end
+        by_name = rows.to_h { |row| [row["queue_name"], row] }
+        names.filter_map { |name| by_name[name] && queue_metrics_hash(name, by_name[name]) }
       rescue StandardError => e
-        Pgbus.logger.error { "[Pgbus::Web] Error fetching batched queue metrics: #{e.class}: #{e.message}" }
-        []
+        unavailable_queue_metrics(names || [], e)
+      end
+
+      # One row for one queue: a single aggregate over its table, plus the
+      # msg_id sequence for the lifetime total. The same expressions as
+      # queue_metrics_via_sql, so a queue reads the same on both paths.
+      def queue_metrics_select(name)
+        qtable = "q_#{sanitize_name(name)}"
+        <<~SQL.strip
+          SELECT #{connection.quote(name)} AS queue_name,
+                 m.queue_length, m.queue_visible_length, m.newest_msg_age_sec, m.oldest_msg_age_sec,
+                 (SELECT CASE WHEN is_called THEN last_value ELSE 0 END FROM pgmq.#{qtable}_msg_id_seq) AS total_messages,
+                 m.max_read_ct, m.visible_unread_length, m.oldest_claimable_age_sec, m.oldest_unread_claimable_age_sec
+          FROM (
+            SELECT count(*) AS queue_length,
+                   count(*) FILTER (WHERE vt <= NOW()) AS queue_visible_length,
+                   EXTRACT(epoch FROM (NOW() - max(enqueued_at)))::int AS newest_msg_age_sec,
+                   EXTRACT(epoch FROM (NOW() - min(enqueued_at)))::int AS oldest_msg_age_sec,
+                   max(read_ct) AS max_read_ct,
+                   count(*) FILTER (WHERE vt <= NOW() AND read_ct = 0) AS visible_unread_length,
+                   EXTRACT(epoch FROM (NOW() - min(vt) FILTER (WHERE vt <= NOW())))::int AS oldest_claimable_age_sec,
+                   EXTRACT(epoch FROM (NOW() - min(vt) FILTER (WHERE vt <= NOW() AND read_ct = 0)))::int AS oldest_unread_claimable_age_sec
+            FROM pgmq.#{qtable}
+          ) AS m
+        SQL
+      end
+
+      def queue_metrics_hash(name, row)
+        {
+          name: name,
+          queue_length: row["queue_length"].to_i,
+          queue_visible_length: row["queue_visible_length"].to_i,
+          parked_length: row["queue_length"].to_i - row["queue_visible_length"].to_i,
+          oldest_msg_age_sec: row["oldest_msg_age_sec"]&.to_i,
+          oldest_claimable_age_sec: row["oldest_claimable_age_sec"]&.to_i,
+          newest_msg_age_sec: row["newest_msg_age_sec"]&.to_i,
+          total_messages: row["total_messages"].to_i,
+          max_read_ct: row["max_read_ct"]&.to_i,
+          visible_unread_length: row["visible_unread_length"].to_i,
+          oldest_unread_claimable_age_sec: row["oldest_unread_claimable_age_sec"]&.to_i
+        }
+      end
+
+      # A failed chunk keeps its queues, flagged, with every metric nil: a
+      # count we could not read is unknown, not zero.
+      def unavailable_queue_metrics(names, error)
+        Pgbus.logger.error do
+          "[Pgbus::Web] Queue metrics unavailable for #{names.size} queue(s) (#{names.first(3).join(", ")}" \
+            "#{", …" if names.size > 3}): #{error.class}: #{error.message}"
+        end
+        (@queue_metrics_errors ||= []) << { queues: names, error: "#{error.class}: #{error.message}" }
+        names.map { |name| { name: name, **UNAVAILABLE_METRICS, metrics_unavailable: true } }
       end
 
       def queue_metrics_via_sql(queue_name)
@@ -1509,9 +1587,14 @@ module Pgbus
         QueueNameValidator.sanitize!(name)
       end
 
+      # A read with a queue's metrics unavailable (issue #677) leaves the
+      # snapshot alone: its lifetime total is unknown, and counting it as zero
+      # would read as a drop now and a spike once it reports again.
       def compute_throughput(queues)
+        return 0.0 if queues.any? { |q| q[:metrics_unavailable] }
+
         current_totals = queues.sum { |q| q[:total_messages] }
-        now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        now = ::Process.clock_gettime(::Process::CLOCK_MONOTONIC)
 
         if @last_throughput_snapshot && @last_throughput_at
           elapsed = now - @last_throughput_at

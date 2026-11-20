@@ -31,7 +31,7 @@ RSpec.describe "Dashboard words", type: :system do
         end
 
         it "puts words under every card", :aggregate_failures do
-          expect(card("/pgbus/queues")).to have_text("8").and have_text("2 paused · 2 dead-letter")
+          expect(card("/pgbus/queues")).to have_text("9").and have_text("2 paused · 2 dead-letter")
           expect(card("/pgbus/queues")).to have_text("1 holds jobs that nothing drains")
           expect(card("/pgbus/jobs?state=ready")).to have_text("141")
           expect(card("/pgbus/jobs?state=ready"))
@@ -108,6 +108,41 @@ RSpec.describe "Dashboard words", type: :system do
     it "shows the Queue Health table's empty state" do
       within("turbo-frame#dashboard-health") do
         expect(page).to have_css("td[colspan='6']", text: "No queue tables to measure yet")
+      end
+    end
+  end
+
+  # Issue #677: a queue whose metrics could not be read says so in its row and
+  # turns the verdict DEGRADED, instead of reading as an empty, healthy queue.
+  context "with a queue whose metrics are unavailable" do
+    before do
+      @stub_data_source.queues = [
+        { name: "pgbus_default", queue_length: 3, queue_visible_length: 0, parked_length: 3,
+          oldest_msg_age_sec: 60, oldest_claimable_age_sec: nil, total_messages: 40, paused: false },
+        { name: "pgbus_reports", queue_length: nil, queue_visible_length: nil, parked_length: nil,
+          oldest_msg_age_sec: nil, oldest_claimable_age_sec: nil, total_messages: nil, paused: false,
+          metrics_unavailable: true }
+      ]
+      @stub_data_source.queue_metrics_errors = [
+        { queues: %w[pgbus_reports], error: "ActiveRecord::QueryCanceled: canceling statement due to statement timeout" }
+      ]
+    end
+
+    %i[light dark].each do |mode|
+      it "says so in the queue's row and in the verdict (#{mode})", :aggregate_failures do
+        mode == :dark ? visit_dark("/pgbus") : visit_light("/pgbus")
+
+        within("turbo-frame#dashboard-queues") do
+          row = find("tr", text: "pgbus_reports")
+          expect(row).to have_text("Metrics unavailable: the metrics query failed or timed out", count: 2)
+          expect(row).to have_no_css("td", exact_text: "0")
+        end
+        within("[data-testid=health-verdict]") do
+          expect(page).to have_text("Health: DEGRADED")
+          expect(page).to have_css("li", text: "queue metrics unavailable for 1 queue(s) " \
+                                               "(ActiveRecord::QueryCanceled: canceling statement due to " \
+                                               "statement timeout): pgbus_reports")
+        end
       end
     end
   end

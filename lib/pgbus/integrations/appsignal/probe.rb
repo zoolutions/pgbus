@@ -94,6 +94,10 @@ module Pgbus
           def track_queues
             data_source.queues_with_metrics.each do |q|
               tags = { queue: q[:name] }
+              # Issue #677: an unmeasured queue reports no gauge (a missing
+              # point, not a false 0) and counts as unavailable instead.
+              next counter("queue_metrics_unavailable", 1, tags) if q[:metrics_unavailable]
+
               gauge "queue_depth", q[:queue_length], tags
               gauge "queue_visible_depth", q[:queue_visible_length], tags
               gauge "queue_paused", q[:paused] ? 1 : 0, tags
@@ -173,6 +177,10 @@ module Pgbus
             return if value.nil?
 
             ::Appsignal.set_gauge("#{METRIC_PREFIX}#{key}", value, tags)
+          end
+
+          def counter(key, value, tags = {})
+            ::Appsignal.increment_counter("#{METRIC_PREFIX}#{key}", value, tags)
           end
 
           def log_failure(label, error)

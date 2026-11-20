@@ -136,7 +136,7 @@ module Pgbus
         # exist. Excluded queues stay known, so their failed rows never show up
         # as orphans of an unknown queue.
         def job_list_scope(queue_name, queues: nil, exclude: nil)
-          names = queues_with_metrics.map { |q| q[:name] }.reject { |n| n.end_with?(Pgbus::DEAD_LETTER_SUFFIX) }
+          names = queue_names.reject { |n| n.end_with?(Pgbus::DEAD_LETTER_SUFFIX) }
           names &= queues if queues
           return nil if queues && names.empty?
 

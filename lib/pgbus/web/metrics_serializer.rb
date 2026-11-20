@@ -36,8 +36,13 @@ module Pgbus
       private
 
       def append_queue_metrics(lines)
-        queues = @data_source.queues_with_metrics
-        return if queues.empty?
+        all = @data_source.queues_with_metrics
+        return if all.empty?
+
+        # A queue whose metrics could not be read (issue #677) has nil counts:
+        # it gets no count sample (format_value would write a false 0), only
+        # its paused state and pgbus_queue_metrics_unavailable.
+        queues = all.reject { |q| q[:metrics_unavailable] }
 
         gauge(lines, "pgbus_queue_depth", "Number of messages in the queue (including invisible)") do
           queues.map { |q| [q[:queue_length], { queue: q[:name] }] }
@@ -69,7 +74,12 @@ module Pgbus
         end
 
         gauge(lines, "pgbus_queue_paused", "Whether the queue is paused (1) or active (0)") do
-          queues.map { |q| [q[:paused] ? 1 : 0, { queue: q[:name] }] }
+          all.map { |q| [q[:paused] ? 1 : 0, { queue: q[:name] }] }
+        end
+
+        gauge(lines, "pgbus_queue_metrics_unavailable",
+              "Whether the queue's metrics could not be read this scrape (1) or were read (0)") do
+          all.map { |q| [q[:metrics_unavailable] ? 1 : 0, { queue: q[:name] }] }
         end
       rescue StandardError => e
         Pgbus.logger.debug { "[Pgbus::Metrics] Error serializing queue metrics: #{e.message}" }

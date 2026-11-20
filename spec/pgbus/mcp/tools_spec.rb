@@ -24,6 +24,19 @@ RSpec.describe "Pgbus MCP tools" do # rubocop:disable RSpec/DescribeClass
       expect(result["queues"].first["name"]).to eq("pgbus_default")
     end
 
+    it "keeps a queue whose metrics are unavailable, flagged (issue #677)" do
+      allow(data_source).to receive(:queues_with_metrics)
+        .and_return([{ name: "pgbus_default", queue_length: nil, metrics_unavailable: true }])
+
+      result = body(described_class.call(server_context: context))
+      expect(result["queues"].first).to include("name" => "pgbus_default", "metrics_unavailable" => true,
+                                                "queue_length" => nil)
+    end
+
+    it "explains the flag in its description" do
+      expect(described_class.description).to include("metrics_unavailable")
+    end
+
     it "is read-only" do
       expect(described_class.annotations_value.to_h).to include(readOnlyHint: true)
     end
@@ -209,7 +222,7 @@ RSpec.describe "Pgbus MCP tools" do # rubocop:disable RSpec/DescribeClass
 
     it "summarizes the detail, through the named DLQ and through the cross-DLQ scan" do
       allow(data_source).to receive(:job_detail).with("pgbus_default_dlq", 5).and_return(rows.first)
-      allow(data_source).to receive_messages(queues_with_metrics: [], dlq_message_detail: rows.first)
+      allow(data_source).to receive_messages(queue_names: [], dlq_message_detail: rows.first)
 
       named = body(Pgbus::MCP::Tools::DlqDetailTool.call(msg_id: 5, queue: "pgbus_default_dlq", server_context: context))
       scanned = body(Pgbus::MCP::Tools::DlqDetailTool.call(msg_id: 5, server_context: context))
@@ -223,7 +236,7 @@ RSpec.describe "Pgbus MCP tools" do # rubocop:disable RSpec/DescribeClass
 
   describe Pgbus::MCP::Tools::DlqDetailTool do
     it "returns a redacted detail when only one DLQ is present" do
-      allow(data_source).to receive_messages(queues_with_metrics: [])
+      allow(data_source).to receive_messages(queue_names: [])
       allow(data_source).to receive(:dlq_message_detail).with(5)
                                                         .and_return({ msg_id: 5, message: "secret" })
 
@@ -232,7 +245,7 @@ RSpec.describe "Pgbus MCP tools" do # rubocop:disable RSpec/DescribeClass
     end
 
     it "errors when not found" do
-      allow(data_source).to receive_messages(queues_with_metrics: [], dlq_message_detail: nil)
+      allow(data_source).to receive_messages(queue_names: [], dlq_message_detail: nil)
 
       expect(described_class.call(msg_id: 5, server_context: context).error?).to be(true)
     end
@@ -248,16 +261,35 @@ RSpec.describe "Pgbus MCP tools" do # rubocop:disable RSpec/DescribeClass
     end
 
     it "refuses to guess when msg_id is ambiguous across multiple DLQs" do
-      allow(data_source).to receive_messages(queues_with_metrics: [
-                                               { name: "pgbus_default_dlq" },
-                                               { name: "pgbus_orders_dlq" }
-                                             ])
+      allow(data_source).to receive_messages(queue_names: %w[pgbus_default pgbus_default_dlq pgbus_orders_dlq])
       allow(data_source).to receive(:job_detail).and_return({ msg_id: 5, message: "x" })
 
       response = described_class.call(msg_id: 5, server_context: context)
 
       expect(response.error?).to be(true)
       expect(response.content.first[:text]).to include("ambiguous")
+      expect(data_source).not_to have_received(:job_detail).with("pgbus_default", 5)
+    end
+
+    it "falls back to queues_with_metrics names on a data source without queue_names" do
+      custom = double("custom data source", queues_with_metrics: [{ name: "pgbus_orders_dlq" }],
+                                            dlq_message_detail: { msg_id: 5, message: "x" })
+      allow(custom).to receive(:job_detail).and_return({ msg_id: 5, message: "x" })
+
+      response = described_class.call(msg_id: 5, server_context: { data_source: custom, allow_payloads: false })
+
+      expect(response.error?).to be(false)
+      expect(custom).to have_received(:job_detail).with("pgbus_orders_dlq", 5)
+    end
+
+    it "scans the DLQs by name only, without reading queue metrics (issue #677)" do
+      allow(data_source).to receive_messages(queue_names: %w[pgbus_default_dlq], queues_with_metrics: [],
+                                             dlq_message_detail: { msg_id: 5, message: "x" })
+      allow(data_source).to receive(:job_detail).and_return({ msg_id: 5, message: "x" })
+
+      described_class.call(msg_id: 5, server_context: context)
+
+      expect(data_source).not_to have_received(:queues_with_metrics)
     end
   end
 

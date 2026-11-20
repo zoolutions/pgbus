@@ -9,7 +9,7 @@ module Pgbus
         # The header path the error-class filter reads (DeadLetterHeader::KEY).
         ERROR_CLASS_SQL = "headers #>> '{#{Pgbus::DeadLetterHeader::KEY},error_class}'".freeze
 
-        # DLQ queue names from queues_with_metrics are already fully qualified
+        # DLQ queue names from queue_names are already fully qualified
         # (e.g., "pgbus_default_dlq"), so we use them directly without re-prefixing.
         # dlq: one DLQ by its full name (unknown names list nothing);
         # error_class: only messages whose dead-letter block names that class.
@@ -40,12 +40,13 @@ module Pgbus
           0
         end
 
-        # { "pgbus_default_dlq" => 12, ... } for the filter chips, from the
-        # cached metrics (no query of its own).
+        # { "pgbus_default_dlq" => 12, ... } for the filter chips: every DLQ
+        # from queue_names, its count from the cached metrics (no query of its
+        # own). A DLQ whose metrics are unavailable (issue #677) stays listed
+        # and counts 0.
         def dlq_counts_by_queue
-          queues_with_metrics
-            .select { |q| q[:name].end_with?(Pgbus::DEAD_LETTER_SUFFIX) }
-            .to_h { |q| [q[:name], q[:queue_length].to_i] }
+          lengths = queues_with_metrics.to_h { |q| [q[:name], q[:queue_length].to_i] }
+          dlq_names.to_h { |name| [name, lengths.fetch(name, 0)] }
         rescue StandardError => e
           Pgbus.logger.debug { "[Pgbus::Web] Error fetching DLQ counts: #{e.message}" }
           {}
@@ -140,10 +141,15 @@ module Pgbus
 
         private
 
-        # Only names that are real DLQs ever reach sanitize_name and SQL.
+        # Only names that are real DLQs ever reach sanitize_name and SQL. Names
+        # only: listing or opening a DLQ message runs no metrics statement.
         def dlq_queue_names(dlq)
-          names = dlq_counts_by_queue.keys
+          names = dlq_names
           dlq.nil? ? names : names & [dlq]
+        end
+
+        def dlq_names
+          queue_names.select { |name| name.end_with?(Pgbus::DEAD_LETTER_SUFFIX) }
         end
       end
     end

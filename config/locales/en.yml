@@ -973,6 +973,7 @@ en:
             other: Drained by a wildcard worker capsule (%{count} healthy workers)
           empty_html: Nothing waiting
           handler_html: Event handler queue — drained by consumers (%{count} healthy)
+          metrics_unavailable_html: 'Metrics unavailable: the metrics query failed or timed out'
           no_consumers_html:
             one: Event handler queue with no healthy consumer — %{count} event waits
             other: Event handler queue with no healthy consumer — %{count} events wait
