@@ -142,8 +142,15 @@ module Pgbus
       end
       private :fetch_queues_with_metrics
 
+      # A name sanitize_name rejects never reaches a caller: before #677 the
+      # metrics read dropped it, and every caller took its names from there.
       def read_queue_names
-        connection.select_values("SELECT queue_name FROM pgmq.meta ORDER BY queue_name")
+        connection.select_values("SELECT queue_name FROM pgmq.meta ORDER BY queue_name").select do |name|
+          sanitize_name(name)
+        rescue ArgumentError => e
+          Pgbus.logger.debug { "[Pgbus::Web] Skipping queue #{name.inspect}: #{e.message}" }
+          false
+        end
       end
       private :read_queue_names
 
@@ -1380,24 +1387,16 @@ module Pgbus
         queue_names.each_slice(chunk_size).flat_map { |chunk| chunk_queue_metrics(chunk) }
       end
 
+      # +chunk+ holds names read_queue_names already validated.
       def chunk_queue_metrics(chunk)
-        selects = chunk.filter_map do |name|
-          [name, queue_metrics_select(name)]
-        rescue StandardError => e
-          Pgbus.logger.debug { "[Pgbus::Web] Skipping queue metrics for #{name}: #{e.message}" }
-          nil
-        end
-        return [] if selects.empty?
-
-        names = selects.map(&:first)
-        sql = selects.map { |(_, select)| "(#{select})" }.join("\nUNION ALL\n")
+        sql = chunk.map { |name| "(#{queue_metrics_select(name)})" }.join("\nUNION ALL\n")
         rows = connection.transaction(requires_new: true) do
           connection.select_all(sql, "Pgbus Batched Queue Metrics").to_a
         end
         by_name = rows.to_h { |row| [row["queue_name"], row] }
-        names.filter_map { |name| by_name[name] && queue_metrics_hash(name, by_name[name]) }
+        chunk.filter_map { |name| by_name[name] && queue_metrics_hash(name, by_name[name]) }
       rescue StandardError => e
-        unavailable_queue_metrics(names || [], e)
+        unavailable_queue_metrics(chunk, e)
       end
 
       # One row for one queue: a single aggregate over its table, plus the

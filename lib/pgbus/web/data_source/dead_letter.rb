@@ -25,15 +25,19 @@ module Pgbus
           []
         end
 
+        # From the cached metrics, unless a filter needs the rows or a DLQ's
+        # metrics are unavailable (issue #677): then a COUNT over the tables,
+        # so the pager never reads a DLQ that lists rows as empty.
         def dlq_total_count(dlq: nil, error_class: nil)
           names = dlq_queue_names(dlq)
           return 0 if names.empty?
-          return dlq_counts_by_queue.values_at(*names).sum unless error_class
+          return dlq_counts_by_queue.values_at(*names).sum unless error_class || dlq_unmeasured?(names)
 
+          where = "#{ERROR_CLASS_SQL} = $1" if error_class
           connection.select_value(
-            "SELECT COUNT(*) FROM (#{queue_message_fragments(names, "#{ERROR_CLASS_SQL} = $1")}) AS combined",
+            "SELECT COUNT(*) FROM (#{queue_message_fragments(names, where)}) AS combined",
             "Pgbus DLQ Count",
-            [error_class]
+            error_class ? [error_class] : []
           ).to_i
         rescue StandardError => e
           Pgbus.logger.debug { "[Pgbus::Web] Error fetching DLQ count: #{e.message}" }
@@ -150,6 +154,10 @@ module Pgbus
 
         def dlq_names
           queue_names.select { |name| name.end_with?(Pgbus::DEAD_LETTER_SUFFIX) }
+        end
+
+        def dlq_unmeasured?(names)
+          queues_with_metrics.any? { |q| q[:metrics_unavailable] && names.include?(q[:name]) }
         end
       end
     end

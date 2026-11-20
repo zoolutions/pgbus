@@ -405,6 +405,13 @@ RSpec.describe Pgbus::Web::DataSource do
       expect(conn).to have_received(:select_values).once
     end
 
+    it "leaves out a name the queue-name validator rejects, as the metrics read always did" do
+      allow(conn).to receive(:select_values).with(a_string_matching(/pgmq\.meta/))
+                                            .and_return(["pgbus_default", "x" * 60])
+
+      expect(data_source.queue_names).to eq(%w[pgbus_default])
+    end
+
     it "logs a failed read and answers []" do
       allow(conn).to receive(:select_values).and_raise(StandardError, "boom")
       allow(Pgbus.logger).to receive(:error)

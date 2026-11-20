@@ -127,6 +127,25 @@ RSpec.describe Pgbus::Web::DataSource::DeadLetter do
 
       expect(data_source.dlq_total_count).to eq(0)
     end
+
+    it "counts the rows when a DLQ's metrics are unavailable, so the pager is not a false 0 (issue #677)" do
+      allow(data_source).to receive(:queues_with_metrics).and_return(
+        [{ name: "pgbus_default_dlq", queue_length: nil, metrics_unavailable: true },
+         { name: "pgbus_low_dlq", queue_length: 2 }]
+      )
+      captured = []
+      allow(mock_connection).to receive(:select_value) do |sql, name, binds|
+        captured << [sql, name, binds]
+        9
+      end
+
+      expect(data_source.dlq_total_count).to eq(9)
+      sql, name, binds = captured.first
+      expect(name).to eq("Pgbus DLQ Count")
+      expect(sql).to include("FROM pgmq.q_pgbus_default_dlq", "FROM pgmq.q_pgbus_low_dlq")
+      expect(sql).not_to include("WHERE")
+      expect(binds).to eq([])
+    end
   end
 
   describe "#dlq_messages filters" do

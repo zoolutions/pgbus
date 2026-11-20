@@ -17,6 +17,10 @@ RSpec.describe "Queue metrics chunking (integration)", :integration do
 
   def metrics_of(name) = data_source.queues_with_metrics.find { |q| q[:name] == name }
 
+  # Errors scoped to the queues an example made, so a stray broken queue left
+  # in a shared database cannot fail it.
+  def errors_naming(names) = data_source.queue_metrics_errors.select { |e| e[:queues].intersect?(names) }
+
   def statement_names(&block)
     names = []
     callback = ->(*, payload) { names << payload[:name] }
@@ -54,7 +58,8 @@ RSpec.describe "Queue metrics chunking (integration)", :integration do
     names = conn.select_values("SELECT queue_name FROM pgmq.meta ORDER BY queue_name")
 
     expect(data_source.queues_with_metrics.map { |q| q[:name] }).to eq(names)
-    expect(data_source.queue_metrics_errors).to eq([])
+    expect(metrics_of(queue_name)).not_to have_key(:metrics_unavailable)
+    expect(errors_naming([queue_name])).to eq([])
   end
 
   context "with a queue whose table is gone" do
@@ -68,7 +73,7 @@ RSpec.describe "Queue metrics chunking (integration)", :integration do
       expect(metrics_of(ghost)).to include(metrics_unavailable: true, queue_length: nil)
       expect(metrics_of(queue_name)).to include(queue_length: 1)
       expect(metrics_of(queue_name)).not_to have_key(:metrics_unavailable)
-      expect(data_source.queue_metrics_errors).to contain_exactly(
+      expect(errors_naming([ghost, queue_name])).to contain_exactly(
         a_hash_including(queues: [ghost], error: a_string_including("ActiveRecord::StatementInvalid", "q_#{ghost}"))
       )
     end
@@ -121,8 +126,9 @@ RSpec.describe "Queue metrics chunking (integration)", :integration do
 
       queues = data_source.queues_with_metrics.select { |q| q[:name].start_with?("#{prefix}_") }
 
-      expect(data_source.queue_metrics_errors).to eq([])
+      expect(errors_naming(queues.map { |q| q[:name] })).to eq([])
       expect(queues.size).to eq(count)
+      expect(queues.count { |q| q[:metrics_unavailable] }).to eq(0)
       expect(queues.map { |q| q[:queue_length] }.uniq).to eq([1])
     end
   end
