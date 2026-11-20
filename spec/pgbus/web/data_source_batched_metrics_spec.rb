@@ -347,6 +347,29 @@ RSpec.describe Pgbus::Web::DataSource do
         .to eq(queues: %w[q3 q4 q5], error: "not read: 2 metrics chunks timed out before them")
     end
 
+    it "counts a deadlocked chunk toward the limit (deadlock detection waits first)" do
+      stub_const("Pgbus::Web::DataSource::MAX_FAILED_METRICS_CHUNKS", 1)
+      allow(Pgbus.configuration).to receive(:web_queue_metrics_chunk_size).and_return(1)
+      statements = []
+      allow(conn).to receive(:select_all).with(anything, "Pgbus Batched Queue Metrics") do |sql, _label|
+        statements << sql
+        raise ActiveRecord::Deadlocked, "deadlock detected"
+      end
+
+      data_source.queues_with_metrics
+
+      expect(statements.size).to eq(1)
+    end
+
+    it "keeps the read names, flagged, when a later step fails after pgmq.meta answered" do
+      allow(data_source).to receive(:paused_queue_names).and_raise(StandardError, "boom")
+      answer_chunks
+
+      expect(data_source.queues_with_metrics.map { |q| q[:name] }).to eq(%w[q1 q2 q3 q4 q5])
+      expect(data_source.queues_with_metrics).to all(include(metrics_unavailable: true))
+      expect(data_source.queue_metrics_errors).to eq([{ queues: %w[q1 q2 q3 q4 q5], error: "StandardError: boom" }])
+    end
+
     it "keeps reading past any number of failures that cost no time (a queue whose table is gone)" do
       stub_const("Pgbus::Web::DataSource::MAX_FAILED_METRICS_CHUNKS", 2)
       allow(Pgbus.configuration).to receive(:web_queue_metrics_chunk_size).and_return(1)

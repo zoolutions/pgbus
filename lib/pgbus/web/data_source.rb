@@ -41,10 +41,11 @@ module Pgbus
       MAX_FAILED_METRICS_CHUNKS = 3
 
       # The chunk failures that cost time (a cancelled statement, a lock wait,
-      # a lost connection) and so count toward MAX_FAILED_METRICS_CHUNKS. A
+      # a deadlock, which PostgreSQL detects only after deadlock_timeout, a
+      # connection that cannot be established) and so count toward MAX_FAILED_METRICS_CHUNKS. A
       # failure that returns at once (a queue whose table is gone) does not:
       # it must never stop the healthy queues after it from being read.
-      SLOW_METRICS_FAILURES = [ActiveRecord::QueryCanceled, ActiveRecord::LockWaitTimeout,
+      SLOW_METRICS_FAILURES = [ActiveRecord::QueryCanceled, ActiveRecord::LockWaitTimeout, ActiveRecord::Deadlocked,
                                ActiveRecord::ConnectionNotEstablished].freeze
 
       def initialize(client: Pgbus.client)
@@ -139,6 +140,8 @@ module Pgbus
         @queue_metrics_errors || []
       end
 
+      # queues: [] in queue_metrics_errors means pgmq.meta itself could not be
+      # read; a failure after it answered keeps the names, flagged.
       def fetch_queues_with_metrics
         @queue_metrics_errors = []
         names = @queue_names ||= read_queue_names
@@ -150,6 +153,8 @@ module Pgbus
         end
       rescue StandardError => e
         Pgbus.logger.error { "[Pgbus::Web] Error fetching queue metrics: #{e.class}: #{e.message}" }
+        return unavailable_queue_metrics(names, "#{e.class}: #{e.message}") if names
+
         @queue_metrics_errors << { queues: [], error: "#{e.class}: #{e.message}" }
         []
       end

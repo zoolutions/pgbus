@@ -8,8 +8,9 @@
 #   PGBUS_DATABASE_URL=postgres://localhost/pgbus_bench bundle exec ruby benchmarks/queue_metrics_bench.rb
 #   QUEUE_METRICS_BENCH_SIZES=100,1000 ...   # a subset
 #
-# Only queues named qmbench_* are created, and they are dropped before seeding
-# and after the run.
+# Queues are created and dropped through Pgbus::Client as qmbench_* (physical
+# pgbus_qmbench_*), before seeding and after the run. Use a database of its
+# own: every other queue in pgmq.meta is read too, and the run aborts on one.
 
 require "active_record"
 require "uri"
@@ -35,22 +36,23 @@ end
 
 CONN = ActiveRecord::Base.connection
 CONN.execute("SET client_min_messages = warning")
-Pgbus.client.ensure_queue("default")
+CLIENT = Pgbus.client
+PHYSICAL_PREFIX = Pgbus.configuration.queue_name(PREFIX)
+CLIENT.ensure_queue(format("#{PREFIX}_%05d", 0)) # installs the PGMQ schema on a fresh database
 
 def bench_queues
-  CONN.select_values("SELECT queue_name FROM pgmq.meta WHERE queue_name LIKE '#{PREFIX}\\_%' ORDER BY queue_name")
+  CONN.select_values("SELECT queue_name FROM pgmq.meta WHERE queue_name LIKE '#{PHYSICAL_PREFIX}\\_%' ORDER BY queue_name")
 end
 
 def drop_bench_queues!
-  bench_queues.each { |name| CONN.select_value("SELECT pgmq.drop_queue(#{CONN.quote(name)})") }
+  bench_queues.each { |name| CLIENT.drop_queue(name, prefixed: false) }
 end
 
 def grow_to!(count)
-  existing = bench_queues.size
-  (existing...count).each do |i|
+  (bench_queues.size...count).each do |i|
     name = format("#{PREFIX}_%05d", i)
-    CONN.select_value("SELECT pgmq.create(#{CONN.quote(name)})")
-    CONN.select_value("SELECT pgmq.send(#{CONN.quote(name)}, '{}'::jsonb)")
+    CLIENT.ensure_queue(name)
+    CLIENT.send_message(name, {})
   end
 end
 
@@ -65,6 +67,10 @@ end
 
 begin
   drop_bench_queues!
+  grow_to!(1)
+  others = CONN.select_values("SELECT queue_name FROM pgmq.meta") - bench_queues
+  abort "Other queues in pgmq.meta would be timed too: #{others.first(5).join(", ")}" if others.any?
+
   puts "queues_with_metrics, median of #{SAMPLES} (one message per queue)"
   puts "queues           ms     rows"
   SIZES.sort.each do |size|

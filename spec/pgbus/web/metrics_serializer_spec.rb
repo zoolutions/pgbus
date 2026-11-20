@@ -157,6 +157,8 @@ RSpec.describe Pgbus::Web::MetricsSerializer do
       )
 
       expect(output).to include("pgbus_queue_metrics_unavailable 1")
+      expect(output).not_to include("pgbus_dlq_depth")
+      expect(output).to include("pgbus_failed_events_total 8")
     end
 
     it "includes job status counts with status label" do

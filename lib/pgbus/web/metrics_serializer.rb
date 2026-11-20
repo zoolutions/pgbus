@@ -88,11 +88,16 @@ module Pgbus
       # No queue rows because pgmq.meta could not be read (issue #677): one
       # unlabelled sample, so the scrape says so instead of going quiet.
       def append_queue_list_unavailable(lines)
-        return unless @data_source.respond_to?(:queue_metrics_errors)
-        return unless @data_source.queue_metrics_errors.any? { |e| Array(e[:queues]).empty? }
+        return unless queue_list_unavailable?
 
         gauge(lines, "pgbus_queue_metrics_unavailable",
               "Whether the queue's metrics could not be read this scrape (1) or were read (0)") { [[1]] }
+      end
+
+      def queue_list_unavailable?
+        return false unless @data_source.respond_to?(:queue_metrics_errors)
+
+        @data_source.queue_metrics_errors.any? { |e| Array(e[:queues]).empty? }
       end
 
       def append_job_metrics(lines)
@@ -188,8 +193,12 @@ module Pgbus
           [[stats[:failed_count]]]
         end
 
-        gauge(lines, "pgbus_dlq_depth", "Total messages across all dead letter queues") do
-          [[stats[:dlq_depth]]]
+        # An unreadable queue list (issue #677) makes the DLQ total unknown,
+        # not 0: no sample, so a dlq_depth alert does not clear on it.
+        unless queue_list_unavailable?
+          gauge(lines, "pgbus_dlq_depth", "Total messages across all dead letter queues") do
+            [[stats[:dlq_depth]]]
+          end
         end
       rescue StandardError => e
         Pgbus.logger.debug { "[Pgbus::Metrics] Error serializing summary metrics: #{e.message}" }

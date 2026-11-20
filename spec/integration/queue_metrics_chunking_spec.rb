@@ -11,8 +11,9 @@ RSpec.describe "Queue metrics chunking (integration)", :integration do
   let(:data_source) { Pgbus::Web::DataSource.new(client: client) }
   let(:queue_name) { client.config.queue_name("metrics_677") }
 
-  # Names outside pgbus_%, so the suite's per-example purge never walks them,
-  # and every example drops what it made.
+  # The ghost row is written to pgmq.meta by hand on purpose: a queue whose
+  # table is gone is the broken state under test. Its name is outside
+  # pgbus_%, so the suite's per-example purge never walks it.
   let(:ghost) { "zz_ghost_677" }
 
   def metrics_of(name) = data_source.queues_with_metrics.find { |q| q[:name] == name }
@@ -106,19 +107,21 @@ RSpec.describe "Queue metrics chunking (integration)", :integration do
     let(:prefix) { "qm677" }
     let(:count) { 1_000 }
 
+    let(:physical_prefix) { client.config.queue_name(prefix) }
+
     before do
       conn.execute("SET client_min_messages = warning")
       count.times do |i|
         name = format("#{prefix}_%04d", i)
-        conn.select_value("SELECT pgmq.create(#{conn.quote(name)})")
-        conn.select_value("SELECT pgmq.send(#{conn.quote(name)}, '{}'::jsonb)")
+        client.ensure_queue(name)
+        client.send_message(name, {})
       end
     end
 
     after do
       conn.execute("RESET statement_timeout")
-      conn.select_values("SELECT queue_name FROM pgmq.meta WHERE queue_name LIKE '#{prefix}\\_%'").each do |name|
-        conn.select_value("SELECT pgmq.drop_queue(#{conn.quote(name)})")
+      conn.select_values("SELECT queue_name FROM pgmq.meta WHERE queue_name LIKE '#{physical_prefix}\\_%'").each do |name|
+        client.drop_queue(name, prefixed: false)
       end
       conn.execute("RESET client_min_messages")
     end
@@ -126,7 +129,7 @@ RSpec.describe "Queue metrics chunking (integration)", :integration do
     it "reports every queue with its metrics" do
       conn.execute("SET statement_timeout = '5s'")
 
-      queues = data_source.queues_with_metrics.select { |q| q[:name].start_with?("#{prefix}_") }
+      queues = data_source.queues_with_metrics.select { |q| q[:name].start_with?("#{physical_prefix}_") }
 
       expect(errors_naming(queues.map { |q| q[:name] })).to eq([])
       expect(queues.size).to eq(count)
