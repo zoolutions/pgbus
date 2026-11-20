@@ -34,11 +34,18 @@ module Pgbus
                                oldest_claimable_age_sec newest_msg_age_sec total_messages max_read_ct
                                visible_unread_length oldest_unread_claimable_age_sec].to_h { |k| [k, nil] }.freeze
 
-      # Failed metrics chunks after which queues_with_metrics stops reading
+      # Timed-out metrics chunks after which queues_with_metrics stops reading
       # (issue #677): the rest of the queues come back unavailable, so a
       # database where every chunk times out costs a few statement_timeouts,
       # not one per chunk.
       MAX_FAILED_METRICS_CHUNKS = 3
+
+      # The chunk failures that cost time (a cancelled statement, a lock wait,
+      # a lost connection) and so count toward MAX_FAILED_METRICS_CHUNKS. A
+      # failure that returns at once (a queue whose table is gone) does not:
+      # it must never stop the healthy queues after it from being read.
+      SLOW_METRICS_FAILURES = [ActiveRecord::QueryCanceled, ActiveRecord::LockWaitTimeout,
+                               ActiveRecord::ConnectionNotEstablished].freeze
 
       def initialize(client: Pgbus.client)
         @client = client
@@ -1400,17 +1407,18 @@ module Pgbus
         queue_names.each_slice(chunk_size).with_index do |chunk, index|
           if failed >= MAX_FAILED_METRICS_CHUNKS
             skipped = queue_names.drop(index * chunk_size)
-            rows.concat(unavailable_queue_metrics(skipped, "not read: #{failed} metrics chunks failed before them"))
+            rows.concat(unavailable_queue_metrics(skipped, "not read: #{failed} metrics chunks timed out before them"))
             break
           end
 
-          chunk_rows = chunk_queue_metrics(chunk)
-          failed += 1 if chunk_rows.any? { |q| q[:metrics_unavailable] }
+          chunk_rows, error = chunk_queue_metrics(chunk)
+          failed += 1 if SLOW_METRICS_FAILURES.any? { |klass| error.is_a?(klass) }
           rows.concat(chunk_rows)
         end
         rows
       end
 
+      # [rows, nil], or [unavailable rows, the error] for a failed chunk.
       # +chunk+ holds names read_queue_names already validated.
       def chunk_queue_metrics(chunk)
         sql = chunk.map { |name| "(#{queue_metrics_select(name)})" }.join("\nUNION ALL\n")
@@ -1418,9 +1426,9 @@ module Pgbus
           connection.select_all(sql, "Pgbus Batched Queue Metrics").to_a
         end
         by_name = rows.to_h { |row| [row["queue_name"], row] }
-        chunk.filter_map { |name| by_name[name] && queue_metrics_hash(name, by_name[name]) }
+        [chunk.filter_map { |name| by_name[name] && queue_metrics_hash(name, by_name[name]) }, nil]
       rescue StandardError => e
-        unavailable_queue_metrics(chunk, "#{e.class}: #{e.message}")
+        [unavailable_queue_metrics(chunk, "#{e.class}: #{e.message}"), e]
       end
 
       # One row for one queue: a single aggregate over its table, plus the

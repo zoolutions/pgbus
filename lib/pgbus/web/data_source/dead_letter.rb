@@ -27,7 +27,8 @@ module Pgbus
 
         # From the cached metrics, unless a filter needs the rows or a DLQ's
         # metrics are unavailable (issue #677): then a COUNT over the tables,
-        # so the pager never reads a DLQ that lists rows as empty.
+        # so the pager does not read a DLQ that lists rows as empty (unless
+        # that COUNT fails too: then 0, logged as an error).
         def dlq_total_count(dlq: nil, error_class: nil)
           names = dlq_queue_names(dlq)
           return 0 if names.empty?
@@ -44,7 +45,7 @@ module Pgbus
             ).to_i
           end
         rescue StandardError => e
-          Pgbus.logger.debug { "[Pgbus::Web] Error fetching DLQ count: #{e.message}" }
+          Pgbus.logger.error { "[Pgbus::Web] Error fetching DLQ count: #{e.class}: #{e.message}" }
           0
         end
 

@@ -344,7 +344,23 @@ RSpec.describe Pgbus::Web::DataSource do
       expect(result.map { |q| q[:name] }).to eq(%w[q1 q2 q3 q4 q5])
       expect(result).to all(include(metrics_unavailable: true))
       expect(data_source.queue_metrics_errors.last)
-        .to eq(queues: %w[q3 q4 q5], error: "not read: 2 metrics chunks failed before them")
+        .to eq(queues: %w[q3 q4 q5], error: "not read: 2 metrics chunks timed out before them")
+    end
+
+    it "keeps reading past any number of failures that cost no time (a queue whose table is gone)" do
+      stub_const("Pgbus::Web::DataSource::MAX_FAILED_METRICS_CHUNKS", 2)
+      allow(Pgbus.configuration).to receive(:web_queue_metrics_chunk_size).and_return(1)
+      allow(conn).to receive(:select_all).with(anything, "Pgbus Batched Queue Metrics") do |sql, _label|
+        name = sql[/'([^']+)' AS queue_name/, 1]
+        raise ActiveRecord::StatementInvalid, "relation does not exist" if %w[q1 q2 q3].include?(name)
+
+        double(to_a: [metrics_row(name)])
+      end
+
+      result = data_source.queues_with_metrics.to_h { |q| [q[:name], q] }
+
+      expect(result.values_at("q1", "q2", "q3")).to all(include(metrics_unavailable: true))
+      expect(result.values_at("q4", "q5")).to all(include(queue_length: 1))
     end
 
     it "keeps reading after fewer failed chunks than the limit" do
