@@ -137,6 +137,22 @@ RSpec.describe Pgbus::Web::QueueSummary do
       expect(keys(lines)).not_to include("empty")
       expect(line(lines, "metrics_unavailable").tone).to eq(:yellow)
     end
+
+    it "heads the row of an unmeasured queue with no live worker, never a false \"0 claimable\"" do
+      unknown = detail.merge(queue_visible_length: nil, parked_length: nil, metrics_unavailable: true)
+
+      expect(described_class.headline(present(detail: unknown, drain: { live_workers: 0 })).key)
+        .to eq("metrics_unavailable")
+      expect(described_class.headline(present(detail: unknown, drain: { handler: true, live_consumers: 0 })).key)
+        .to eq("metrics_unavailable")
+    end
+
+    it "still lets a pause head an unmeasured queue's row" do
+      unknown = detail.merge(queue_visible_length: nil, metrics_unavailable: true)
+
+      expect(described_class.headline(present(detail: unknown, pause: { paused: true, paused_at: now })).key)
+        .to eq("paused_operator_no_reason")
+    end
   end
 
   describe "priority line" do

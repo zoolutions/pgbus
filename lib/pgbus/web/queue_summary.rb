@@ -19,13 +19,18 @@ module Pgbus
 
       module_function
 
+      # A queue whose metrics could not be read (issue #677) says so right
+      # after any pause, ahead of the drain line: "no worker — N claimable"
+      # would quote an unknown count as 0.
       def present(detail, pause_state, drainers, max_retries:)
         name = detail[:name].to_s
         dlq = name.end_with?(Pgbus::DEAD_LETTER_SUFFIX)
+        unavailable = line("metrics_unavailable", :yellow) if detail[:metrics_unavailable]
         [
           pause_line(pause_state),
+          unavailable,
           drain_line(dlq, detail, drainers, max_retries),
-          (backlog_line(detail) unless dlq || drainers[:stream]),
+          (backlog_line(detail) unless unavailable || dlq || drainers[:stream]),
           priority_line(drainers)
         ].compact
       end
@@ -70,11 +75,7 @@ module Pgbus
         line("drained_by", :gray, capsules: capsules.join(", "), count: live)
       end
 
-      # A queue whose metrics could not be read (issue #677) has no backlog to
-      # describe: nil counts are unknown, not "Nothing waiting".
       def backlog_line(detail)
-        return line("metrics_unavailable", :yellow) if detail[:metrics_unavailable]
-
         visible = detail[:queue_visible_length].to_i
         parked = detail[:parked_length].to_i
         if visible.positive?
