@@ -40,8 +40,11 @@ CLIENT = Pgbus.client
 PHYSICAL_PREFIX = Pgbus.configuration.queue_name(PREFIX)
 CLIENT.ensure_queue(format("#{PREFIX}_%05d", 0)) # installs the PGMQ schema on a fresh database
 
+# Matched in Ruby, not with LIKE: the prefix's own underscores would be wildcards.
 def bench_queues
-  CONN.select_values("SELECT queue_name FROM pgmq.meta WHERE queue_name LIKE '#{PHYSICAL_PREFIX}\\_%' ORDER BY queue_name")
+  CONN.select_values("SELECT queue_name FROM pgmq.meta ORDER BY queue_name").select do |name|
+    name.start_with?("#{PHYSICAL_PREFIX}_")
+  end
 end
 
 def drop_bench_queues!

@@ -120,8 +120,9 @@ RSpec.describe "Queue metrics chunking (integration)", :integration do
 
     after do
       conn.execute("RESET statement_timeout")
-      conn.select_values("SELECT queue_name FROM pgmq.meta WHERE queue_name LIKE '#{physical_prefix}\\_%'").each do |name|
-        client.drop_queue(name, prefixed: false)
+      # Matched in Ruby, not with LIKE: the prefix's own underscores would be wildcards.
+      conn.select_values("SELECT queue_name FROM pgmq.meta").each do |name|
+        client.drop_queue(name, prefixed: false) if name.start_with?("#{physical_prefix}_")
       end
       conn.execute("RESET client_min_messages")
     end
