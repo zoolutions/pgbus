@@ -204,7 +204,8 @@ module Pgbus
         errors = queue_metrics_errors
         return if unavailable.empty? && errors.empty?
 
-        cause = errors.first && " (#{errors.first[:error]})"
+        # First line only: a database error carries a multi-line SQL excerpt.
+        cause = errors.first && " (#{errors.first[:error].to_s.lines.first.to_s.strip})"
         if unavailable.any?
           "queue metrics unavailable for #{unavailable.size} queue(s)#{cause}: #{backlog_names(unavailable)}"
         else

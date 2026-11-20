@@ -34,6 +34,12 @@ module Pgbus
                                oldest_claimable_age_sec newest_msg_age_sec total_messages max_read_ct
                                visible_unread_length oldest_unread_claimable_age_sec].to_h { |k| [k, nil] }.freeze
 
+      # Failed metrics chunks after which queues_with_metrics stops reading
+      # (issue #677): the rest of the queues come back unavailable, so a
+      # database where every chunk times out costs a few statement_timeouts,
+      # not one per chunk.
+      MAX_FAILED_METRICS_CHUNKS = 3
+
       def initialize(client: Pgbus.client)
         @client = client
         @last_throughput_snapshot = nil
@@ -1382,9 +1388,27 @@ module Pgbus
       # (statement_timeout included) rolls back to it, so a caller's open
       # transaction stays usable, and only that chunk's queues come back as
       # unavailable. Rows follow +queue_names+ order.
+      #
+      # Chunks run one after another, so a database where every chunk times
+      # out would cost chunks × statement_timeout. After
+      # MAX_FAILED_METRICS_CHUNKS failed chunks the rest are not run: their
+      # queues come back unavailable at once.
       def batched_queue_metrics(queue_names)
         chunk_size = Pgbus.configuration.web_queue_metrics_chunk_size
-        queue_names.each_slice(chunk_size).flat_map { |chunk| chunk_queue_metrics(chunk) }
+        rows = []
+        failed = 0
+        queue_names.each_slice(chunk_size).with_index do |chunk, index|
+          if failed >= MAX_FAILED_METRICS_CHUNKS
+            skipped = queue_names.drop(index * chunk_size)
+            rows.concat(unavailable_queue_metrics(skipped, "not read: #{failed} metrics chunks failed before them"))
+            break
+          end
+
+          chunk_rows = chunk_queue_metrics(chunk)
+          failed += 1 if chunk_rows.any? { |q| q[:metrics_unavailable] }
+          rows.concat(chunk_rows)
+        end
+        rows
       end
 
       # +chunk+ holds names read_queue_names already validated.
@@ -1396,7 +1420,7 @@ module Pgbus
         by_name = rows.to_h { |row| [row["queue_name"], row] }
         chunk.filter_map { |name| by_name[name] && queue_metrics_hash(name, by_name[name]) }
       rescue StandardError => e
-        unavailable_queue_metrics(chunk, e)
+        unavailable_queue_metrics(chunk, "#{e.class}: #{e.message}")
       end
 
       # One row for one queue: a single aggregate over its table, plus the
@@ -1444,9 +1468,9 @@ module Pgbus
       def unavailable_queue_metrics(names, error)
         Pgbus.logger.error do
           "[Pgbus::Web] Queue metrics unavailable for #{names.size} queue(s) (#{names.first(3).join(", ")}" \
-            "#{", …" if names.size > 3}): #{error.class}: #{error.message}"
+            "#{", …" if names.size > 3}): #{error}"
         end
-        (@queue_metrics_errors ||= []) << { queues: names, error: "#{error.class}: #{error.message}" }
+        (@queue_metrics_errors ||= []) << { queues: names, error: error }
         names.map { |name| { name: name, **UNAVAILABLE_METRICS, metrics_unavailable: true } }
       end
 
@@ -1598,7 +1622,8 @@ module Pgbus
         if @last_throughput_snapshot && @last_throughput_at
           elapsed = now - @last_throughput_at
           delta = current_totals - @last_throughput_snapshot
-          rate = elapsed.positive? ? (delta / elapsed).round(1) : 0.0
+          # A dropped queue lowers the lifetime total: never a negative rate.
+          rate = elapsed.positive? ? [(delta / elapsed).round(1), 0.0].max : 0.0
         end
 
         @last_throughput_snapshot = current_totals

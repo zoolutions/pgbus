@@ -303,6 +303,14 @@ RSpec.describe Pgbus::Web::DataSource do
         allow(data_source).to receive(:queues_with_metrics).and_return([healthy.merge(total_messages: 160)])
         expect(data_source.summary_stats[:throughput_rate]).to be_positive
       end
+
+      it "never reports a negative rate when the lifetime total drops (a queue dropped)" do
+        allow(data_source).to receive(:queues_with_metrics).and_return([healthy])
+        data_source.summary_stats
+        allow(data_source).to receive(:queues_with_metrics).and_return([healthy.merge(total_messages: 40)])
+
+        expect(data_source.summary_stats[:throughput_rate]).to eq(0.0)
+      end
     end
   end
 

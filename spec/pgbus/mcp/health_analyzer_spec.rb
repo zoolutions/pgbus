@@ -197,6 +197,16 @@ RSpec.describe Pgbus::MCP::HealthAnalyzer do
         expect(verdict[:reasons]).to eq(["queue metrics unavailable for 1 queue(s) (#{timeout}): pgbus_mailers"])
       end
 
+      it "quotes only the first line of a multi-line database error" do
+        error = "ActiveRecord::StatementInvalid: PG::UndefinedTable: relation does not exist\nLINE 1: SELECT ...\n ^"
+        stub_data_source(queues: [unavailable], metrics_errors: [{ queues: %w[pgbus_mailers], error: error }])
+
+        expect(analyzer.verdict[:reasons]).to eq(
+          ["queue metrics unavailable for 1 queue(s) (ActiveRecord::StatementInvalid: PG::UndefinedTable: " \
+           "relation does not exist): pgbus_mailers"]
+        )
+      end
+
       it "is DEGRADED when the queue list itself could not be read" do
         stub_data_source(queues: [], processes: [worker(status: :healthy)],
                          metrics_errors: [{ queues: [], error: timeout }])

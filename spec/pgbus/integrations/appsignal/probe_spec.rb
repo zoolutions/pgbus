@@ -136,6 +136,17 @@ RSpec.describe "Pgbus::Integrations::Appsignal::Probe" do
     end
   end
 
+  it "counts an unreadable queue list once, untagged, instead of reporting nothing" do
+    unreadable = Class.new do
+      def queues_with_metrics = []
+      def queue_metrics_errors = [{ queues: [], error: "ActiveRecord::QueryCanceled: canceling statement" }]
+    end.new
+
+    Pgbus::Integrations::Appsignal::Probe::Runner.new(data_source: unreadable).call
+
+    expect(appsignal_class.counters).to eq([["pgbus_queue_metrics_unavailable", 1, {}]])
+  end
+
   it "records queue latency from the claimable age, not the raw message age" do
     runner = Pgbus::Integrations::Appsignal::Probe::Runner.new(data_source: fake_data_source)
     runner.call

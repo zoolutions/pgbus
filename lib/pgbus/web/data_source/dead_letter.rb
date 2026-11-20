@@ -33,12 +33,16 @@ module Pgbus
           return 0 if names.empty?
           return dlq_counts_by_queue.values_at(*names).sum unless error_class || dlq_unmeasured?(names)
 
+          # In a savepoint: the DLQ whose metrics timed out may time out here
+          # too, and that must not abort a caller's transaction.
           where = "#{ERROR_CLASS_SQL} = $1" if error_class
-          connection.select_value(
-            "SELECT COUNT(*) FROM (#{queue_message_fragments(names, where)}) AS combined",
-            "Pgbus DLQ Count",
-            error_class ? [error_class] : []
-          ).to_i
+          connection.transaction(requires_new: true) do
+            connection.select_value(
+              "SELECT COUNT(*) FROM (#{queue_message_fragments(names, where)}) AS combined",
+              "Pgbus DLQ Count",
+              error_class ? [error_class] : []
+            ).to_i
+          end
         rescue StandardError => e
           Pgbus.logger.debug { "[Pgbus::Web] Error fetching DLQ count: #{e.message}" }
           0

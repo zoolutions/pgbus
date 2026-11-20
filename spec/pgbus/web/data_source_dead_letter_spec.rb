@@ -30,6 +30,7 @@ RSpec.describe Pgbus::Web::DataSource::DeadLetter do
     # The names follow whichever metrics a block stubs (issue #677: the DLQ
     # selection reads queue_names, the counts read queues_with_metrics).
     allow(data_source).to receive(:queue_names) { data_source.queues_with_metrics.map { |q| q[:name] } }
+    allow(mock_connection).to receive(:transaction).with(requires_new: true).and_yield
   end
 
   describe "#dlq_messages (SQL pagination pushdown)" do
@@ -140,6 +141,7 @@ RSpec.describe Pgbus::Web::DataSource::DeadLetter do
       end
 
       expect(data_source.dlq_total_count).to eq(9)
+      expect(mock_connection).to have_received(:transaction).with(requires_new: true)
       sql, name, binds = captured.first
       expect(name).to eq("Pgbus DLQ Count")
       expect(sql).to include("FROM pgmq.q_pgbus_default_dlq", "FROM pgmq.q_pgbus_low_dlq")

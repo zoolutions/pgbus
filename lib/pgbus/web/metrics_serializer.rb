@@ -37,7 +37,7 @@ module Pgbus
 
       def append_queue_metrics(lines)
         all = @data_source.queues_with_metrics
-        return if all.empty?
+        return append_queue_list_unavailable(lines) if all.empty?
 
         # A queue whose metrics could not be read (issue #677) has nil counts:
         # it gets no count sample (format_value would write a false 0), only
@@ -83,6 +83,16 @@ module Pgbus
         end
       rescue StandardError => e
         Pgbus.logger.debug { "[Pgbus::Metrics] Error serializing queue metrics: #{e.message}" }
+      end
+
+      # No queue rows because pgmq.meta could not be read (issue #677): one
+      # unlabelled sample, so the scrape says so instead of going quiet.
+      def append_queue_list_unavailable(lines)
+        return unless @data_source.respond_to?(:queue_metrics_errors)
+        return unless @data_source.queue_metrics_errors.any? { |e| Array(e[:queues]).empty? }
+
+        gauge(lines, "pgbus_queue_metrics_unavailable",
+              "Whether the queue's metrics could not be read this scrape (1) or were read (0)") { [[1]] }
       end
 
       def append_job_metrics(lines)

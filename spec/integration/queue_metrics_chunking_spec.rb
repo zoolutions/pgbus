@@ -48,7 +48,9 @@ RSpec.describe "Queue metrics chunking (integration)", :integration do
     detail = data_source.queue_detail(queue_name)
 
     expect(batched.except(:paused)).to eq(detail)
-    expect(batched).to include(queue_length: 3, queue_visible_length: 2, parked_length: 1, total_messages: 3,
+    # total_messages is the msg_id sequence, which no purge resets: the eq
+    # above pins it against the detail read.
+    expect(batched).to include(queue_length: 3, queue_visible_length: 2, parked_length: 1,
                                max_read_ct: 1, visible_unread_length: 1)
     expect(batched).not_to have_key(:metrics_unavailable)
   end

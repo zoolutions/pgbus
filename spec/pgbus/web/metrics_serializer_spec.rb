@@ -151,6 +151,14 @@ RSpec.describe Pgbus::Web::MetricsSerializer do
       end
     end
 
+    it "marks an unreadable queue list instead of writing no queue family at all (issue #677)" do
+      allow(data_source).to receive_messages(
+        queues_with_metrics: [], queue_metrics_errors: [{ queues: [], error: "ActiveRecord::QueryCanceled: x" }]
+      )
+
+      expect(output).to include("pgbus_queue_metrics_unavailable 1")
+    end
+
     it "includes job status counts with status label" do
       expect(output).to include('pgbus_jobs_total{status="success"} 150')
       expect(output).to include('pgbus_jobs_total{status="failed"} 5')

@@ -333,6 +333,30 @@ RSpec.describe Pgbus::Web::DataSource do
       )
     end
 
+    it "stops reading after MAX_FAILED_METRICS_CHUNKS failed chunks and flags the rest at once" do
+      stub_const("Pgbus::Web::DataSource::MAX_FAILED_METRICS_CHUNKS", 2)
+      allow(Pgbus.configuration).to receive(:web_queue_metrics_chunk_size).and_return(1)
+      statements = answer_chunks(failing: %w[q1 q2 q3 q4 q5])
+
+      result = data_source.queues_with_metrics
+
+      expect(statements.size).to eq(2)
+      expect(result.map { |q| q[:name] }).to eq(%w[q1 q2 q3 q4 q5])
+      expect(result).to all(include(metrics_unavailable: true))
+      expect(data_source.queue_metrics_errors.last)
+        .to eq(queues: %w[q3 q4 q5], error: "not read: 2 metrics chunks failed before them")
+    end
+
+    it "keeps reading after fewer failed chunks than the limit" do
+      allow(Pgbus.configuration).to receive(:web_queue_metrics_chunk_size).and_return(1)
+      statements = answer_chunks(failing: %w[q1 q3])
+
+      result = data_source.queues_with_metrics
+
+      expect(statements.size).to eq(5)
+      expect(result.reject { |q| q[:metrics_unavailable] }.map { |q| q[:name] }).to eq(%w[q2 q4 q5])
+    end
+
     it "keeps the paused flag on an unavailable queue" do
       answer_chunks(failing: %w[q1])
       allow(data_source).to receive(:paused_queue_names).and_return(%w[q1])
