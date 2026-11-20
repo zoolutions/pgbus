@@ -973,6 +973,7 @@ sv:
             other: Töms av en jokertecken-worker-kapsel (%{count} friska workers)
           empty_html: Inget väntar
           handler_html: Händelsehanterarkö — töms av consumers (%{count} friska)
+          metrics_unavailable_html: 'Mätvärden otillgängliga: mätvärdesfrågan misslyckades eller överskred tidsgränsen'
           no_consumers_html:
             one: Händelsehanterarkö utan frisk consumer — %{count} händelse väntar
             other: Händelsehanterarkö utan frisk consumer — %{count} händelser väntar

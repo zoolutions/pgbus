@@ -32,6 +32,9 @@ module Pgbus
           now = Time.now
           @stats = sample_stats
           @queues = sample_queues
+          # pgbus_reports' metrics chunk timed out (issue #677).
+          @queue_metrics_errors = [{ queues: %w[pgbus_reports],
+                                     error: "ActiveRecord::QueryCanceled: canceling statement due to statement timeout" }]
           @jobs_list = sample_jobs(now)
           @job_rows_list = sample_job_rows(now.utc)
           @jobs_ahead_hash = { ["pgbus_default", 905] => 0, ["pgbus_mailers", 906] => 14, ["pgbus_imports", 907] => 3,
@@ -124,7 +127,7 @@ module Pgbus
         end
 
         def sample_stats
-          { total_queues: 8, total_depth: 146, total_visible: 116, active_processes: 10, failed_count: 5, dlq_depth: 5,
+          { total_queues: 9, total_depth: 146, total_visible: 116, active_processes: 10, failed_count: 5, dlq_depth: 5,
             recurring_count: PAGED_ROWS, throughput_rate: 42.7, total_dead_tuples: 1_250, tables_needing_vacuum: 1,
             oldest_transaction_age_sec: 8, parked_total: 5, oldest_parked_age_sec: 300, slots_held: 3,
             keys_at_limit: 1 }
@@ -149,7 +152,8 @@ module Pgbus
             { name: "pgbus_default_dlq", queue_length: 4, queue_visible_length: 4, parked_length: 0,
               oldest_msg_age_sec: 18_000, oldest_claimable_age_sec: 18_000, newest_msg_age_sec: 1800, total_messages: 47 },
             { name: "pgbus_events_dlq", queue_length: 1, queue_visible_length: 1, parked_length: 0,
-              oldest_msg_age_sec: 900, oldest_claimable_age_sec: 900, newest_msg_age_sec: 900, total_messages: 4 }
+              oldest_msg_age_sec: 900, oldest_claimable_age_sec: 900, newest_msg_age_sec: 900, total_messages: 4 },
+            { name: "pgbus_reports", **Pgbus::Web::DataSource::UNAVAILABLE_METRICS, metrics_unavailable: true }
           ]
         end
 

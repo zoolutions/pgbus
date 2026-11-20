@@ -301,7 +301,12 @@ module Pgbus
     attr_accessor :web_auth, :web_refresh_interval, :web_per_page, :web_live_updates, :web_data_source,
                   :insights_default_minutes, :base_controller_class, :return_to_app_url, :web_actor,
                   :metrics_enabled,
-                  :web_filter_parameters, :web_filter_sensitive
+                  :web_filter_parameters, :web_filter_sensitive,
+                  # Queues per statement when Web::DataSource#queues_with_metrics
+                  # reads every queue's metrics (issue #677): each chunk is its
+                  # own statement in its own savepoint, so a cancelled chunk
+                  # marks only its queues unavailable.
+                  :web_queue_metrics_chunk_size
 
     # The MCP server's workflow write tools (issue #550): pgbus_workflow_resume,
     # _cancel, _skip_step, _resume_at, _run_now and _signal. Off by default, and
@@ -504,6 +509,7 @@ module Pgbus
       @metrics_enabled = true
       @web_filter_parameters = nil # nil = auto-detect from Rails, then fall back to defaults
       @web_filter_sensitive = true
+      @web_queue_metrics_chunk_size = 100
       @deprecation_warned = Set.new
 
       # HTTP health endpoints — nil port disables the standalone server.
@@ -1121,6 +1127,10 @@ module Pgbus
 
       unless insights_default_minutes.is_a?(Integer) && insights_default_minutes.positive?
         raise Pgbus::ConfigurationError, "insights_default_minutes must be a positive integer"
+      end
+
+      unless web_queue_metrics_chunk_size.is_a?(Integer) && web_queue_metrics_chunk_size.positive?
+        raise Pgbus::ConfigurationError, "web_queue_metrics_chunk_size must be a positive integer"
       end
 
       raise Pgbus::ConfigurationError, "require_primary must be true or false" unless [true, false].include?(require_primary)

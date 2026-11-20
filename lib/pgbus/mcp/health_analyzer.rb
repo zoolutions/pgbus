@@ -13,8 +13,9 @@ module Pgbus
     #              but its claim loop has stopped advancing (status :stalled),
     #              OR backlog with live-but-idle workers and zero claim progress.
     #   DEGRADED — something is wrong but not the wedge: stale processes, a
-    #              paused queue holding a backlog, growing DLQ, or MVCC horizon
-    #              pinned by a long-running transaction.
+    #              paused queue holding a backlog, growing DLQ, MVCC horizon
+    #              pinned by a long-running transaction, or queue metrics that
+    #              could not be read (issue #677).
     #   OK       — draining normally / nothing actionable.
     class HealthAnalyzer
       # A worker is considered to have idle capacity unless its metadata
@@ -161,6 +162,9 @@ module Pgbus
 
         reasons << "queue health stats unavailable: #{health_error.class}: #{health_error.message}" if health_error
 
+        metrics_reason = metrics_unavailable_reason(queues)
+        reasons << metrics_reason if metrics_reason
+
         stale = processes.select { |p| p[:status].to_s == "stale" }
         reasons << "#{stale.size} process(es) stale (no recent heartbeat)" if stale.any?
 
@@ -187,6 +191,32 @@ module Pgbus
         reasons << unregistered_hint if unregistered_hint
 
         reasons
+      end
+
+      # Issue #677: a queue whose metrics could not be read (its chunk failed or
+      # hit statement_timeout) has nil counts, so it can never look backed up
+      # or wedged. Without this reason a fleet too large to measure would read
+      # OK. queue_metrics_errors also covers a pgmq.meta read that failed, when
+      # there are no rows to flag; a custom data source without it still
+      # reports its flagged rows.
+      def metrics_unavailable_reason(queues)
+        unavailable = queues.select { |q| q[:metrics_unavailable] }
+        errors = queue_metrics_errors
+        return if unavailable.empty? && errors.empty?
+
+        # First line only: a database error carries a multi-line SQL excerpt.
+        cause = errors.first && " (#{errors.first[:error].to_s.lines.first.to_s.strip})"
+        if unavailable.any?
+          "queue metrics unavailable for #{unavailable.size} queue(s)#{cause}: #{backlog_names(unavailable)}"
+        else
+          "queue metrics unavailable#{cause}: the queue list could not be read"
+        end
+      end
+
+      def queue_metrics_errors
+        return [] unless @data_source.respond_to?(:queue_metrics_errors)
+
+        Array(@data_source.queue_metrics_errors)
       end
 
       # Issue #366: fingerprint-matched streams excluded from the wedge signal

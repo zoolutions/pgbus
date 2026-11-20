@@ -327,6 +327,8 @@ module Pgbus
     def web_live_updates=: (untyped) -> untyped
     def web_per_page: () -> Integer
     def web_per_page=: (untyped) -> untyped
+    def web_queue_metrics_chunk_size: () -> Integer
+    def web_queue_metrics_chunk_size=: (untyped) -> untyped
     def web_refresh_interval: () -> Integer
     def web_refresh_interval=: (untyped) -> untyped
     def worker_notify_connection_options: () -> untyped

@@ -9,7 +9,7 @@ module Pgbus
         # The header path the error-class filter reads (DeadLetterHeader::KEY).
         ERROR_CLASS_SQL = "headers #>> '{#{Pgbus::DeadLetterHeader::KEY},error_class}'".freeze
 
-        # DLQ queue names from queues_with_metrics are already fully qualified
+        # DLQ queue names from queue_names are already fully qualified
         # (e.g., "pgbus_default_dlq"), so we use them directly without re-prefixing.
         # dlq: one DLQ by its full name (unknown names list nothing);
         # error_class: only messages whose dead-letter block names that class.
@@ -25,27 +25,37 @@ module Pgbus
           []
         end
 
+        # From the cached metrics, unless a filter needs the rows or a DLQ's
+        # metrics are unavailable (issue #677): then a COUNT over the tables,
+        # so the pager does not read a DLQ that lists rows as empty (unless
+        # that COUNT fails too: then 0, logged as an error).
         def dlq_total_count(dlq: nil, error_class: nil)
           names = dlq_queue_names(dlq)
           return 0 if names.empty?
-          return dlq_counts_by_queue.values_at(*names).sum unless error_class
+          return dlq_counts_by_queue.values_at(*names).sum unless error_class || dlq_unmeasured?(names)
 
-          connection.select_value(
-            "SELECT COUNT(*) FROM (#{queue_message_fragments(names, "#{ERROR_CLASS_SQL} = $1")}) AS combined",
-            "Pgbus DLQ Count",
-            [error_class]
-          ).to_i
+          # In a savepoint: the DLQ whose metrics timed out may time out here
+          # too, and that must not abort a caller's transaction.
+          where = "#{ERROR_CLASS_SQL} = $1" if error_class
+          connection.transaction(requires_new: true) do
+            connection.select_value(
+              "SELECT COUNT(*) FROM (#{queue_message_fragments(names, where)}) AS combined",
+              "Pgbus DLQ Count",
+              error_class ? [error_class] : []
+            ).to_i
+          end
         rescue StandardError => e
-          Pgbus.logger.debug { "[Pgbus::Web] Error fetching DLQ count: #{e.message}" }
+          Pgbus.logger.error { "[Pgbus::Web] Error fetching DLQ count: #{e.class}: #{e.message}" }
           0
         end
 
-        # { "pgbus_default_dlq" => 12, ... } for the filter chips, from the
-        # cached metrics (no query of its own).
+        # { "pgbus_default_dlq" => 12, ... } for the filter chips: every DLQ
+        # from queue_names, its count from the cached metrics (no query of its
+        # own). A DLQ whose metrics are unavailable (issue #677) stays listed
+        # and counts 0.
         def dlq_counts_by_queue
-          queues_with_metrics
-            .select { |q| q[:name].end_with?(Pgbus::DEAD_LETTER_SUFFIX) }
-            .to_h { |q| [q[:name], q[:queue_length].to_i] }
+          lengths = queues_with_metrics.to_h { |q| [q[:name], q[:queue_length].to_i] }
+          dlq_names.to_h { |name| [name, lengths.fetch(name, 0)] }
         rescue StandardError => e
           Pgbus.logger.debug { "[Pgbus::Web] Error fetching DLQ counts: #{e.message}" }
           {}
@@ -140,10 +150,19 @@ module Pgbus
 
         private
 
-        # Only names that are real DLQs ever reach sanitize_name and SQL.
+        # Only names that are real DLQs ever reach sanitize_name and SQL. Names
+        # only: listing or opening a DLQ message runs no metrics statement.
         def dlq_queue_names(dlq)
-          names = dlq_counts_by_queue.keys
+          names = dlq_names
           dlq.nil? ? names : names & [dlq]
+        end
+
+        def dlq_names
+          queue_names.select { |name| name.end_with?(Pgbus::DEAD_LETTER_SUFFIX) }
+        end
+
+        def dlq_unmeasured?(names)
+          queues_with_metrics.any? { |q| q[:metrics_unavailable] && names.include?(q[:name]) }
         end
       end
     end

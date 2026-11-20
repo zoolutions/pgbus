@@ -19,8 +19,7 @@ RSpec.describe Pgbus::Web::DataSource::EventList do
   before do
     allow(Pgbus::BusRecord).to receive(:connection).and_return(mock_connection)
     allow(Pgbus.configuration).to receive(:queue_prefix).and_return("pgbus_test")
-    allow(data_source).to receive_messages(queues_with_metrics: queue_names.map { |name| { name: name } },
-                                           registered_subscribers: subscribers)
+    allow(data_source).to receive_messages(queue_names: queue_names, registered_subscribers: subscribers)
   end
 
   describe "#event_rows" do

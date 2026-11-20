@@ -973,6 +973,7 @@ de:
             other: Abgearbeitet von einer Wildcard-Worker-Kapsel (%{count} gesunde Worker)
           empty_html: Nichts wartet
           handler_html: Event-Handler-Queue — von Consumern abgearbeitet (%{count} gesund)
+          metrics_unavailable_html: 'Metriken nicht verfügbar: Die Metrikabfrage ist fehlgeschlagen oder hat das Zeitlimit überschritten'
           no_consumers_html:
             one: Event-Handler-Queue ohne gesunden Consumer — %{count} Event wartet
             other: Event-Handler-Queue ohne gesunden Consumer — %{count} Events warten

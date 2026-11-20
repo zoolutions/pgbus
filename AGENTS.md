@@ -52,6 +52,7 @@ bundle exec rake bench:integration        # Real DB benchmarks (requires PGBUS_D
 bundle exec rake bench:streams            # SSE streaming benchmarks (requires PGBUS_DATABASE_URL)
 bundle exec rake bench:streams_scale      # 100 / 1 000 SSE clients on one Puma process (requires PGBUS_DATABASE_URL)
 bundle exec rake bench:worker_profile     # Real Worker: jobs/s + where a job's time goes (requires PGBUS_DATABASE_URL)
+bundle exec rake bench:queue_metrics      # Web::DataSource#queues_with_metrics at 100 / 1 000 / 5 000 queues (requires PGBUS_DATABASE_URL)
 bundle exec rake frontend:css             # Rebuild app/frontend/pgbus/style.css after adding a Tailwind class to a view
 bundle exec rake frontend:js              # Rebuild the committed .min.js + .min.js.map after editing app/frontend/pgbus/**/*.js or the stream element
 bundle exec rake frontend:js_check        # CI drift guard: fails when a committed .min.js is stale

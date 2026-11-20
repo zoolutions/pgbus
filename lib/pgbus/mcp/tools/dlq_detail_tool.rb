@@ -57,16 +57,25 @@ module Pgbus
         # refuse to guess if more than one matches. Returns an error response
         # on ambiguity, nil otherwise (so the caller proceeds with the normal
         # first-match lookup).
+        # Names only (issue #677): finding a message runs no metrics statement.
+        # A custom web_data_source without queue_names falls back to the names
+        # of its queues_with_metrics.
         def self.ambiguity_check(data_source, msg_id)
           dlq_suffix = Pgbus::DEAD_LETTER_SUFFIX
-          dlqs = data_source.queues_with_metrics.select { |q| q[:name].to_s.end_with?(dlq_suffix) }
-          matches = dlqs.map { |q| q[:name] }.select { |name| data_source.job_detail(name, msg_id) }
+          dlqs = queue_names_of(data_source).select { |name| name.to_s.end_with?(dlq_suffix) }
+          matches = dlqs.select { |name| data_source.job_detail(name, msg_id) }
           return nil if matches.size <= 1
 
           error_response(
             "Dead-letter message #{msg_id} is ambiguous — present in #{matches.size} DLQs " \
             "(#{matches.join(", ")}). Pass `queue:` to disambiguate."
           )
+        end
+
+        def self.queue_names_of(data_source)
+          return data_source.queue_names if data_source.respond_to?(:queue_names)
+
+          data_source.queues_with_metrics.map { |q| q[:name] }
         end
       end
     end

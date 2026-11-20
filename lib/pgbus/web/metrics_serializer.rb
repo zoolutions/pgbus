@@ -36,8 +36,13 @@ module Pgbus
       private
 
       def append_queue_metrics(lines)
-        queues = @data_source.queues_with_metrics
-        return if queues.empty?
+        all = @data_source.queues_with_metrics
+        return append_queue_list_unavailable(lines) if all.empty?
+
+        # A queue whose metrics could not be read (issue #677) has nil counts:
+        # it gets no count sample (format_value would write a false 0), only
+        # its paused state and pgbus_queue_metrics_unavailable.
+        queues = all.reject { |q| q[:metrics_unavailable] }
 
         gauge(lines, "pgbus_queue_depth", "Number of messages in the queue (including invisible)") do
           queues.map { |q| [q[:queue_length], { queue: q[:name] }] }
@@ -69,10 +74,30 @@ module Pgbus
         end
 
         gauge(lines, "pgbus_queue_paused", "Whether the queue is paused (1) or active (0)") do
-          queues.map { |q| [q[:paused] ? 1 : 0, { queue: q[:name] }] }
+          all.map { |q| [q[:paused] ? 1 : 0, { queue: q[:name] }] }
+        end
+
+        gauge(lines, "pgbus_queue_metrics_unavailable",
+              "Whether the queue's metrics could not be read this scrape (1) or were read (0)") do
+          all.map { |q| [q[:metrics_unavailable] ? 1 : 0, { queue: q[:name] }] }
         end
       rescue StandardError => e
         Pgbus.logger.debug { "[Pgbus::Metrics] Error serializing queue metrics: #{e.message}" }
+      end
+
+      # No queue rows because pgmq.meta could not be read (issue #677): one
+      # unlabelled sample, so the scrape says so instead of going quiet.
+      def append_queue_list_unavailable(lines)
+        return unless queue_list_unavailable?
+
+        gauge(lines, "pgbus_queue_metrics_unavailable",
+              "Whether the queue's metrics could not be read this scrape (1) or were read (0)") { [[1]] }
+      end
+
+      def queue_list_unavailable?
+        return false unless @data_source.respond_to?(:queue_metrics_errors)
+
+        @data_source.queue_metrics_errors.any? { |e| Array(e[:queues]).empty? }
       end
 
       def append_job_metrics(lines)
@@ -168,8 +193,12 @@ module Pgbus
           [[stats[:failed_count]]]
         end
 
-        gauge(lines, "pgbus_dlq_depth", "Total messages across all dead letter queues") do
-          [[stats[:dlq_depth]]]
+        # An unreadable queue list (issue #677) makes the DLQ total unknown,
+        # not 0: no sample, so a dlq_depth alert does not clear on it.
+        unless queue_list_unavailable?
+          gauge(lines, "pgbus_dlq_depth", "Total messages across all dead letter queues") do
+            [[stats[:dlq_depth]]]
+          end
         end
       rescue StandardError => e
         Pgbus.logger.debug { "[Pgbus::Metrics] Error serializing summary metrics: #{e.message}" }

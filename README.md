@@ -1025,7 +1025,7 @@ When the `appsignal` gem is loaded in your app, Pgbus auto-installs a subscriber
 
 - **Background-job transactions** for every ActiveJob run and every event-bus handler invocation. Action names follow the AppSignal convention: `MyJob#perform`, `MyHandler#handle`. Tags include `queue`, `job_class`/`handler`, `routing_key`, `attempts`, and the `active_job_id` / `provider_job_id`. `enqueued_at` becomes the AppSignal `queue_start` timestamp so "time on queue" shows up correctly in the timeline. The transaction is current for the whole execution (deserialize, `perform`/`handle`, archive), so `Appsignal.add_tags`, `Appsignal.set_error` and `Appsignal.instrument` called from job or handler code attach to it, and the error an execution raised is reported on it, also when it was raised before `perform` (an unknown job class, arguments that cannot be deserialized).
 - **Custom counters and distributions** for sends, reads, broadcasts, outbox publishes, recurring scheduling, and worker recycles. All metric names are prefixed `pgbus_`.
-- **A minutely probe** that gauges queue depth (visible vs total), oldest message age per queue, DLQ depth, failed events count, dead-tuple totals, MVCC horizon age, active processes, and stream connection estimates.
+- **A minutely probe** that gauges queue depth (visible vs total), oldest message age per queue, DLQ depth, failed events count, dead-tuple totals, MVCC horizon age, active processes, and stream connection estimates. A queue whose metrics could not be read (its metrics query failed or hit `statement_timeout`) gets no gauges that minute; it increments the `pgbus_queue_metrics_unavailable` counter, tagged by queue, instead (untagged when the queue list itself could not be read).
 
 There is nothing to wire up — load the appsignal gem and the integration installs itself in a Rails initializer. To opt out:
 
@@ -1205,6 +1205,7 @@ When `config.metrics_enabled = true` (default), the dashboard exposes Prometheus
 | Metric | Description |
 |--------|-------------|
 | `pgbus_queue_oldest_claimable_age_seconds` | Age of the oldest message eligible for pickup (visibility timeout elapsed) — safe to alert on: scheduled/backoff-parked messages don't count until due; the series is omitted entirely when no claimable backlog exists (while the raw `pgbus_queue_oldest_message_age_seconds` gauge may still report a parked message's age) |
+| `pgbus_queue_metrics_unavailable` | 1 when the queue's metrics could not be read this scrape (its metrics query failed or hit `statement_timeout`), else 0; such a queue has no depth or age samples, rather than a false 0. One unlabelled `1` sample when the queue list itself could not be read |
 | `pgbus_table_dead_tuples` | Dead tuple count per PGMQ table |
 | `pgbus_table_live_tuples` | Live tuple count per PGMQ table |
 | `pgbus_table_bloat_ratio` | Dead / (dead + live) per table |

@@ -126,6 +126,7 @@ module ConfigReference
       { name: "web_refresh_interval", type: "Integer", default: "5000", desc: "Dashboard auto-refresh interval (ms)." },
       { name: "web_live_updates", type: "Boolean", default: "true", desc: "Enable Turbo Frames auto-refresh." },
       { name: "web_per_page", type: "Integer", default: "25", desc: "Dashboard pagination size." },
+      { name: "web_queue_metrics_chunk_size", type: "Integer", default: "100", desc: "Queues per statement when the dashboard, the MCP server and the metrics probes read every queue's metrics. Each chunk runs in its own savepoint: a chunk that fails or hits statement_timeout marks only its queues metrics_unavailable. After three chunks that time out (a cancelled statement, a lock wait, a deadlock), the remaining queues are marked unavailable without being read." },
       { name: "web_filter_sensitive", type: "Boolean", default: "true", desc: "Redact sensitive values in dashboard payload views. Replaces the deprecated dashboard_filter_sensitive." },
       { name: "web_filter_parameters", type: "Array, nil", default: "nil (auto)", desc: "Parameter-name patterns to redact; nil auto-detects from Rails. Replaces the deprecated dashboard_filter_parameters." },
       { name: "metrics_enabled", type: "Boolean", default: "true", desc: "Expose Prometheus gauges on the dashboard." }

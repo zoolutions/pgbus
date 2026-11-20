@@ -11,7 +11,7 @@ RSpec.describe Pgbus::Web::DataSource::QueueSummary do
   before do
     allow(Pgbus::BusRecord).to receive(:connection).and_return(double("ActiveRecord::Connection"))
     allow(Pgbus.configuration).to receive(:queue_prefix).and_return("pgbus_test")
-    allow(data_source).to receive(:queues_with_metrics).and_return(queue_names.map { |name| { name: name } })
+    allow(data_source).to receive(:queue_names).and_return(queue_names)
   end
 
   describe "#queue_pause_state" do

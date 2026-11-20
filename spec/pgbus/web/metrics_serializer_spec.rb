@@ -127,6 +127,40 @@ RSpec.describe Pgbus::Web::MetricsSerializer do
       expect(output).to include('pgbus_queue_paused{queue="pgbus_critical"} 1')
     end
 
+    context "when a queue's metrics are unavailable (issue #677)" do
+      let(:queue_metrics) do
+        [{ name: "pgbus_default", queue_length: 42, queue_visible_length: 40, total_messages: 1000,
+           oldest_msg_age_sec: 120, oldest_claimable_age_sec: 90, newest_msg_age_sec: 1, paused: false },
+         { name: "pgbus_mailers", queue_length: nil, queue_visible_length: nil, total_messages: nil,
+           oldest_msg_age_sec: nil, oldest_claimable_age_sec: nil, newest_msg_age_sec: nil, paused: true,
+           metrics_unavailable: true }]
+      end
+
+      it "writes no count for it, rather than a false 0" do
+        expect(output).not_to match(/pgbus_queue_(depth|visible_depth|total_messages)\{queue="pgbus_mailers"\}/)
+        expect(output).to include('pgbus_queue_depth{queue="pgbus_default"} 42')
+      end
+
+      it "still reports its paused state" do
+        expect(output).to include('pgbus_queue_paused{queue="pgbus_mailers"} 1')
+      end
+
+      it "marks it in pgbus_queue_metrics_unavailable" do
+        expect(output).to include('pgbus_queue_metrics_unavailable{queue="pgbus_mailers"} 1')
+        expect(output).to include('pgbus_queue_metrics_unavailable{queue="pgbus_default"} 0')
+      end
+    end
+
+    it "marks an unreadable queue list instead of writing no queue family at all (issue #677)" do
+      allow(data_source).to receive_messages(
+        queues_with_metrics: [], queue_metrics_errors: [{ queues: [], error: "ActiveRecord::QueryCanceled: x" }]
+      )
+
+      expect(output).to include("pgbus_queue_metrics_unavailable 1")
+      expect(output).not_to include("pgbus_dlq_depth")
+      expect(output).to include("pgbus_failed_events_total 8")
+    end
+
     it "includes job status counts with status label" do
       expect(output).to include('pgbus_jobs_total{status="success"} 150')
       expect(output).to include('pgbus_jobs_total{status="failed"} 5')

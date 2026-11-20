@@ -12,12 +12,14 @@ RSpec.describe Pgbus::MCP::HealthAnalyzer do
   # asserting on the full backlog. Pass an explicit array to restrict the
   # drained set (issue #367 defect 2). unregistered_streams stubs the #366
   # dormant-stream hint count.
-  def stub_data_source(queues: [], processes: [], health: {}, stream_queues: [], drained: nil, unregistered_streams: 0)
+  def stub_data_source(queues: [], processes: [], health: {}, stream_queues: [], drained: nil, unregistered_streams: 0,
+                       metrics_errors: [])
     allow(data_source).to receive_messages(
       queues_with_metrics: queues, processes: processes,
       queue_health_stats: health, stream_queue_names: Set.new(stream_queues),
       drained_queue_names: drained.nil? ? nil : Set.new(drained),
-      unregistered_stream_queue_count: unregistered_streams
+      unregistered_stream_queue_count: unregistered_streams,
+      queue_metrics_errors: metrics_errors
     )
   end
 
@@ -178,6 +180,62 @@ RSpec.describe Pgbus::MCP::HealthAnalyzer do
       expect(verdict[:reasons].join).to include("MVCC")
     end
 
+    context "when queue metrics are unavailable (issue #677)" do
+      let(:timeout) { "ActiveRecord::QueryCanceled: canceling statement due to statement timeout" }
+      let(:unavailable) do
+        { name: "pgbus_mailers", queue_length: nil, queue_visible_length: nil, visible_unread_length: nil,
+          paused: false, metrics_unavailable: true }
+      end
+
+      it "is DEGRADED, naming the queues and the error, instead of OK" do
+        stub_data_source(queues: [queue(name: "pgbus_default"), unavailable], processes: [worker(status: :healthy)],
+                         metrics_errors: [{ queues: %w[pgbus_mailers], error: timeout }])
+
+        verdict = analyzer.verdict
+
+        expect(verdict[:status]).to eq("DEGRADED")
+        expect(verdict[:reasons]).to eq(["queue metrics unavailable for 1 queue(s) (#{timeout}): pgbus_mailers"])
+      end
+
+      it "quotes only the first line of a multi-line database error" do
+        error = "ActiveRecord::StatementInvalid: PG::UndefinedTable: relation does not exist\nLINE 1: SELECT ...\n ^"
+        stub_data_source(queues: [unavailable], metrics_errors: [{ queues: %w[pgbus_mailers], error: error }])
+
+        expect(analyzer.verdict[:reasons]).to eq(
+          ["queue metrics unavailable for 1 queue(s) (ActiveRecord::StatementInvalid: PG::UndefinedTable: " \
+           "relation does not exist): pgbus_mailers"]
+        )
+      end
+
+      it "is DEGRADED when the queue list itself could not be read" do
+        stub_data_source(queues: [], processes: [worker(status: :healthy)],
+                         metrics_errors: [{ queues: [], error: timeout }])
+
+        verdict = analyzer.verdict
+
+        expect(verdict[:status]).to eq("DEGRADED")
+        expect(verdict[:reasons]).to eq(["queue metrics unavailable (#{timeout}): the queue list could not be read"])
+      end
+
+      it "reads an unavailable queue as no evidence of a wedge" do
+        stub_data_source(queues: [unavailable], processes: [worker(status: :healthy)],
+                         metrics_errors: [{ queues: %w[pgbus_mailers], error: timeout }])
+
+        expect(analyzer.verdict[:status]).to eq("DEGRADED")
+      end
+
+      it "still flags a flagged queue when the data source has no queue_metrics_errors" do
+        custom = double("custom data source", queues_with_metrics: [unavailable], processes: [],
+                                              queue_health_stats: {}, stream_queue_names: Set.new,
+                                              drained_queue_names: nil)
+
+        verdict = described_class.new(custom).verdict
+
+        expect(verdict[:status]).to eq("DEGRADED")
+        expect(verdict[:reasons]).to eq(["queue metrics unavailable for 1 queue(s): pgbus_mailers"])
+      end
+    end
+
     it "STALLED takes precedence over DEGRADED conditions" do
       stub_data_source(
         queues: [queue(name: "pgbus_default", length: 5, visible: 5, max_read_ct: 0),
@@ -195,7 +253,7 @@ RSpec.describe Pgbus::MCP::HealthAnalyzer do
     it "still produces a verdict when queue_health_stats raises" do
       allow(data_source).to receive_messages(
         queues_with_metrics: [], processes: [], stream_queue_names: Set.new,
-        drained_queue_names: nil, unregistered_stream_queue_count: 0
+        drained_queue_names: nil, unregistered_stream_queue_count: 0, queue_metrics_errors: []
       )
       allow(data_source).to receive(:queue_health_stats).and_raise(StandardError, "boom")
 
@@ -207,7 +265,7 @@ RSpec.describe Pgbus::MCP::HealthAnalyzer do
     it "logs the queue_health_stats failure rather than swallowing it" do
       allow(data_source).to receive_messages(
         queues_with_metrics: [], processes: [], stream_queue_names: Set.new,
-        drained_queue_names: nil, unregistered_stream_queue_count: 0
+        drained_queue_names: nil, unregistered_stream_queue_count: 0, queue_metrics_errors: []
       )
       allow(data_source).to receive(:queue_health_stats).and_raise(StandardError, "boom")
 

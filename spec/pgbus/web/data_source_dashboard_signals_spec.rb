@@ -36,6 +36,7 @@ RSpec.describe Pgbus::Web::DataSource::DashboardSignals do
                                            handler_queue_physical_names: %w[pgbus_test_billing],
                                            stream_queue_names: Set.new)
     allow(Pgbus::FailedEventRecorder).to receive(:source_queue_column?).and_return(true)
+    allow(data_source).to receive(:queue_names) { data_source.queues_with_metrics.map { |q| q[:name] } }
   end
 
   describe "#retrying_signal" do

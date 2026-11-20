@@ -43,12 +43,13 @@ module Pgbus
                     :process_thresholds_overrides, :dashboard_signals_overrides, :throughput_signal,
                     :deploy_tasks_list, :deploy_task_runs_list, :deploy_rollover_hash, :deploy_enqueue_result,
                     :workflows_list, :workflow_attention_groups_list, :workflow_action_result, :workflow_bulk_result,
-                    :workflow_insights_samples
+                    :workflow_insights_samples, :queue_metrics_errors
       attr_reader :calls
 
       def initialize
         @stats = default_stats
         @queues = default_queues
+        @queue_metrics_errors = []
         @processes_list = default_processes
         @failed_events_list = []
         @dlq_messages_list = []
@@ -106,6 +107,7 @@ module Pgbus
       def summary_stats = @stats
       def reset_cache! = self
       def queues_with_metrics = @queues
+      def queue_names = @queues.map { |q| q[:name] }
       def queue_detail(name) = @queues.find { |q| q[:name].include?(name) }
       # The stub never derives; thresholds is accepted for DataSource's signature.
       def processes(thresholds: nil) = @processes_list

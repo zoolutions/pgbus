@@ -973,6 +973,7 @@ fr:
             other: Vidée par une capsule de workers joker (%{count} workers sains)
           empty_html: Rien en attente
           handler_html: File de gestionnaire d'événements — vidée par les consommateurs (%{count} sains)
+          metrics_unavailable_html: 'Métriques indisponibles : la requête des métriques a échoué ou a expiré'
           no_consumers_html:
             one: File de gestionnaire d'événements sans consommateur sain — %{count} événement attend
             other: File de gestionnaire d'événements sans consommateur sain — %{count} événements attendent

@@ -973,6 +973,7 @@ nl:
             other: Leeggemaakt door een wildcard-workercapsule (%{count} gezonde workers)
           empty_html: Niets in de wacht
           handler_html: Event-handlerwachtrij — leeggemaakt door consumers (%{count} gezond)
+          metrics_unavailable_html: 'Metrieken niet beschikbaar: de metriekenquery is mislukt of verlopen'
           no_consumers_html:
             one: Event-handlerwachtrij zonder gezonde consumer — %{count} event wacht
             other: Event-handlerwachtrij zonder gezonde consumer — %{count} events wachten

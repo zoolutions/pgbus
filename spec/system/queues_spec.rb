@@ -39,6 +39,28 @@ RSpec.describe "Queues", type: :system do
       expect(page).to have_text("Paused")
     end
 
+    # Issue #677: a queue whose metrics query failed or timed out stays listed
+    # and says so, instead of reading as an empty queue.
+    %i[light dark].each do |mode|
+      it "marks a queue whose metrics are unavailable instead of showing zeros (#{mode})" do
+        @stub_data_source.queues = [
+          { name: "pgbus_default", queue_length: 10, queue_visible_length: 8, parked_length: 2,
+            oldest_msg_age_sec: 120, newest_msg_age_sec: 5, total_messages: 500, paused: false },
+          { name: "pgbus_mailers", queue_length: nil, queue_visible_length: nil, parked_length: nil,
+            oldest_msg_age_sec: nil, newest_msg_age_sec: nil, total_messages: nil, paused: false,
+            metrics_unavailable: true }
+        ]
+
+        mode == :dark ? visit_dark("/pgbus/queues") : visit_light("/pgbus/queues")
+
+        row = find("tr", text: "pgbus_mailers")
+        expect(row).to have_text("Metrics unavailable: the metrics query failed or timed out")
+        expect(row).to have_no_css("td", exact_text: "0")
+        expect(row).to have_button("Pause").and have_button("Purge").and have_button("Delete")
+        expect(find("tr", text: "pgbus_default")).to have_no_text("Metrics unavailable")
+      end
+    end
+
     it "shows empty state when no queues" do
       @stub_data_source.queues = []
 

@@ -12,7 +12,7 @@ RSpec.describe Pgbus::Web::DataSource::JobList do
   before do
     allow(Pgbus::BusRecord).to receive(:connection).and_return(mock_connection)
     allow(Pgbus.configuration).to receive(:queue_prefix).and_return("pgbus_test")
-    allow(data_source).to receive(:queues_with_metrics).and_return(queue_names.map { |name| { name: name } })
+    allow(data_source).to receive_messages(queue_names: queue_names, queues_with_metrics: [])
     allow(Pgbus::FailedEventRecorder).to receive(:source_queue_column?).and_return(true)
   end
 
@@ -43,6 +43,13 @@ RSpec.describe Pgbus::Web::DataSource::JobList do
       expect(sql).to include("ORDER BY q.msg_id DESC LIMIT 20")
       expect(sql).to match(/ORDER BY sort_at DESC NULLS LAST, id DESC\s+LIMIT \$1 OFFSET \$2/)
       expect(binds).to eq([10, 10])
+    end
+
+    it "takes its queues from queue_names, without reading queue metrics (issue #677)" do
+      captured_sql("Pgbus Job List") { data_source.job_rows }
+
+      expect(data_source).to have_received(:queue_names).at_least(:once)
+      expect(data_source).not_to have_received(:queues_with_metrics)
     end
 
     it "adds orphaned failed rows and blocked executions to the All tab" do
