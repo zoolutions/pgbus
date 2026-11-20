@@ -1,0 +1,19 @@
+spec/integration/streams/presence_seats_spec.rb
+  s_0f3c1357a81030::t_a89887aa9b7d45 102-133
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "84fc0cf26e71bd261c3c0ea37772a71f6dabee33",
+  "prompts": {},
+  "sessions": {
+    "s_0f3c1357a81030": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9c927cf3-d701-4e5e-85a8-26f3a4e157a9",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}

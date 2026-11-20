@@ -1,0 +1,25 @@
+spec/pgbus/signals_spec.rb
+  s_2a9c7569c34f5d::t_fc0d1a2e8a7332 1-10,12-183,185-226
+lib/pgbus/signals.rb
+  s_2a9c7569c34f5d::t_59491765572d08 1-39,44,47-57,61-138,140-156,159-166,168-206,209-235
+lib/pgbus/open_transaction.rb
+  s_2a9c7569c34f5d::t_9e7af62ef0ae40 1-20,25-75,78-85,87-96
+spec/integration/streams/signals_spec.rb
+  s_2a9c7569c34f5d::t_12fc70bb22dddd 1-86,89-171
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "cbc9fb6ca2b39dd0da103daad67429039848a331",
+  "prompts": {},
+  "sessions": {
+    "s_2a9c7569c34f5d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4dfc7d14-1b6d-490f-ba17-6dc28374bffc",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}

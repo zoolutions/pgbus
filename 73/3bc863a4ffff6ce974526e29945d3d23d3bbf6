@@ -1,0 +1,38 @@
+README.md
+  s_32f1905dad0a43::t_cb84d4711a3c3c 556
+lib/pgbus/client.rb
+  s_32f1905dad0a43::t_cb84d4711a3c3c 1899-1907
+spec/integration/connection_failure_spec.rb
+  s_32f1905dad0a43::t_047df0b2e04860 111-117,126-128,131-134,146-147,156-157
+Gemfile.lock
+  ai_agent 8,241,539
+gemfiles/rails_7_1.gemfile.lock
+  ai_agent 8,249,558
+pgbus.gemspec
+  s_32f1905dad0a43::t_c6f7eea3907463 41
+spec/pgbus/client/stale_retry_reload_spec.rb
+  s_32f1905dad0a43::t_cb84d4711a3c3c 6-11
+CHANGELOG.md
+  ai_agent 9
+  s_32f1905dad0a43::t_d74b389db01329 10
+docs/app/views/docs/pages/running_workers.rb
+  s_32f1905dad0a43::t_cb84d4711a3c3c 394-401
+docs/Gemfile.lock
+  ai_agent 8,215,514
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "733bc863a4ffff6ce974526e29945d3d23d3bbf6",
+  "prompts": {},
+  "sessions": {
+    "s_32f1905dad0a43": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "adec1fec-d801-46d6-bafa-715640f4557f",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}

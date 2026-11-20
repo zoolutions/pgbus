@@ -1,0 +1,23 @@
+CHANGELOG.md
+  s_1ba7acc41a0553::t_7c4efa1acfbdee 11
+lib/pgbus/client/session_gucs.rb
+  s_1ba7acc41a0553::t_7c4efa1acfbdee 18-20,23-24
+docs/app/views/docs/pages/running_workers.rb
+  s_1ba7acc41a0553::t_7c4efa1acfbdee 410-413
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "b3887779b5b499efab7620d7f10f2c98067718bf",
+  "prompts": {},
+  "sessions": {
+    "s_1ba7acc41a0553": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "62abcae1-8b7b-4afb-bf1e-9fa3b40886ef",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
