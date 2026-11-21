@@ -22,9 +22,9 @@ module Pgbus
     scope :processing, -> { where(status: "processing") }
     scope :without_executions, -> { where.not(batch_id: BatchExecution.select(:batch_id)) }
 
-    # Deprecated alias, kept past 1.0 for installs that have not run
-    # pgbus:add_batch_executions (removed in 2.0): after the column is
-    # dropped this reads failed_jobs.
+    # Deprecated alias, removed in 2.0, kept for installs that have not run
+    # pgbus:add_batch_executions: after the column is dropped this reads
+    # failed_jobs.
     def discarded_jobs
       has_attribute?(:discarded_jobs) ? self[:discarded_jobs] : failed_jobs
     end

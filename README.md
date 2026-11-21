@@ -874,7 +874,7 @@ Inside a job, `batch { |b| ... }` opens a new batch the same way, and a job that
 |----------|------------|
 | `on_complete` | All jobs completed (success or failure). `on_finish` is a deprecated alias, removed in 2.0 |
 | `on_success` | All jobs completed successfully (zero failed) |
-| `on_failure` | At least one job was dead-lettered |
+| `on_failure` | At least one job failed (dead-lettered, or never sent) |
 
 Callback jobs given as a bare class receive the batch `properties` hash as their argument:
 
