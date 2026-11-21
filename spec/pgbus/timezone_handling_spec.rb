@@ -40,9 +40,8 @@ RSpec.describe Pgbus do
       future_timestamp = Time.current.to_f + 60
       adapter.enqueue_at(job, future_timestamp)
 
-      # Sent in bulk with its delay since issue #686.
-      expect(mock_client).to have_received(:send_batch).with(
-        "default", [serialized_hash], delay: a_value_between(59, 61), priority: nil
+      expect(mock_client).to have_received(:send_message).with(
+        "default", serialized_hash, delay: a_value_between(59, 61), priority: nil
       )
     end
   end
@@ -69,8 +68,9 @@ RSpec.describe Pgbus do
 
       adapter.enqueue_all([job])
 
-      expect(mock_client).to have_received(:send_message).with(
-        "default", serialized_hash, delay: a_value_between(59, 61), priority: nil
+      # Sent in bulk with its delay since issue #686.
+      expect(mock_client).to have_received(:send_batch).with(
+        "default", [serialized_hash], delay: a_value_between(59, 61), priority: nil
       )
     end
   end
