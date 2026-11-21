@@ -111,8 +111,9 @@ RSpec.describe "Bulk scheduled sends (integration)", :integration do
     Thread.current[:scheduled_bulk_sends] = []
     yield
     names = Thread.current[:scheduled_bulk_sends]
-    { send_batch: names.count { |n| n.start_with?("pgbus_send_batch_") || n.include?("unnest($1::jsonb[])") || n.include?("pgmq.send_batch(") },
-      send: names.count { |n| n.match?(/\Apgbus_send_\h{12}\z/) || n.include?("VALUES (clock_timestamp()") || n.include?("pgmq.send(") } }
+    batch = ->(n) { n.start_with?("pgbus_send_batch_") || n.include?("unnest($1::jsonb[])") || n.include?("pgmq.send_batch(") }
+    single = ->(n) { n.match?(/\Apgbus_send_\h{12}\z/) || n.include?("VALUES (clock_timestamp()") || n.include?("pgmq.send(") }
+    { send_batch: names.count(&batch), send: names.count(&single) }
   ensure
     Thread.current[:scheduled_bulk_sends] = nil
   end
