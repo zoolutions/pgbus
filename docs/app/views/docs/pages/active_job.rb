@@ -88,13 +88,15 @@ class Views::Docs::Pages::ActiveJob < DocsUI::Page
       RUBY
       md <<~'MD'
         - **Sent at once, not held:** jobs with uniqueness or a concurrency limit,
-          future jobs (`set(wait:)`), `retry_on` re-enqueues, deploy task runs,
+          `retry_on` re-enqueues, deploy task runs,
           batch members outside their own built batch's block, workflow steps, jobs
           from another thread or fiber, and
           jobs enqueued once the flush has started. On Rails 7.2+ a job that
           Rails defers to after commit (`enqueue_after_transaction_commit`)
           reaches the scope at commit, so one from a rolled-back transaction
           never does; a job that does not defer is held like any other.
+        - **Future jobs (`set(wait:)`)** are held too and sent with the delay
+          left at the flush, one `send_batch` per queue, priority and delay.
         - **Serialized at `perform_later`:** an argument that cannot be
           serialized raises there, and a later change to the job is not sent.
         - **The return value:** `perform_later` returns the job with

@@ -131,7 +131,7 @@ RSpec.describe Pgbus::ActiveJob::Adapter, "#enqueue_all enqueue status" do
     count = adapter.enqueue_all([later, now])
 
     expect(statuses([later, now])).to eq([true, true])
-    expect(mock_client).to have_received(:send_message).with("default", anything, delay: a_value > 0, priority: nil)
+    expect(mock_client).to have_received(:send_batch).with("default", anything, delay: a_value > 0, priority: nil)
     expect(count).to eq(2)
   end
 
