@@ -91,6 +91,12 @@ RSpec.describe Pgbus::Process::Heartbeat do
       allow(Process).to receive(:pid).and_return(Process.pid + 1)
 
       expect(described_class.current_process_id).to be_nil
+
+      described_class.note_registered(43)
+
+      expect(described_class.current_process_id).to eq(43)
+    ensure
+      described_class.note_deregistered(43)
     end
 
     it "keeps a later registration when an older row deregisters" do

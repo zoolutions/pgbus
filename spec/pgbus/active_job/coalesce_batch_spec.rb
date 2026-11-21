@@ -67,6 +67,16 @@ RSpec.describe Pgbus::ActiveJob::Coalesce do
       expect(batches.map(&:size)).to eq([2, 2, 1])
     end
 
+    it "keeps one running total, not a result per chunk" do
+      scope = nil
+      Pgbus.coalesce do
+        scope = described_class.current
+        5.times { |i| plain_class.perform_later(i) }
+
+        expect(scope.instance_variable_get(:@totals).buffered).to eq(4)
+      end
+    end
+
     it "keeps no delivered job once its chunk was sent, only the chunk still held" do
       scope = nil
       Pgbus.coalesce do

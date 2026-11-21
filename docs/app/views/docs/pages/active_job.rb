@@ -106,8 +106,10 @@ class Views::Docs::Pages::ActiveJob < DocsUI::Page
           When the block raises, the buffer is still sent and the block's error
           propagates.
         - **Chunks:** a scope sends what it holds every
-          `config.coalesce_chunk_size` jobs (default 1 000) and at the end;
-          `on_failure` runs once, at the end, over every chunk.
+          `config.coalesce_chunk_size` jobs (default 1 000) and at the end. A
+          built batch's scope keeps holding while a transaction is open on the
+          batch's connection; `on_failure` runs once, at the end, over every
+          chunk.
         - **Nesting and batches:** a nested scope joins the outer one. A
           `Pgbus.batch` built in a pgbus process opens a scope of its own that
           holds only its members, sends them by the batch block's end and

@@ -153,7 +153,7 @@ module Pgbus
         # last count closes the build (count_in), before anything is sent.
         count_jobs do
           Pgbus::ActiveJob::Coalesce.open(on_failure: @on_enqueue_failure, batch_id: batch_id,
-                                          count_in: method(:count_in), &)
+                                          count_in: method(:count_in), on_failed: method(:record_enqueue_failures), &)
         end
       else
         count_jobs(&)
@@ -813,6 +813,20 @@ module Pgbus
         close_build_alone
         raise
       end
+    end
+
+    # Members of this batch's block that were never sent (issue #683) count
+    # as failed jobs, total and failed alike, so the invariant holds and the
+    # batch cannot report success: on_failure fires, on_success cannot,
+    # whatever on_enqueue_failure does with the jobs. Reported, not raised,
+    # when it cannot be written: on_enqueue_failure still runs.
+    def record_enqueue_failures(jobs)
+      BatchEntry.connection_pool.with_connection do
+        BatchEntry.where(batch_id: batch_id, status: BatchEntry::UNFINISHED)
+                  .update_all(["total_jobs = total_jobs + ?, failed_jobs = failed_jobs + ?", jobs.size, jobs.size])
+      end
+    rescue StandardError => e
+      ErrorReporter.report(e, { pgbus_batch_enqueue_failures: batch_id })
     end
 
     def close_build_alone

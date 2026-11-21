@@ -12,8 +12,9 @@ module Pgbus
     scope :finished, -> { where(status: "finished") }
     scope :stale, ->(before:) { finished.where("finished_at < ?", before) }
     # building (issue #683): the batch's block is still open in the process
-    # owner_process_id names; no sweep and no finish touch it until the
-    # block closes the build (close_build!) or the owner stops heartbeating.
+    # owner_process_id names; no sweep changes its status and no finish
+    # closes it (counters still move) until the block closes the build
+    # (close_build!) or the owner stops heartbeating.
     UNFINISHED = %w[building pending processing].freeze
 
     scope :building, -> { where(status: "building") }

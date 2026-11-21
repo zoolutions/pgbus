@@ -50,8 +50,10 @@ class Views::Docs::Pages::Batches < DocsUI::Page
         `pending` block that goes `config.batch_stall_threshold` (default 5
         minutes) without adding a job is treated as stalled and started by
         that sweep, so keep slow work outside the block. A batch opened in a
-        pgbus process is `building` instead, which the sweep leaves alone
-        while that process heartbeats. Membership follows the block's
+        pgbus process, once `pgbus:add_batch_executions` and
+        `pgbus:add_batch_owner` have run (`pgbus:update` adds both), is
+        `building` instead, which the sweep leaves alone while that process
+        heartbeats. Membership follows the block's
         own thread or fiber: `b.add` raises anywhere else, and a plain
         `perform_later` from a thread or fiber the block spawns does not join
         the batch, so the batch can finish before that job runs. Enqueue from
@@ -268,17 +270,19 @@ class Views::Docs::Pages::Batches < DocsUI::Page
            `total_jobs` and inserts its `pgbus_batch_executions` row (identity
            is the ActiveJob `job_id`). The increment is guarded on an unfinished
            batch — that guard is what raises `AlreadyFinished`. A
-           `perform_all_later` counts once for the whole bulk: one
-           increment, one multi-row insert, one `send_batch` per queue and
-           priority, one backfill. A batch opened in a pgbus process (one with
-           a `pgbus_processes` heartbeat) is created `building` with that
-           process as its owner, and its block's `perform_later` calls are
-           held and counted the same way every `config.coalesce_chunk_size`
-           jobs. While `building` the sweep ignores it and it cannot finish;
+           `perform_all_later` counts once per batch and send group: one
+           increment and one multi-row insert per batch per queue and
+           priority, one `send_batch` and one backfill per group. A batch
+           opened in a pgbus process (one with a `pgbus_processes` heartbeat)
+           is created `building` with that process as its owner, and its
+           block's bulk-eligible `perform_later` calls are held and counted
+           the same way every `config.coalesce_chunk_size` jobs; uniqueness,
+           concurrency, future, retry and opted-out calls are sent at once. While `building` the sweep ignores it and it cannot finish;
            the block's end counts the last chunk and moves it to `pending` in
            one transaction. If the owner stops heartbeating, the sweep reaps
            the build: `processing`, with the abandoned build counted as one
-           failed job. A member that cannot be sent goes to
+           failed job. A held member that cannot be sent counts as a failed
+           job and goes to
            `Pgbus.batch(on_enqueue_failure:)` (`:raise` by default).
         3. As each job is archived or dead-lettered, the executor deletes that
            execution row and bumps `completed_jobs` / `failed_jobs`.

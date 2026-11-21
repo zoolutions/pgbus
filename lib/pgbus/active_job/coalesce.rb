@@ -35,7 +35,9 @@ module Pgbus
     # inside it joins it. A batch scope counts each chunk in before sending
     # it, with one call: count_in.call(payloads, final:). The final call
     # (the block's end) also closes the batch's build, in the same
-    # transaction; see Batch#count_in. Every scope flushes early each
+    # transaction; see Batch#count_in. Before on_failure, a batch scope hands
+    # the jobs that were never sent to on_failed (Batch#record_enqueue_failures),
+    # so the batch counts them as failed. Every scope flushes early each
     # config.coalesce_chunk_size held jobs, so a huge block stays bounded in
     # memory (a batch scope only once no transaction is open on the batch's
     # connection: until then it keeps holding); on_failure still runs once,
@@ -52,13 +54,13 @@ module Pgbus
           Thread.current[KEY]
         end
 
-        def open(on_failure: :raise, batch_id: nil, count_in: nil, &block)
+        def open(on_failure: :raise, batch_id: nil, count_in: nil, on_failed: nil, &block)
           raise ArgumentError, "Pgbus.coalesce needs a block" unless block
 
           validate_on_failure!(on_failure)
           return yield if current && batch_id.nil?
 
-          run(new(on_failure: on_failure, batch_id: batch_id, count_in: count_in), &block)
+          run(new(on_failure: on_failure, batch_id: batch_id, count_in: count_in, on_failed: on_failed), &block)
         end
 
         def validate_on_failure!(on_failure)
@@ -87,14 +89,16 @@ module Pgbus
 
       attr_reader :on_failure, :batch_id
 
-      def initialize(on_failure: :raise, batch_id: nil, count_in: nil, chunk_size: Pgbus.configuration.coalesce_chunk_size)
+      def initialize(on_failure: :raise, batch_id: nil, count_in: nil, on_failed: nil,
+                     chunk_size: Pgbus.configuration.coalesce_chunk_size)
         @on_failure = on_failure
         @batch_id = batch_id
         @count_in = count_in
+        @on_failed = on_failed
         @chunk_size = chunk_size
         @mutex = Mutex.new
         @entries = []
-        @results = []
+        @totals = Result.new(buffered: 0, sent: 0, retried: 0, failed: [], error: nil)
         @failed_entries = []
         @closed = false
       end
@@ -126,10 +130,12 @@ module Pgbus
       def finish!(block_error: nil)
         started = ::Process.clock_gettime(::Process::CLOCK_MONOTONIC)
         deliver_chunk(close, final: true)
-        failed_entries, results = @mutex.synchronize { [@failed_entries, @results] }
-        result = combine(results.sum(&:buffered), results)
+        failed_entries, result = @mutex.synchronize { [@failed_entries, @totals] }
         instrument(result, started) if result.buffered.positive?
-        handle_failure(result, failed_entries, block_error) if result.failed.any?
+        if result.failed.any?
+          @on_failed&.call(result.failed)
+          handle_failure(result, failed_entries, block_error)
+        end
         result
       rescue StandardError => e
         # The block's error is the one that propagates: anything the flush
@@ -171,7 +177,7 @@ module Pgbus
         # Only the counts and the failed jobs are kept: a sent chunk's jobs
         # and payloads go, so chunking bounds memory.
         @mutex.synchronize do
-          @results << result
+          @totals = combine(@totals.buffered + result.buffered, [@totals, result])
           @failed_entries.concat(entries.select { |_, job, _| failed.include?(job.object_id) })
         end
       end
@@ -202,7 +208,8 @@ module Pgbus
         jobs = entries.map { |_, job, _| job }
         jobs.each { |job| job.successfully_enqueued = false }
         @mutex.synchronize do
-          @results << Result.new(buffered: entries.size, sent: 0, retried: 0, failed: jobs, error: e)
+          failed = Result.new(buffered: entries.size, sent: 0, retried: 0, failed: jobs, error: e)
+          @totals = combine(@totals.buffered + entries.size, [@totals, failed])
           @failed_entries.concat(entries)
         end
         entries.clear

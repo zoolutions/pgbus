@@ -81,6 +81,27 @@ RSpec.describe "Batch building (integration)", :integration do
     end
   end
 
+  def open_batch_with(**options, &)
+    Pgbus.batch(**options) do |b|
+      b.on_complete(BuildingSpec::DoneJob)
+      b.on_success(BuildingSpec::OkJob)
+      b.on_failure(BuildingSpec::FailJob)
+      yield
+    end
+  end
+
+  # Sends to the work queue fail outright; the callback queue still works.
+  def fail_work_queue_sends
+    %i[send_batch send_message].each do |method|
+      allow(client).to receive(method).and_wrap_original do |original, queue, *args, **kwargs|
+        raise IOError, "not sent" if queue == work_queue
+
+        original.call(queue, *args, **kwargs)
+      end
+    end
+    allow(Pgbus).to receive(:client).and_return(client)
+  end
+
   def status_of(batch_id) = Pgbus::BatchEntry.find_by(batch_id: batch_id).status
 
   def callbacks
@@ -240,8 +261,9 @@ RSpec.describe "Batch building (integration)", :integration do
 
       expect(status_of(batch_id)).not_to eq("building")
       expect(failed.size).to eq(1)
-      expect(Pgbus::BatchEntry.find_by(batch_id: batch_id).total_jobs)
-        .to eq(Pgbus::BatchExecution.where(batch_id: batch_id).count)
+      record = Pgbus::BatchEntry.find_by(batch_id: batch_id)
+      expect(record.total_jobs).to eq(Pgbus::BatchExecution.where(batch_id: batch_id).count + record.failed_jobs)
+      expect(record.failed_jobs).to eq(1) # the unsent member
       expect(queue_depth(work_queue)).to eq(0)
     end
 
@@ -269,6 +291,40 @@ RSpec.describe "Batch building (integration)", :integration do
     end
   end
 
+  describe "a held member that cannot be sent" do
+    it "counts as a failed job of the batch, so on_success cannot fire" do
+      fail_work_queue_sends
+      failed = []
+
+      batch = open_batch_with(on_enqueue_failure: ->(jobs, _error) { failed.concat(jobs) }) do
+        2.times { |i| work_job.perform_later(i) }
+      end
+
+      expect(failed.size).to eq(2)
+      expect(batch.reload).to have_attributes(status: "finished", total_jobs: 2, failed_jobs: 2)
+      expect(Pgbus::BatchExecution.where(batch_id: batch.batch_id).count).to eq(0)
+      expect(callbacks).to contain_exactly("BuildingSpec::DoneJob", "BuildingSpec::FailJob")
+    end
+
+    it "is uncounted when its send fails before any message can exist, not left as an orphan row" do
+      fail_work_queue_sends
+      Pgbus.configuration.coalesce_chunk_size = 1
+      nil
+      rows_in_block = nil
+
+      batch = open_batch_with(on_enqueue_failure: ->(*) {}) do
+        work_job.perform_later(1)
+        work_job.perform_later(2) # chunk 1 counted in, then its send fails outright
+        rows_in_block = Pgbus::BatchExecution.where(batch_id: Thread.current[:pgbus_batch_id]).count
+      end
+
+      expect(rows_in_block).to eq(0)
+      expect(batch.reload).to have_attributes(total_jobs: 2, failed_jobs: 2)
+    ensure
+      Pgbus.configuration.coalesce_chunk_size = 1_000
+    end
+  end
+
   describe "a live owner the sweep took for dead" do
     it "counts no later chunk into the reaped batch" do
       Pgbus.configuration.coalesce_chunk_size = 1
@@ -289,8 +345,10 @@ RSpec.describe "Batch building (integration)", :integration do
       end
 
       expect(error.cause).to be_a(Pgbus::Batch::AlreadyFinished)
-      # The member sent at once and the abandoned build, nothing held.
-      expect(Pgbus::BatchEntry.find_by(batch_id: batch_id).total_jobs).to eq(2)
+      # The member sent at once and the abandoned build; no held member was
+      # counted in, each of the three counts only as a failed job.
+      expect(Pgbus::BatchEntry.find_by(batch_id: batch_id)).to have_attributes(total_jobs: 5, failed_jobs: 4)
+      expect(Pgbus::BatchExecution.where(batch_id: batch_id).count).to eq(1)
     ensure
       Pgbus.configuration.coalesce_chunk_size = 1_000
     end
@@ -319,7 +377,8 @@ RSpec.describe "Batch building (integration)", :integration do
       expect(error.cause).to be_a(Pgbus::Batch::AlreadyFinished)
       batch ||= Pgbus::Batch.find(Pgbus::BatchEntry.order(:id).last.batch_id)
       run_all
-      expect(batch.reload).to have_attributes(status: "finished", completed_jobs: 1, failed_jobs: 1)
+      # One failure for the abandoned build, one for the held member that was never sent.
+      expect(batch.reload).to have_attributes(status: "finished", completed_jobs: 1, failed_jobs: 2)
       expect(callbacks).to contain_exactly("BuildingSpec::DoneJob", "BuildingSpec::FailJob")
     end
 
@@ -362,10 +421,13 @@ RSpec.describe "Batch building (integration)", :integration do
           work_job.perform_later(1)
           batch_id = Thread.current[:pgbus_batch_id]
           Pgbus::ProcessEntry.where(id: owner.id).delete_all
+          replacement = nil
           replacement = Pgbus::ProcessEntry.create!(kind: "worker", hostname: "spec-host", pid: Process.pid,
                                                     metadata: {}, last_heartbeat_at: Time.current)
           Pgbus::Process::Heartbeat.note_registered(replacement.id)
           sweep_elsewhere
+        ensure
+          Pgbus::Process::Heartbeat.note_deregistered(replacement.id) if replacement
         end
       rescue Pgbus::EnqueueError
         nil

@@ -312,7 +312,8 @@ RSpec.describe "Batch bulk bookkeeping (integration)", :integration do
       end
 
       expect(failed.size).to eq(3)
-      expect(batch.reload.total_jobs).to eq(0)
+      # No row is left; the three unsent members count as failed jobs.
+      expect(batch.reload).to have_attributes(total_jobs: 3, failed_jobs: 3)
       expect(Pgbus::BatchExecution.where(batch_id: batch.batch_id).count).to eq(0)
     end
 

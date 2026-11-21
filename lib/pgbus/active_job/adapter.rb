@@ -585,6 +585,7 @@ module Pgbus
         tracked = true
         physical = physical_queue(queue, priority)
         msg_ids = nil
+        sending = true
         msg_ids = Pgbus.client.send_batch(queue, payloads, priority: priority)
 
         unless msg_ids.is_a?(Array) && msg_ids.size == jobs.size
@@ -607,10 +608,24 @@ module Pgbus
         raise
       rescue StandardError => e
         Pgbus.logger.error { "[Pgbus] #{e.message}" } if e.is_a?(Pgbus::SchemaNotReady)
-        note_counted(counted, jobs, payloads, Array(payloads).each_index.to_a) if tracked
+        settle_counted(counted, jobs, payloads, ambiguous: sending && ambiguous_delivery?(e)) if tracked
         raise
       ensure
         jobs.each { |j| forget_enqueue_batch_id(j) }
+      end
+
+      # A coalesce delivery's members after a failed send (+counted+ set):
+      # when the send may have committed, their counts stand and the retry
+      # does not count them again; when no message can exist, they are
+      # uncounted now and the retry counts each again, so a member that
+      # fails twice leaves no row behind. Without +counted+ (enqueue_all) the
+      # counts stand, as they always did.
+      def settle_counted(counted, jobs, payloads, ambiguous:)
+        return unless counted
+        return note_counted(counted, jobs, payloads, Array(payloads).each_index.to_a) if ambiguous
+
+        jobs.each { |job| counted.delete(job) }
+        Batch.untrack_enqueue_all(payloads)
       end
 
       # The members at +indexes+ stay counted in their batch (their send's

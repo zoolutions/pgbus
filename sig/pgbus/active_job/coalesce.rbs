@@ -9,6 +9,14 @@ module Pgbus
 
       type on_failure = :raise | :report | _OnFailure
 
+      interface _CountIn
+        def call: (Array[Hash[String, untyped]] payloads, final: bool) -> void
+      end
+
+      interface _OnFailed
+        def call: (Array[untyped] jobs) -> void
+      end
+
       KEY: Symbol
       FAILURE_MODES: Array[Symbol]
 
@@ -25,13 +33,13 @@ module Pgbus
       def self.current: () -> Coalesce?
       # batch_id: (Pgbus.batch, issue #683) a scope of the batch's own that holds only its members;
       # count_in.call(payloads, final:) counts each chunk in before it is sent, the final one closing the build.
-      def self.open: [T] (?on_failure: on_failure, ?batch_id: String?, ?count_in: untyped) { () -> T } -> T
+      def self.open: [T] (?on_failure: on_failure, ?batch_id: String?, ?count_in: _CountIn?, ?on_failed: _OnFailed?) { () -> T } -> T
       def self.validate_on_failure!: (untyped on_failure) -> void
 
       attr_reader on_failure: on_failure
       attr_reader batch_id: String?
 
-      def initialize: (?on_failure: on_failure, ?batch_id: String?, ?count_in: untyped, ?chunk_size: Integer) -> void
+      def initialize: (?on_failure: on_failure, ?batch_id: String?, ?count_in: _CountIn?, ?on_failed: _OnFailed?, ?chunk_size: Integer) -> void
       def push: (Adapter adapter, untyped job, Hash[String, untyped] payload) -> bool
       def finish!: (?block_error: Exception?) -> Result
 
