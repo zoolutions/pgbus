@@ -23,12 +23,13 @@ module Pgbus
           @on_failure = on_failure
         end
 
-        # A flush that raises (on_failure: :raise) closes the body first, as
-        # Rack requires of a response it will never send.
+        # A flush that raises (on_failure: :raise, or a callable that raises)
+        # closes the body first, as Rack requires of a response it will never
+        # send.
         def call(env)
           response = nil
           Pgbus.coalesce(on_failure: @on_failure) { response = @app.call(env) }
-        rescue EnqueueError
+        rescue Exception # rubocop:disable Lint/RescueException -- closes, then re-raises
           body = response&.at(2)
           body.close if body.respond_to?(:close)
           raise

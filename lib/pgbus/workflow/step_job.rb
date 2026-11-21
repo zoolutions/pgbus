@@ -22,7 +22,8 @@ module Pgbus
 
       # Sent at once inside Pgbus.coalesce (issue #682): a step enqueue that
       # fails is reported and swept (WorkflowStep#enqueue_step_job), so it
-      # must not become the scope's on_failure.
+      # must not become the scope's on_failure. Internal to pgbus, not an
+      # opt-out for application jobs.
       def self.pgbus_coalesce? = false
 
       def perform(step_id)

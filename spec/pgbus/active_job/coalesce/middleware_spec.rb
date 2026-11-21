@@ -66,6 +66,23 @@ RSpec.describe Pgbus::ActiveJob::Coalesce::Middleware do
     expect(body).to have_received(:close)
   end
 
+  it "closes the response body when a callable on_failure raises" do
+    allow(mock_client).to receive(:send_batch).and_raise(IOError, "gone")
+    allow(mock_client).to receive(:send_message).and_raise(IOError, "gone")
+    body = instance_double(Rack::BodyProxy, close: nil)
+    failing = ->(*) { raise ArgumentError, "callable broke" }
+    middleware = described_class.new(app_enqueuing(1, response: [200, {}, body]), on_failure: failing)
+
+    expect { middleware.call({}) }.to raise_error(ArgumentError, "callable broke")
+    expect(body).to have_received(:close)
+  end
+
+  it "leaves the body alone when the app itself raises" do
+    middleware = described_class.new(->(_env) { raise ArgumentError, "app broke" })
+
+    expect { middleware.call({}) }.to raise_error(ArgumentError, "app broke")
+  end
+
   it "rejects an unknown on_failure when it is built" do
     expect { described_class.new(->(_env) {}, on_failure: :ignore) }.to raise_error(ArgumentError, /on_failure/)
   end

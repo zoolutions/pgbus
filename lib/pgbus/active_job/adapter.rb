@@ -79,10 +79,11 @@ module Pgbus
       # re-enqueue (#424) and a deploy task run's job (#660), which need the
       # single path's bookkeeping, a batch member (counted in now: a batch
       # pending on a buffered member reads as stalled to the sweep), and a
-      # class that opts out (Workflow::StepJob, whose enqueue failure is
-      # reported and swept, never raised). Serializing now raises an
-      # unserializable argument here, as outside a scope, and keeps a later
-      # change to the job or its arguments out of the message.
+      # pgbus class that opts out (Workflow::StepJob, whose enqueue failure
+      # is reported and swept, never raised; pgbus_coalesce? is internal).
+      # Serializing now raises an unserializable argument here, as outside a
+      # scope, and keeps a later change to the job or its arguments out of
+      # the message.
       def coalesce(scope, active_job)
         return false if Uniqueness.uniqueness_config(active_job) || concurrency_config(active_job)
         return false if scheduled_in_future?(active_job) || active_job.executions.to_i.positive?
