@@ -271,8 +271,10 @@ class Views::Docs::Pages::Batches < DocsUI::Page
            every `config.coalesce_chunk_size` jobs and when it returns, count
            once per bulk: one increment, one multi-row insert, one
            `send_batch` per queue and priority, one backfill. While the scope
-           holds members it keeps one placeholder count on the batch, so the
-           sweep cannot finish it empty. A member that cannot be sent goes to
+           holds members it keeps a counted placeholder row on the batch,
+           refreshed as the block keeps enqueuing, so the sweep cannot finish
+           it empty; the sweep removes a placeholder older than
+           `batch_stall_threshold` (a dead process). A member that cannot be sent goes to
            `Pgbus.batch(on_enqueue_failure:)` (`:raise` by default).
         3. As each job is archived or dead-lettered, the executor deletes that
            execution row and bumps `completed_jobs` / `failed_jobs`.

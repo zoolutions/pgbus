@@ -594,8 +594,10 @@ module Pgbus
         Batch.backfill_executions(payloads, msg_ids, physical)
       rescue Pgbus::EnqueueError
         unsent = Array(payloads).each_index.select { |index| msg_ids.nil? || msg_ids[index].nil? }
-        Batch.untrack_enqueue_all(payloads.values_at(*unsent))
+        # Noted before the untrack, which can raise: a member with an id keeps
+        # its count either way.
         note_counted(counted, jobs, payloads, Array(payloads).each_index.to_a - unsent)
+        Batch.untrack_enqueue_all(payloads.values_at(*unsent))
         raise
       rescue StandardError => e
         Pgbus.logger.error { "[Pgbus] #{e.message}" } if e.is_a?(Pgbus::SchemaNotReady)

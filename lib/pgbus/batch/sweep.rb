@@ -92,6 +92,9 @@ module Pgbus
         # A row without a msg_id still holds the logical queue name it was
         # inserted with (the job's queue_name); the backfill was never applied.
         def classify_orphan(row, client)
+          # A coalesce scope's hold (issue #683) older than the threshold:
+          # its block stopped enqueuing that long ago, or its process died.
+          return :orphan if Batch.hold_row?(row.job_id)
           return :live if row.queue_name.nil?
 
           in_queue = client.message_with_job_id?(row.queue_name, job_id: row.job_id)

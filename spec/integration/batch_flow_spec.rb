@@ -93,14 +93,18 @@ RSpec.describe "Batch flow (integration)", :integration do
   end
 
   def complete_next(batch_id)
-    row = Pgbus::BatchExecution.where(batch_id: batch_id).order(:id).first
+    # A coalesce scope's hold row (issue #683) is not a job.
+    row = Pgbus::BatchExecution.where(batch_id: batch_id).where.not("job_id LIKE ?", "#{Pgbus::Batch::HOLD_PREFIX}%")
+                               .order(:id).first
     raise "no execution row for #{batch_id}" unless row
 
     Pgbus::Batch.job_completed(batch_id, job_id: row.job_id)
   end
 
   def discard_next(batch_id)
-    row = Pgbus::BatchExecution.where(batch_id: batch_id).order(:id).first
+    # A coalesce scope's hold row (issue #683) is not a job.
+    row = Pgbus::BatchExecution.where(batch_id: batch_id).where.not("job_id LIKE ?", "#{Pgbus::Batch::HOLD_PREFIX}%")
+                               .order(:id).first
     raise "no execution row for #{batch_id}" unless row
 
     Pgbus::Batch.job_discarded(batch_id, job_id: row.job_id)
@@ -269,9 +273,6 @@ RSpec.describe "Batch flow (integration)", :integration do
     end
 
     it "leaves a pending batch alone while its block is still actively enqueuing" do
-      # One job per flush (issue #683), so each member is counted and sent
-      # while the block is still open, as this race needs.
-      Pgbus.configuration.coalesce_chunk_size = 1
       batch = Pgbus::Batch.new
       batch.enqueue do
         worker_job.perform_later

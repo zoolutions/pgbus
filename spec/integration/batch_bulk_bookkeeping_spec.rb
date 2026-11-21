@@ -285,6 +285,81 @@ RSpec.describe "Batch bulk bookkeeping (integration)", :integration do
       expect(queue_depth(callback_queue)).to eq(1)
     end
 
+    it "keeps the invariant and finishes when a transaction in the block rolls back around the first member" do
+      batch = Pgbus.batch do
+        ActiveRecord::Base.transaction do
+          work_job.perform_later(1)
+          raise ActiveRecord::Rollback
+        end
+        work_job.perform_later(2)
+      end
+
+      expect(invariant_holds?(batch.batch_id)).to be(true)
+
+      run_all
+
+      expect(batch.reload).to have_attributes(status: "finished", completed_jobs: 2)
+    end
+
+    it "is recovered by the sweep when the process dies before the scope gives its hold back" do
+      hold = nil
+      allow(Pgbus::Batch).to receive(:release_enqueue_hold) { |id| hold = id }
+      batch = Pgbus.batch do |b|
+        b.on_complete(callback_job)
+        2.times { |i| work_job.perform_later(i) }
+      end
+      run_all
+      expect(batch.reload.status).not_to eq("finished")
+      expect(hold).to be_present
+
+      Pgbus::BatchExecution.where(batch_id: batch.batch_id).update_all(created_at: 1.hour.ago)
+      Pgbus::BatchEntry.where(batch_id: batch.batch_id).update_all(created_at: 1.hour.ago)
+      Pgbus::Batch.sweep_stalled(stalled_for: 300)
+
+      expect(batch.reload).to have_attributes(status: "finished", total_jobs: 2, completed_jobs: 2)
+      expect(queue_depth(callback_queue)).to eq(1)
+    end
+
+    it "keeps a held batch pending while its block keeps enqueuing past the stall threshold" do
+      batch = Pgbus.batch do
+        work_job.perform_later(1)
+        batch_id = Thread.current[:pgbus_batch_id]
+        Pgbus::BatchEntry.where(batch_id: batch_id).update_all(created_at: 1.hour.ago)
+        Pgbus::Batch.sweep_stalled(stalled_for: 300)
+
+        expect(Pgbus::BatchEntry.find_by(batch_id: batch_id).status).to eq("pending")
+      end
+
+      expect(batch.reload.total_jobs).to eq(1)
+    end
+
+    it "re-counts the members a short send_batch left uncounted, once each" do
+      allow(client).to receive(:send_batch).and_return([])
+      allow(Pgbus).to receive(:client).and_return(client)
+
+      batch = Pgbus.batch { 3.times { |i| work_job.perform_later(i) } }
+
+      expect(batch.reload.total_jobs).to eq(3)
+      expect(Pgbus::BatchExecution.where(batch_id: batch.batch_id).count).to eq(3)
+      expect(Pgbus::BatchExecution.where(batch_id: batch.batch_id, msg_id: nil).count).to eq(0)
+      expect(queue_depth(work_queue)).to eq(3)
+    end
+
+    it "uncounts a re-counted member whose single send fails before any message exists" do
+      allow(client).to receive(:send_batch).and_return([])
+      allow(client).to receive(:send_message).and_raise(IOError, "not sent")
+      allow(Pgbus).to receive(:client).and_return(client)
+      failed = []
+
+      batch = Pgbus.batch(on_enqueue_failure: ->(jobs, _error) { failed.concat(jobs) }) do
+        3.times { |i| work_job.perform_later(i) }
+      end
+
+      expect(failed.size).to eq(3)
+      expect(batch.reload.total_jobs).to eq(0)
+      expect(Pgbus::BatchExecution.where(batch_id: batch.batch_id).count).to eq(0)
+    end
+
     it "raises AlreadyFinished at the first perform_later into a finished batch" do
       batch = Pgbus::Batch.new
       expect do

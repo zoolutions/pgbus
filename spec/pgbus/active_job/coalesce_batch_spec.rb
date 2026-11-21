@@ -39,7 +39,7 @@ RSpec.describe Pgbus::ActiveJob::Coalesce do
     end
     allow(Pgbus::Batch).to receive(:track_enqueue)
     allow(Pgbus::Batch).to receive(:backfill_executions)
-    allow(Pgbus::Batch).to receive(:hold_enqueue)
+    allow(Pgbus::Batch).to receive_messages(hold_enqueue: "hold-token", refresh_enqueue_hold: true)
     allow(Pgbus::Batch).to receive(:release_enqueue_hold)
   end
 
@@ -67,6 +67,16 @@ RSpec.describe Pgbus::ActiveJob::Coalesce do
 
       expect(sizes_in_block).to eq([2, 2])
       expect(batches.map(&:size)).to eq([2, 2, 1])
+    end
+
+    it "keeps no delivered job once its chunk was sent, only the failed ones" do
+      scope = nil
+      Pgbus.coalesce do
+        scope = described_class.current
+        4.times { |i| plain_class.perform_later(i) }
+
+        expect(scope.send(:retained_entries)).to be_empty
+      end
     end
 
     it "applies on_failure once, at the end, to the jobs of every chunk that failed" do
@@ -107,16 +117,16 @@ RSpec.describe Pgbus::ActiveJob::Coalesce do
 
     it "takes one hold on its batch before the first held member and gives it back after the flush" do
       order = []
-      allow(Pgbus::Batch).to receive(:hold_enqueue) { order << :hold }
+      allow(Pgbus::Batch).to receive(:hold_enqueue) { order << :hold and "hold-token" }
       allow(Pgbus::Batch).to receive(:track_enqueue) { order << :count }
-      allow(Pgbus::Batch).to receive(:release_enqueue_hold) { order << :release }
+      allow(Pgbus::Batch).to receive(:release_enqueue_hold) { |token| order << [:release, token] }
 
       described_class.open(batch_id: "b-1") do
         Thread.current[:pgbus_batch_id] = "b-1"
         3.times { |i| plain_class.perform_later(i) }
       end
 
-      expect(order).to eq(%i[hold count release])
+      expect(order).to eq([:hold, :count, [:release, "hold-token"]])
     end
 
     it "takes no hold when it holds nothing" do
@@ -168,7 +178,7 @@ RSpec.describe Pgbus::ActiveJob::Coalesce do
       expect(batches.size).to eq(2)
     end
 
-    it "is not joined by a plain scope opened inside it" do
+    it "is joined by a plain scope opened inside it" do
       described_class.open(batch_id: "b-1") do
         scope = described_class.current
         Pgbus.coalesce { expect(described_class.current).to be(scope) }

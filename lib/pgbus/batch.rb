@@ -147,7 +147,13 @@ module Pgbus
       # The block's perform_later calls are held in a scope of the batch's
       # own (issue #683) and sent, counted and backfilled one group at a time
       # when the block returns, before the batch can start.
-      count_jobs { Pgbus::ActiveJob::Coalesce.open(on_failure: @on_enqueue_failure, batch_id: batch_id, &) }
+      # Before the executions migration there is no row to hold the batch
+      # open with, so the block enqueues one job at a time, as it did.
+      if self.class.executions_migrated?
+        count_jobs { Pgbus::ActiveJob::Coalesce.open(on_failure: @on_enqueue_failure, batch_id: batch_id, &) }
+      else
+        count_jobs(&)
+      end
       self.class.send(:after_transactions_commit) { start_processing }
       self
     end
@@ -444,19 +450,63 @@ module Pgbus
       end
     end
 
-    # A batch scope's hold (issue #683): one count the scope takes before it
-    # holds the batch's first member, and gives back once every held member
-    # is counted in. While members are held they have no execution row, so
-    # the stalled-batch sweep could otherwise read a long block as crashed
-    # and finish the batch empty; the hold keeps total_jobs above the
-    # finished counters until the members are counted. Raises
-    # AlreadyFinished, as an enqueue into a finished batch does.
+    # A batch scope's hold (issue #683): while the block's coalesce scope
+    # holds members, they have no execution row, so the stalled-batch sweep
+    # could read the batch as crashed and finish it empty. The hold is one
+    # counted execution row of its own (job_id HOLD_PREFIX + a token, no
+    # queue), taken in one statement with its count before the first held
+    # member, so AlreadyFinished still raises at perform_later:
+    #
+    # * it keeps the batch from finishing (a finish needs no rows left) and,
+    #   refreshed as the block keeps enqueuing, keeps the batch pending, as a
+    #   block's own inserts did before;
+    # * the final flush deletes it with its count, in one statement that only
+    #   uncounts what it deleted, so a hold an enclosing transaction rolled
+    #   back is never given back twice;
+    # * a process that died holding it leaves a row the orphan sweep removes,
+    #   with its count, once it is older than batch_stall_threshold: the same
+    #   "no activity within the threshold" rule a crashed block meets.
+    HOLD_PREFIX = "pgbus:coalesce-hold:"
+
+    def self.hold_row?(job_id) = job_id.to_s.start_with?(HOLD_PREFIX)
+
+    # Returns the hold's job_id. Raises AlreadyFinished for a finished batch.
     def self.hold_enqueue(batch_id)
-      BatchEntry.connection_pool.with_connection { BatchEntry.increment_total_jobs!(batch_id, 1) }
+      token = "#{HOLD_PREFIX}#{SecureRandom.uuid}"
+      sql = <<~SQL.squish
+        WITH counted AS (
+          UPDATE #{BatchEntry.table_name} SET total_jobs = total_jobs + 1
+           WHERE batch_id = $1 AND status IN ('pending', 'processing')
+          RETURNING batch_id
+        )
+        INSERT INTO #{BatchExecution.table_name} (batch_id, job_id, queue_name, created_at)
+        SELECT batch_id, $2, NULL, $3 FROM counted RETURNING id
+      SQL
+      rows = BatchEntry.connection_pool.with_connection do |conn|
+        conn.exec_query(sql, "Pgbus Batch Hold", [batch_id, token, Time.current])
+      end
+      raise AlreadyFinished, "Can't add jobs into an already finished batch" if rows.rows.empty?
+
+      token
     end
 
-    def self.release_enqueue_hold(batch_id)
-      BatchEntry.connection_pool.with_connection { BatchEntry.decrement_total_jobs!(batch_id) }
+    # Marks the hold active now; false when it is gone (rolled back with an
+    # enclosing transaction, or removed by the sweep).
+    def self.refresh_enqueue_hold(token)
+      BatchExecution.connection_pool.with_connection do
+        BatchExecution.where(job_id: token).update_all(created_at: Time.current).positive?
+      end
+    end
+
+    def self.release_enqueue_hold(token)
+      sql = <<~SQL.squish
+        WITH released AS (DELETE FROM #{BatchExecution.table_name} WHERE job_id = $1 RETURNING batch_id)
+        UPDATE #{BatchEntry.table_name} SET total_jobs = GREATEST(total_jobs - 1, 0)
+         WHERE batch_id IN (SELECT batch_id FROM released) AND status IN ('pending', 'processing')
+      SQL
+      BatchEntry.connection_pool.with_connection do |conn|
+        conn.exec_query(sql, "Pgbus Batch Release Hold", [token])
+      end
     end
 
     # untrack_enqueue for every payload of a failed bulk send (issue #683):

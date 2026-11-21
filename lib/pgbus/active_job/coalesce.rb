@@ -88,9 +88,11 @@ module Pgbus
         @chunk_size = chunk_size
         @mutex = Mutex.new
         @entries = []
-        @delivered = []
+        @results = []
+        @failed_entries = []
         @closed = false
-        @hold = false
+        @hold = nil
+        @hold_touched_at = nil
       end
 
       # Holds +job+ for +adapter+ with the +payload+ serialized at
@@ -121,10 +123,10 @@ module Pgbus
         ensure
           release_batch_hold
         end
-        entries, results = @mutex.synchronize { [@delivered.flat_map(&:first), @delivered.map(&:last)] }
-        result = combine(entries.size, results)
-        instrument(result, started)
-        handle_failure(result, entries, block_error) if result.failed.any?
+        failed_entries, results = @mutex.synchronize { [@failed_entries, @results] }
+        result = combine(results.sum(&:buffered), results)
+        instrument(result, started) if result.buffered.positive?
+        handle_failure(result, failed_entries, block_error) if result.failed.any?
         result
       rescue StandardError => e
         # The block's error is the one that propagates: anything the flush
@@ -137,24 +139,39 @@ module Pgbus
 
       private
 
-      # A batch scope counts one placeholder into its batch before holding
-      # its first member (Batch.hold_enqueue) and gives it back once the
-      # members are counted, so the batch cannot finish while they are held.
-      # @hold is read and written only by the scope's own fiber (push and
-      # finish!), outside the mutex so the database call never holds it.
+      # A batch scope takes its batch's hold (Batch.hold_enqueue) before it
+      # holds the first member, refreshes it as the block keeps enqueuing so
+      # the stalled-batch sweep sees activity, and gives it back once the
+      # members are counted. @hold and @hold_touched_at are read and written
+      # only by the scope's own fiber (push and finish!), outside the mutex
+      # so the database call never holds it.
       def take_batch_hold
-        return unless @batch_id && !@hold
+        return unless @batch_id
 
-        Batch.hold_enqueue(@batch_id)
-        @hold = true
+        if @hold.nil?
+          @hold = Batch.hold_enqueue(@batch_id)
+        elsif hold_refresh_due?
+          @hold = Batch.hold_enqueue(@batch_id) unless Batch.refresh_enqueue_hold(@hold)
+        else
+          return
+        end
+        @hold_touched_at = ::Process.clock_gettime(::Process::CLOCK_MONOTONIC)
+      end
+
+      def hold_refresh_due?
+        ::Process.clock_gettime(::Process::CLOCK_MONOTONIC) - @hold_touched_at >=
+          Pgbus.configuration.batch_stall_threshold / 4.0
       end
 
       def release_batch_hold
         return unless @hold
 
-        @hold = false
-        Batch.release_enqueue_hold(@batch_id)
+        hold = @hold
+        @hold = nil
+        Batch.release_enqueue_hold(hold)
       rescue StandardError => e
+        # The hold row stays; the orphan sweep removes it, with its count,
+        # once it is older than batch_stall_threshold.
         ErrorReporter.report(e, { pgbus_coalesce_hold: @batch_id })
       end
 
@@ -179,7 +196,20 @@ module Pgbus
         results = entries.group_by(&:first).map do |adapter, group|
           adapter.deliver_coalesced(group.map { |_, job, payload| [job, payload] })
         end
-        @mutex.synchronize { @delivered << [entries, combine(entries.size, results)] }
+        result = combine(entries.size, results)
+        failed = result.failed.to_set(&:object_id)
+        # Only the counts and the failed jobs are kept: a sent chunk's jobs
+        # and payloads go, so chunking bounds memory.
+        @mutex.synchronize do
+          @results << result
+          @failed_entries.concat(entries.select { |_, job, _| failed.include?(job.object_id) })
+        end
+      end
+
+      # The held jobs this scope still references, waiting for the flush or
+      # failed in it.
+      def retained_entries
+        @mutex.synchronize { @entries + @failed_entries }
       end
 
       def combine(buffered, results)
