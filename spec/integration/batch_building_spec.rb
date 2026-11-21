@@ -232,16 +232,17 @@ RSpec.describe "Batch building (integration)", :integration do
         original.call(*args, **kwargs)
       end
       batch_id = nil
-      begin
-        Pgbus.batch(on_enqueue_failure: :report) do
-          batch_id = Thread.current[:pgbus_batch_id]
-          work_job.perform_later(1)
-        end
-      rescue Pgbus::EnqueueError
-        nil
+      failed = []
+      Pgbus.batch(on_enqueue_failure: ->(jobs, _error) { failed.concat(jobs) }) do
+        batch_id = Thread.current[:pgbus_batch_id]
+        work_job.perform_later(1)
       end
 
       expect(status_of(batch_id)).not_to eq("building")
+      expect(failed.size).to eq(1)
+      expect(Pgbus::BatchEntry.find_by(batch_id: batch_id).total_jobs)
+        .to eq(Pgbus::BatchExecution.where(batch_id: batch_id).count)
+      expect(queue_depth(work_queue)).to eq(0)
     end
 
     it "still closes an empty build when the closing transaction fails" do
@@ -263,6 +264,8 @@ RSpec.describe "Batch building (integration)", :integration do
       end
 
       expect(status_of(batch_id)).not_to eq("building")
+      expect(Pgbus::BatchEntry.find_by(batch_id: batch_id).total_jobs).to eq(1) # the b.add member, sent at once
+      expect(Pgbus::BatchExecution.where(batch_id: batch_id).count).to eq(1)
     end
   end
 

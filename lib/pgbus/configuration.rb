@@ -310,7 +310,8 @@ module Pgbus
 
     # Held jobs after which a Pgbus.coalesce scope (and the one Pgbus.batch
     # opens for its block) sends what it holds before the block ends (issue
-    # #683), so a huge block stays bounded in memory.
+    # #683), so a huge block stays bounded in memory. A built batch's scope
+    # holds past it while a transaction is open on the batch's connection.
     attr_accessor :coalesce_chunk_size
 
     # The MCP server's workflow write tools (issue #550): pgbus_workflow_resume,

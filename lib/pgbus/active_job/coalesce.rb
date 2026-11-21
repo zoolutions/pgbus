@@ -37,7 +37,9 @@ module Pgbus
     # (the block's end) also closes the batch's build, in the same
     # transaction; see Batch#count_in. Every scope flushes early each
     # config.coalesce_chunk_size held jobs, so a huge block stays bounded in
-    # memory; on_failure still runs once, at the end, for every chunk.
+    # memory (a batch scope only once no transaction is open on the batch's
+    # connection: until then it keeps holding); on_failure still runs once,
+    # at the end, for every chunk.
     class Coalesce
       KEY = :pgbus_coalesce
       FAILURE_MODES = %i[raise report].freeze
@@ -179,7 +181,10 @@ module Pgbus
 
         connection = Pgbus::BatchEntry.connection_pool.active_connection?
         connection ? connection.transaction_open? : false
-      rescue StandardError
+      rescue StandardError => e
+        # Unknown is treated as open: holding a chunk to the block's end is
+        # safe, counting it inside a transaction that rolls back is not.
+        Pgbus.logger.debug { "[Pgbus] Coalesce could not read the batch connection's transaction (#{e.class}); holding the chunk" }
         true
       end
 
