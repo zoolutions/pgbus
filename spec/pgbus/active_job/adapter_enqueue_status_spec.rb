@@ -192,6 +192,28 @@ RSpec.describe Pgbus::ActiveJob::Adapter, "#enqueue_all enqueue status" do
     expect(job.successfully_enqueued?).to be(true)
   end
 
+  it "leaves a job its concurrency limit raises for false" do
+    stub_const("EnqueueStatusSpec::LimitedJob", limited_class(:raise))
+    allow(Pgbus::Concurrency::Semaphore).to receive(:acquire).and_return(:blocked)
+    job = EnqueueStatusSpec::LimitedJob.new
+
+    expect { adapter.enqueue_all([job]) }.to raise_error(Pgbus::ConcurrencyLimitExceeded)
+
+    expect(job.successfully_enqueued?).to be(false)
+  end
+
+  it "leaves an individual job whose send raises false" do
+    stub_const("EnqueueStatusSpec::UniqueJob", unique_class(:discard))
+    allow(mock_client).to receive(:send_message).and_raise(StandardError, "send failed")
+    allow(Pgbus::Uniqueness).to receive(:release_lock)
+    job = EnqueueStatusSpec::UniqueJob.new(1)
+
+    expect { adapter.enqueue_all([job]) }.to raise_error(StandardError, "send failed")
+
+    expect(job.successfully_enqueued?).to be(false)
+    expect(job.provider_job_id).to be_nil
+  end
+
   describe "the single-job path perform_later takes" do
     it "leaves the flag alone when bookkeeping after the send raises" do
       allow(Pgbus::Batch).to receive(:backfill_execution).and_raise(StandardError, "backfill failed")

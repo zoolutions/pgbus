@@ -43,9 +43,10 @@ module Pgbus
 
       private
 
-      # One job of an enqueue_all that cannot take the bulk path. Only here is
-      # successfully_enqueued set: on perform_later, ActiveJob sets it itself
-      # around enqueue/enqueue_at.
+      # One job of an enqueue_all that cannot take the bulk path.
+      # enqueue_with_concurrency marks it once it is live, as enqueue_immediate
+      # marks the bulk; on perform_later the adapter never sets
+      # successfully_enqueued, ActiveJob sets it around enqueue/enqueue_at.
       def enqueue_one_of_all(active_job)
         delay = scheduled_in_future?(active_job) ? delay_until(active_job.scheduled_at.to_f) : 0
         enqueue_job(active_job, delay: delay, mark_enqueued: true)
