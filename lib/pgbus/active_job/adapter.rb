@@ -7,12 +7,10 @@ module Pgbus
     class Adapter
       def enqueue(active_job)
         enqueue_job(active_job)
-        active_job
       end
 
       def enqueue_at(active_job, timestamp)
         enqueue_job(active_job, delay: delay_until(timestamp))
-        active_job
       end
 
       # Sets successfully_enqueued on every job, as ActiveJob.perform_all_later
@@ -50,17 +48,17 @@ module Pgbus
       # around enqueue/enqueue_at.
       def enqueue_one_of_all(active_job)
         delay = scheduled_in_future?(active_job) ? delay_until(active_job.scheduled_at.to_f) : 0
-        active_job.successfully_enqueued = enqueue_job(active_job, delay: delay)
+        enqueue_job(active_job, delay: delay, mark_enqueued: true)
       end
 
       def delay_until(timestamp)
         [(timestamp - Time.current.to_f).ceil, 0].max
       end
 
-      # Returns true when the job is live: sent, or parked behind its
-      # concurrency limit to run later. False when a uniqueness or concurrency
-      # on_conflict dropped it.
-      def enqueue_job(active_job, delay: 0)
+      # Returns the job. With mark_enqueued (enqueue_all), sets
+      # successfully_enqueued once the job is live: sent, or parked behind its
+      # concurrency limit to run later.
+      def enqueue_job(active_job, delay: 0, mark_enqueued: false)
         queue = active_job.queue_name || Pgbus.configuration.default_queue
         payload_hash = Serializer.serialize_job_hash(active_job)
         payload_hash = Concurrency.inject_metadata(active_job, payload_hash)
@@ -71,15 +69,15 @@ module Pgbus
 
         if uniqueness_rejected?(active_job, payload_hash, queue: queue)
           uncount_batch_job(payload_hash, active_job)
-          return false
+          return active_job
         end
 
-        enqueue_with_concurrency(active_job, queue, payload_hash, delay: delay)
+        enqueue_with_concurrency(active_job, queue, payload_hash, delay: delay, mark_enqueued: mark_enqueued)
       ensure
         forget_enqueue_batch_id(active_job)
       end
 
-      def enqueue_with_concurrency(active_job, queue, payload_hash, delay: 0)
+      def enqueue_with_concurrency(active_job, queue, payload_hash, delay: 0, mark_enqueued: false)
         key = Concurrency.extract_key(payload_hash)
         concurrency = concurrency_config(active_job)
         priority = active_job.try(:priority)
@@ -126,6 +124,10 @@ module Pgbus
           active_job.provider_job_id = msg_id
         end
 
+        # Marked before any bookkeeping below can raise: the job is live
+        # whatever happens next (issue #679).
+        active_job.successfully_enqueued = true if mark_enqueued && (msg_id || blocked)
+
         # Bind before backfill so a live message is never left with an unbound
         # uniqueness row if execution-row bookkeeping raises.
         bind_acquired_uniqueness_lock(queue, msg_id) if msg_id
@@ -140,7 +142,7 @@ module Pgbus
         uniqueness_key = Thread.current[:pgbus_acquired_uniqueness_key]
         UniquenessKey.clear_bind_stamp!(uniqueness_key) if uniqueness_key
         Thread.current[:pgbus_acquired_uniqueness_key] = nil
-        !msg_id.nil? || blocked
+        active_job
       rescue StandardError => e
         # An ambiguous send is treated exactly like a live message: the
         # produce may have committed with only its reply lost, and undoing

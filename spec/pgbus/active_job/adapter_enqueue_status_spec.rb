@@ -169,7 +169,39 @@ RSpec.describe Pgbus::ActiveJob::Adapter, "#enqueue_all enqueue status" do
     expect(statuses([first, duplicate, plain])).to eq([true, false, false])
   end
 
+  it "keeps a sent individual job marked when bookkeeping after its send raises" do
+    stub_const("EnqueueStatusSpec::UniqueJob", unique_class(:discard))
+    allow(Pgbus::Batch).to receive(:backfill_execution).and_raise(StandardError, "backfill failed")
+    job = EnqueueStatusSpec::UniqueJob.new(1)
+
+    expect { adapter.enqueue_all([job]) }.to raise_error(StandardError, "backfill failed")
+
+    expect(job.successfully_enqueued?).to be(true)
+    expect(job.provider_job_id).to eq(101)
+  end
+
+  it "keeps a parked individual job marked when bookkeeping after the park raises" do
+    stub_const("EnqueueStatusSpec::LimitedJob", limited_class(:block))
+    allow(Pgbus::Concurrency::Semaphore).to receive(:acquire).and_return(:blocked)
+    allow(Pgbus::Batch).to receive(:note_retry_reenqueued).and_raise(StandardError, "note failed")
+    allow(adapter).to receive(:retry_retagged?).and_return(true)
+    job = EnqueueStatusSpec::LimitedJob.new
+
+    expect { adapter.enqueue_all([job]) }.to raise_error(StandardError, "note failed")
+
+    expect(job.successfully_enqueued?).to be(true)
+  end
+
   describe "the single-job path perform_later takes" do
+    it "leaves the flag alone when bookkeeping after the send raises" do
+      allow(Pgbus::Batch).to receive(:backfill_execution).and_raise(StandardError, "backfill failed")
+      job = plain_class.new
+
+      expect { adapter.enqueue(job) }.to raise_error(StandardError, "backfill failed")
+
+      expect(job.successfully_enqueued?).to be_nil
+    end
+
     it "leaves successfully_enqueued to ActiveJob: enqueue and enqueue_at never set it" do
       now = plain_class.new
       later = plain_class.new
