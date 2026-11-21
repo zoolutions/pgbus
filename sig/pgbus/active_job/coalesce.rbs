@@ -19,12 +19,14 @@ module Pgbus
       end
 
       def self.current: () -> Coalesce?
-      def self.open: [T] (?on_failure: on_failure) { () -> T } -> T
+      # batch_id: (Pgbus.batch, issue #683) a scope of the batch's own that holds only its members.
+      def self.open: [T] (?on_failure: on_failure, ?batch_id: String?) { () -> T } -> T
       def self.validate_on_failure!: (untyped on_failure) -> void
 
       attr_reader on_failure: on_failure
+      attr_reader batch_id: String?
 
-      def initialize: (?on_failure: on_failure) -> void
+      def initialize: (?on_failure: on_failure, ?batch_id: String?, ?chunk_size: Integer) -> void
       def push: (Adapter adapter, untyped job, Hash[String, untyped] payload) -> bool
       def finish!: (?block_error: Exception?) -> Result
 

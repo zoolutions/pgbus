@@ -65,6 +65,8 @@ RSpec.describe "Batch flow (integration)", :integration do
     client.ensure_queue(work_queue)
   end
 
+  after { Pgbus.configuration.coalesce_chunk_size = 1_000 }
+
   # Drain the callback queue and return the ActiveJob class names of every
   # message on it, deleting each as it is read so a re-read never sees it again.
   def drain_callback_job_classes
@@ -172,6 +174,9 @@ RSpec.describe "Batch flow (integration)", :integration do
 
   describe "completions racing the total publish (PR #417 review)" do
     it "finishes a batch whose jobs all complete before total_jobs is published" do
+      # One job per flush (issue #683), so each member is counted and sent
+      # while the block is still open, as this race needs.
+      Pgbus.configuration.coalesce_chunk_size = 1
       batch = Pgbus::Batch.new(on_finish: on_finish_job)
       batch.enqueue do
         worker_job.perform_later
@@ -234,6 +239,9 @@ RSpec.describe "Batch flow (integration)", :integration do
 
   describe "stalled-pending sweep keeps the counters it already has (issue #423)" do
     it "finishes a crashed pending batch whose early jobs already completed" do
+      # One job per flush (issue #683), so each member is counted and sent
+      # while the block is still open, as this race needs.
+      Pgbus.configuration.coalesce_chunk_size = 1
       batch = Pgbus::Batch.new(on_finish: on_finish_job)
       expect do
         batch.enqueue do
@@ -261,6 +269,9 @@ RSpec.describe "Batch flow (integration)", :integration do
     end
 
     it "leaves a pending batch alone while its block is still actively enqueuing" do
+      # One job per flush (issue #683), so each member is counted and sent
+      # while the block is still open, as this race needs.
+      Pgbus.configuration.coalesce_chunk_size = 1
       batch = Pgbus::Batch.new
       batch.enqueue do
         worker_job.perform_later

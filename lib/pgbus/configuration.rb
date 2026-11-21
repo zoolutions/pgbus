@@ -308,6 +308,11 @@ module Pgbus
                   # marks only its queues unavailable.
                   :web_queue_metrics_chunk_size
 
+    # Held jobs after which a Pgbus.coalesce scope (and the one Pgbus.batch
+    # opens for its block) sends what it holds before the block ends (issue
+    # #683), so a huge block stays bounded in memory.
+    attr_accessor :coalesce_chunk_size
+
     # The MCP server's workflow write tools (issue #550): pgbus_workflow_resume,
     # _cancel, _skip_step, _resume_at, _run_now and _signal. Off by default, and
     # then they are never built, so tools/list cannot show them. Read once, when
@@ -510,6 +515,7 @@ module Pgbus
       @web_filter_parameters = nil # nil = auto-detect from Rails, then fall back to defaults
       @web_filter_sensitive = true
       @web_queue_metrics_chunk_size = 100
+      @coalesce_chunk_size = 1_000
       @deprecation_warned = Set.new
 
       # HTTP health endpoints — nil port disables the standalone server.
@@ -1131,6 +1137,10 @@ module Pgbus
 
       unless web_queue_metrics_chunk_size.is_a?(Integer) && web_queue_metrics_chunk_size.positive?
         raise Pgbus::ConfigurationError, "web_queue_metrics_chunk_size must be a positive integer"
+      end
+
+      unless coalesce_chunk_size.is_a?(Integer) && coalesce_chunk_size.positive?
+        raise Pgbus::ConfigurationError, "coalesce_chunk_size must be a positive integer"
       end
 
       raise Pgbus::ConfigurationError, "require_primary must be true or false" unless [true, false].include?(require_primary)

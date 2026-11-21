@@ -37,7 +37,16 @@ RSpec.describe Pgbus::BatchEntry do
 
       described_class.decrement_total_jobs!("b1")
 
-      expect(relation).to have_received(:update_all).with(["total_jobs = GREATEST(total_jobs - 1, 0)"])
+      expect(relation).to have_received(:update_all).with(["total_jobs = GREATEST(total_jobs - ?, 0)", 1])
+    end
+
+    it "subtracts a whole failed group in one statement (issue #683)" do
+      relation = double("relation", update_all: 1)
+      allow(described_class).to receive(:where).and_return(relation)
+
+      described_class.decrement_total_jobs!("b1", 4)
+
+      expect(relation).to have_received(:update_all).with(["total_jobs = GREATEST(total_jobs - ?, 0)", 4])
     end
   end
 

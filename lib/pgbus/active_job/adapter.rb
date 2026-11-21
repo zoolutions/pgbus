@@ -60,14 +60,16 @@ module Pgbus
           job.enqueue_error = nil
         end
         error = nil
+        counted = {}.compare_by_identity
         entries.group_by { |_, payload| [payload["queue_name"] || Pgbus.configuration.default_queue, payload["priority"]] }
                .each do |(queue, priority), group|
-          enqueue_immediate(queue, group.map(&:first), priority: priority, payloads: group.map(&:last))
+          enqueue_immediate(queue, group.map(&:first), priority: priority, payloads: group.map(&:last), counted: counted)
         rescue StandardError => e
           error = e
         end
         sent = jobs.count(&:successfully_enqueued?)
-        retried, failed, error = retry_coalesced(entries.reject { |job, _| job.successfully_enqueued? }, error)
+        unsent = entries.reject { |job, _| job.successfully_enqueued? }
+        retried, failed, error = retry_coalesced(unsent, counted, error)
         Coalesce::Result.new(buffered: entries.size, sent: sent, retried: retried, failed: failed, error: error)
       end
 
@@ -77,9 +79,10 @@ module Pgbus
       # send it. Sent at once instead: uniqueness and concurrency (their lock
       # or slot is taken at enqueue), a future job (its delay), a retry
       # re-enqueue (#424) and a deploy task run's job (#660), which need the
-      # single path's bookkeeping, a batch member (counted in now: a batch
-      # pending on a buffered member reads as stalled to the sweep), and a
-      # pgbus class that opts out (Workflow::StepJob, whose enqueue failure
+      # single path's bookkeeping, a batch member outside its own batch's
+      # scope (Pgbus.batch opens one for its block, issue #683; an outer
+      # scope's flush could come after the sweep reads the batch as stalled),
+      # and a pgbus class that opts out (Workflow::StepJob, whose enqueue failure
       # is reported and swept, never raised; pgbus_coalesce? is internal).
       # Serializing now raises an unserializable argument here, as outside a
       # scope, and keeps a later change to the job or its arguments out of
@@ -88,24 +91,21 @@ module Pgbus
         return false if Uniqueness.uniqueness_config(active_job) || concurrency_config(active_job)
         return false if scheduled_in_future?(active_job) || active_job.executions.to_i.positive?
         return false if active_job.is_a?(DeployTaskRunId) && active_job.deploy_task_run_id
-        return false if member_batch_id(active_job)
+        return false if member_batch_id(active_job) != scope.batch_id
         return false if active_job.class.respond_to?(:pgbus_coalesce?) && !active_job.class.pgbus_coalesce?
 
-        scope.push(self, active_job, FairShare.inject_metadata(active_job, Serializer.serialize_job_hash(active_job)))
+        payload = tag_bulk_member(FairShare.inject_metadata(active_job, Serializer.serialize_job_hash(active_job)), active_job)
+        scope.push(self, active_job, payload)
       end
 
       # Each held job the bulk left unsent, on its own: for a job coalesce
-      # admitted, the single path is the plain send. Returns
-      # [retried count, failed jobs, the last error].
-      def retry_coalesced(entries, error)
+      # admitted, the single path is the plain send, plus a batch member's
+      # count and backfill. Returns [retried count, failed jobs, the last error].
+      def retry_coalesced(entries, counted, error)
         retried = 0
         failed = []
         entries.each do |job, payload|
-          queue = payload["queue_name"] || Pgbus.configuration.default_queue
-          msg_id = Pgbus.client.send_message(queue, payload, delay: 0, priority: payload["priority"])
-          if msg_id
-            job.provider_job_id = msg_id
-            job.successfully_enqueued = true
+          if resend_coalesced(job, payload, counted: counted.key?(job))
             retried += 1
           else
             failed << job
@@ -115,6 +115,32 @@ module Pgbus
           failed << job
         end
         [retried, failed, error]
+      end
+
+      # A batch member not +counted+ is counted in first, as a single
+      # enqueue is, and uncounted when its send fails before any message can
+      # exist; one the bulk counted keeps that count (its send's outcome is
+      # unknown) and is only sent.
+      def resend_coalesced(job, payload, counted:)
+        queue = payload["queue_name"] || Pgbus.configuration.default_queue
+        priority = payload["priority"]
+        member = payload[Batch::METADATA_KEY]
+        Batch.track_enqueue(payload) if member && !counted
+        begin
+          msg_id = Pgbus.client.send_message(queue, payload, delay: 0, priority: priority)
+        rescue StandardError => e
+          Batch.untrack_enqueue(payload) if member && !counted && !ambiguous_delivery?(e)
+          raise
+        end
+        unless msg_id
+          Batch.untrack_enqueue(payload) if member && !counted
+          return false
+        end
+
+        job.provider_job_id = msg_id
+        job.successfully_enqueued = true
+        Batch.backfill_executions([payload], [msg_id], physical_queue(queue, priority)) if member
+        true
       end
 
       # One job of an enqueue_all that cannot take the bulk path.
@@ -540,13 +566,19 @@ module Pgbus
       end
 
       # +payloads+: already built (a Coalesce scope serialized them at push).
-      def enqueue_immediate(queue, jobs, priority: nil, payloads: nil)
+      # +counted+ (deliver_coalesced) collects the batch members whose count
+      # stands after a failure, so their retry does not count them twice.
+      # The bookkeeping around the send is one statement per group (issue
+      # #683): track_bulk's insert, the backfill, or the untrack on a failure.
+      def enqueue_immediate(queue, jobs, priority: nil, payloads: nil, counted: nil)
         return if jobs.empty?
 
         payloads ||= jobs.map do |j|
           tag_bulk_member(FairShare.inject_metadata(j, Serializer.serialize_job_hash(j)), j)
         end
+        tracked = false
         track_bulk(payloads)
+        tracked = true
         physical = physical_queue(queue, priority)
         msg_ids = nil
         msg_ids = Pgbus.client.send_batch(queue, payloads, priority: priority)
@@ -559,17 +591,27 @@ module Pgbus
           job.provider_job_id = id
           job.successfully_enqueued = true
         end
-        payloads.zip(msg_ids).each { |payload, id| Batch.backfill_execution(payload, id, physical) }
+        Batch.backfill_executions(payloads, msg_ids, physical)
       rescue Pgbus::EnqueueError
-        Array(payloads).each_with_index do |payload, index|
-          Batch.untrack_enqueue(payload) if msg_ids.nil? || msg_ids[index].nil?
-        end
+        unsent = Array(payloads).each_index.select { |index| msg_ids.nil? || msg_ids[index].nil? }
+        Batch.untrack_enqueue_all(payloads.values_at(*unsent))
+        note_counted(counted, jobs, payloads, Array(payloads).each_index.to_a - unsent)
         raise
-      rescue Pgbus::SchemaNotReady => e
-        Pgbus.logger.error { "[Pgbus] #{e.message}" }
+      rescue StandardError => e
+        Pgbus.logger.error { "[Pgbus] #{e.message}" } if e.is_a?(Pgbus::SchemaNotReady)
+        note_counted(counted, jobs, payloads, Array(payloads).each_index.to_a) if tracked
         raise
       ensure
         jobs.each { |j| forget_enqueue_batch_id(j) }
+      end
+
+      # The members at +indexes+ stay counted in their batch (their send's
+      # outcome is unknown, or it returned their id): a retry sends them
+      # without counting them again.
+      def note_counted(counted, jobs, payloads, indexes)
+        return unless counted
+
+        indexes.each { |index| counted[jobs[index]] = true if payloads[index][Batch::METADATA_KEY] }
       end
 
       # One guarded increment per batch for the whole bulk, not one per job.

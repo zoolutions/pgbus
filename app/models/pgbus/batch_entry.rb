@@ -33,9 +33,9 @@ module Pgbus
 
     # Reverse of increment_total_jobs! for a job that will never run. Floored
     # at zero; a finished row is left alone.
-    def self.decrement_total_jobs!(batch_id)
+    def self.decrement_total_jobs!(batch_id, count = 1)
       where(batch_id: batch_id, status: %w[pending processing])
-        .update_all(["total_jobs = GREATEST(total_jobs - 1, 0)"])
+        .update_all(["total_jobs = GREATEST(total_jobs - ?, 0)", count])
     end
 
     # Resolve a batch member and count it, in one statement and no

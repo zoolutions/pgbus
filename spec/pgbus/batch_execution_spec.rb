@@ -70,7 +70,7 @@ RSpec.describe Pgbus::BatchExecution do
     let(:payload) { { "job_id" => job_id, "queue_name" => "default", Pgbus::Batch::METADATA_KEY => batch_id } }
 
     before do
-      allow(described_class).to receive(:insert_for!)
+      allow(described_class).to receive(:insert_all_for!)
       allow(described_class).to receive(:backfill!)
       allow(described_class).to receive(:where).and_return(double(delete_all: 1))
       allow(Pgbus::BatchEntry).to receive(:transaction).and_yield
@@ -80,7 +80,7 @@ RSpec.describe Pgbus::BatchExecution do
     it "inserts an execution row when tracking an enqueue" do
       Pgbus::Batch.track_enqueue(payload)
 
-      expect(described_class).to have_received(:insert_for!).with(batch_id: batch_id, job_id: job_id, queue_name: "default")
+      expect(described_class).to have_received(:insert_all_for!).with(batch_id: batch_id, rows: [[job_id, "default"]])
     end
 
     it "does not insert when the executions table is missing" do
@@ -89,7 +89,7 @@ RSpec.describe Pgbus::BatchExecution do
 
       Pgbus::Batch.track_enqueue(payload)
 
-      expect(described_class).not_to have_received(:insert_for!)
+      expect(described_class).not_to have_received(:insert_all_for!)
     end
 
     it "deletes the row when untracking an enqueue-time discard" do

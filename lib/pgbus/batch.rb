@@ -81,13 +81,19 @@ module Pgbus
     #   this key may exist; see #enqueue for what happens to the next one
     # @param on_conflict [Symbol] :reject (raise AlreadyRunning), :discard
     #   (skip the block silently) or :log (skip the block, warn)
+    # @param on_enqueue_failure [Symbol, #call] what happens to a member the
+    #   block's coalesce scope (issue #683) could not send: :raise (default,
+    #   Pgbus::EnqueueError), :report, or a callable taking (jobs, error).
+    #   Distinct from on_failure:, the callback fired when a member fails.
     def initialize(on_complete: nil, on_finish: nil, on_success: nil, on_discard: nil, on_failure: nil,
-                   description: nil, properties: {}, uniqueness_key: nil, on_conflict: :reject)
+                   description: nil, properties: {}, uniqueness_key: nil, on_conflict: :reject,
+                   on_enqueue_failure: :raise)
       raise ArgumentError, "pass on_failure: only — on_discard: is a deprecated alias" if on_discard && on_failure
       raise ArgumentError, "pass on_complete: only — on_finish: is a deprecated alias" if on_finish && on_complete
       unless VALID_CONFLICTS.include?(on_conflict)
         raise ArgumentError, "on_conflict must be one of #{VALID_CONFLICTS.join(", ")}, got #{on_conflict.inspect}"
       end
+      Pgbus::ActiveJob::Coalesce.validate_on_failure!(on_enqueue_failure)
 
       if on_discard
         Pgbus.logger.warn do
@@ -104,6 +110,7 @@ module Pgbus
       @properties = properties
       @uniqueness_key = uniqueness_key&.to_s
       @on_conflict = on_conflict
+      @on_enqueue_failure = on_enqueue_failure
       @discarded = false
       @started = false
     end
@@ -136,7 +143,10 @@ module Pgbus
         raise
       end
       @started = true
-      count_jobs(&)
+      # The block's perform_later calls are held in a scope of the batch's
+      # own (issue #683) and sent, counted and backfilled one group at a time
+      # when the block returns, before the batch can start.
+      count_jobs { Pgbus::ActiveJob::Coalesce.open(on_failure: @on_enqueue_failure, batch_id: batch_id, &) }
       self.class.send(:after_transactions_commit) { start_processing }
       self
     end
@@ -367,12 +377,9 @@ module Pgbus
           BatchEntry.increment_total_jobs!(batch_id, payloads.size)
           next unless migrated
 
-          payloads.each do |payload|
-            job_id = payload["job_id"]
-            next unless job_id
-
-            BatchExecution.insert_for!(batch_id: batch_id, job_id: job_id, queue_name: payload["queue_name"])
-          end
+          # One multi-row INSERT for the whole bulk (issue #683).
+          rows = payloads.filter_map { |payload| [payload["job_id"], payload["queue_name"]] if payload["job_id"] }
+          BatchExecution.insert_all_for!(batch_id: batch_id, rows: rows)
         end
       end
     end
@@ -434,6 +441,53 @@ module Pgbus
           BatchExecution.where(job_id: job_id).delete_all if migrated && job_id
         end
       end
+    end
+
+    # A batch scope's hold (issue #683): one count the scope takes before it
+    # holds the batch's first member, and gives back once every held member
+    # is counted in. While members are held they have no execution row, so
+    # the stalled-batch sweep could otherwise read a long block as crashed
+    # and finish the batch empty; the hold keeps total_jobs above the
+    # finished counters until the members are counted. Raises
+    # AlreadyFinished, as an enqueue into a finished batch does.
+    def self.hold_enqueue(batch_id)
+      BatchEntry.connection_pool.with_connection { BatchEntry.increment_total_jobs!(batch_id, 1) }
+    end
+
+    def self.release_enqueue_hold(batch_id)
+      BatchEntry.connection_pool.with_connection { BatchEntry.decrement_total_jobs!(batch_id) }
+    end
+
+    # untrack_enqueue for every payload of a failed bulk send (issue #683):
+    # per batch, one decrement by the count and one DELETE.
+    def self.untrack_enqueue_all(payloads)
+      payloads.select { |payload| payload[METADATA_KEY] }.group_by { |payload| payload[METADATA_KEY] }
+              .each do |batch_id, members|
+        BatchEntry.connection_pool.with_connection do
+          migrated = executions_migrated?
+          BatchEntry.transaction do
+            BatchEntry.decrement_total_jobs!(batch_id, members.size)
+            BatchExecution.delete_all_for!(members.filter_map { |payload| payload["job_id"] }) if migrated
+          end
+        end
+      end
+    end
+
+    # backfill_execution for a whole send group, in one UPDATE (issue #683).
+    # The messages are live, so a failure is logged, never raised: the rows
+    # keep their logical queue_name, which is what the stalled-execution sweep
+    # probes before the msg_id lands.
+    def self.backfill_executions(payloads, msg_ids, queue_name)
+      rows = payloads.zip(msg_ids).filter_map do |payload, msg_id|
+        [payload["job_id"], msg_id, queue_name] if payload[METADATA_KEY] && payload["job_id"] && msg_id
+      end
+      return if rows.empty?
+      return unless execution_rows_migrated_softly?
+
+      BatchExecution.backfill_all!(rows)
+    rescue StandardError => e
+      Pgbus.logger.warn { "[Pgbus] Batch execution backfill failed for #{rows&.size} job(s): #{e.class}: #{e.message}" }
+      nil
     end
 
     def self.backfill_execution(payload, msg_id, queue_name)

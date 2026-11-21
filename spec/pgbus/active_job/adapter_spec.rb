@@ -958,26 +958,27 @@ RSpec.describe Pgbus::ActiveJob::Adapter do
 
     it "backfills execution rows only for the batch members of a mixed bulk (issue #603)" do
       allow(Pgbus::Batch).to receive_messages(executions_migrated?: true, track_enqueue: nil)
-      allow(Pgbus::BatchExecution).to receive(:backfill!)
+      allow(Pgbus::BatchExecution).to receive(:backfill_all!)
       allow(job).to receive(:enqueue_batch_id).and_return("b-1")
       allow(job).to receive(:enqueue_batch_id=)
       allow(mock_client).to receive(:send_batch).and_return([1, 2])
 
       adapter.enqueue_all([job, job2])
 
-      expect(Pgbus::BatchExecution).to have_received(:backfill!).once
-      expect(Pgbus::BatchExecution).to have_received(:backfill!)
-        .with(job_id, msg_id: 1, queue_name: "#{Pgbus.configuration.queue_prefix}_default")
+      expect(Pgbus::BatchExecution).to have_received(:backfill_all!).once
+        .with([[job_id, 1, "#{Pgbus.configuration.queue_prefix}_default"]])
     end
 
     it "never touches pgbus_batch_executions for a bulk of jobs in no batch (issue #603)" do
       allow(Pgbus::Batch).to receive(:executions_migrated?).and_return(true)
       allow(Pgbus::BatchExecution).to receive(:backfill!)
+      allow(Pgbus::BatchExecution).to receive(:backfill_all!)
       allow(mock_client).to receive(:send_batch).and_return([1, 2])
 
       adapter.enqueue_all([job, job2])
 
       expect(Pgbus::BatchExecution).not_to have_received(:backfill!)
+      expect(Pgbus::BatchExecution).not_to have_received(:backfill_all!)
     end
 
     context "when batch response size mismatches" do

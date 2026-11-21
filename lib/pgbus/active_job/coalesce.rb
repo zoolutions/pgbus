@@ -27,6 +27,14 @@ module Pgbus
     # fiber, during the flush, or after the block, goes out at once. A nested
     # scope joins the outer one, whose on_failure applies; only the outermost
     # flushes.
+    #
+    # A batch scope (issue #683, opened by Pgbus.batch for its block with
+    # +batch_id+) holds only that batch's members and joins nothing: it
+    # replaces the current scope for the block, flushes when the block ends,
+    # before the batch starts, and puts the outer scope back. A plain scope
+    # opened inside it joins it. Every scope flushes early each
+    # config.coalesce_chunk_size held jobs, so a huge block stays bounded in
+    # memory; on_failure still runs once, at the end, for every chunk.
     class Coalesce
       KEY = :pgbus_coalesce
       FAILURE_MODES = %i[raise report].freeze
@@ -39,13 +47,13 @@ module Pgbus
           Thread.current[KEY]
         end
 
-        def open(on_failure: :raise, &block)
+        def open(on_failure: :raise, batch_id: nil, &block)
           raise ArgumentError, "Pgbus.coalesce needs a block" unless block
 
           validate_on_failure!(on_failure)
-          return yield if current
+          return yield if current && batch_id.nil?
 
-          run(new(on_failure: on_failure), &block)
+          run(new(on_failure: on_failure, batch_id: batch_id), &block)
         end
 
         def validate_on_failure!(on_failure)
@@ -57,6 +65,7 @@ module Pgbus
         private
 
         def run(scope)
+          outer = current
           Thread.current[KEY] = scope
           error = nil
           begin
@@ -65,31 +74,40 @@ module Pgbus
             error = e
             raise
           ensure
-            Thread.current[KEY] = nil
+            Thread.current[KEY] = outer
             scope.finish!(block_error: error)
           end
         end
       end
 
-      attr_reader :on_failure
+      attr_reader :on_failure, :batch_id
 
-      def initialize(on_failure: :raise)
+      def initialize(on_failure: :raise, batch_id: nil, chunk_size: Pgbus.configuration.coalesce_chunk_size)
         @on_failure = on_failure
+        @batch_id = batch_id
+        @chunk_size = chunk_size
         @mutex = Mutex.new
         @entries = []
+        @delivered = []
         @closed = false
+        @hold = false
       end
 
       # Holds +job+ for +adapter+ with the +payload+ serialized at
-      # perform_later. Returns false once the flush has started: the caller
-      # sends it itself.
+      # perform_later, and sends the buffer once it holds a chunk. Returns
+      # false once the flush has started: the caller sends it itself.
       def push(adapter, job, payload)
-        @mutex.synchronize do
+        return false if @mutex.synchronize { @closed }
+
+        take_batch_hold
+        chunk = @mutex.synchronize do
           return false if @closed
 
           @entries << [adapter, job, payload]
-          true
+          drain if @entries.size >= @chunk_size
         end
+        deliver_chunk(chunk) if chunk
+        true
       end
 
       # Closes the buffer, sends it, then applies on_failure to whatever could
@@ -98,8 +116,13 @@ module Pgbus
       # callable that raises is reported, so the block's error propagates.
       def finish!(block_error: nil)
         started = ::Process.clock_gettime(::Process::CLOCK_MONOTONIC)
-        entries = close
-        result = deliver(entries)
+        begin
+          deliver_chunk(close)
+        ensure
+          release_batch_hold
+        end
+        entries, results = @mutex.synchronize { [@delivered.flat_map(&:first), @delivered.map(&:last)] }
+        result = combine(entries.size, results)
         instrument(result, started)
         handle_failure(result, entries, block_error) if result.failed.any?
         result
@@ -107,21 +130,54 @@ module Pgbus
 
       private
 
+      # A batch scope counts one placeholder into its batch before holding
+      # its first member (Batch.hold_enqueue) and gives it back once the
+      # members are counted, so the batch cannot finish while they are held.
+      # @hold is read and written only by the scope's own fiber (push and
+      # finish!), outside the mutex so the database call never holds it.
+      def take_batch_hold
+        return unless @batch_id && !@hold
+
+        Batch.hold_enqueue(@batch_id)
+        @hold = true
+      end
+
+      def release_batch_hold
+        return unless @hold
+
+        @hold = false
+        Batch.release_enqueue_hold(@batch_id)
+      rescue StandardError => e
+        ErrorReporter.report(e, { pgbus_coalesce_hold: @batch_id })
+      end
+
       def close
         @mutex.synchronize do
           @closed = true
-          entries = @entries
-          @entries = []
-          entries
+          drain
         end
       end
 
-      def deliver(entries)
+      # Takes the buffer; the caller holds the mutex.
+      def drain
+        entries = @entries
+        @entries = []
+        entries
+      end
+
+      # Sends +entries+ now and keeps their result for finish!.
+      def deliver_chunk(entries)
+        return if entries.empty?
+
         results = entries.group_by(&:first).map do |adapter, group|
           adapter.deliver_coalesced(group.map { |_, job, payload| [job, payload] })
         end
+        @mutex.synchronize { @delivered << [entries, combine(entries.size, results)] }
+      end
+
+      def combine(buffered, results)
         Result.new(
-          buffered: entries.size,
+          buffered: buffered,
           sent: results.sum(&:sent), retried: results.sum(&:retried),
           failed: results.flat_map(&:failed), error: results.filter_map(&:error).last
         )

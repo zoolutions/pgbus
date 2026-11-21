@@ -263,10 +263,17 @@ class Views::Docs::Pages::Batches < DocsUI::Page
            nothing.
         2. Each job enqueued in the block is tagged with the batch id and,
            in one transaction *before* the message is sent, increments
-           `total_jobs` and inserts a `pgbus_batch_executions` row (identity is
-           the ActiveJob `job_id`). The increment is guarded on an unfinished
+           `total_jobs` and inserts its `pgbus_batch_executions` row (identity
+           is the ActiveJob `job_id`). The increment is guarded on an unfinished
            batch — that guard is what raises `AlreadyFinished`. A
-           `perform_all_later` counts once for the whole bulk.
+           `perform_all_later`, and the block's own `perform_later` calls, which
+           the block holds in a coalesce scope of the batch's own and sends
+           every `config.coalesce_chunk_size` jobs and when it returns, count
+           once per bulk: one increment, one multi-row insert, one
+           `send_batch` per queue and priority, one backfill. While the scope
+           holds members it keeps one placeholder count on the batch, so the
+           sweep cannot finish it empty. A member that cannot be sent goes to
+           `Pgbus.batch(on_enqueue_failure:)` (`:raise` by default).
         3. As each job is archived or dead-lettered, the executor deletes that
            execution row and bumps `completed_jobs` / `failed_jobs`.
            `total_jobs == outstanding rows + completed + failed` holds at every

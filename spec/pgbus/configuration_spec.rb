@@ -147,6 +147,10 @@ RSpec.describe Pgbus::Configuration do
       expect(config.web_queue_metrics_chunk_size).to eq(100)
     end
 
+    it "flushes a coalesce scope every 1 000 held jobs by default (issue #683)" do
+      expect(config.coalesce_chunk_size).to eq(1_000)
+    end
+
     it "has outbox disabled by default" do
       expect(config.outbox_enabled).to be false
       expect(config.outbox_poll_interval).to eq(1.0)
@@ -2087,6 +2091,13 @@ RSpec.describe Pgbus::Configuration do
       [0, -1, 2.5, nil, "100"].each do |value|
         config.web_queue_metrics_chunk_size = value
         expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /web_queue_metrics_chunk_size/)
+      end
+    end
+
+    it "rejects a coalesce_chunk_size that is not a positive integer" do
+      [0, -1, 2.5, nil, "100"].each do |value|
+        config.coalesce_chunk_size = value
+        expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /coalesce_chunk_size/)
       end
     end
 
