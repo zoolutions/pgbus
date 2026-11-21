@@ -941,18 +941,16 @@ RSpec.describe Pgbus::ActiveJob::Adapter do
       expect(mock_client).to have_received(:send_batch).with("default", [second_serialized_hash], priority: 2)
     end
 
-    it "schedules future jobs individually via enqueue_at" do
+    it "sends future jobs in bulk too, one send_batch per delay (issue #686)" do
       future_time = Time.now + 120
       allow(job).to receive(:scheduled_at).and_return(future_time)
       allow(job2).to receive(:scheduled_at).and_return(nil)
-
-      # job is scheduled in the future -> enqueue_at individually
-      # job2 is immediate -> send_batch
       allow(mock_client).to receive_messages(send_message: 10, send_batch: [20])
 
       adapter.enqueue_all([job, job2])
 
-      expect(mock_client).to have_received(:send_message).with("default", serialized_hash, delay: a_value > 0, priority: nil)
+      expect(mock_client).not_to have_received(:send_message)
+      expect(mock_client).to have_received(:send_batch).with("default", [serialized_hash], delay: a_value_within(1).of(120), priority: nil)
       expect(mock_client).to have_received(:send_batch).with("default", [second_serialized_hash], priority: nil)
     end
 

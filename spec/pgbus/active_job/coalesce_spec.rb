@@ -2,12 +2,15 @@
 
 require "spec_helper"
 require "active_job"
+require "active_support/testing/time_helpers"
 
 # Issue #682: Pgbus.coalesce holds a unit of work's bulk-eligible enqueues at
 # the adapter and sends them together when the block ends: one send_batch per
 # (queue, priority) group, each job not sent by it retried on its own, and
 # whatever still fails handed to on_failure.
 RSpec.describe Pgbus::ActiveJob::Coalesce do
+  include ActiveSupport::Testing::TimeHelpers
+
   let(:adapter) { Pgbus::ActiveJob::Adapter.new }
   let(:mock_client) { build_mock_client }
   let(:next_id) { [100] }
@@ -146,13 +149,44 @@ RSpec.describe Pgbus::ActiveJob::Coalesce do
       end
     end
 
-    it "sends a future set(wait:) job at once, with its delay" do
+    it "holds a future set(wait:) job and sends it at the flush with the delay left then (issue #686)" do
       Pgbus.coalesce do
         plain_class.set(wait: 5.minutes).perform_later(1)
 
-        expect(mock_client).to have_received(:send_message).with("default", anything, delay: a_value > 0, priority: nil)
+        expect(mock_client).not_to have_received(:send_batch)
+        travel 2.minutes
       end
-      expect(mock_client).not_to have_received(:send_batch)
+
+      expect(mock_client).to have_received(:send_batch).with("default", anything, delay: a_value_within(1).of(180), priority: nil)
+      expect(mock_client).not_to have_received(:send_message)
+    ensure
+      travel_back
+    end
+
+    it "resends a held future job on its own with the delay left at the retry" do
+      allow(mock_client).to receive(:send_batch).and_raise(IOError, "lost")
+      allow(mock_client).to receive(:send_message) { take_id }
+
+      Pgbus.coalesce do
+        plain_class.set(wait: 100).perform_later(1)
+        travel 30.seconds
+      end
+
+      expect(mock_client).to have_received(:send_message).with("default", anything, delay: a_value_within(1).of(70), priority: nil)
+    ensure
+      travel_back
+    end
+
+    it "sends a held job already due at the flush with the immediate group, without a delay" do
+      Pgbus.coalesce do
+        plain_class.set(wait: 5).perform_later(1)
+        plain_class.perform_later(2)
+        travel 10.seconds
+      end
+
+      expect(mock_client).to have_received(:send_batch).once.with("default", satisfy { |p| p.size == 2 }, priority: nil)
+    ensure
+      travel_back
     end
 
     it "sends a retry re-enqueue (executions > 0) at once" do

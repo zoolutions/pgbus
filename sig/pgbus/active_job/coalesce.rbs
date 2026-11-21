@@ -40,7 +40,7 @@ module Pgbus
       attr_reader batch_id: String?
 
       def initialize: (?on_failure: on_failure, ?batch_id: String?, ?count_in: _CountIn?, ?on_failed: _OnFailed?, ?chunk_size: Integer) -> void
-      def push: (Adapter adapter, untyped job, Hash[String, untyped] payload) -> bool
+      def push: (Adapter adapter, untyped job, Hash[String, untyped] payload, ?Numeric? due_at) -> bool
       def finish!: (?block_error: Exception?) -> Result
 
       # Runs the request inside Pgbus.coalesce; the buffer is sent before the

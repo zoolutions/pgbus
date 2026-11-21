@@ -3,15 +3,16 @@
 module Pgbus
   module ActiveJob
     # A unit of work's enqueues, held at the adapter and sent together when
-    # the unit ends (issue #682): one send_batch per (queue, priority) group
+    # the unit ends (issue #682): one send_batch per (queue, priority, delay) group
     # instead of one send per perform_later. Opened by Pgbus.coalesce and the
     # Rack Middleware.
     #
-    # Only a bulk-eligible job is held (Adapter#enqueue decides), serialized
-    # at perform_later. One with uniqueness or concurrency, a future
-    # scheduled_at, a retry re-enqueue, a deploy task run's job, a batch
-    # member or a Workflow::StepJob goes out at once, as it does outside a
-    # scope. Active Job's enqueue_after_transaction_commit runs before the
+    # Only a bulk-eligible job is held (Adapter#enqueue / #enqueue_at
+    # decide), serialized at perform_later; a future one with its scheduled
+    # time, so its delay is what is left at the flush (issue #686). One with
+    # uniqueness or concurrency, a retry re-enqueue, a deploy task run's job,
+    # a batch member outside its own batch's scope or a Workflow::StepJob
+    # goes out at once, as it does outside a scope. Active Job's enqueue_after_transaction_commit runs before the
     # adapter, so a job that defers reaches the buffer at commit, and a rolled
     # back one never does.
     #
@@ -112,7 +113,9 @@ module Pgbus
       # Holds +job+ for +adapter+ with the +payload+ serialized at
       # perform_later, and sends the buffer once it holds a chunk. Returns
       # false once the flush has started: the caller sends it itself.
-      def push(adapter, job, payload) # rubocop:disable Naming/PredicateMethod -- holds; the result says whether
+      # +due_at+: the time a future job is due (enqueue_at, issue #686); the
+      # flush works its delay out from it.
+      def push(adapter, job, payload, due_at = nil) # rubocop:disable Naming/PredicateMethod -- holds; the result says whether
         chunk = @mutex.synchronize do
           return false if @closed
 
@@ -122,7 +125,7 @@ module Pgbus
           # connection: a chunk counted in there and sent on PGMQ's own
           # connection would lose its count, not its messages, on a rollback.
           full = drain if @entries.size >= @chunk_size && !hold_for_transaction?
-          @entries << [adapter, job, payload]
+          @entries << [adapter, job, payload, due_at]
           full
         end
         deliver_chunk(chunk) if chunk
@@ -176,7 +179,7 @@ module Pgbus
         return if entries.empty?
 
         results = entries.group_by(&:first).map do |adapter, group|
-          adapter.deliver_coalesced(group.map { |_, job, payload| [job, payload] }, counted: counted)
+          adapter.deliver_coalesced(group.map { |_, job, payload, due_at| [job, payload, due_at] }, counted: counted)
         end
         result = combine(entries.size, results)
         failed = result.failed.to_set(&:object_id)
@@ -206,7 +209,7 @@ module Pgbus
       def count_chunk_in(entries, final)
         return false unless @count_in
 
-        @count_in.call(entries.map(&:last), final: final)
+        @count_in.call(entries.map { |_, _, payload, _| payload }, final: final)
         true
       rescue StandardError => e
         raise if entries.empty?
