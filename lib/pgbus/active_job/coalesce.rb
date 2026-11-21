@@ -140,22 +140,32 @@ module Pgbus
       private
 
       # A batch scope takes its batch's hold (Batch.hold_enqueue) before it
-      # holds the first member, refreshes it as the block keeps enqueuing so
-      # the stalled-batch sweep sees activity, and gives it back once the
-      # members are counted. @hold and @hold_touched_at are read and written
+      # holds the first member, refreshes it as the block keeps enqueuing
+      # (taking a new one if an enclosing transaction rolled it back), hands
+      # it to the HoldKeeper so it stays alive while the block is quiet, and
+      # gives it back once the members are counted. @hold and @hold_touched_at are read and written
       # only by the scope's own fiber (push and finish!), outside the mutex
       # so the database call never holds it.
       def take_batch_hold
         return unless @batch_id
 
         if @hold.nil?
-          @hold = Batch.hold_enqueue(@batch_id)
+          retake_batch_hold
         elsif hold_refresh_due?
-          @hold = Batch.hold_enqueue(@batch_id) unless Batch.refresh_enqueue_hold(@hold)
+          retake_batch_hold unless Batch.refresh_enqueue_hold(@hold)
         else
           return
         end
         @hold_touched_at = ::Process.clock_gettime(::Process::CLOCK_MONOTONIC)
+      end
+
+      # Takes a new hold (the first, or one for a hold that is gone) and
+      # hands it to the HoldKeeper, which keeps it alive while the block is
+      # quiet.
+      def retake_batch_hold
+        Batch::HoldKeeper.unregister(@hold) if @hold
+        @hold = Batch.hold_enqueue(@batch_id)
+        Batch::HoldKeeper.register(@hold)
       end
 
       def hold_refresh_due?
@@ -168,6 +178,7 @@ module Pgbus
 
         hold = @hold
         @hold = nil
+        Batch::HoldKeeper.unregister(hold)
         Batch.release_enqueue_hold(hold)
       rescue StandardError => e
         # The hold row stays; the orphan sweep removes it, with its count,

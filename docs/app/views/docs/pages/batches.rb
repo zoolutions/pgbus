@@ -48,8 +48,9 @@ class Views::Docs::Pages::Batches < DocsUI::Page
         `add`, the jobs already added still run, and the batch finishes later
         (through the dispatcher sweep) with only the callbacks set by then. A
         block that goes `config.batch_stall_threshold` (default 5 minutes)
-        without adding a job is treated as stalled and started by that sweep,
-        so keep slow work outside the block. Membership follows the block's
+        without adding a job, and holds no member it has not sent yet, is
+        treated as stalled and started by that sweep, so keep slow work
+        outside the block. Membership follows the block's
         own thread or fiber: `b.add` raises anywhere else, and a plain
         `perform_later` from a thread or fiber the block spawns does not join
         the batch, so the batch can finish before that job runs. Enqueue from
@@ -272,9 +273,10 @@ class Views::Docs::Pages::Batches < DocsUI::Page
            once per bulk: one increment, one multi-row insert, one
            `send_batch` per queue and priority, one backfill. While the scope
            holds members it keeps a counted placeholder row on the batch,
-           refreshed as the block keeps enqueuing, so the sweep cannot finish
-           it empty; the sweep removes a placeholder older than
-           `batch_stall_threshold` (a dead process). A member that cannot be sent goes to
+           kept fresh while the scope is open (at each enqueue, and by a
+           timer while the block is quiet), so the sweep cannot finish it
+           empty; the sweep removes a placeholder older than
+           `batch_stall_threshold`, which only a dead process leaves. A member that cannot be sent goes to
            `Pgbus.batch(on_enqueue_failure:)` (`:raise` by default).
         3. As each job is archived or dead-lettered, the executor deletes that
            execution row and bumps `completed_jobs` / `failed_jobs`.
