@@ -1,5 +1,23 @@
 ## [Unreleased]
 
+### Added
+
+### Changed
+
+### Fixed
+
+### Security
+
+## [1.0.0] - 2026-11-21
+
+**pgbus 1.0.** This release stabilises the API that 0.x settled into, and makes enqueueing many jobs cost a constant number of round trips instead of one or more per job.
+
+- **Coalesced enqueues.** `Pgbus.coalesce { }` holds a unit of work's jobs and sends them together: one `send_batch` per queue, priority and delay. `config.pgbus.coalesce_requests` turns on an opt-in Rack middleware that does the same for every request. At 5 ms per database round trip, 1 000 `perform_later` calls take about 75 ms instead of 6.9 s.
+- **Building batches.** A `Pgbus.batch` opened in a pgbus process is created `building`, owned by that process's heartbeat row. While it is building, no sweep or finish can touch it. Its block's `perform_later` calls are held and counted in once per chunk (`config.coalesce_chunk_size`). If the owner process dies, the sweep reaps the build. Existing installs add `owner_process_id` with `rails generate pgbus:add_batch_owner` (or `pgbus:update`).
+- **Bulk batch bookkeeping.** A batch's execution rows are inserted, backfilled and uncounted with one statement per group, not one per job. At 5 ms per round trip, 1 000 members through `b.add` take about 0.36 s instead of 15.5 s, and 1 000 `perform_later` calls in a built batch take about 0.36 s instead of 41.6 s.
+- **Bulk scheduled sends.** Jobs with `set(wait:)` go out as one `send_batch` per delay, so a staggered fan-out costs one send per slice.
+- **Breaking:** `Batch.new(on_discard:)` and `Batch#on_discard` are removed; use `on_failure:`. `on_finish` stays until 2.0. The 1.0 table in the upgrade guide lists every change.
+
 ### Breaking Changes
 
 - **`Pgbus::Batch.new(on_discard:)` and `Batch#on_discard` are removed**, as their deprecation warning announced for 1.0 (this release). Pass `on_failure:` and read `#on_failure`. `on_discard:` now raises `ArgumentError` (unknown keyword).
