@@ -81,8 +81,14 @@ module Pgbus
             error = e
             raise
           ensure
-            Thread.current[KEY] = outer
-            scope.finish!(block_error: error)
+            # No scope is current while this one flushes: an enqueue then
+            # goes out at once. The outer scope comes back afterwards.
+            Thread.current[KEY] = nil
+            begin
+              scope.finish!(block_error: error)
+            ensure
+              Thread.current[KEY] = outer
+            end
           end
         end
       end

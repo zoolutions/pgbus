@@ -115,6 +115,9 @@ module Pgbus
         return if ProcessEntry.where(id: @process_id).update_all(updates).positive? || @stopped
 
         old_id = @process_id
+        # A batch built while this process re-registers must not name the
+        # row that is gone (issue #683).
+        self.class.note_deregistered(old_id)
         Pgbus.logger.warn do
           "[Pgbus] Process row id=#{old_id} kind=#{@kind} pid=#{::Process.pid} is gone " \
             "(stale-process reaper, manual cleanup, or clock skew?) — re-registering"

@@ -587,6 +587,7 @@ module Pgbus
         msg_ids = nil
         sending = true
         msg_ids = Pgbus.client.send_batch(queue, payloads, priority: priority)
+        sent = true
 
         unless msg_ids.is_a?(Array) && msg_ids.size == jobs.size
           raise Pgbus::EnqueueError, "Pgbus batch enqueue failed: expected #{jobs.size} ids, got #{msg_ids&.size || 0}"
@@ -608,7 +609,8 @@ module Pgbus
         raise
       rescue StandardError => e
         Pgbus.logger.error { "[Pgbus] #{e.message}" } if e.is_a?(Pgbus::SchemaNotReady)
-        settle_counted(counted, jobs, payloads, ambiguous: sending && ambiguous_delivery?(e)) if tracked
+        # After the send returned, its messages are live: the counts stand.
+        settle_counted(counted, jobs, payloads, ambiguous: sent || (sending && ambiguous_delivery?(e))) if tracked
         raise
       ensure
         jobs.each { |j| forget_enqueue_batch_id(j) }

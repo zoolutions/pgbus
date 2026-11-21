@@ -234,6 +234,15 @@ RSpec.describe Pgbus::Process::Heartbeat do
           expect(warnings.join).to include("Process registration failed")
           expect(gone_scope).to have_received(:update_all).twice
         end
+
+        # Issue #683: a batch built now must not name the row that is gone.
+        it "reports no current process id while the process has no row" do
+          heartbeat.beat # the stub hands back row 42 once more
+          heartbeat.beat # row 42 is gone again, and registering fails
+
+          expect(warnings.join).to include("Process registration failed")
+          expect(described_class.current_process_id).to be_nil
+        end
       end
 
       context "when stop has already run" do

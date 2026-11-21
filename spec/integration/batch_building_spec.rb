@@ -309,7 +309,6 @@ RSpec.describe "Batch building (integration)", :integration do
     it "is uncounted when its send fails before any message can exist, not left as an orphan row" do
       fail_work_queue_sends
       Pgbus.configuration.coalesce_chunk_size = 1
-      nil
       rows_in_block = nil
 
       batch = open_batch_with(on_enqueue_failure: ->(*) {}) do
@@ -355,7 +354,7 @@ RSpec.describe "Batch building (integration)", :integration do
   end
 
   describe "an owner that stops heartbeating" do
-    it "is reaped once its process row is gone: one failed job, on_complete and on_failure, never on_success" do
+    it "is reaped once its process row is gone: two failed jobs, on_complete and on_failure, never on_success" do
       error = nil
       batch = nil
       begin

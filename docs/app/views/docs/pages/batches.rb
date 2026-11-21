@@ -41,9 +41,10 @@ class Views::Docs::Pages::Batches < DocsUI::Page
         `b.add { ... }` with a block also works, and any `perform_later` inside
         the `Pgbus.batch` block joins the batch as well.
 
-        The batch row exists before the block runs and stays `pending` until
-        the block returns, so a job that finishes while the block is still
-        adding jobs cannot finish the batch early. Callbacks can be set at any
+        The batch row exists before the block runs and stays `building` (in a
+        pgbus process) or `pending` until the block returns, so a job that
+        finishes while the block is still adding jobs cannot finish the batch
+        early (a `pending` one only until the stalled-batch sweep starts it). Callbacks can be set at any
         point in the block, but set them first: if the block raises after an
         `add`, the jobs already added still run, and the batch finishes later
         (through the dispatcher sweep) with only the callbacks set by then. A

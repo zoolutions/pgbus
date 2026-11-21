@@ -220,6 +220,24 @@ RSpec.describe Pgbus::ActiveJob::Coalesce do
       expect(batches.size).to eq(2)
     end
 
+    it "leaves no scope current while it flushes, so an enqueue then goes out at once" do
+      seen = []
+      allow(mock_client).to receive(:send_batch) do |_queue, payloads, **|
+        seen << described_class.current
+        payloads.map { take_id }
+      end
+
+      Pgbus.coalesce do
+        described_class.open(batch_id: "b-1") do
+          Thread.current[:pgbus_batch_id] = "b-1"
+          plain_class.perform_later(1)
+          Thread.current[:pgbus_batch_id] = nil
+        end
+      end
+
+      expect(seen.first).to be_nil
+    end
+
     it "is joined by a plain scope opened inside it" do
       described_class.open(batch_id: "b-1") do
         scope = described_class.current
