@@ -5,7 +5,13 @@ require "active_job"
 module Pgbus
   module ActiveJob
     class Adapter
+      # Inside Pgbus.coalesce a bulk-eligible job is serialized now and held,
+      # then sent with the rest when the scope ends (issue #682); everything
+      # else is sent now. With no scope open this costs one fiber-local read.
       def enqueue(active_job)
+        scope = Coalesce.current
+        return active_job if scope && coalesce(scope, active_job)
+
         enqueue_job(active_job)
       end
 
@@ -41,7 +47,75 @@ module Pgbus
         active_jobs.count(&:successfully_enqueued?)
       end
 
+      # Sends what a Coalesce scope held, as [job, payload] pairs with the
+      # payload serialized at perform_later (issue #682): one send_batch per
+      # (queue, priority) group, through the bulk path enqueue_all uses, then
+      # each job left unsent on its own. Queue and priority are the payload's,
+      # so a job changed after perform_later goes where it was sent. Never
+      # raises: what still fails is the result's +failed+, for on_failure.
+      def deliver_coalesced(entries)
+        jobs = entries.map(&:first)
+        jobs.each do |job|
+          job.successfully_enqueued = false
+          job.enqueue_error = nil
+        end
+        error = nil
+        entries.group_by { |_, payload| [payload["queue_name"] || Pgbus.configuration.default_queue, payload["priority"]] }
+               .each do |(queue, priority), group|
+          enqueue_immediate(queue, group.map(&:first), priority: priority, payloads: group.map(&:last))
+        rescue StandardError => e
+          error = e
+        end
+        sent = jobs.count(&:successfully_enqueued?)
+        retried, failed, error = retry_coalesced(entries.reject { |job, _| job.successfully_enqueued? }, error)
+        Coalesce::Result.new(buffered: entries.size, sent: sent, retried: retried, failed: failed, error: error)
+      end
+
       private
+
+      # Holds +active_job+ in +scope+, serialized now, when the bulk path can
+      # send it. Sent at once instead: uniqueness and concurrency (their lock
+      # or slot is taken at enqueue), a future job (its delay), a retry
+      # re-enqueue (#424) and a deploy task run's job (#660), which need the
+      # single path's bookkeeping, a batch member (counted in now: a batch
+      # pending on a buffered member reads as stalled to the sweep), and a
+      # pgbus class that opts out (Workflow::StepJob, whose enqueue failure
+      # is reported and swept, never raised; pgbus_coalesce? is internal).
+      # Serializing now raises an unserializable argument here, as outside a
+      # scope, and keeps a later change to the job or its arguments out of
+      # the message.
+      def coalesce(scope, active_job)
+        return false if Uniqueness.uniqueness_config(active_job) || concurrency_config(active_job)
+        return false if scheduled_in_future?(active_job) || active_job.executions.to_i.positive?
+        return false if active_job.is_a?(DeployTaskRunId) && active_job.deploy_task_run_id
+        return false if member_batch_id(active_job)
+        return false if active_job.class.respond_to?(:pgbus_coalesce?) && !active_job.class.pgbus_coalesce?
+
+        scope.push(self, active_job, FairShare.inject_metadata(active_job, Serializer.serialize_job_hash(active_job)))
+      end
+
+      # Each held job the bulk left unsent, on its own: for a job coalesce
+      # admitted, the single path is the plain send. Returns
+      # [retried count, failed jobs, the last error].
+      def retry_coalesced(entries, error)
+        retried = 0
+        failed = []
+        entries.each do |job, payload|
+          queue = payload["queue_name"] || Pgbus.configuration.default_queue
+          msg_id = Pgbus.client.send_message(queue, payload, delay: 0, priority: payload["priority"])
+          if msg_id
+            job.provider_job_id = msg_id
+            job.successfully_enqueued = true
+            retried += 1
+          else
+            failed << job
+          end
+        rescue StandardError => e
+          error = e
+          failed << job
+        end
+        [retried, failed, error]
+      end
 
       # One job of an enqueue_all that cannot take the bulk path.
       # enqueue_with_concurrency marks it once it is live, as enqueue_immediate
@@ -465,10 +539,11 @@ module Pgbus
         batch_id ? payload_hash.merge(Batch::METADATA_KEY => batch_id) : payload_hash
       end
 
-      def enqueue_immediate(queue, jobs, priority: nil)
+      # +payloads+: already built (a Coalesce scope serialized them at push).
+      def enqueue_immediate(queue, jobs, priority: nil, payloads: nil)
         return if jobs.empty?
 
-        payloads = jobs.map do |j|
+        payloads ||= jobs.map do |j|
           tag_bulk_member(FairShare.inject_metadata(j, Serializer.serialize_job_hash(j)), j)
         end
         track_bulk(payloads)

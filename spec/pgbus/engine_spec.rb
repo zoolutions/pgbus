@@ -328,6 +328,42 @@ RSpec.describe Pgbus::Engine do
     end
   end
 
+  describe "pgbus.coalesce.middleware initializer (issue #682)" do
+    let(:middleware) { spy("middleware") }
+    let(:options) { ActiveSupport::OrderedOptions.new }
+    let(:app) { double("app", config: double("config", pgbus: options), middleware: middleware) }
+
+    it "defaults config.pgbus.coalesce_requests to false and its on_failure to :raise" do
+      expect(Rails.application.config.pgbus.coalesce_requests).to be(false)
+      expect(Rails.application.config.pgbus.coalesce_requests_on_failure).to eq(:raise)
+    end
+
+    it "runs after the app's initializers, so the flag may be set there" do
+      initializer = described_class.initializers.find { |i| i.name == "pgbus.coalesce.middleware" }
+
+      expect(initializer.after).to eq(:load_config_initializers)
+    end
+
+    it "leaves the middleware stack alone with the flag off" do
+      expect(Rails.application.middleware.map(&:name)).not_to include("Pgbus::ActiveJob::Coalesce::Middleware")
+
+      options.coalesce_requests = false
+      initializer_block("pgbus.coalesce.middleware").call(app)
+
+      expect(middleware).not_to have_received(:insert_after)
+    end
+
+    it "inserts the middleware right after ActionDispatch::Executor with the flag on" do
+      options.coalesce_requests = true
+      options.coalesce_requests_on_failure = :report
+
+      initializer_block("pgbus.coalesce.middleware").call(app)
+
+      expect(middleware).to have_received(:insert_after)
+        .with(ActionDispatch::Executor, Pgbus::ActiveJob::Coalesce::Middleware, on_failure: :report)
+    end
+  end
+
   describe "pgbus.streams.importmap initializer" do
     let(:importmap) { spy("importmap") }
 
