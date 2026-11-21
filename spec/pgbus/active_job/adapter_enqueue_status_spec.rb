@@ -124,7 +124,7 @@ RSpec.describe Pgbus::ActiveJob::Adapter, "#enqueue_all enqueue status" do
     expect(count).to eq(1)
   end
 
-  it "marks a future job of the bulk enqueued once enqueue_at sends it" do
+  it "marks a future job of the bulk enqueued once it is sent with its delay" do
     later = plain_class.new.tap { |j| j.scheduled_at = Time.current + 120 }
     now = plain_class.new
 
