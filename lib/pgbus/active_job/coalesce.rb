@@ -126,6 +126,13 @@ module Pgbus
         instrument(result, started)
         handle_failure(result, entries, block_error) if result.failed.any?
         result
+      rescue StandardError => e
+        # The block's error is the one that propagates: anything the flush
+        # raises after it (a notification subscriber, say) is reported.
+        raise unless block_error
+
+        ErrorReporter.report(e, { pgbus_coalesce: :finish })
+        result
       end
 
       private
@@ -183,6 +190,8 @@ module Pgbus
         )
       end
 
+      # A subscriber that raises is reported: the flush's outcome, and the
+      # failed jobs on_failure must still see, do not depend on it.
       def instrument(result, started)
         duration = (::Process.clock_gettime(::Process::CLOCK_MONOTONIC) - started) * 1000.0
         Instrumentation.instrument(
@@ -190,6 +199,8 @@ module Pgbus
           buffered: result.buffered, sent: result.sent, retried: result.retried,
           failed: result.failed.size, duration: duration
         )
+      rescue StandardError => e
+        ErrorReporter.report(e, { pgbus_coalesce: :instrument })
       end
 
       def handle_failure(result, entries, block_error)

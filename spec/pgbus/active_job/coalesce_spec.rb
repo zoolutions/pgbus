@@ -488,6 +488,60 @@ RSpec.describe Pgbus::ActiveJob::Coalesce do
     end
   end
 
+  describe "a raising pgbus.coalesce subscriber" do
+    it "keeps the block's error and reports the subscriber's" do
+      hide_const("Rails")
+      allow(Pgbus::ErrorReporter).to receive(:report)
+      callback = ->(*) { raise "subscriber broke" }
+
+      ActiveSupport::Notifications.subscribed(callback, "pgbus.coalesce") do
+        expect do
+          Pgbus.coalesce do
+            plain_class.perform_later(1)
+            raise ArgumentError, "boom"
+          end
+        end.to raise_error(ArgumentError, "boom")
+      end
+
+      expect(Pgbus::ErrorReporter).to have_received(:report).with(an_instance_of(RuntimeError), anything)
+    end
+
+    it "still hands the failed jobs to on_failure" do
+      hide_const("Rails")
+      allow(Pgbus::ErrorReporter).to receive(:report)
+      allow(mock_client).to receive(:send_batch).and_raise(IOError, "gone")
+      allow(mock_client).to receive(:send_message).and_raise(IOError, "gone")
+      callback = ->(*) { raise "subscriber broke" }
+      received = []
+
+      ActiveSupport::Notifications.subscribed(callback, "pgbus.coalesce") do
+        Pgbus.coalesce(on_failure: ->(jobs, _error) { received.concat(jobs) }) { plain_class.perform_later(1) }
+      end
+
+      expect(received.size).to eq(1)
+    end
+
+    it "still hands the failed jobs to on_failure when the block raised" do
+      hide_const("Rails")
+      allow(Pgbus::ErrorReporter).to receive(:report)
+      allow(mock_client).to receive(:send_batch).and_raise(IOError, "gone")
+      allow(mock_client).to receive(:send_message).and_raise(IOError, "gone")
+      callback = ->(*) { raise "subscriber broke" }
+      received = []
+
+      ActiveSupport::Notifications.subscribed(callback, "pgbus.coalesce") do
+        expect do
+          Pgbus.coalesce(on_failure: ->(jobs, _error) { received.concat(jobs) }) do
+            plain_class.perform_later(1)
+            raise ArgumentError, "boom"
+          end
+        end.to raise_error(ArgumentError, "boom")
+      end
+
+      expect(received.size).to eq(1)
+    end
+  end
+
   describe "nesting" do
     it "joins the outer scope and flushes only at its end" do
       Pgbus.coalesce do

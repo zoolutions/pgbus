@@ -77,6 +77,18 @@ RSpec.describe Pgbus::ActiveJob::Coalesce::Middleware do
     expect(body).to have_received(:close)
   end
 
+  it "keeps the flush error when closing the body raises too" do
+    allow(mock_client).to receive(:send_batch).and_raise(IOError, "gone")
+    allow(mock_client).to receive(:send_message).and_raise(IOError, "gone")
+    body = instance_double(Rack::BodyProxy)
+    allow(body).to receive(:close).and_raise(IOError, "close broke")
+    allow(Pgbus.logger).to receive(:warn)
+    middleware = described_class.new(app_enqueuing(1, response: [200, {}, body]))
+
+    expect { middleware.call({}) }.to raise_error(Pgbus::EnqueueError)
+    expect(Pgbus.logger).to have_received(:warn)
+  end
+
   it "leaves the body alone when the app itself raises" do
     middleware = described_class.new(->(_env) { raise ArgumentError, "app broke" })
 

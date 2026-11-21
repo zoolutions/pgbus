@@ -338,6 +338,12 @@ RSpec.describe Pgbus::Engine do
       expect(Rails.application.config.pgbus.coalesce_requests_on_failure).to eq(:raise)
     end
 
+    it "runs after the app's initializers, so the flag may be set there" do
+      initializer = described_class.initializers.find { |i| i.name == "pgbus.coalesce.middleware" }
+
+      expect(initializer.after).to eq(:load_config_initializers)
+    end
+
     it "leaves the middleware stack alone with the flag off" do
       expect(Rails.application.middleware.map(&:name)).not_to include("Pgbus::ActiveJob::Coalesce::Middleware")
 

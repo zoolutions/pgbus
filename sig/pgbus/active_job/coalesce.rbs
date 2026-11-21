@@ -3,7 +3,11 @@ module Pgbus
     # A unit of work's enqueues, held at the adapter and sent together when
     # the unit ends (issue #682). Opened by Pgbus.coalesce and Middleware.
     class Coalesce
-      type on_failure = :raise | :report | ^(Array[untyped] jobs, Pgbus::EnqueueError error) -> void
+      interface _OnFailure
+        def call: (Array[untyped] jobs, Pgbus::EnqueueError error) -> void
+      end
+
+      type on_failure = :raise | :report | _OnFailure
 
       KEY: Symbol
       FAILURE_MODES: Array[Symbol]
