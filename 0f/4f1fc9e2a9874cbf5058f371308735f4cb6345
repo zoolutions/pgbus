@@ -1,0 +1,19 @@
+spec/pgbus/active_job/adapter_enqueue_status_spec.rb
+  s_f41c0e321fd926::t_0e78cd1a7b01e4 172-194,196-204
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "0f4f1fc9e2a9874cbf5058f371308735f4cb6345",
+  "prompts": {},
+  "sessions": {
+    "s_f41c0e321fd926": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "412fa30d-6104-4070-a691-16b4bf4f1626",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
