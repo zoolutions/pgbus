@@ -102,6 +102,7 @@ module Pgbus
         add_processed_event_completion: "pgbus:add_processed_event_completion",
         add_batch_executions: "pgbus:add_batch_executions",
         add_batch_callback_jobs: "pgbus:add_batch_callback_jobs",
+        add_batch_owner: "pgbus:add_batch_owner",
         tune_autovacuum: "pgbus:tune_autovacuum",
         tune_fillfactor: "pgbus:tune_fillfactor",
         fold_queue_name_case: "pgbus:fold_queue_name_case"
@@ -130,6 +131,7 @@ module Pgbus
         add_processed_event_completion: "completed_at on pgbus_processed_events (two-phase idempotency claim)",
         add_batch_executions: "batch execution-row tracking (self-healing completion, on_failure rename)",
         add_batch_callback_jobs: "batch callback-job columns (configured ActiveJob instances as batch callbacks)",
+        add_batch_owner: "batch owner column (a batch built by a pgbus process; its perform_later calls sent together)",
         tune_autovacuum: "autovacuum tuning for PGMQ queue and archive tables",
         tune_fillfactor: "fillfactor=70 on PGMQ queue tables (reduces page density during update churn)",
         fold_queue_name_case: "lower-case spelling for queues created in mixed case (PGMQ's table names are lower case)"
@@ -169,6 +171,7 @@ module Pgbus
           *processed_event_completion_migrations,
           *batch_executions_migrations,
           *batch_callback_jobs_migrations,
+          *batch_owner_migrations,
           *autovacuum_migrations,
           *fillfactor_migrations
         ]
@@ -337,6 +340,15 @@ module Pgbus
         return [] if column_names("pgbus_batches").include?("on_finish_job")
 
         [:add_batch_callback_jobs]
+      end
+
+      # The process that builds a batch (issue #683): without the column a
+      # batch is never built, and its members are sent one at a time.
+      def batch_owner_migrations
+        return [] unless table_exists?("pgbus_batches")
+        return [] if column_names("pgbus_batches").include?("owner_process_id")
+
+        [:add_batch_owner]
       end
 
       # Autovacuum tuning: check if any PGMQ queue table already has

@@ -56,12 +56,21 @@ RSpec.describe "Batch bulk bookkeeping (integration)", :integration do
       def perform(*); end
     end
   end
+  # A batch is built (status "building", its block coalesced) only by a
+  # process with a heartbeat row (issue #683), as a pgbus worker has.
+  let(:owner) do
+    Pgbus::ProcessEntry.create!(kind: "worker", hostname: "spec-host", pid: Process.pid, metadata: {},
+                                last_heartbeat_at: Time.current)
+  end
 
   before(:all) { PG::Connection.prepend(BatchBulkSendRecorder) unless PG::Connection <= BatchBulkSendRecorder }
+
+  after { Pgbus::Process::Heartbeat.note_deregistered(owner.id) }
 
   before do
     ActiveJob::Base.logger = Logger.new(IO::NULL)
     Pgbus::Batch.reset_executions_migrated_cache!
+    Pgbus::Process::Heartbeat.note_registered(owner.id)
     stub_const("BulkBookSpec", Module.new)
     stub_const("BulkBookSpec::WorkJob", work_job)
     stub_const("BulkBookSpec::DoneJob", callback_job)
@@ -264,27 +273,6 @@ RSpec.describe "Batch bulk bookkeeping (integration)", :integration do
       expect { Pgbus.batch { work_job.perform_later(1) } }.to raise_error(Pgbus::EnqueueError)
     end
 
-    it "is never finished by the stalled-batch sweep while its block holds members" do
-      batch = Pgbus.batch do |b|
-        b.on_complete(callback_job)
-        2.times { |i| work_job.perform_later(i) }
-        batch_id = Thread.current[:pgbus_batch_id]
-        Pgbus::BatchEntry.where(batch_id: batch_id).update_all(created_at: 1.hour.ago)
-        Pgbus::Batch.sweep_stalled(stalled_for: 300)
-
-        expect(Pgbus::BatchEntry.find_by(batch_id: batch_id).status).not_to eq("finished")
-      end
-
-      expect(queue_depth(callback_queue)).to eq(0)
-      expect(batch.reload.total_jobs).to eq(2)
-      expect(invariant_holds?(batch.batch_id)).to be(true)
-
-      run_all
-
-      expect(batch.reload).to have_attributes(status: "finished", completed_jobs: 2)
-      expect(queue_depth(callback_queue)).to eq(1)
-    end
-
     it "keeps the invariant and finishes when a transaction in the block rolls back around the first member" do
       batch = Pgbus.batch do
         ActiveRecord::Base.transaction do
@@ -299,102 +287,6 @@ RSpec.describe "Batch bulk bookkeeping (integration)", :integration do
       run_all
 
       expect(batch.reload).to have_attributes(status: "finished", completed_jobs: 2)
-    end
-
-    it "is recovered by the sweep when the process dies before the scope gives its hold back" do
-      hold = nil
-      allow(Pgbus::Batch).to receive(:release_enqueue_hold) { |id| hold = id }
-      batch = Pgbus.batch do |b|
-        b.on_complete(callback_job)
-        2.times { |i| work_job.perform_later(i) }
-      end
-      run_all
-      expect(batch.reload.status).not_to eq("finished")
-      expect(hold).to be_present
-
-      Pgbus::BatchExecution.where(batch_id: batch.batch_id).update_all(created_at: 1.hour.ago)
-      Pgbus::BatchEntry.where(batch_id: batch.batch_id).update_all(created_at: 1.hour.ago)
-      Pgbus::Batch.sweep_stalled(stalled_for: 300)
-
-      expect(batch.reload).to have_attributes(status: "finished", total_jobs: 2, completed_jobs: 2)
-      expect(queue_depth(callback_queue)).to eq(1)
-    end
-
-    it "keeps a quiet block's batch alive: the hold keeper refreshes the hold, so the sweep finishes nothing" do
-      batch = Pgbus.batch do |b|
-        b.on_complete(callback_job)
-        2.times { |i| work_job.perform_later(i) }
-        batch_id = Thread.current[:pgbus_batch_id]
-        # The block goes quiet past the threshold: everything it wrote is old.
-        Pgbus::BatchExecution.where(batch_id: batch_id).update_all(created_at: 1.hour.ago)
-        Pgbus::BatchEntry.where(batch_id: batch_id).update_all(created_at: 1.hour.ago)
-        Pgbus::Batch::HoldKeeper.refresh! # the keeper's timer tick
-        # The sweep runs in the dispatcher, not in the block's scope.
-        Thread.new { Pgbus::Batch.sweep_stalled(stalled_for: 300) }.join # rubocop:disable ThreadSafety/NewThread -- joined here
-
-        expect(Pgbus::BatchEntry.find_by(batch_id: batch_id).status).not_to eq("finished")
-        expect(queue_depth(callback_queue)).to eq(0)
-      end
-
-      expect(batch.reload.total_jobs).to eq(2)
-      expect(queue_depth(work_queue)).to eq(2)
-      run_all
-      expect(batch.reload).to have_attributes(status: "finished", completed_jobs: 2)
-      expect(queue_depth(callback_queue)).to eq(1)
-    end
-
-    context "with a short batch_stall_threshold" do
-      around do |example|
-        original = Pgbus.configuration.batch_stall_threshold
-        Pgbus.configuration.batch_stall_threshold = 0.4
-        example.run
-      ensure
-        Pgbus.configuration.batch_stall_threshold = original
-      end
-
-      def hold_rows(batch_id)
-        Pgbus::BatchExecution.where(batch_id: batch_id).where("job_id LIKE ?", "#{Pgbus::Batch::HOLD_PREFIX}%")
-      end
-
-      it "refreshes the hold at a push once a quarter of the threshold has passed" do
-        Pgbus.batch do
-          work_job.perform_later(1)
-          batch_id = Thread.current[:pgbus_batch_id]
-          hold_rows(batch_id).update_all(created_at: 1.hour.ago)
-          sleep 0.15
-          work_job.perform_later(2)
-
-          expect(hold_rows(batch_id).pick(:created_at)).to be > 1.minute.ago
-        end
-      end
-
-      it "takes a new hold at a push when the old one is gone" do
-        batch = Pgbus.batch do
-          work_job.perform_later(1)
-          batch_id = Thread.current[:pgbus_batch_id]
-          Pgbus::Batch.release_enqueue_hold(hold_rows(batch_id).pick(:job_id))
-          sleep 0.15
-          work_job.perform_later(2)
-
-          expect(hold_rows(batch_id).count).to eq(1)
-        end
-
-        expect(batch.reload.total_jobs).to eq(2)
-        expect(Pgbus::BatchExecution.where(batch_id: batch.batch_id).count).to eq(2)
-      end
-    end
-
-    it "keeps a held batch pending: a fresh hold row is recent activity to the sweep" do
-      batch = Pgbus.batch do
-        work_job.perform_later(1)
-        batch_id = Thread.current[:pgbus_batch_id]
-        Pgbus::BatchEntry.where(batch_id: batch_id).update_all(created_at: 1.hour.ago)
-        Pgbus::Batch.sweep_stalled(stalled_for: 300)
-
-        expect(Pgbus::BatchEntry.find_by(batch_id: batch_id).status).to eq("pending")
-      end
-
-      expect(batch.reload.total_jobs).to eq(1)
     end
 
     it "re-counts the members a short send_batch left uncounted, once each" do
@@ -424,14 +316,19 @@ RSpec.describe "Batch bulk bookkeeping (integration)", :integration do
       expect(Pgbus::BatchExecution.where(batch_id: batch.batch_id).count).to eq(0)
     end
 
-    it "raises AlreadyFinished at the first perform_later into a finished batch" do
+    it "fails the held members with AlreadyFinished when the build was closed under it" do
       batch = Pgbus::Batch.new
-      expect do
+      error = nil
+      begin
         batch.enqueue do
-          Pgbus::BatchEntry.where(batch_id: batch.batch_id).update_all(status: "finished")
           work_job.perform_later(1)
+          Pgbus::BatchEntry.where(batch_id: batch.batch_id).update_all(status: "finished")
         end
-      end.to raise_error(Pgbus::Batch::AlreadyFinished)
+      rescue Pgbus::EnqueueError => e
+        error = e
+      end
+
+      expect(error.cause).to be_a(Pgbus::Batch::AlreadyFinished)
       expect(queue_depth(work_queue)).to eq(0)
     end
 

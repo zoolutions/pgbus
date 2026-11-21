@@ -14,13 +14,54 @@ module Pgbus
           return unless Batch.executions_migrated?
 
           payload = { stale_executions: 0, orphan_rows: 0, started_batches: 0, finished_batches: 0,
-                      stalled_for: stalled_for }
+                      abandoned_builds: 0, stalled_for: stalled_for }
           Instrumentation.instrument("pgbus.batch_sweep", payload) do |p|
+            p[:abandoned_builds] = reap_abandoned_builds(batch_size: batch_size)
             p[:stale_executions] = sweep_stale_executions(batch_size: batch_size, client: client, stalled_for: stalled_for)
             p[:orphan_rows] = sweep_orphan_rows(stalled_for: stalled_for, batch_size: batch_size, client: client)
             p[:started_batches] = start_stalled_pending(stalled_for: stalled_for, batch_size: batch_size)
             p[:finished_batches] = finish_stalled_processing(batch_size: batch_size)
           end
+        end
+
+        # A building batch (issue #683) is reaped only when the process that
+        # builds it is dead: its pgbus_processes row is gone or has not
+        # heartbeat within Process::Heartbeat::ALIVE_THRESHOLD. A live
+        # owner's build is never touched, however long its block runs. One
+        # guarded statement per batch (status = 'building'), so the reaper
+        # and a block closing its build cannot both win.
+        #
+        # The abandoned build counts as one failed job (total_jobs and
+        # failed_jobs both + 1): whatever its block held was never sent, so
+        # the batch must not report success. It moves to processing; the
+        # members it did send still resolve, and the batch then finishes
+        # through the usual single-winner path, firing on_complete and
+        # on_failure, never on_success.
+        def reap_abandoned_builds(batch_size: 500, now: Time.current)
+          return 0 unless Batch.owner_migrated?
+
+          alive_since = now - Process::Heartbeat::ALIVE_THRESHOLD
+          reaped = BatchEntry.connection_pool.with_connection do |conn|
+            conn.exec_query(<<~SQL.squish, "Pgbus Batch Reap Build", [alive_since, batch_size]).rows.flatten
+              UPDATE #{BatchEntry.table_name} b
+                 SET status = 'processing', total_jobs = b.total_jobs + 1, failed_jobs = b.failed_jobs + 1
+               WHERE b.id IN (
+                 SELECT c.id FROM #{BatchEntry.table_name} c
+                  WHERE c.status = 'building'
+                    AND NOT EXISTS (
+                      SELECT 1 FROM #{ProcessEntry.table_name} p
+                       WHERE p.id = c.owner_process_id AND p.last_heartbeat_at >= $1
+                    )
+                  LIMIT $2
+               ) AND b.status = 'building'
+              RETURNING b.batch_id
+            SQL
+          end
+          reaped.each do |batch_id|
+            Pgbus.logger.warn { "[Pgbus] Batch #{batch_id} was being built by a process that stopped heartbeating; reaped" }
+            Batch.send(:finish_if_needed, Batch.try_finish!(batch_id))
+          end
+          reaped.size
         end
 
         private
@@ -92,9 +133,6 @@ module Pgbus
         # A row without a msg_id still holds the logical queue name it was
         # inserted with (the job's queue_name); the backfill was never applied.
         def classify_orphan(row, client)
-          # A coalesce scope's hold (issue #683) older than the threshold:
-          # its block stopped enqueuing that long ago, or its process died.
-          return :orphan if Batch.hold_row?(row.job_id)
           return :live if row.queue_name.nil?
 
           in_queue = client.message_with_job_id?(row.queue_name, job_id: row.job_id)

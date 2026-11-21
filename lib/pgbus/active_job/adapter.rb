@@ -53,23 +53,27 @@ module Pgbus
       # each job left unsent on its own. Queue and priority are the payload's,
       # so a job changed after perform_later goes where it was sent. Never
       # raises: what still fails is the result's +failed+, for on_failure.
-      def deliver_coalesced(entries)
+      # +counted+: a batch scope already counted the entries into their batch
+      # (issue #683), so the send does not count them again.
+      def deliver_coalesced(entries, counted: false)
         jobs = entries.map(&:first)
         jobs.each do |job|
           job.successfully_enqueued = false
           job.enqueue_error = nil
         end
         error = nil
-        counted = {}.compare_by_identity
+        standing = {}.compare_by_identity
+        entries.each { |job, payload| standing[job] = true if payload[Batch::METADATA_KEY] } if counted
         entries.group_by { |_, payload| [payload["queue_name"] || Pgbus.configuration.default_queue, payload["priority"]] }
                .each do |(queue, priority), group|
-          enqueue_immediate(queue, group.map(&:first), priority: priority, payloads: group.map(&:last), counted: counted)
+          enqueue_immediate(queue, group.map(&:first), priority: priority, payloads: group.map(&:last),
+                                                       counted: standing, tracked: counted)
         rescue StandardError => e
           error = e
         end
         sent = jobs.count(&:successfully_enqueued?)
         unsent = entries.reject { |job, _| job.successfully_enqueued? }
-        retried, failed, error = retry_coalesced(unsent, counted, error)
+        retried, failed, error = retry_coalesced(unsent, standing, error)
         Coalesce::Result.new(buffered: entries.size, sent: sent, retried: retried, failed: failed, error: error)
       end
 
@@ -570,14 +574,14 @@ module Pgbus
       # stands after a failure, so their retry does not count them twice.
       # The bookkeeping around the send is one statement per group (issue
       # #683): track_bulk's insert, the backfill, or the untrack on a failure.
-      def enqueue_immediate(queue, jobs, priority: nil, payloads: nil, counted: nil)
+      # +tracked+: the payloads are already counted into their batch.
+      def enqueue_immediate(queue, jobs, priority: nil, payloads: nil, counted: nil, tracked: false)
         return if jobs.empty?
 
         payloads ||= jobs.map do |j|
           tag_bulk_member(FairShare.inject_metadata(j, Serializer.serialize_job_hash(j)), j)
         end
-        tracked = false
-        track_bulk(payloads)
+        track_bulk(payloads) unless tracked
         tracked = true
         physical = physical_queue(queue, priority)
         msg_ids = nil
@@ -597,6 +601,8 @@ module Pgbus
         # Noted before the untrack, which can raise: a member with an id keeps
         # its count either way.
         note_counted(counted, jobs, payloads, Array(payloads).each_index.to_a - unsent)
+        # The unsent ones are uncounted here: their retry counts them again.
+        unsent.each { |index| counted&.delete(jobs[index]) }
         Batch.untrack_enqueue_all(payloads.values_at(*unsent))
         raise
       rescue StandardError => e

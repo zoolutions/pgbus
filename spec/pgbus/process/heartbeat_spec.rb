@@ -68,6 +68,41 @@ RSpec.describe Pgbus::Process::Heartbeat do
     end
   end
 
+  # Issue #683: the row a batch built in this process records as its owner.
+  describe ".current_process_id" do
+    before do
+      allow(Pgbus::ProcessEntry).to receive_messages(create!: process_record, where: double("relation", delete_all: 1))
+    end
+
+    after { described_class.note_deregistered(42) }
+
+    it "is the row this process registered, and nil once it deregisters" do
+      heartbeat.start
+
+      expect(described_class.current_process_id).to eq(42)
+
+      heartbeat.stop
+
+      expect(described_class.current_process_id).to be_nil
+    end
+
+    it "is nil in a forked child until the child registers its own row" do
+      described_class.note_registered(42)
+      allow(Process).to receive(:pid).and_return(Process.pid + 1)
+
+      expect(described_class.current_process_id).to be_nil
+    end
+
+    it "keeps a later registration when an older row deregisters" do
+      described_class.note_registered(41)
+      described_class.note_registered(42)
+
+      described_class.note_deregistered(41)
+
+      expect(described_class.current_process_id).to eq(42)
+    end
+  end
+
   describe "#beat" do
     context "when process_id is set" do
       let(:scope) { double("scope", update_all: 1) }

@@ -89,7 +89,7 @@ class Views::Docs::Pages::ActiveJob < DocsUI::Page
       md <<~'MD'
         - **Sent at once, not held:** jobs with uniqueness or a concurrency limit,
           future jobs (`set(wait:)`), `retry_on` re-enqueues, deploy task runs,
-          batch members outside their own batch's block, workflow steps, jobs
+          batch members outside their own built batch's block, workflow steps, jobs
           from another thread or fiber, and
           jobs enqueued once the flush has started. On Rails 7.2+ a job that
           Rails defers to after commit (`enqueue_after_transaction_commit`)
@@ -109,9 +109,9 @@ class Views::Docs::Pages::ActiveJob < DocsUI::Page
           `config.coalesce_chunk_size` jobs (default 1 000) and at the end;
           `on_failure` runs once, at the end, over every chunk.
         - **Nesting and batches:** a nested scope joins the outer one. A
-          `Pgbus.batch` block opens a scope of its own that holds only its
-          members, sends them when the batch block ends and never joins an
-          outer scope (see [Batches](/docs/batches)).
+          `Pgbus.batch` built in a pgbus process opens a scope of its own that
+          holds only its members, sends them by the batch block's end and
+          never joins an outer scope (see [Batches](/docs/batches)).
 
         An endpoint that must not answer 500 after committing its writes should use
         `on_failure: :report` or a callable that does not raise.

@@ -11,6 +11,28 @@ module Pgbus
 
       attr_reader :process_entry
 
+      # The pgbus_processes row this OS process heartbeats under (issue
+      # #683): a batch built here records it as its owner, and the sweep
+      # reaps the build only once that row is gone or its heartbeat is older
+      # than ALIVE_THRESHOLD. [pid, id], so a forked child never reports its
+      # parent's row; the last registration wins.
+      @owner_lock = Mutex.new
+      @owner = nil
+
+      class << self
+        def current_process_id
+          @owner_lock.synchronize { @owner[1] if @owner && @owner[0] == ::Process.pid }
+        end
+
+        def note_registered(id)
+          @owner_lock.synchronize { @owner = [::Process.pid, id].freeze }
+        end
+
+        def note_deregistered(id)
+          @owner_lock.synchronize { @owner = nil if @owner && @owner[1] == id }
+        end
+      end
+
       # config: the owning process's configuration, for the app revision.
       def initialize(kind:, metadata: {}, on_beat: nil, loop_tick_supplier: nil, metadata_supplier: nil,
                      config: Pgbus.configuration)
@@ -110,6 +132,7 @@ module Pgbus
           last_heartbeat_at: Time.current
         )
         @process_id = record.id
+        self.class.note_registered(@process_id)
       rescue StandardError => e
         Pgbus.logger.warn { "[Pgbus] Process registration failed: #{e.message}" }
       end
@@ -117,6 +140,7 @@ module Pgbus
       def deregister_process
         return unless @process_id
 
+        self.class.note_deregistered(@process_id)
         ProcessEntry.where(id: @process_id).delete_all
       rescue StandardError => e
         Pgbus.logger.warn { "[Pgbus] Process deregistration failed: #{e.message}" }

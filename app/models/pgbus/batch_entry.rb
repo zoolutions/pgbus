@@ -11,6 +11,12 @@ module Pgbus
 
     scope :finished, -> { where(status: "finished") }
     scope :stale, ->(before:) { finished.where("finished_at < ?", before) }
+    # building (issue #683): the batch's block is still open in the process
+    # owner_process_id names; no sweep and no finish touch it until the
+    # block closes the build (close_build!) or the owner stops heartbeating.
+    UNFINISHED = %w[building pending processing].freeze
+
+    scope :building, -> { where(status: "building") }
     scope :pending, -> { where(status: "pending") }
     scope :processing, -> { where(status: "processing") }
     scope :without_executions, -> { where.not(batch_id: BatchExecution.select(:batch_id)) }
@@ -24,7 +30,7 @@ module Pgbus
     # Raises Batch::AlreadyFinished when the row is already finished (0 rows
     # updated) — the adder-before-insert contract open batches (#415) rely on.
     def self.increment_total_jobs!(batch_id, count) # rubocop:disable Naming/PredicateMethod
-      updated = where(batch_id: batch_id, status: %w[pending processing])
+      updated = where(batch_id: batch_id, status: UNFINISHED)
                 .update_all(["total_jobs = total_jobs + ?", count])
       raise Batch::AlreadyFinished, "Can't add jobs into an already finished batch" if updated.zero?
 
@@ -34,8 +40,18 @@ module Pgbus
     # Reverse of increment_total_jobs! for a job that will never run. Floored
     # at zero; a finished row is left alone.
     def self.decrement_total_jobs!(batch_id, count = 1)
-      where(batch_id: batch_id, status: %w[pending processing])
+      where(batch_id: batch_id, status: UNFINISHED)
         .update_all(["total_jobs = GREATEST(total_jobs - ?, 0)", count])
+    end
+
+    # The block that builds the batch returned: building -> pending, guarded
+    # so the block and the sweep's reaping (Sweep.reap_abandoned_builds)
+    # cannot both win. Raises AlreadyFinished when the build was reaped.
+    def self.close_build!(batch_id)
+      closed = where(batch_id: batch_id, status: "building").update_all(status: "pending")
+      raise Batch::AlreadyFinished, "Can't close the build of batch #{batch_id}: the sweep reaped it" if closed.zero?
+
+      closed
     end
 
     # Resolve a batch member and count it, in one statement and no

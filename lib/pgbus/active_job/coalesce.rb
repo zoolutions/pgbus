@@ -28,11 +28,14 @@ module Pgbus
     # scope joins the outer one, whose on_failure applies; only the outermost
     # flushes.
     #
-    # A batch scope (issue #683, opened by Pgbus.batch for its block with
-    # +batch_id+) holds only that batch's members and joins nothing: it
-    # replaces the current scope for the block, flushes when the block ends,
-    # before the batch starts, and puts the outer scope back. A plain scope
-    # opened inside it joins it. Every scope flushes early each
+    # A batch scope (issue #683, opened by Pgbus.batch for a batch it builds,
+    # with +batch_id+ and +count_in+) holds only that batch's members and
+    # joins nothing: it replaces the current scope for the block, flushes
+    # when the block ends and puts the outer scope back. A plain scope opened
+    # inside it joins it. A batch scope counts each chunk in before sending
+    # it, with one call: count_in.call(payloads, final:). The final call
+    # (the block's end) also closes the batch's build, in the same
+    # transaction; see Batch#count_in. Every scope flushes early each
     # config.coalesce_chunk_size held jobs, so a huge block stays bounded in
     # memory; on_failure still runs once, at the end, for every chunk.
     class Coalesce
@@ -47,13 +50,13 @@ module Pgbus
           Thread.current[KEY]
         end
 
-        def open(on_failure: :raise, batch_id: nil, &block)
+        def open(on_failure: :raise, batch_id: nil, count_in: nil, &block)
           raise ArgumentError, "Pgbus.coalesce needs a block" unless block
 
           validate_on_failure!(on_failure)
           return yield if current && batch_id.nil?
 
-          run(new(on_failure: on_failure, batch_id: batch_id), &block)
+          run(new(on_failure: on_failure, batch_id: batch_id, count_in: count_in), &block)
         end
 
         def validate_on_failure!(on_failure)
@@ -82,31 +85,30 @@ module Pgbus
 
       attr_reader :on_failure, :batch_id
 
-      def initialize(on_failure: :raise, batch_id: nil, chunk_size: Pgbus.configuration.coalesce_chunk_size)
+      def initialize(on_failure: :raise, batch_id: nil, count_in: nil, chunk_size: Pgbus.configuration.coalesce_chunk_size)
         @on_failure = on_failure
         @batch_id = batch_id
+        @count_in = count_in
         @chunk_size = chunk_size
         @mutex = Mutex.new
         @entries = []
         @results = []
         @failed_entries = []
         @closed = false
-        @hold = nil
-        @hold_touched_at = nil
       end
 
       # Holds +job+ for +adapter+ with the +payload+ serialized at
       # perform_later, and sends the buffer once it holds a chunk. Returns
       # false once the flush has started: the caller sends it itself.
       def push(adapter, job, payload) # rubocop:disable Naming/PredicateMethod -- holds; the result says whether
-        return false if @mutex.synchronize { @closed }
-
-        take_batch_hold
         chunk = @mutex.synchronize do
           return false if @closed
 
+          # A full chunk goes when the next job arrives, so a block of
+          # exactly chunk_size jobs is still one flush, at its end.
+          full = drain if @entries.size >= @chunk_size
           @entries << [adapter, job, payload]
-          drain if @entries.size >= @chunk_size
+          full
         end
         deliver_chunk(chunk) if chunk
         true
@@ -118,11 +120,7 @@ module Pgbus
       # callable that raises is reported, so the block's error propagates.
       def finish!(block_error: nil)
         started = ::Process.clock_gettime(::Process::CLOCK_MONOTONIC)
-        begin
-          deliver_chunk(close)
-        ensure
-          release_batch_hold
-        end
+        deliver_chunk(close, final: true)
         failed_entries, results = @mutex.synchronize { [@failed_entries, @results] }
         result = combine(results.sum(&:buffered), results)
         instrument(result, started) if result.buffered.positive?
@@ -139,53 +137,6 @@ module Pgbus
 
       private
 
-      # A batch scope takes its batch's hold (Batch.hold_enqueue) before it
-      # holds the first member, refreshes it as the block keeps enqueuing
-      # (taking a new one if an enclosing transaction rolled it back), hands
-      # it to the HoldKeeper so it stays alive while the block is quiet, and
-      # gives it back once the members are counted. @hold and @hold_touched_at are read and written
-      # only by the scope's own fiber (push and finish!), outside the mutex
-      # so the database call never holds it.
-      def take_batch_hold
-        return unless @batch_id
-
-        if @hold.nil?
-          retake_batch_hold
-        elsif hold_refresh_due?
-          retake_batch_hold unless Batch.refresh_enqueue_hold(@hold)
-        else
-          return
-        end
-        @hold_touched_at = ::Process.clock_gettime(::Process::CLOCK_MONOTONIC)
-      end
-
-      # Takes a new hold (the first, or one for a hold that is gone) and
-      # hands it to the HoldKeeper, which keeps it alive while the block is
-      # quiet.
-      def retake_batch_hold
-        Batch::HoldKeeper.unregister(@hold) if @hold
-        @hold = Batch.hold_enqueue(@batch_id)
-        Batch::HoldKeeper.register(@hold)
-      end
-
-      def hold_refresh_due?
-        ::Process.clock_gettime(::Process::CLOCK_MONOTONIC) - @hold_touched_at >=
-          Pgbus.configuration.batch_stall_threshold / 4.0
-      end
-
-      def release_batch_hold
-        return unless @hold
-
-        hold = @hold
-        @hold = nil
-        Batch::HoldKeeper.unregister(hold)
-        Batch.release_enqueue_hold(hold)
-      rescue StandardError => e
-        # The hold row stays; the orphan sweep removes it, with its count,
-        # once it is older than batch_stall_threshold.
-        ErrorReporter.report(e, { pgbus_coalesce_hold: @batch_id })
-      end
-
       def close
         @mutex.synchronize do
           @closed = true
@@ -200,12 +151,15 @@ module Pgbus
         entries
       end
 
-      # Sends +entries+ now and keeps their result for finish!.
-      def deliver_chunk(entries)
+      # Sends +entries+ now and keeps their result for finish!. A batch
+      # scope counts them in first (count_in); the final chunk also closes
+      # the batch's build, so it runs even when the chunk is empty.
+      def deliver_chunk(entries, final: false)
+        counted = count_chunk_in(entries, final)
         return if entries.empty?
 
         results = entries.group_by(&:first).map do |adapter, group|
-          adapter.deliver_coalesced(group.map { |_, job, payload| [job, payload] })
+          adapter.deliver_coalesced(group.map { |_, job, payload| [job, payload] }, counted: counted)
         end
         result = combine(entries.size, results)
         failed = result.failed.to_set(&:object_id)
@@ -215,6 +169,27 @@ module Pgbus
           @results << result
           @failed_entries.concat(entries.select { |_, job, _| failed.include?(job.object_id) })
         end
+      end
+
+      # True when the chunk was counted in. A count that fails (a batch the
+      # sweep reaped, a database error) sends nothing: every job of the chunk
+      # fails, with that error, through on_failure.
+      def count_chunk_in(entries, final)
+        return false unless @count_in
+
+        @count_in.call(entries.map(&:last), final: final)
+        true
+      rescue StandardError => e
+        raise if entries.empty?
+
+        jobs = entries.map { |_, job, _| job }
+        jobs.each { |job| job.successfully_enqueued = false }
+        @mutex.synchronize do
+          @results << Result.new(buffered: entries.size, sent: 0, retried: 0, failed: jobs, error: e)
+          @failed_entries.concat(entries)
+        end
+        entries.clear
+        false
       end
 
       # The held jobs this scope still references, waiting for the flush or

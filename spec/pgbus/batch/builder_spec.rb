@@ -104,7 +104,7 @@ RSpec.describe Pgbus::Batch::Builder do
       Pgbus.batch { |b| b.on_complete(callback_job) }
 
       expect(Pgbus::BatchEntry).to have_received(:where)
-        .with(batch_id: anything, status: %w[pending processing])
+        .with(batch_id: anything, status: %w[building pending processing])
       expect(relation).to have_received(:update_all)
         .with(on_finish_class: "BuilderSpec::CallbackJob", on_finish_job: nil)
     end

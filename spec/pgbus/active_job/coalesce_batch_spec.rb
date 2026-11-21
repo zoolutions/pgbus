@@ -39,8 +39,6 @@ RSpec.describe Pgbus::ActiveJob::Coalesce do
     end
     allow(Pgbus::Batch).to receive(:track_enqueue)
     allow(Pgbus::Batch).to receive(:backfill_executions)
-    allow(Pgbus::Batch).to receive_messages(hold_enqueue: "hold-token", refresh_enqueue_hold: true)
-    allow(Pgbus::Batch).to receive(:release_enqueue_hold)
   end
 
   after do
@@ -69,14 +67,24 @@ RSpec.describe Pgbus::ActiveJob::Coalesce do
       expect(batches.map(&:size)).to eq([2, 2, 1])
     end
 
-    it "keeps no delivered job once its chunk was sent, only the failed ones" do
+    it "keeps no delivered job once its chunk was sent, only the chunk still held" do
       scope = nil
       Pgbus.coalesce do
         scope = described_class.current
-        4.times { |i| plain_class.perform_later(i) }
+        5.times { |i| plain_class.perform_later(i) }
 
-        expect(scope.send(:retained_entries)).to be_empty
+        expect(scope.send(:retained_entries).size).to eq(1)
       end
+    end
+
+    it "sends a block of exactly coalesce_chunk_size jobs as one flush, at its end" do
+      Pgbus.coalesce do
+        2.times { |i| plain_class.perform_later(i) }
+
+        expect(batches).to be_empty
+      end
+
+      expect(batches.map(&:size)).to eq([2])
     end
 
     it "applies on_failure once, at the end, to the jobs of every chunk that failed" do
@@ -115,37 +123,43 @@ RSpec.describe Pgbus::ActiveJob::Coalesce do
       expect(mock_client).not_to have_received(:send_message)
     end
 
-    it "takes one hold on its batch before the first held member and gives it back after the flush" do
-      order = []
-      allow(Pgbus::Batch).to receive(:hold_enqueue) { order << :hold and "hold-token" }
-      allow(Pgbus::Batch).to receive(:track_enqueue) { order << :count }
-      allow(Pgbus::Batch).to receive(:release_enqueue_hold) { |token| order << [:release, token] }
+    it "counts each chunk in before sending it, and closes with a final count even when empty" do
+      calls = []
+      count_in = ->(payloads, final:) { calls << [payloads.size, final, batches.size] }
+      original = Pgbus.configuration.coalesce_chunk_size
+      Pgbus.configuration.coalesce_chunk_size = 2
 
-      described_class.open(batch_id: "b-1") do
+      described_class.open(batch_id: "b-1", count_in: count_in) do
         Thread.current[:pgbus_batch_id] = "b-1"
         3.times { |i| plain_class.perform_later(i) }
       end
 
-      expect(order).to eq([:hold, :count, [:release, "hold-token"]])
+      expect(calls).to eq([[2, false, 0], [1, true, 1]])
+      expect(Pgbus::Batch).not_to have_received(:track_enqueue)
+    ensure
+      Pgbus.configuration.coalesce_chunk_size = original
     end
 
-    it "takes no hold when it holds nothing" do
-      described_class.open(batch_id: "b-1") { nil }
+    it "sends nothing of a chunk it could not count in, and fails its jobs" do
+      count_in = ->(_payloads, final:) { raise Pgbus::Batch::AlreadyFinished, "reaped" if final }
+      failed = []
 
-      expect(Pgbus::Batch).not_to have_received(:hold_enqueue)
-      expect(Pgbus::Batch).not_to have_received(:release_enqueue_hold)
-    end
-
-    it "reports a hold it cannot give back" do
-      allow(Pgbus::Batch).to receive(:release_enqueue_hold).and_raise(IOError, "db gone")
-      allow(Pgbus::ErrorReporter).to receive(:report)
-
-      described_class.open(batch_id: "b-1") do
+      described_class.open(batch_id: "b-1", count_in: count_in, on_failure: ->(jobs, error) { failed << [jobs.size, error.cause] }) do
         Thread.current[:pgbus_batch_id] = "b-1"
         plain_class.perform_later(1)
       end
 
-      expect(Pgbus::ErrorReporter).to have_received(:report).with(an_instance_of(IOError), { pgbus_coalesce_hold: "b-1" })
+      expect(batches).to be_empty
+      expect(failed.size).to eq(1)
+      expect(failed.first[0]).to eq(1)
+      expect(failed.first[1]).to be_a(Pgbus::Batch::AlreadyFinished)
+    end
+
+    it "raises a final count that fails with nothing held" do
+      count_in = ->(_payloads, final:) { raise Pgbus::Batch::AlreadyFinished, "reaped" if final }
+
+      expect { described_class.open(batch_id: "b-1", count_in: count_in) { nil } }
+        .to raise_error(Pgbus::Batch::AlreadyFinished)
     end
 
     it "sends a member of another batch at once" do

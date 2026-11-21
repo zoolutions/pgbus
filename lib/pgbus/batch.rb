@@ -138,19 +138,22 @@ module Pgbus
       return self unless acquire_lock!
 
       begin
+        @owner = self.class.building_owner
         create_record
       rescue StandardError
         self.class.release_lock(batch_id)
         raise
       end
       @started = true
-      # The block's perform_later calls are held in a scope of the batch's
-      # own (issue #683) and sent, counted and backfilled one group at a time
-      # when the block returns, before the batch can start.
-      # Before the executions migration there is no row to hold the batch
-      # open with, so the block enqueues one job at a time, as it did.
-      if self.class.executions_migrated?
-        count_jobs { Pgbus::ActiveJob::Coalesce.open(on_failure: @on_enqueue_failure, batch_id: batch_id, &) }
+      if @owner
+        # Built (issue #683): the block runs with the batch "building", so no
+        # sweep and no finish can touch it, and its perform_later calls are
+        # held in a scope of the batch's own and counted in per chunk. The
+        # last count closes the build (count_in), before anything is sent.
+        count_jobs do
+          Pgbus::ActiveJob::Coalesce.open(on_failure: @on_enqueue_failure, batch_id: batch_id,
+                                          count_in: method(:count_in), &)
+        end
       else
         count_jobs(&)
       end
@@ -344,6 +347,7 @@ module Pgbus
       @schema_lock.synchronize do
         @executions_migrated = nil
         @callback_jobs_migrated = nil
+        @owner_migrated = nil
         @warned_callback_jobs_unmigrated = nil
         @warned_on_finish = nil
       end
@@ -362,6 +366,31 @@ module Pgbus
       end
       @schema_lock.synchronize { @callback_jobs_migrated = true } if result
       result
+    end
+
+    # True once pgbus_batches.owner_process_id exists (issue #683,
+    # pgbus:add_batch_owner): a batch can then be built (status "building")
+    # by a process the sweep can watch.
+    def self.owner_migrated?
+      return true if @schema_lock.synchronize { @owner_migrated }
+
+      result = begin
+        BatchEntry.column_names.include?("owner_process_id")
+      rescue StandardError
+        false
+      end
+      @schema_lock.synchronize { @owner_migrated = true } if result
+      result
+    end
+
+    # The process that builds a batch opened now, or nil when the batch is
+    # not built (issue #683): the pgbus_processes row this process
+    # heartbeats under. A process without one (a web server, a console, a
+    # rake task) has nothing whose death the sweep can see, so its batches
+    # take the pending path and enqueue their members one at a time.
+    def self.building_owner
+      owner = Process::Heartbeat.current_process_id
+      owner if owner && executions_migrated? && owner_migrated?
     end
 
     # Count tagged payloads into their batch and insert their execution rows,
@@ -447,65 +476,6 @@ module Pgbus
           BatchEntry.decrement_total_jobs!(batch_id)
           BatchExecution.where(job_id: job_id).delete_all if migrated && job_id
         end
-      end
-    end
-
-    # A batch scope's hold (issue #683): while the block's coalesce scope
-    # holds members, they have no execution row, so the stalled-batch sweep
-    # could read the batch as crashed and finish it empty. The hold is one
-    # counted execution row of its own (job_id HOLD_PREFIX + a token, no
-    # queue), taken in one statement with its count before the first held
-    # member, so AlreadyFinished still raises at perform_later:
-    #
-    # * it keeps the batch from finishing (a finish needs no rows left) and,
-    #   refreshed as the block keeps enqueuing, keeps the batch pending, as a
-    #   block's own inserts did before;
-    # * the final flush deletes it with its count, in one statement that only
-    #   uncounts what it deleted, so a hold an enclosing transaction rolled
-    #   back is never given back twice;
-    # * a process that died holding it leaves a row the orphan sweep removes,
-    #   with its count, once it is older than batch_stall_threshold: the same
-    #   "no activity within the threshold" rule a crashed block meets.
-    HOLD_PREFIX = "pgbus:coalesce-hold:"
-
-    def self.hold_row?(job_id) = job_id.to_s.start_with?(HOLD_PREFIX)
-
-    # Returns the hold's job_id. Raises AlreadyFinished for a finished batch.
-    def self.hold_enqueue(batch_id)
-      token = "#{HOLD_PREFIX}#{SecureRandom.uuid}"
-      sql = <<~SQL.squish
-        WITH counted AS (
-          UPDATE #{BatchEntry.table_name} SET total_jobs = total_jobs + 1
-           WHERE batch_id = $1 AND status IN ('pending', 'processing')
-          RETURNING batch_id
-        )
-        INSERT INTO #{BatchExecution.table_name} (batch_id, job_id, queue_name, created_at)
-        SELECT batch_id, $2, NULL, $3 FROM counted RETURNING id
-      SQL
-      rows = BatchEntry.connection_pool.with_connection do |conn|
-        conn.exec_query(sql, "Pgbus Batch Hold", [batch_id, token, Time.current])
-      end
-      raise AlreadyFinished, "Can't add jobs into an already finished batch" if rows.rows.empty?
-
-      token
-    end
-
-    # Marks the hold active now; false when it is gone (rolled back with an
-    # enclosing transaction, or removed by the sweep).
-    def self.refresh_enqueue_hold(token)
-      BatchExecution.connection_pool.with_connection do
-        BatchExecution.where(job_id: token).update_all(created_at: Time.current).positive?
-      end
-    end
-
-    def self.release_enqueue_hold(token)
-      sql = <<~SQL.squish
-        WITH released AS (DELETE FROM #{BatchExecution.table_name} WHERE job_id = $1 RETURNING batch_id)
-        UPDATE #{BatchEntry.table_name} SET total_jobs = GREATEST(total_jobs - 1, 0)
-         WHERE batch_id IN (SELECT batch_id FROM released) AND status IN ('pending', 'processing')
-      SQL
-      BatchEntry.connection_pool.with_connection do |conn|
-        conn.exec_query(sql, "Pgbus Batch Release Hold", [token])
       end
     end
 
@@ -813,13 +783,31 @@ module Pgbus
       self
     end
 
+    # The batch scope's count (issue #683): each chunk of held members is
+    # counted in before it is sent; the last one, at the block's end, also
+    # closes the build, building -> pending, in the same transaction, so the
+    # batch can finish only once every held member is counted. Raises
+    # AlreadyFinished when the build is no longer open (the sweep reaped it
+    # because its process stopped heartbeating).
+    def count_in(payloads, final:)
+      return self.class.track_enqueue(payloads) unless final
+
+      BatchEntry.connection_pool.with_connection do
+        BatchEntry.transaction do
+          BatchEntry.close_build!(batch_id)
+          self.class.track_enqueue(payloads) if payloads.any?
+        end
+      end
+    end
+
     def create_record
       attrs = {
         batch_id: batch_id,
         description: description,
         properties: JSON.generate(properties),
-        status: "pending"
+        status: @owner ? "building" : "pending"
       }
+      attrs[:owner_process_id] = @owner if @owner
       CALLBACK_COLUMNS.each_key { |slot| attrs.merge!(callback_attributes(slot, public_send(slot))) }
       @record = BatchEntry.create!(attrs)
     end
@@ -828,7 +816,7 @@ module Pgbus
     # builder's setters, inside the Pgbus.batch block, while the row is
     # still pending and so cannot fire its callbacks).
     def write_callback(slot, callback)
-      updated = BatchEntry.where(batch_id: batch_id, status: %w[pending processing])
+      updated = BatchEntry.where(batch_id: batch_id, status: BatchEntry::UNFINISHED)
                           .update_all(callback_attributes(slot, callback))
       raise AlreadyFinished, "Can't change the callbacks of an already finished batch" if updated.zero?
 
