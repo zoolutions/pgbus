@@ -11,6 +11,7 @@ class Views::Docs::Pages::ActiveJob < DocsUI::Page
   def content
     setup
     enqueueing
+    coalescing
     lifecycle
     current_attributes
     what_you_keep
@@ -60,6 +61,53 @@ class Views::Docs::Pages::ActiveJob < DocsUI::Page
       md <<~'MD'
         A scheduled job is sent with a PGMQ delay, so it stays invisible until its
         time arrives — no separate scheduler poll table.
+      MD
+    end
+  end
+
+  def coalescing
+    DocsUI::Section("Coalescing enqueues", description: "One send for a unit of work's jobs.") do
+      md <<~'MD'
+        Every `perform_later` is one send, so one database round trip. Inside
+        `Pgbus.coalesce` the adapter holds the jobs it can send in bulk and sends
+        them when the block ends: one `send_batch` per queue and priority.
+      MD
+      DocsUI::Code(<<~RUBY, filename: "app/controllers/orders_controller.rb")
+        Pgbus.coalesce do                 # on_failure: :raise (default) | :report | ->(jobs, error) { }
+          EventJob.perform_later("a")
+          EventJob.perform_later("b")
+        end                               # one send here
+      RUBY
+      md <<~'MD'
+        For every request, an opt-in Rack middleware runs the request inside the
+        scope and sends before it returns the response, never after it:
+      MD
+      DocsUI::Code(<<~RUBY, filename: "config/application.rb")
+        config.pgbus.coalesce_requests = true               # inserted after ActionDispatch::Executor
+        config.pgbus.coalesce_requests_on_failure = :report # default :raise
+      RUBY
+      md <<~'MD'
+        - **Sent at once, not held:** jobs with uniqueness or a concurrency limit,
+          future jobs (`set(wait:)`), `retry_on` re-enqueues, deploy task runs,
+          batch members, workflow steps, jobs from another thread or fiber, and
+          jobs enqueued once the flush has started. On Rails 7.2+ a job that
+          Rails defers to after commit (`enqueue_after_transaction_commit`)
+          reaches the scope at commit, so one from a rolled-back transaction
+          never does; a job that does not defer is held like any other.
+        - **Serialized at `perform_later`:** an argument that cannot be
+          serialized raises there, and a later change to the job is not sent.
+        - **The return value:** `perform_later` returns the job with
+          `successfully_enqueued?` true and `provider_job_id` nil until the flush,
+          as Rails does for a job deferred to after commit.
+        - **The flush:** one `send_batch` per queue and priority, then each job
+          left unsent is retried on its own; what still fails goes to
+          `on_failure`. `:raise` raises `Pgbus::EnqueueError` naming each job.
+          When the block raises, the buffer is still sent and the block's error
+          propagates.
+        - **Nesting:** a nested scope joins the outer one.
+
+        An endpoint that must not answer 500 after committing its writes should use
+        `on_failure: :report` or a callable that does not raise.
       MD
     end
   end

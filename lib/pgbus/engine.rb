@@ -6,6 +6,14 @@ module Pgbus
   class Engine < ::Rails::Engine
     isolate_namespace Pgbus
 
+    # config.pgbus.* in the application (issue #682). coalesce_requests
+    # inserts Pgbus::ActiveJob::Coalesce::Middleware after
+    # ActionDispatch::Executor, with coalesce_requests_on_failure as its
+    # on_failure.
+    config.pgbus = ActiveSupport::OrderedOptions.new
+    config.pgbus.coalesce_requests = false
+    config.pgbus.coalesce_requests_on_failure = :raise
+
     # When pgbus was loaded before Rails, a separate Zeitwerk loader manages
     # app/models. Tear it down before Rails' autoloader claims the same paths.
     initializer "pgbus.release_models_loader", before: :set_autoload_paths do
@@ -166,6 +174,17 @@ module Pgbus
     # this one; with no subscriber it does nothing.
     initializer "pgbus.signals.middleware" do |app|
       app.middleware.use Pgbus::Signals::Middleware if Pgbus.configuration.streams_enabled
+    end
+
+    # Opt-in (issue #682): each request's enqueues go out together before
+    # the response is returned.
+    # After the app's initializers, so the flag may be set there too.
+    initializer "pgbus.coalesce.middleware", after: :load_config_initializers do |app|
+      options = app.config.pgbus
+      if options.coalesce_requests
+        app.middleware.insert_after ActionDispatch::Executor, Pgbus::ActiveJob::Coalesce::Middleware,
+                                    on_failure: options.coalesce_requests_on_failure
+      end
     end
 
     # Make the <pgbus-stream-source> element available to the host app's

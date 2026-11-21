@@ -119,6 +119,9 @@ module Pgbus
   def self.stream_name_budget: () -> Integer
   # Keywords go to Pgbus::Batch.new (description:, properties:, on_complete:, uniqueness_key:, …).
   def self.batch: (**untyped options) { (Batch::Builder) -> void } -> Batch
+  # Holds the block's bulk-eligible enqueues and sends them together when it
+  # ends (issue #682); on_failure: :raise | :report | ^(jobs, error) -> void.
+  def self.coalesce: [T] (?on_failure: ActiveJob::Coalesce::on_failure) { () -> T } -> T
   # delay: seconds, as a Numeric or an ActiveSupport::Duration (1.hour).
   def self.publish: (String routing_key, untyped payload, ?headers: Hash[String, untyped]?, ?delay: Numeric | _ToI) -> untyped
   def self.publish_later: (String routing_key, untyped payload, delay: Numeric | _ToI, ?headers: Hash[String, untyped]?) -> untyped
