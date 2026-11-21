@@ -6,55 +6,28 @@ module Pgbus
   module ActiveJob
     class Adapter
       def enqueue(active_job)
-        queue = active_job.queue_name || Pgbus.configuration.default_queue
-        payload_hash = Serializer.serialize_job_hash(active_job)
-        payload_hash = Concurrency.inject_metadata(active_job, payload_hash)
-        payload_hash = Uniqueness.inject_metadata(active_job, payload_hash)
-        payload_hash = FairShare.inject_metadata(active_job, payload_hash)
-        payload_hash = inject_batch_metadata(payload_hash, active_job)
-        note_deploy_task_run_enqueued(active_job, false)
-
-        if uniqueness_rejected?(active_job, payload_hash, queue: queue)
-          uncount_batch_job(payload_hash, active_job)
-          return active_job
-        end
-
-        enqueue_with_concurrency(active_job, queue, payload_hash)
-      ensure
-        forget_enqueue_batch_id(active_job)
+        enqueue_job(active_job)
       end
 
       def enqueue_at(active_job, timestamp)
-        queue = active_job.queue_name || Pgbus.configuration.default_queue
-        payload_hash = Serializer.serialize_job_hash(active_job)
-        payload_hash = Concurrency.inject_metadata(active_job, payload_hash)
-        payload_hash = Uniqueness.inject_metadata(active_job, payload_hash)
-        payload_hash = FairShare.inject_metadata(active_job, payload_hash)
-        payload_hash = inject_batch_metadata(payload_hash, active_job)
-        delay = [(timestamp - Time.current.to_f).ceil, 0].max
-        note_deploy_task_run_enqueued(active_job, false)
-
-        if uniqueness_rejected?(active_job, payload_hash, queue: queue)
-          uncount_batch_job(payload_hash, active_job)
-          return active_job
-        end
-
-        enqueue_with_concurrency(active_job, queue, payload_hash, delay: delay)
-      ensure
-        forget_enqueue_batch_id(active_job)
+        enqueue_job(active_job, delay: delay_until(timestamp))
       end
 
+      # Sets successfully_enqueued on every job, as ActiveJob.perform_all_later
+      # reads it (issue #679): true for a job sent or parked behind its
+      # concurrency limit, false for one dropped or never reached because an
+      # error raised. Returns the number marked, so the enqueue_all.active_job
+      # notification's enqueued_count agrees with the jobs.
       def enqueue_all(active_jobs)
+        active_jobs.each do |j|
+          j.successfully_enqueued = false
+          j.enqueue_error = nil
+        end
+
         # Jobs with uniqueness or concurrency must go through individual enqueue
         # to acquire locks/semaphores — the bulk path cannot (issue #413)
         individual, bulk = active_jobs.partition { |j| Uniqueness.uniqueness_config(j) || concurrency_config(j) }
-        individual.each do |j|
-          if scheduled_in_future?(j)
-            enqueue_at(j, j.scheduled_at.to_f)
-          else
-            enqueue(j)
-          end
-        end
+        individual.each { |j| enqueue_one_of_all(j) }
 
         # Group by priority too: send_batch routes through the queue strategy,
         # so a mixed-priority bulk send needs one produce_batch per level.
@@ -62,15 +35,50 @@ module Pgbus
             .each do |(queue, priority), jobs|
           immediate, scheduled = jobs.partition { |j| !scheduled_in_future?(j) }
           enqueue_immediate(queue, immediate, priority: priority)
-          scheduled.each { |j| enqueue_at(j, j.scheduled_at.to_f) }
+          scheduled.each { |j| enqueue_one_of_all(j) }
         end
 
-        active_jobs.count
+        active_jobs.count(&:successfully_enqueued?)
       end
 
       private
 
-      def enqueue_with_concurrency(active_job, queue, payload_hash, delay: 0)
+      # One job of an enqueue_all that cannot take the bulk path.
+      # enqueue_with_concurrency marks it once it is live, as enqueue_immediate
+      # marks the bulk; on perform_later the adapter never sets
+      # successfully_enqueued, ActiveJob sets it around enqueue/enqueue_at.
+      def enqueue_one_of_all(active_job)
+        delay = scheduled_in_future?(active_job) ? delay_until(active_job.scheduled_at.to_f) : 0
+        enqueue_job(active_job, delay: delay, mark_enqueued: true)
+      end
+
+      def delay_until(timestamp)
+        [(timestamp - Time.current.to_f).ceil, 0].max
+      end
+
+      # Returns the job. With mark_enqueued (enqueue_all), sets
+      # successfully_enqueued once the job is live: sent, or parked behind its
+      # concurrency limit to run later.
+      def enqueue_job(active_job, delay: 0, mark_enqueued: false)
+        queue = active_job.queue_name || Pgbus.configuration.default_queue
+        payload_hash = Serializer.serialize_job_hash(active_job)
+        payload_hash = Concurrency.inject_metadata(active_job, payload_hash)
+        payload_hash = Uniqueness.inject_metadata(active_job, payload_hash)
+        payload_hash = FairShare.inject_metadata(active_job, payload_hash)
+        payload_hash = inject_batch_metadata(payload_hash, active_job)
+        note_deploy_task_run_enqueued(active_job, false)
+
+        if uniqueness_rejected?(active_job, payload_hash, queue: queue)
+          uncount_batch_job(payload_hash, active_job)
+          return active_job
+        end
+
+        enqueue_with_concurrency(active_job, queue, payload_hash, delay: delay, mark_enqueued: mark_enqueued)
+      ensure
+        forget_enqueue_batch_id(active_job)
+      end
+
+      def enqueue_with_concurrency(active_job, queue, payload_hash, delay: 0, mark_enqueued: false)
         key = Concurrency.extract_key(payload_hash)
         concurrency = concurrency_config(active_job)
         priority = active_job.try(:priority)
@@ -116,6 +124,10 @@ module Pgbus
           msg_id = Pgbus.client.send_message(queue, payload_hash, delay: delay, priority: priority)
           active_job.provider_job_id = msg_id
         end
+
+        # Marked before any bookkeeping below can raise: the job is live
+        # whatever happens next (issue #679).
+        active_job.successfully_enqueued = true if mark_enqueued && (msg_id || blocked)
 
         # Bind before backfill so a live message is never left with an unbound
         # uniqueness row if execution-row bookkeeping raises.
@@ -468,7 +480,10 @@ module Pgbus
           raise Pgbus::EnqueueError, "Pgbus batch enqueue failed: expected #{jobs.size} ids, got #{msg_ids&.size || 0}"
         end
 
-        jobs.zip(msg_ids).each { |job, id| job.provider_job_id = id }
+        jobs.zip(msg_ids).each do |job, id|
+          job.provider_job_id = id
+          job.successfully_enqueued = true
+        end
         payloads.zip(msg_ids).each { |payload, id| Batch.backfill_execution(payload, id, physical) }
       rescue Pgbus::EnqueueError
         Array(payloads).each_with_index do |payload, index|
