@@ -505,6 +505,8 @@ class Views::Docs::Pages::UpgradingPgbus < DocsUI::Page
           [ [ :code, "lock_ttl:" ], [ :md, "Removed from `ensures_uniqueness` — validated but never read by anything." ], [ :md, "Passing it raises `ArgumentError` naming the removal and this page." ] ],
           [ [ :code, "pgbus:add_job_locks" ], [ :md, "Generator removed; `Pgbus::JobLock` model removed (zero references)." ], [ :md, "No replacement — new installs use `pgbus:add_uniqueness_keys`; `pgbus:migrate_job_locks` still retires the legacy table." ] ],
           [ [ :code, "with_pgbus_durable" ], [ :md, "Removed (internal streams helper, zero callers)." ], [ :md, "Use `with_pgbus_broadcast_opts(durable:)`." ] ],
+          [ [ :code, "Pgbus::Batch.new(on_discard:)" ], [ :md, "Removed, with `Batch#on_discard` (deprecated since the `on_failure:` rename)." ], [ :md, "Use `on_failure:` / `#on_failure`; passing `on_discard:` raises `ArgumentError` (unknown keyword)." ] ],
+          [ [ :code, "on_finish:" ], [ :md, "Still a deprecated alias of `on_complete:` (keyword, `Batch#on_finish`, `b.on_finish`); the `on_finish_*` columns stay." ], "Warns once; removed in 2.0." ],
           [ [ :code, "reconnect_via_reset" ], [ :md, "Removed — the streamer's `conn.reset` reconnect fallback (only test wiring reached it)." ], [ :md, "`connection_factory` is now required on `Streamer::Listener` and always injected; reconnect always rebuilds a fresh connection." ] ]
         ]
       )

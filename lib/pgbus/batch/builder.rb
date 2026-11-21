@@ -43,7 +43,7 @@ module Pgbus
 
       def on_failure(job = nil, &) = set_callback(:on_failure, job, &)
 
-      # Deprecated alias of #on_complete until 1.0.
+      # Deprecated alias of #on_complete, kept past 1.0; removed in 2.0.
       def on_finish(job = nil, &)
         Batch.warn_on_finish_deprecated
         set_callback(:on_complete, job, &)
