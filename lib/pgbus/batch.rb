@@ -22,7 +22,7 @@ module Pgbus
     VALID_CONFLICTS = %i[reject discard log].freeze
 
     # The callback slots, each mapped to the prefix of its pgbus_batches
-    # columns. on_complete keeps the on_finish_* columns until the 1.0 schema
+    # columns. on_complete keeps the on_finish_* columns until the 2.0 schema
     # cleanup, so rows written before the rename still fire.
     CALLBACK_COLUMNS = { on_complete: "on_finish", on_success: "on_success", on_failure: "on_failure" }.freeze
 
@@ -30,12 +30,9 @@ module Pgbus
                 :on_complete, :on_success, :on_failure,
                 :uniqueness_key, :on_conflict
 
-    # Deprecated alias of #on_complete until 1.0.
+    # Deprecated alias of #on_complete, kept past 1.0 for the callers that
+    # still pass it; removed in 2.0.
     def on_finish = on_complete
-
-    def on_discard
-      on_failure
-    end
 
     # Open a batch, yield a Pgbus::Batch::Builder, and start the batch when
     # the block returns. Every job the block enqueues (through +b.add+ or a
@@ -86,10 +83,9 @@ module Pgbus
     #   block's coalesce scope (issue #683) could not send: :raise (default,
     #   Pgbus::EnqueueError), :report, or a callable taking (jobs, error).
     #   Distinct from on_failure:, the callback fired when a member fails.
-    def initialize(on_complete: nil, on_finish: nil, on_success: nil, on_discard: nil, on_failure: nil,
+    def initialize(on_complete: nil, on_finish: nil, on_success: nil, on_failure: nil,
                    description: nil, properties: {}, uniqueness_key: nil, on_conflict: :reject,
                    on_enqueue_failure: :raise)
-      raise ArgumentError, "pass on_failure: only — on_discard: is a deprecated alias" if on_discard && on_failure
       raise ArgumentError, "pass on_complete: only — on_finish: is a deprecated alias" if on_finish && on_complete
       unless VALID_CONFLICTS.include?(on_conflict)
         raise ArgumentError, "on_conflict must be one of #{VALID_CONFLICTS.join(", ")}, got #{on_conflict.inspect}"
@@ -97,17 +93,12 @@ module Pgbus
 
       Pgbus::ActiveJob::Coalesce.validate_on_failure!(on_enqueue_failure)
 
-      if on_discard
-        Pgbus.logger.warn do
-          "[Pgbus] Batch on_discard: is deprecated and will be removed in 1.0 — use on_failure: instead"
-        end
-      end
       self.class.warn_on_finish_deprecated if on_finish
 
       @batch_id = SecureRandom.uuid
       @on_complete = on_complete || on_finish
       @on_success = on_success
-      @on_failure = on_failure || on_discard
+      @on_failure = on_failure
       @description = description
       @properties = properties
       @uniqueness_key = uniqueness_key&.to_s
@@ -317,7 +308,7 @@ module Pgbus
       return unless first
 
       Pgbus.logger.warn do
-        "[Pgbus] Batch on_finish is deprecated and will be removed in 1.0 — use on_complete instead"
+        "[Pgbus] Batch on_finish is deprecated and will be removed in 2.0 — use on_complete instead"
       end
     end
 

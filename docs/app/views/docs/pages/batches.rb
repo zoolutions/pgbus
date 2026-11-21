@@ -213,9 +213,9 @@ class Views::Docs::Pages::Batches < DocsUI::Page
       DocsUI::Table(
         [ "Callback", "Fired when" ],
         [
-          [ [ :code, "on_complete" ], "The batch finished (no outstanding execution rows remain), including after a dispatcher sweep repair. (`on_finish` is a deprecated alias until 1.0.)" ],
+          [ [ :code, "on_complete" ], "The batch finished (no outstanding execution rows remain), including after a dispatcher sweep repair. (`on_finish` is a deprecated alias, removed in 2.0.)" ],
           [ [ :code, "on_success" ], "The batch finished with zero failed jobs." ],
-          [ [ :code, "on_failure" ], "The batch finished with at least one dead-lettered job. (`on_discard:` is a deprecated alias until 1.0.)" ]
+          [ [ :code, "on_failure" ], "The batch finished with at least one dead-lettered job." ]
         ]
       )
       md <<~'MD'
@@ -223,7 +223,7 @@ class Views::Docs::Pages::Batches < DocsUI::Page
         `Pgbus::Batch.new` keyword (`on_complete: MyJob`). `on_finish` still
         works in both places and logs a deprecation warning once per process.
         The batch row keeps its `on_finish_class` and `on_finish_job` columns
-        until 1.0, so batches created before the rename still fire.
+        until 2.0, so batches created before the rename still fire.
       MD
       md <<~'MD'
         A callback job receives the batch `properties` hash as its argument:

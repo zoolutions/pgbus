@@ -1,5 +1,13 @@
 ## [Unreleased]
 
+### Breaking Changes
+
+- **`Pgbus::Batch.new(on_discard:)` and `Batch#on_discard` are removed**, as their deprecation warning announced for 1.0 (this release). Pass `on_failure:` and read `#on_failure`. `on_discard:` now raises `ArgumentError` (unknown keyword).
+
+### Changed
+
+- **`on_finish` stays one more major version.** The `on_finish:` keyword and the builder's `b.on_finish` are still accepted and still warn once per process (`Batch#on_finish` stays as a plain reader alias); the warning now says they are removed in 2.0. Callers in the wild still use them. The `BatchEntry#discarded_jobs` alias, for installs that have not run `pgbus:add_batch_executions`, is also kept until 2.0: the legacy-schema path still reads it. The `on_finish_class` / `on_finish_job` columns, which were to be renamed at 1.0, stay until 2.0 too.
+
 ### Added
 
 - **Scheduled jobs go out in bulk (issue #686).** `enqueue_all` (`perform_all_later`, `b.add`), a `Pgbus.coalesce` scope and a built batch's block group bulk-eligible jobs by queue, priority and delay (whole seconds), and send each group with one `send_batch` carrying that delay; they used to send every future job on its own. A staggered fan-out (slice i scheduled i × delay ahead) costs one send per slice, and 50 jobs that share a `wait:` one send. A coalesce scope now holds future jobs (`enqueue_at`) as well, and works their delay out at the flush, from the scheduled time, so time spent in the scope is not added to it. A batch's scheduled members are counted and backfilled in bulk with the rest. Uniqueness and concurrency jobs keep the single path, their lock and slot leases covering the delay. Refs #686.
