@@ -1,12 +1,12 @@
 ## [Unreleased]
 
-### Breaking
+### Breaking Changes
 
-- **`Pgbus::Batch.new(on_discard:)` and `Batch#on_discard` are removed**, as their deprecation warning announced for 1.0. Pass `on_failure:` and read `#on_failure`. `on_discard:` now raises `ArgumentError` (unknown keyword).
+- **`Pgbus::Batch.new(on_discard:)` and `Batch#on_discard` are removed**, as their deprecation warning announced for 1.0 (this release). Pass `on_failure:` and read `#on_failure`. `on_discard:` now raises `ArgumentError` (unknown keyword).
 
 ### Changed
 
-- **`on_finish` stays one more major version.** The `on_finish:` keyword, `Batch#on_finish` and the builder's `b.on_finish` are still accepted and still warn once per process; the warning now says they are removed in 2.0. Callers in the wild still use them. The `BatchEntry#discarded_jobs` alias, for installs that have not run `pgbus:add_batch_executions`, is also kept until 2.0.
+- **`on_finish` stays one more major version.** The `on_finish:` keyword, `Batch#on_finish` and the builder's `b.on_finish` are still accepted and still warn once per process; the warning now says they are removed in 2.0. Callers in the wild still use them. The `BatchEntry#discarded_jobs` alias, for installs that have not run `pgbus:add_batch_executions`, is also kept until 2.0: the legacy-schema path still reads it. The `on_finish_class` / `on_finish_job` columns, which were to be renamed at 1.0, stay until 2.0 too.
 
 ### Added
 

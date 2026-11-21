@@ -222,8 +222,8 @@ class Views::Docs::Pages::Batches < DocsUI::Page
         Each name works as a builder method (`b.on_complete MyJob`) and as a
         `Pgbus::Batch.new` keyword (`on_complete: MyJob`). `on_finish` still
         works in both places and logs a deprecation warning once per process.
-        The batch row keeps its `on_finish_class` and `on_finish_job` columns,
-        so batches created before the rename still fire.
+        The batch row keeps its `on_finish_class` and `on_finish_job` columns
+        until 2.0, so batches created before the rename still fire.
       MD
       md <<~'MD'
         A callback job receives the batch `properties` hash as its argument:

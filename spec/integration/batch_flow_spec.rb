@@ -45,7 +45,7 @@ RSpec.describe "Batch flow (integration)", :integration do
     end
   end
 
-  let(:on_discard_job) do
+  let(:on_failure_job) do
     queue = callback_queue
     Class.new(ActiveJob::Base) do
       self.queue_adapter = :pgbus
@@ -60,7 +60,7 @@ RSpec.describe "Batch flow (integration)", :integration do
     stub_const("BatchFlowSpec", Module.new)
     stub_const("BatchFlowSpec::OnFinishJob", on_finish_job)
     stub_const("BatchFlowSpec::OnSuccessJob", on_success_job)
-    stub_const("BatchFlowSpec::OnDiscardJob", on_discard_job)
+    stub_const("BatchFlowSpec::OnDiscardJob", on_failure_job)
     client.ensure_queue(callback_queue)
     client.ensure_queue(work_queue)
   end
@@ -190,9 +190,9 @@ RSpec.describe "Batch flow (integration)", :integration do
     end
   end
 
-  describe "on_discard path" do
-    it "fires on_discard instead of on_success when a job is discarded" do
-      batch = enqueue_batch(on_success: on_success_job, on_failure: on_discard_job)
+  describe "on_failure path" do
+    it "fires on_failure instead of on_success when a job is discarded" do
+      batch = enqueue_batch(on_success: on_success_job, on_failure: on_failure_job)
 
       # One completes, one is discarded (dead-lettered) — batch still finishes.
       complete_next(batch.batch_id)
@@ -274,7 +274,7 @@ RSpec.describe "Batch flow (integration)", :integration do
 
   describe "orphan-row sweep probes the queue before un-counting (issue #423)" do
     it "keeps a msg_id-less row whose message is live, and resolves it as failed once dead-lettered" do
-      batch = Pgbus::Batch.new(on_finish: on_finish_job, on_failure: on_discard_job)
+      batch = Pgbus::Batch.new(on_finish: on_finish_job, on_failure: on_failure_job)
       batch.enqueue { worker_job.perform_later }
       row = Pgbus::BatchExecution.find_by!(batch_id: batch.batch_id)
       # Simulate a backfill that never landed: message is live, the row keeps
@@ -333,7 +333,7 @@ RSpec.describe "Batch flow (integration)", :integration do
     end
 
     it "resolves an orphan row as failed once its message is dead-lettered" do
-      batch = Pgbus::Batch.new(on_finish: on_finish_job, on_failure: on_discard_job)
+      batch = Pgbus::Batch.new(on_finish: on_finish_job, on_failure: on_failure_job)
       batch.enqueue { worker_job.perform_later }
       row = Pgbus::BatchExecution.find_by!(batch_id: batch.batch_id)
       row.update_columns(msg_id: nil, queue_name: work_queue, created_at: 1.hour.ago)
@@ -345,7 +345,7 @@ RSpec.describe "Batch flow (integration)", :integration do
     end
 
     it "resolves a backfilled row as failed once its message is dead-lettered" do
-      batch = Pgbus::Batch.new(on_finish: on_finish_job, on_failure: on_discard_job)
+      batch = Pgbus::Batch.new(on_finish: on_finish_job, on_failure: on_failure_job)
       batch.enqueue { worker_job.perform_later }
       row = Pgbus::BatchExecution.find_by!(batch_id: batch.batch_id)
       expect(row.queue_name).to eq("pgbus_int_pgbus_int_sweep_work")

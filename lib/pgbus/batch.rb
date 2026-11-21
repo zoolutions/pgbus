@@ -22,7 +22,7 @@ module Pgbus
     VALID_CONFLICTS = %i[reject discard log].freeze
 
     # The callback slots, each mapped to the prefix of its pgbus_batches
-    # columns. on_complete keeps the on_finish_* columns until a later schema
+    # columns. on_complete keeps the on_finish_* columns until the 2.0 schema
     # cleanup, so rows written before the rename still fire.
     CALLBACK_COLUMNS = { on_complete: "on_finish", on_success: "on_success", on_failure: "on_failure" }.freeze
 
