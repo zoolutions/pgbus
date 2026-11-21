@@ -135,6 +135,11 @@ module PgmqDoubles
       )
       allow(job).to receive(:provider_job_id=)
       allow(job).to receive(:perform_now)
+      # enqueue_all reports each job's outcome the way ActiveJob reads it back.
+      enqueued = nil
+      allow(job).to receive(:successfully_enqueued=) { |value| enqueued = value }
+      allow(job).to receive(:successfully_enqueued?) { enqueued }
+      allow(job).to receive(:enqueue_error=)
     end
   end
 end
