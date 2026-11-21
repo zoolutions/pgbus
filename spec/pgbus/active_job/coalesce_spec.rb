@@ -488,6 +488,25 @@ RSpec.describe Pgbus::ActiveJob::Coalesce do
     end
   end
 
+  describe "a raising pgbus.coalesce subscriber" do
+    it "keeps the block's error and reports the subscriber's" do
+      hide_const("Rails")
+      allow(Pgbus::ErrorReporter).to receive(:report)
+      callback = ->(*) { raise "subscriber broke" }
+
+      ActiveSupport::Notifications.subscribed(callback, "pgbus.coalesce") do
+        expect do
+          Pgbus.coalesce do
+            plain_class.perform_later(1)
+            raise ArgumentError, "boom"
+          end
+        end.to raise_error(ArgumentError, "boom")
+      end
+
+      expect(Pgbus::ErrorReporter).to have_received(:report).with(an_instance_of(RuntimeError), anything)
+    end
+  end
+
   describe "nesting" do
     it "joins the outer scope and flushes only at its end" do
       Pgbus.coalesce do

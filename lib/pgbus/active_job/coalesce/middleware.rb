@@ -30,9 +30,17 @@ module Pgbus
           response = nil
           Pgbus.coalesce(on_failure: @on_failure) { response = @app.call(env) }
         rescue Exception # rubocop:disable Lint/RescueException -- closes, then re-raises
-          body = response&.at(2)
-          body.close if body.respond_to?(:close)
+          close_body(response&.at(2))
           raise
+        end
+
+        private
+
+        # A body whose close raises must not hide the error being raised.
+        def close_body(body)
+          body.close if body.respond_to?(:close)
+        rescue StandardError => e
+          Pgbus.logger.warn { "[Pgbus] Closing the response body failed: #{e.class}: #{e.message}" }
         end
       end
     end

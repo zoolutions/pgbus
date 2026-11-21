@@ -103,6 +103,13 @@ module Pgbus
         instrument(result, started)
         handle_failure(result, entries, block_error) if result.failed.any?
         result
+      rescue StandardError => e
+        # The block's error is the one that propagates: anything the flush
+        # raises after it (a notification subscriber, say) is reported.
+        raise unless block_error
+
+        ErrorReporter.report(e, { pgbus_coalesce: :finish })
+        result
       end
 
       private
