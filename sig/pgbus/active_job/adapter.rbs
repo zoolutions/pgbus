@@ -6,7 +6,7 @@ module Pgbus
       def enqueue_at: (untyped active_job, Numeric timestamp) -> untyped
       def enqueue_all: (Array[untyped] active_jobs) -> Integer
       # A Coalesce scope's buffer, as [job, payload serialized at perform_later] pairs (issue #682).
-      def deliver_coalesced: (Array[[untyped, Hash[String, untyped]]] entries) -> Coalesce::Result
+      def deliver_coalesced: (Array[[untyped, Hash[String, untyped]]] entries, ?counted: bool) -> Coalesce::Result
     end
   end
 

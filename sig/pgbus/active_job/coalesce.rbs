@@ -23,14 +23,15 @@ module Pgbus
       end
 
       def self.current: () -> Coalesce?
-      # batch_id: (Pgbus.batch, issue #683) a scope of the batch's own that holds only its members.
-      def self.open: [T] (?on_failure: on_failure, ?batch_id: String?) { () -> T } -> T
+      # batch_id: (Pgbus.batch, issue #683) a scope of the batch's own that holds only its members;
+      # count_in.call(payloads, final:) counts each chunk in before it is sent, the final one closing the build.
+      def self.open: [T] (?on_failure: on_failure, ?batch_id: String?, ?count_in: untyped) { () -> T } -> T
       def self.validate_on_failure!: (untyped on_failure) -> void
 
       attr_reader on_failure: on_failure
       attr_reader batch_id: String?
 
-      def initialize: (?on_failure: on_failure, ?batch_id: String?, ?chunk_size: Integer) -> void
+      def initialize: (?on_failure: on_failure, ?batch_id: String?, ?count_in: untyped, ?chunk_size: Integer) -> void
       def push: (Adapter adapter, untyped job, Hash[String, untyped] payload) -> bool
       def finish!: (?block_error: Exception?) -> Result
 
