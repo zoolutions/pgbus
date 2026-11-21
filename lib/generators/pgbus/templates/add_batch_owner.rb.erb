@@ -1,0 +1,13 @@
+class AddPgbusBatchOwner < ActiveRecord::Migration<%= migration_version %>
+  # The pgbus_processes row of the process that builds a batch (issue #683):
+  # the stalled-batch sweep reaps a build only once that process stops
+  # heartbeating. No index: the sweep reads it only for batches in
+  # status "building", which idx_pgbus_batches_status narrows.
+  def up
+    add_column :pgbus_batches, :owner_process_id, :bigint unless column_exists?(:pgbus_batches, :owner_process_id)
+  end
+
+  def down
+    remove_column :pgbus_batches, :owner_process_id if column_exists?(:pgbus_batches, :owner_process_id)
+  end
+end

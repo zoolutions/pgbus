@@ -116,6 +116,7 @@ class CreatePgbusTables < ActiveRecord::Migration<%= migration_version %>
       t.integer :completed_jobs, null: false, default: 0
       t.integer :failed_jobs, null: false, default: 0
       t.string :status, null: false, default: "pending"
+      t.bigint :owner_process_id
       t.datetime :created_at, null: false, default: -> { "CURRENT_TIMESTAMP" }
       t.datetime :finished_at
     end

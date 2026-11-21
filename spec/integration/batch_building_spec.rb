@@ -1,0 +1,456 @@
+# frozen_string_literal: true
+
+require_relative "../integration_helper"
+require "active_job"
+require "active_job/queue_adapters/pgbus_adapter"
+
+# Issue #683: a batch opened in a process with a heartbeat row is built. It
+# is created "building" with that row as its owner, its block's
+# perform_later calls are held and counted in per chunk, and the block's end
+# closes the build (building -> pending) in the transaction that counts the
+# last chunk. While building, no sweep and no finish touch it; the sweep
+# reaps a build only once its owner stops heartbeating.
+RSpec.describe "Batch building (integration)", :integration do
+  let(:client) { Pgbus.client }
+  let(:work_queue) { "building_work" }
+  let(:callback_queue) { "building_callbacks" }
+  let(:executor) { Pgbus::ActiveJob::Executor.new(client: client) }
+
+  let(:work_job) do
+    queue = work_queue
+    Class.new(ActiveJob::Base) do
+      include Pgbus::ActiveJob::BatchId
+
+      self.queue_adapter = :pgbus
+      queue_as(queue)
+      def self.name = "BuildingSpec::WorkJob"
+      def perform(*); end
+    end
+  end
+
+  # Sent at once even inside the block: uniqueness takes the single path.
+  let(:unique_job) do
+    queue = work_queue
+    Class.new(ActiveJob::Base) do
+      include Pgbus::ActiveJob::BatchId
+      include Pgbus::Uniqueness
+
+      self.queue_adapter = :pgbus
+      queue_as(queue)
+      def self.name = "BuildingSpec::UniqueJob"
+      def perform(*); end
+
+      ensures_uniqueness strategy: :until_executing, key: ->(id) { "building-#{id}" }
+    end
+  end
+  let(:owner) do
+    Pgbus::ProcessEntry.create!(kind: "worker", hostname: "spec-host", pid: Process.pid, metadata: {},
+                                last_heartbeat_at: Time.current)
+  end
+
+  def callback(name)
+    queue = callback_queue
+    Class.new(ActiveJob::Base) do
+      self.queue_adapter = :pgbus
+      queue_as(queue)
+      define_singleton_method(:name) { "BuildingSpec::#{name}" }
+      def perform(*); end
+    end
+  end
+
+  before do
+    ActiveJob::Base.logger = Logger.new(IO::NULL)
+    Pgbus::Batch.reset_executions_migrated_cache!
+    stub_const("BuildingSpec", Module.new)
+    stub_const("BuildingSpec::WorkJob", work_job)
+    stub_const("BuildingSpec::UniqueJob", unique_job)
+    %w[DoneJob OkJob FailJob].each { |name| stub_const("BuildingSpec::#{name}", callback(name)) }
+    client.ensure_queue(work_queue)
+    client.ensure_queue(callback_queue)
+    Pgbus::Process::Heartbeat.note_registered(owner.id)
+  end
+
+  after { Pgbus::Process::Heartbeat.note_deregistered(owner.id) }
+
+  def open_batch(&)
+    Pgbus.batch do |b|
+      b.on_complete(BuildingSpec::DoneJob)
+      b.on_success(BuildingSpec::OkJob)
+      b.on_failure(BuildingSpec::FailJob)
+      yield
+    end
+  end
+
+  def open_batch_with(**options, &)
+    Pgbus.batch(**options) do |b|
+      b.on_complete(BuildingSpec::DoneJob)
+      b.on_success(BuildingSpec::OkJob)
+      b.on_failure(BuildingSpec::FailJob)
+      yield
+    end
+  end
+
+  # Sends to the work queue fail outright; the callback queue still works.
+  def fail_work_queue_sends
+    %i[send_batch send_message].each do |method|
+      allow(client).to receive(method).and_wrap_original do |original, queue, *args, **kwargs|
+        raise IOError, "not sent" if queue == work_queue
+
+        original.call(queue, *args, **kwargs)
+      end
+    end
+    allow(Pgbus).to receive(:client).and_return(client)
+  end
+
+  def status_of(batch_id) = Pgbus::BatchEntry.find_by(batch_id: batch_id).status
+
+  def callbacks
+    classes = []
+    while (message = client.read_message(callback_queue, vt: 30))
+      classes << JSON.parse(message.message).fetch("job_class")
+      client.delete_message(callback_queue, message.msg_id.to_i)
+    end
+    classes
+  end
+
+  def run_all
+    while (message = client.read_message(work_queue, vt: 30))
+      executor.execute(message, work_queue)
+    end
+  end
+
+  def queue_depth(queue)
+    physical = Pgbus.configuration.queue_name(queue)
+    ActiveRecord::Base.connection.select_value("SELECT count(*) FROM pgmq.q_#{physical}").to_i
+  end
+
+  # The sweep runs in the dispatcher, outside the block's coalesce scope.
+  def sweep_elsewhere(stalled_for: 300)
+    Thread.new { Pgbus::Batch.sweep_stalled(stalled_for: stalled_for) }.join # rubocop:disable ThreadSafety/NewThread -- joined here
+  end
+
+  def backdate(batch_id)
+    Pgbus::BatchEntry.where(batch_id: batch_id).update_all(created_at: 1.hour.ago)
+    Pgbus::BatchExecution.where(batch_id: batch_id).update_all(created_at: 1.hour.ago)
+  end
+
+  it "builds the batch with this process as its owner, then closes the build at the block's end" do
+    seen = nil
+    batch = open_batch do
+      work_job.perform_later(1)
+      record = Pgbus::BatchEntry.find_by(batch_id: Thread.current[:pgbus_batch_id])
+      seen = [record.status, record.owner_process_id]
+    end
+
+    expect(seen).to eq(["building", owner.id])
+    expect(batch.reload).to have_attributes(status: "processing", total_jobs: 1)
+  end
+
+  it "is skipped by the stalled-batch sweep while building, however old" do
+    open_batch do
+      work_job.perform_later(1)
+      batch_id = Thread.current[:pgbus_batch_id]
+      backdate(batch_id)
+      sweep_elsewhere
+
+      expect(status_of(batch_id)).to eq("building")
+      expect(callbacks).to be_empty
+    end
+  end
+
+  it "is not finished by a member that finishes while building, and finishes right after the block" do
+    statuses = []
+    batch = open_batch do
+      unique_job.perform_later(1) # sent and counted at once
+      run_all
+      statuses << status_of(Thread.current[:pgbus_batch_id])
+      expect(callbacks).to be_empty
+    end
+
+    expect(statuses).to eq(["building"])
+    expect(batch.reload).to have_attributes(status: "finished", total_jobs: 1, completed_jobs: 1)
+    expect(callbacks).to contain_exactly("BuildingSpec::DoneJob", "BuildingSpec::OkJob")
+  end
+
+  describe "a transaction inside the block" do
+    it "rolled back around the first held member cannot finish the batch early" do
+      batch = open_batch do
+        ActiveRecord::Base.transaction do
+          work_job.perform_later(1)
+          raise ActiveRecord::Rollback
+        end
+        work_job.perform_later(2)
+        batch_id = Thread.current[:pgbus_batch_id]
+        backdate(batch_id)
+        sweep_elsewhere
+
+        expect(status_of(batch_id)).to eq("building")
+        expect(callbacks).to be_empty
+      end
+
+      run_all
+      expect(batch.reload).to have_attributes(status: "finished", completed_jobs: 2)
+      expect(callbacks).to contain_exactly("BuildingSpec::DoneJob", "BuildingSpec::OkJob")
+    end
+
+    it "committed, then one held open across the sweep, cannot finish the batch early" do
+      Pgbus.configuration.coalesce_chunk_size = 1
+      batch = open_batch do
+        ActiveRecord::Base.transaction { work_job.perform_later(1) }
+        batch_id = Thread.current[:pgbus_batch_id]
+        ActiveRecord::Base.transaction do
+          work_job.perform_later(2)
+          backdate(batch_id)
+          sweep_elsewhere
+        end
+
+        expect(status_of(batch_id)).to eq("building")
+        expect(callbacks).to be_empty
+      end
+
+      run_all
+      expect(batch.reload).to have_attributes(status: "finished", completed_jobs: 2)
+    ensure
+      Pgbus.configuration.coalesce_chunk_size = 1_000
+    end
+  end
+
+  describe "a chunk filled inside a transaction" do
+    around do |example|
+      Pgbus.configuration.coalesce_chunk_size = 1
+      example.run
+    ensure
+      Pgbus.configuration.coalesce_chunk_size = 1_000
+    end
+
+    it "is not sent until the transaction is gone, so a rollback cannot strand a counted-out member" do
+      depth_in_transaction = nil
+      batch = open_batch do
+        work_job.perform_later(1)
+        ActiveRecord::Base.transaction do
+          work_job.perform_later(2) # chunk 1 is full: it must not be counted in this transaction
+          depth_in_transaction = queue_depth(work_queue)
+          raise ActiveRecord::Rollback
+        end
+        work_job.perform_later(3)
+      end
+
+      expect(depth_in_transaction).to eq(0)
+      expect(batch.reload.total_jobs).to eq(queue_depth(work_queue))
+      run_all
+      expect(batch.reload).to have_attributes(status: "finished", completed_jobs: 3)
+      expect(queue_depth(work_queue)).to eq(0)
+    end
+  end
+
+  describe "a final count that fails on a transient error" do
+    it "still closes the build, so the batch is not left building" do
+      calls = 0
+      allow(Pgbus::Batch).to receive(:track_enqueue).and_wrap_original do |original, *args, **kwargs|
+        calls += 1
+        raise PG::ConnectionBad, "transient" if calls == 1
+
+        original.call(*args, **kwargs)
+      end
+      batch_id = nil
+      failed = []
+      Pgbus.batch(on_enqueue_failure: ->(jobs, _error) { failed.concat(jobs) }) do
+        batch_id = Thread.current[:pgbus_batch_id]
+        work_job.perform_later(1)
+      end
+
+      expect(status_of(batch_id)).not_to eq("building")
+      expect(failed.size).to eq(1)
+      record = Pgbus::BatchEntry.find_by(batch_id: batch_id)
+      expect(record.total_jobs).to eq(Pgbus::BatchExecution.where(batch_id: batch_id).count + record.failed_jobs)
+      expect(record.failed_jobs).to eq(1) # the unsent member
+      expect(queue_depth(work_queue)).to eq(0)
+    end
+
+    it "still closes an empty build when the closing transaction fails" do
+      calls = 0
+      allow(Pgbus::BatchEntry).to receive(:close_build!).and_wrap_original do |original, *args|
+        calls += 1
+        raise PG::ConnectionBad, "transient" if calls == 1
+
+        original.call(*args)
+      end
+      batch_id = nil
+      begin
+        Pgbus.batch do |b|
+          batch_id = Thread.current[:pgbus_batch_id]
+          b.add(work_job.new(1))
+        end
+      rescue PG::ConnectionBad
+        nil
+      end
+
+      expect(status_of(batch_id)).not_to eq("building")
+      expect(Pgbus::BatchEntry.find_by(batch_id: batch_id).total_jobs).to eq(1) # the b.add member, sent at once
+      expect(Pgbus::BatchExecution.where(batch_id: batch_id).count).to eq(1)
+    end
+  end
+
+  describe "a held member that cannot be sent" do
+    it "counts as a failed job of the batch, so on_success cannot fire" do
+      fail_work_queue_sends
+      failed = []
+
+      batch = open_batch_with(on_enqueue_failure: ->(jobs, _error) { failed.concat(jobs) }) do
+        2.times { |i| work_job.perform_later(i) }
+      end
+
+      expect(failed.size).to eq(2)
+      expect(batch.reload).to have_attributes(status: "finished", total_jobs: 2, failed_jobs: 2)
+      expect(Pgbus::BatchExecution.where(batch_id: batch.batch_id).count).to eq(0)
+      expect(callbacks).to contain_exactly("BuildingSpec::DoneJob", "BuildingSpec::FailJob")
+    end
+
+    it "is uncounted when its send fails before any message can exist, not left as an orphan row" do
+      fail_work_queue_sends
+      Pgbus.configuration.coalesce_chunk_size = 1
+      rows_in_block = nil
+
+      batch = open_batch_with(on_enqueue_failure: ->(*) {}) do
+        work_job.perform_later(1)
+        work_job.perform_later(2) # chunk 1 counted in, then its send fails outright
+        rows_in_block = Pgbus::BatchExecution.where(batch_id: Thread.current[:pgbus_batch_id]).count
+      end
+
+      expect(rows_in_block).to eq(0)
+      expect(batch.reload).to have_attributes(total_jobs: 2, failed_jobs: 2)
+    ensure
+      Pgbus.configuration.coalesce_chunk_size = 1_000
+    end
+  end
+
+  describe "a live owner the sweep took for dead" do
+    it "counts no later chunk into the reaped batch" do
+      Pgbus.configuration.coalesce_chunk_size = 1
+      error = nil
+      batch_id = nil
+      begin
+        open_batch do
+          batch_id = Thread.current[:pgbus_batch_id]
+          unique_job.perform_later(0) # counted at once: the reaped batch stays processing
+          work_job.perform_later(1)
+          Pgbus::ProcessEntry.where(id: owner.id).delete_all
+          sweep_elsewhere
+          work_job.perform_later(2) # flushes chunk 1 into a reaped batch
+          work_job.perform_later(3)
+        end
+      rescue Pgbus::EnqueueError => e
+        error = e
+      end
+
+      expect(error.cause).to be_a(Pgbus::Batch::AlreadyFinished)
+      # The member sent at once and the abandoned build; no held member was
+      # counted in, each of the three counts only as a failed job.
+      expect(Pgbus::BatchEntry.find_by(batch_id: batch_id)).to have_attributes(total_jobs: 5, failed_jobs: 4)
+      expect(Pgbus::BatchExecution.where(batch_id: batch_id).count).to eq(1)
+    ensure
+      Pgbus.configuration.coalesce_chunk_size = 1_000
+    end
+  end
+
+  describe "an owner that stops heartbeating" do
+    it "is reaped once its process row is gone: two failed jobs, on_complete and on_failure, never on_success" do
+      error = nil
+      batch = nil
+      begin
+        batch = open_batch do
+          unique_job.perform_later(1)
+          work_job.perform_later(2) # held, never sent: the process "dies" with it
+          Pgbus::ProcessEntry.where(id: owner.id).delete_all
+          sweep_elsewhere
+
+          batch_id = Thread.current[:pgbus_batch_id]
+          expect(Pgbus::BatchEntry.find_by(batch_id: batch_id))
+            .to have_attributes(status: "processing", total_jobs: 2, failed_jobs: 1)
+        end
+      rescue Pgbus::EnqueueError => e
+        error = e
+      end
+
+      # The block "returned" after its build was reaped: the held member fails.
+      expect(error.cause).to be_a(Pgbus::Batch::AlreadyFinished)
+      batch ||= Pgbus::Batch.find(Pgbus::BatchEntry.order(:id).last.batch_id)
+      run_all
+      # One failure for the abandoned build, one for the held member that was never sent.
+      expect(batch.reload).to have_attributes(status: "finished", completed_jobs: 1, failed_jobs: 2)
+      expect(callbacks).to contain_exactly("BuildingSpec::DoneJob", "BuildingSpec::FailJob")
+    end
+
+    it "is reaped once its heartbeat is older than the dead-process threshold" do
+      batch_id = nil
+      begin
+        open_batch do
+          work_job.perform_later(1)
+          batch_id = Thread.current[:pgbus_batch_id]
+          Pgbus::ProcessEntry.where(id: owner.id)
+                             .update_all(last_heartbeat_at: Time.current - Pgbus::Process::Heartbeat::ALIVE_THRESHOLD - 1)
+          sweep_elsewhere
+        end
+      rescue Pgbus::EnqueueError
+        nil
+      end
+
+      expect(Pgbus::BatchEntry.find_by(batch_id: batch_id).status).to eq("finished")
+    end
+
+    it "is not reaped while its owner heartbeats" do
+      open_batch do
+        work_job.perform_later(1)
+        batch_id = Thread.current[:pgbus_batch_id]
+        Pgbus::ProcessEntry.where(id: owner.id).update_all(last_heartbeat_at: Time.current)
+        backdate(batch_id)
+        sweep_elsewhere
+
+        expect(status_of(batch_id)).to eq("building")
+      end
+    end
+
+    # Heartbeat#write_beat re-registers a process whose row the stale-process
+    # reaper deleted: pgbus already treated it as dead, so a build it owned
+    # under the old row is reaped like any other.
+    it "treats a build owned by a row the stale-process reaper deleted as abandoned" do
+      batch_id = nil
+      begin
+        open_batch do
+          work_job.perform_later(1)
+          batch_id = Thread.current[:pgbus_batch_id]
+          Pgbus::ProcessEntry.where(id: owner.id).delete_all
+          replacement = nil
+          replacement = Pgbus::ProcessEntry.create!(kind: "worker", hostname: "spec-host", pid: Process.pid,
+                                                    metadata: {}, last_heartbeat_at: Time.current)
+          Pgbus::Process::Heartbeat.note_registered(replacement.id)
+          sweep_elsewhere
+        ensure
+          Pgbus::Process::Heartbeat.note_deregistered(replacement.id) if replacement
+        end
+      rescue Pgbus::EnqueueError
+        nil
+      end
+
+      expect(Pgbus::BatchEntry.find_by(batch_id: batch_id).status).to eq("finished")
+    end
+  end
+
+  describe "a process without a heartbeat row" do
+    before { Pgbus::Process::Heartbeat.note_deregistered(owner.id) }
+
+    it "takes the pending path: no build, members sent and counted at once" do
+      depth_in_block = nil
+      seen = nil
+      batch = open_batch do
+        work_job.perform_later(1)
+        depth_in_block = queue_depth(work_queue)
+        seen = Pgbus::BatchEntry.find_by(batch_id: Thread.current[:pgbus_batch_id]).slice(:status, :owner_process_id)
+      end
+
+      expect(seen).to eq("status" => "pending", "owner_process_id" => nil)
+      expect(depth_in_block).to eq(1)
+      expect(batch.reload.total_jobs).to eq(1)
+    end
+  end
+end

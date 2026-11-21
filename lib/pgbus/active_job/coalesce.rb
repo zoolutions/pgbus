@@ -27,6 +27,21 @@ module Pgbus
     # fiber, during the flush, or after the block, goes out at once. A nested
     # scope joins the outer one, whose on_failure applies; only the outermost
     # flushes.
+    #
+    # A batch scope (issue #683, opened by Pgbus.batch for a batch it builds,
+    # with +batch_id+ and +count_in+) holds only that batch's members and
+    # joins nothing: it replaces the current scope for the block, flushes
+    # when the block ends and puts the outer scope back. A plain scope opened
+    # inside it joins it. A batch scope counts each chunk in before sending
+    # it, with one call: count_in.call(payloads, final:). The final call
+    # (the block's end) also closes the batch's build, in the same
+    # transaction; see Batch#count_in. Before on_failure, a batch scope hands
+    # the jobs that were never sent to on_failed (Batch#record_enqueue_failures),
+    # so the batch counts them as failed. Every scope flushes early each
+    # config.coalesce_chunk_size held jobs, so a huge block stays bounded in
+    # memory (a batch scope only once no transaction is open on the batch's
+    # connection: until then it keeps holding); on_failure still runs once,
+    # at the end, for every chunk.
     class Coalesce
       KEY = :pgbus_coalesce
       FAILURE_MODES = %i[raise report].freeze
@@ -39,13 +54,13 @@ module Pgbus
           Thread.current[KEY]
         end
 
-        def open(on_failure: :raise, &block)
+        def open(on_failure: :raise, batch_id: nil, count_in: nil, on_failed: nil, &block)
           raise ArgumentError, "Pgbus.coalesce needs a block" unless block
 
           validate_on_failure!(on_failure)
-          return yield if current
+          return yield if current && batch_id.nil?
 
-          run(new(on_failure: on_failure), &block)
+          run(new(on_failure: on_failure, batch_id: batch_id, count_in: count_in, on_failed: on_failed), &block)
         end
 
         def validate_on_failure!(on_failure)
@@ -57,6 +72,7 @@ module Pgbus
         private
 
         def run(scope)
+          outer = current
           Thread.current[KEY] = scope
           error = nil
           begin
@@ -65,31 +81,52 @@ module Pgbus
             error = e
             raise
           ensure
+            # No scope is current while this one flushes: an enqueue then
+            # goes out at once. The outer scope comes back afterwards.
             Thread.current[KEY] = nil
-            scope.finish!(block_error: error)
+            begin
+              scope.finish!(block_error: error)
+            ensure
+              Thread.current[KEY] = outer
+            end
           end
         end
       end
 
-      attr_reader :on_failure
+      attr_reader :on_failure, :batch_id
 
-      def initialize(on_failure: :raise)
+      def initialize(on_failure: :raise, batch_id: nil, count_in: nil, on_failed: nil,
+                     chunk_size: Pgbus.configuration.coalesce_chunk_size)
         @on_failure = on_failure
+        @batch_id = batch_id
+        @count_in = count_in
+        @on_failed = on_failed
+        @chunk_size = chunk_size
         @mutex = Mutex.new
         @entries = []
+        @totals = Result.new(buffered: 0, sent: 0, retried: 0, failed: [], error: nil)
+        @failed_entries = []
         @closed = false
       end
 
       # Holds +job+ for +adapter+ with the +payload+ serialized at
-      # perform_later. Returns false once the flush has started: the caller
-      # sends it itself.
-      def push(adapter, job, payload)
-        @mutex.synchronize do
+      # perform_later, and sends the buffer once it holds a chunk. Returns
+      # false once the flush has started: the caller sends it itself.
+      def push(adapter, job, payload) # rubocop:disable Naming/PredicateMethod -- holds; the result says whether
+        chunk = @mutex.synchronize do
           return false if @closed
 
+          # A full chunk goes when the next job arrives, so a block of
+          # exactly chunk_size jobs is still one flush, at its end. A batch
+          # scope keeps holding while a transaction is open on the batch's
+          # connection: a chunk counted in there and sent on PGMQ's own
+          # connection would lose its count, not its messages, on a rollback.
+          full = drain if @entries.size >= @chunk_size && !hold_for_transaction?
           @entries << [adapter, job, payload]
-          true
+          full
         end
+        deliver_chunk(chunk) if chunk
+        true
       end
 
       # Closes the buffer, sends it, then applies on_failure to whatever could
@@ -98,10 +135,13 @@ module Pgbus
       # callable that raises is reported, so the block's error propagates.
       def finish!(block_error: nil)
         started = ::Process.clock_gettime(::Process::CLOCK_MONOTONIC)
-        entries = close
-        result = deliver(entries)
-        instrument(result, started)
-        handle_failure(result, entries, block_error) if result.failed.any?
+        deliver_chunk(close, final: true)
+        failed_entries, result = @mutex.synchronize { [@failed_entries, @totals] }
+        instrument(result, started) if result.buffered.positive?
+        if result.failed.any?
+          @on_failed&.call(result.failed)
+          handle_failure(result, failed_entries, block_error)
+        end
         result
       rescue StandardError => e
         # The block's error is the one that propagates: anything the flush
@@ -117,18 +157,80 @@ module Pgbus
       def close
         @mutex.synchronize do
           @closed = true
-          entries = @entries
-          @entries = []
-          entries
+          drain
         end
       end
 
-      def deliver(entries)
+      # Takes the buffer; the caller holds the mutex.
+      def drain
+        entries = @entries
+        @entries = []
+        entries
+      end
+
+      # Sends +entries+ now and keeps their result for finish!. A batch
+      # scope counts them in first (count_in); the final chunk also closes
+      # the batch's build, so it runs even when the chunk is empty.
+      def deliver_chunk(entries, final: false)
+        counted = count_chunk_in(entries, final)
+        return if entries.empty?
+
         results = entries.group_by(&:first).map do |adapter, group|
-          adapter.deliver_coalesced(group.map { |_, job, payload| [job, payload] })
+          adapter.deliver_coalesced(group.map { |_, job, payload| [job, payload] }, counted: counted)
         end
+        result = combine(entries.size, results)
+        failed = result.failed.to_set(&:object_id)
+        # Only the counts and the failed jobs are kept: a sent chunk's jobs
+        # and payloads go, so chunking bounds memory.
+        @mutex.synchronize do
+          @totals = combine(@totals.buffered + result.buffered, [@totals, result])
+          @failed_entries.concat(entries.select { |_, job, _| failed.include?(job.object_id) })
+        end
+      end
+
+      def hold_for_transaction?
+        return false unless @count_in
+
+        connection = Pgbus::BatchEntry.connection_pool.active_connection?
+        connection ? connection.transaction_open? : false
+      rescue StandardError => e
+        # Unknown is treated as open: holding a chunk to the block's end is
+        # safe, counting it inside a transaction that rolls back is not.
+        Pgbus.logger.debug { "[Pgbus] Coalesce could not read the batch connection's transaction (#{e.class}); holding the chunk" }
+        true
+      end
+
+      # True when the chunk was counted in. A count that fails (a batch the
+      # sweep reaped, a database error) sends nothing: every job of the chunk
+      # fails, with that error, through on_failure.
+      def count_chunk_in(entries, final)
+        return false unless @count_in
+
+        @count_in.call(entries.map(&:last), final: final)
+        true
+      rescue StandardError => e
+        raise if entries.empty?
+
+        jobs = entries.map { |_, job, _| job }
+        jobs.each { |job| job.successfully_enqueued = false }
+        @mutex.synchronize do
+          failed = Result.new(buffered: entries.size, sent: 0, retried: 0, failed: jobs, error: e)
+          @totals = combine(@totals.buffered + entries.size, [@totals, failed])
+          @failed_entries.concat(entries)
+        end
+        entries.clear
+        false
+      end
+
+      # The held jobs this scope still references, waiting for the flush or
+      # failed in it.
+      def retained_entries
+        @mutex.synchronize { @entries + @failed_entries }
+      end
+
+      def combine(buffered, results)
         Result.new(
-          buffered: entries.size,
+          buffered: buffered,
           sent: results.sum(&:sent), retried: results.sum(&:retried),
           failed: results.flat_map(&:failed), error: results.filter_map(&:error).last
         )

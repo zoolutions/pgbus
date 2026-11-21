@@ -423,16 +423,16 @@ RSpec.describe Pgbus::Batch do
       allow(described_class).to receive(:executions_migrated?).and_return(true)
       allow(Pgbus::BatchEntry).to receive(:transaction).and_yield
       allow(Pgbus::BatchEntry).to receive(:increment_total_jobs!).and_return(true)
-      allow(Pgbus::BatchExecution).to receive(:insert_for!)
+      allow(Pgbus::BatchExecution).to receive(:insert_all_for!)
     end
 
     it "increments total_jobs before inserting the execution row, inside one transaction" do
       described_class.track_enqueue(payload)
 
       expect(Pgbus::BatchEntry).to have_received(:transaction).ordered
-      expect(Pgbus::BatchEntry).to have_received(:increment_total_jobs!).with("b-1", 1).ordered
-      expect(Pgbus::BatchExecution).to have_received(:insert_for!)
-        .with(batch_id: "b-1", job_id: "j-1", queue_name: "default").ordered
+      expect(Pgbus::BatchEntry).to have_received(:increment_total_jobs!).with("b-1", 1, statuses: Pgbus::BatchEntry::UNFINISHED).ordered
+      expect(Pgbus::BatchExecution).to have_received(:insert_all_for!)
+        .with(batch_id: "b-1", rows: [%w[j-1 default]]).ordered
     end
 
     it "increments once by N for a bulk of payloads" do
@@ -440,8 +440,9 @@ RSpec.describe Pgbus::Batch do
 
       described_class.track_enqueue([payload, second])
 
-      expect(Pgbus::BatchEntry).to have_received(:increment_total_jobs!).with("b-1", 2).once
-      expect(Pgbus::BatchExecution).to have_received(:insert_for!).twice
+      expect(Pgbus::BatchEntry).to have_received(:increment_total_jobs!).with("b-1", 2, statuses: Pgbus::BatchEntry::UNFINISHED).once
+      expect(Pgbus::BatchExecution).to have_received(:insert_all_for!)
+        .with(batch_id: "b-1", rows: [%w[j-1 default], %w[j-2 default]]).once
     end
 
     it "inserts no row before the executions migration but still counts" do
@@ -449,15 +450,15 @@ RSpec.describe Pgbus::Batch do
 
       described_class.track_enqueue(payload)
 
-      expect(Pgbus::BatchEntry).to have_received(:increment_total_jobs!).with("b-1", 1)
-      expect(Pgbus::BatchExecution).not_to have_received(:insert_for!)
+      expect(Pgbus::BatchEntry).to have_received(:increment_total_jobs!).with("b-1", 1, statuses: Pgbus::BatchEntry::UNFINISHED)
+      expect(Pgbus::BatchExecution).not_to have_received(:insert_all_for!)
     end
 
     it "propagates AlreadyFinished without inserting a row" do
       allow(Pgbus::BatchEntry).to receive(:increment_total_jobs!).and_raise(Pgbus::Batch::AlreadyFinished)
 
       expect { described_class.track_enqueue(payload) }.to raise_error(Pgbus::Batch::AlreadyFinished)
-      expect(Pgbus::BatchExecution).not_to have_received(:insert_for!)
+      expect(Pgbus::BatchExecution).not_to have_received(:insert_all_for!)
     end
   end
 

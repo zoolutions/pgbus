@@ -10,7 +10,7 @@ RSpec.describe Pgbus::BatchEntry do
     it "raises AlreadyFinished when no unfinished row is updated" do
       relation = double("relation", update_all: 0)
       allow(described_class).to receive(:where)
-        .with(batch_id: "b1", status: %w[pending processing])
+        .with(batch_id: "b1", status: %w[building pending processing])
         .and_return(relation)
 
       expect do
@@ -21,10 +21,26 @@ RSpec.describe Pgbus::BatchEntry do
     it "returns true when the unfinished row is updated" do
       relation = double("relation", update_all: 1)
       allow(described_class).to receive(:where)
-        .with(batch_id: "b1", status: %w[pending processing])
+        .with(batch_id: "b1", status: %w[building pending processing])
         .and_return(relation)
 
       expect(described_class.increment_total_jobs!("b1", 2)).to be true
+    end
+  end
+
+  describe ".close_build! (issue #683)" do
+    it "moves a building batch to pending" do
+      relation = double("relation", update_all: 1)
+      allow(described_class).to receive(:where).with(batch_id: "b1", status: "building").and_return(relation)
+
+      expect(described_class.close_build!("b1")).to eq(1)
+      expect(relation).to have_received(:update_all).with(status: "pending")
+    end
+
+    it "raises AlreadyFinished when the sweep reaped the build" do
+      allow(described_class).to receive(:where).and_return(double("relation", update_all: 0))
+
+      expect { described_class.close_build!("b1") }.to raise_error(Pgbus::Batch::AlreadyFinished, /reaped/)
     end
   end
 
@@ -32,12 +48,21 @@ RSpec.describe Pgbus::BatchEntry do
     it "subtracts one, floored at zero, only on an unfinished row" do
       relation = double("relation", update_all: 1)
       allow(described_class).to receive(:where)
-        .with(batch_id: "b1", status: %w[pending processing])
+        .with(batch_id: "b1", status: %w[building pending processing])
         .and_return(relation)
 
       described_class.decrement_total_jobs!("b1")
 
-      expect(relation).to have_received(:update_all).with(["total_jobs = GREATEST(total_jobs - 1, 0)"])
+      expect(relation).to have_received(:update_all).with(["total_jobs = GREATEST(total_jobs - ?, 0)", 1])
+    end
+
+    it "subtracts a whole failed group in one statement (issue #683)" do
+      relation = double("relation", update_all: 1)
+      allow(described_class).to receive(:where).and_return(relation)
+
+      described_class.decrement_total_jobs!("b1", 4)
+
+      expect(relation).to have_received(:update_all).with(["total_jobs = GREATEST(total_jobs - ?, 0)", 4])
     end
   end
 

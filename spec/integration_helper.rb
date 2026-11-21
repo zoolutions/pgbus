@@ -418,6 +418,8 @@ def bootstrap_integration_tables(conn)
     %w[on_finish_job on_success_job on_failure_job].each do |column|
       conn.execute("ALTER TABLE pgbus_batches ADD COLUMN IF NOT EXISTS #{column} JSONB")
     end
+    # The process that builds a batch (issue #683).
+    conn.execute("ALTER TABLE pgbus_batches ADD COLUMN IF NOT EXISTS owner_process_id BIGINT")
   end
 
   unless conn.table_exists?("pgbus_batch_executions")

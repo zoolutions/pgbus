@@ -273,6 +273,26 @@ RSpec.describe Pgbus::Generators::MigrationDetector do
       end
     end
 
+    context "with batch owner detection (issue #683)" do
+      it "queues add_batch_owner when owner_process_id is missing" do
+        stub_columns("pgbus_batches", %w[id batch_id on_failure_class on_finish_job status])
+
+        expect(detector.missing_migrations).to include(:add_batch_owner)
+      end
+
+      it "does not queue it once owner_process_id exists" do
+        stub_columns("pgbus_batches", %w[id batch_id on_failure_class on_finish_job owner_process_id status])
+
+        expect(detector.missing_migrations).not_to include(:add_batch_owner)
+      end
+
+      it "does not queue it when pgbus_batches itself is missing" do
+        remove_table("pgbus_batches")
+
+        expect(detector.missing_migrations).not_to include(:add_batch_owner)
+      end
+    end
+
     context "with outbox detection" do
       it "queues add_outbox when pgbus_outbox_entries is missing" do
         expect(detector.missing_migrations).to include(:add_outbox)
@@ -674,6 +694,7 @@ RSpec.describe Pgbus::Generators::MigrationDetector do
           :add_processed_event_completion,
           :add_batch_executions,
           :add_batch_callback_jobs,
+          :add_batch_owner,
           :tune_autovacuum,
           :tune_fillfactor
         )
@@ -704,7 +725,7 @@ RSpec.describe Pgbus::Generators::MigrationDetector do
         uniqueness_keys add_job_stats add_job_stats_latency
         add_job_stats_queue_index add_stream_stats add_presence
         add_queue_states add_outbox add_recurring add_failed_events_source_queue
-        add_processed_event_completion add_batch_executions add_batch_callback_jobs
+        add_processed_event_completion add_batch_executions add_batch_callback_jobs add_batch_owner
         add_stream_queues tune_autovacuum tune_fillfactor add_presence_seats add_deploy_tasks
         add_deploy_task_run_outcomes add_workflows add_workflow_signals fold_queue_name_case
       ]
