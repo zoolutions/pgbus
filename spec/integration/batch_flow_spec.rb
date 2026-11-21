@@ -192,7 +192,7 @@ RSpec.describe "Batch flow (integration)", :integration do
 
   describe "on_discard path" do
     it "fires on_discard instead of on_success when a job is discarded" do
-      batch = enqueue_batch(on_success: on_success_job, on_discard: on_discard_job)
+      batch = enqueue_batch(on_success: on_success_job, on_failure: on_discard_job)
 
       # One completes, one is discarded (dead-lettered) — batch still finishes.
       complete_next(batch.batch_id)

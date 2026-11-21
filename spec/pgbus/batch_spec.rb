@@ -86,18 +86,11 @@ RSpec.describe Pgbus::Batch do
       callback_class = Class.new
       batch = described_class.new(on_failure: callback_class)
       expect(batch.on_failure).to eq(callback_class)
-      expect(batch.on_discard).to eq(callback_class)
     end
 
-    it "maps deprecated on_discard: onto on_failure and warns" do
-      callback_class = Class.new
-      logger = instance_double(Logger, warn: nil, error: nil, info: nil, debug: nil)
-      allow(Pgbus).to receive(:logger).and_return(logger)
-
-      batch = described_class.new(on_discard: callback_class)
-
-      expect(batch.on_failure).to eq(callback_class)
-      expect(logger).to have_received(:warn)
+    it "no longer takes on_discard:, removed at 1.0" do
+      expect { described_class.new(on_discard: Class.new) }.to raise_error(ArgumentError, /on_discard/)
+      expect(described_class.new).not_to respond_to(:on_discard)
     end
   end
 
