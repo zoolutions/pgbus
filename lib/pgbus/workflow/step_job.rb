@@ -20,6 +20,11 @@ module Pgbus
       # this, and a redelivery means a dead worker only while it is true.
       def self.pgbus_visibility_heartbeat_enabled = true # rubocop:disable Naming/PredicateMethod -- JobMixin's reader
 
+      # Sent at once inside Pgbus.coalesce (issue #682): a step enqueue that
+      # fails is reported and swept (WorkflowStep#enqueue_step_job), so it
+      # must not become the scope's on_failure.
+      def self.pgbus_coalesce? = false
+
       def perform(step_id)
         StepExecution.new(step_id).call
       end

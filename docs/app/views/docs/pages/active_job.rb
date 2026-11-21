@@ -88,20 +88,22 @@ class Views::Docs::Pages::ActiveJob < DocsUI::Page
       RUBY
       md <<~'MD'
         - **Sent at once, not held:** jobs with uniqueness or a concurrency limit,
-          future jobs (`set(wait:)`), `retry_on` re-enqueues, deploy task runs, jobs
-          from another thread or fiber, and jobs enqueued once the flush has
-          started. Rails' `enqueue_after_transaction_commit` runs first, so a job
-          from a rolled-back transaction never reaches the scope.
+          future jobs (`set(wait:)`), `retry_on` re-enqueues, deploy task runs,
+          batch members, workflow steps, jobs from another thread or fiber, and
+          jobs enqueued once the flush has started. On Rails 7.2+ Rails'
+          `enqueue_after_transaction_commit` runs first, so a job from a
+          rolled-back transaction never reaches the scope.
+        - **Serialized at `perform_later`:** an argument that cannot be
+          serialized raises there, and a later change to the job is not sent.
         - **The return value:** `perform_later` returns the job with
           `successfully_enqueued?` true and `provider_job_id` nil until the flush,
           as Rails does for a job deferred to after commit.
-        - **The flush:** `enqueue_all`, then each job left unsent is retried on its
-          own; what still fails goes to `on_failure`. `:raise` raises
-          `Pgbus::EnqueueError` naming each job. When the block raises, the buffer
-          is still sent and the block's error propagates.
-        - **Nesting and batches:** a nested scope joins the outer one. A
-          `Pgbus.batch` inside a scope starts only after the flush has counted its
-          members in.
+        - **The flush:** one `send_batch` per queue and priority, then each job
+          left unsent is retried on its own; what still fails goes to
+          `on_failure`. `:raise` raises `Pgbus::EnqueueError` naming each job.
+          When the block raises, the buffer is still sent and the block's error
+          propagates.
+        - **Nesting:** a nested scope joins the outer one.
 
         An endpoint that must not answer 500 after committing its writes should use
         `on_failure: :report` or a callable.

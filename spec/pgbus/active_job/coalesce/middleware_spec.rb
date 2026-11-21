@@ -2,6 +2,7 @@
 
 require "spec_helper"
 require "active_job"
+require "rack/body_proxy"
 
 # Issue #682: the Rack middleware wraps the request in Pgbus.coalesce and
 # flushes before it hands the response back, never after the response.
@@ -53,6 +54,20 @@ RSpec.describe Pgbus::ActiveJob::Coalesce::Middleware do
     middleware = described_class.new(app_enqueuing(1))
 
     expect { middleware.call({}) }.to raise_error(Pgbus::EnqueueError)
+  end
+
+  it "closes the response body before the flush failure propagates" do
+    allow(mock_client).to receive(:send_batch).and_raise(IOError, "gone")
+    allow(mock_client).to receive(:send_message).and_raise(IOError, "gone")
+    body = instance_double(Rack::BodyProxy, close: nil)
+    middleware = described_class.new(app_enqueuing(1, response: [200, {}, body]))
+
+    expect { middleware.call({}) }.to raise_error(Pgbus::EnqueueError)
+    expect(body).to have_received(:close)
+  end
+
+  it "rejects an unknown on_failure when it is built" do
+    expect { described_class.new(->(_env) {}, on_failure: :ignore) }.to raise_error(ArgumentError, /on_failure/)
   end
 
   it "passes its on_failure through" do

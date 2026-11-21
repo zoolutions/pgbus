@@ -7,20 +7,20 @@ module Pgbus
     # instead of one send per perform_later. Opened by Pgbus.coalesce and the
     # Rack Middleware.
     #
-    # Only a bulk-eligible job is held (Adapter#enqueue decides): one with
-    # uniqueness or concurrency, a future scheduled_at, a retry re-enqueue, a
-    # deploy task run's job, or a batch member whose batch this scope does not
-    # hold goes out at once, as it does outside a scope. Active Job's
-    # enqueue_after_transaction_commit runs before the adapter, so a job
-    # enqueued in a transaction reaches the buffer at commit, and a rolled
+    # Only a bulk-eligible job is held (Adapter#enqueue decides), serialized
+    # at perform_later. One with uniqueness or concurrency, a future
+    # scheduled_at, a retry re-enqueue, a deploy task run's job, a batch
+    # member or a Workflow::StepJob goes out at once, as it does outside a
+    # scope. Active Job's enqueue_after_transaction_commit runs before the
+    # adapter, so a job that defers reaches the buffer at commit, and a rolled
     # back one never does.
     #
     # perform_later inside the scope returns the job with successfully_enqueued
     # true and provider_job_id nil until the flush, the same optimistic answer
     # Active Job gives a job deferred to after commit. The flush proves the
-    # delivery: Adapter#deliver_coalesced sends the buffer through enqueue_all,
-    # retries every job it left unsent on its own, and what still fails goes
-    # to on_failure (:raise, :report, or a callable taking (jobs, error)).
+    # delivery: Adapter#deliver_coalesced sends the buffer in bulk, retries
+    # every job it left unsent on its own, and what still fails goes to
+    # on_failure (:raise, :report, or a callable taking (jobs, error)).
     #
     # The scope is fiber-local (Thread.current, like the batch tag) and
     # cleared before the flush starts, so a job enqueued on another thread or
@@ -46,14 +46,6 @@ module Pgbus
           return yield if current
 
           run(new(on_failure: on_failure), &block)
-        end
-
-        # Registers +batch_id+ with the open scope: its members are then
-        # buffered, and the batch starts after the flush (Batch#enqueue).
-        # Returns the scope, or nil when none is open.
-        def hold(batch_id)
-          scope = current
-          scope if scope&.hold(batch_id)
         end
 
         def validate_on_failure!(on_failure)
@@ -85,61 +77,31 @@ module Pgbus
         @on_failure = on_failure
         @mutex = Mutex.new
         @entries = []
-        @held = Set.new
-        @hooks = []
         @closed = false
-        @flushed = false
       end
 
-      # Buffers +job+ for +adapter+, with the batch it joins captured now.
-      # Returns false once the flush has started: the caller sends it itself.
-      def push(adapter, job, batch_id)
+      # Holds +job+ for +adapter+ with the +payload+ serialized at
+      # perform_later. Returns false once the flush has started: the caller
+      # sends it itself.
+      def push(adapter, job, payload)
         @mutex.synchronize do
           return false if @closed
 
-          @entries << [adapter, job, batch_id]
+          @entries << [adapter, job, payload]
           true
         end
       end
 
-      def hold(batch_id)
-        @mutex.synchronize do
-          return false if @closed
-
-          @held << batch_id
-          true
-        end
-      end
-
-      def holds?(batch_id)
-        @mutex.synchronize { @held.include?(batch_id) }
-      end
-
-      # Runs the block after the flush has sent the buffer (at once when it
-      # already has): a held batch starts there, once its members are counted.
-      def after_flush(&block)
-        run_now = @mutex.synchronize do
-          @hooks << block unless @flushed
-          @flushed
-        end
-        yield if run_now
-      end
-
-      # Closes the buffer, sends it, runs the after_flush hooks, then applies
-      # on_failure to whatever could not be sent. With +block_error+ (the
-      # block raised) a failure is reported instead of raised, so the block's
-      # error is the one that propagates.
+      # Closes the buffer, sends it, then applies on_failure to whatever could
+      # not be sent. With +block_error+ (the block raised) a callable still
+      # gets the jobs, but nothing raises: :raise becomes a report, and a
+      # callable that raises is reported, so the block's error propagates.
       def finish!(block_error: nil)
         started = ::Process.clock_gettime(::Process::CLOCK_MONOTONIC)
         entries = close
-        result = nil
-        begin
-          result = deliver(entries)
-        ensure
-          run_hooks
-        end
+        result = deliver(entries)
         instrument(result, started)
-        handle_failure(result, block_error) if result.failed.any?
+        handle_failure(result, entries, block_error) if result.failed.any?
         result
       end
 
@@ -156,23 +118,13 @@ module Pgbus
 
       def deliver(entries)
         results = entries.group_by(&:first).map do |adapter, group|
-          adapter.deliver_coalesced(group.map { |_, job, batch_id| [job, batch_id] })
+          adapter.deliver_coalesced(group.map { |_, job, payload| [job, payload] })
         end
         Result.new(
           buffered: entries.size,
           sent: results.sum(&:sent), retried: results.sum(&:retried),
           failed: results.flat_map(&:failed), error: results.filter_map(&:error).last
         )
-      end
-
-      def run_hooks
-        hooks = @mutex.synchronize do
-          @flushed = true
-          hooks = @hooks
-          @hooks = []
-          hooks
-        end
-        hooks.each(&:call)
       end
 
       def instrument(result, started)
@@ -184,15 +136,30 @@ module Pgbus
         )
       end
 
-      def handle_failure(result, block_error)
+      def handle_failure(result, entries, block_error)
         error = failure_error(result)
-        return report(result.failed, error) if block_error
-
+        payloads = failed_payloads(result.failed, entries)
         case on_failure
-        when :raise then raise error
-        when :report then report(result.failed, error)
-        else on_failure.call(result.failed, error)
+        when :raise then block_error ? report(payloads, error) : raise(error)
+        when :report then report(payloads, error)
+        else call_on_failure(result.failed, payloads, error, block_error)
         end
+      end
+
+      def call_on_failure(jobs, payloads, error, block_error)
+        on_failure.call(jobs, error)
+      rescue StandardError => e
+        raise unless block_error
+
+        report(payloads, error)
+        ErrorReporter.report(e, { pgbus_coalesce_on_failure: on_failure.to_s })
+      end
+
+      # The payloads serialized at perform_later: a job that failed is never
+      # serialized again here.
+      def failed_payloads(jobs, entries)
+        failed = jobs.to_set(&:object_id)
+        entries.filter_map { |_, job, payload| payload if failed.include?(job.object_id) }
       end
 
       def failure_error(result)
@@ -208,8 +175,8 @@ module Pgbus
         end
       end
 
-      def report(jobs, error)
-        context = { pgbus_coalesce: jobs.map(&:serialize) }
+      def report(payloads, error)
+        context = { pgbus_coalesce: payloads }
         if defined?(::Rails) && ::Rails.respond_to?(:error)
           Pgbus.logger.error { "[Pgbus] #{error.message}" }
           ::Rails.error.report(error, context: context)

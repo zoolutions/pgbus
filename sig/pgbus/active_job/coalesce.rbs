@@ -20,16 +20,12 @@ module Pgbus
 
       def self.current: () -> Coalesce?
       def self.open: [T] (?on_failure: on_failure) { () -> T } -> T
-      def self.hold: (String batch_id) -> Coalesce?
       def self.validate_on_failure!: (untyped on_failure) -> void
 
       attr_reader on_failure: on_failure
 
       def initialize: (?on_failure: on_failure) -> void
-      def push: (Adapter adapter, untyped job, String? batch_id) -> bool
-      def hold: (String batch_id) -> bool
-      def holds?: (String batch_id) -> bool
-      def after_flush: () { () -> void } -> void
+      def push: (Adapter adapter, untyped job, Hash[String, untyped] payload) -> bool
       def finish!: (?block_error: Exception?) -> Result
 
       # Runs the request inside Pgbus.coalesce; the buffer is sent before the

@@ -178,7 +178,8 @@ module Pgbus
 
     # Opt-in (issue #682): each request's enqueues go out together before
     # the response is returned.
-    initializer "pgbus.coalesce.middleware" do |app|
+    # After the app's initializers, so the flag may be set there too.
+    initializer "pgbus.coalesce.middleware", after: :load_config_initializers do |app|
       options = app.config.pgbus
       if options.coalesce_requests
         app.middleware.insert_after ActionDispatch::Executor, Pgbus::ActiveJob::Coalesce::Middleware,

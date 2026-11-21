@@ -165,23 +165,17 @@ RSpec.describe "Pgbus.coalesce (integration)", :integration do
       end
     end
 
-    it "counts the buffered members and stays pending until the flush has sent them" do
-      client.send_batch(work_queue, [{ "warm" => true }])
-      client.purge_queue(work_queue)
+    it "sends its members at once and counts them, as outside a scope" do
       batch = nil
-      status_in_scope = nil
+      depth_in_scope = nil
 
-      statements = statements_during do
-        Pgbus.coalesce do
-          batch = open_batch(event_job, 3)
-          status_in_scope = batch.reload.status
-        end
+      Pgbus.coalesce do
+        batch = open_batch(event_job, 3)
+        depth_in_scope = queue_depth(work_queue)
       end
 
-      expect(sends(statements)).to eq(send_batch: 1, send: 0)
-      expect(status_in_scope).to eq("pending")
+      expect(depth_in_scope).to eq(3)
       expect(batch.reload).to have_attributes(total_jobs: 3, status: "processing")
-      expect(queue_depth(work_queue)).to eq(3)
       expect(queue_depth(callback_queue)).to eq(0)
     end
 
@@ -195,36 +189,44 @@ RSpec.describe "Pgbus.coalesce (integration)", :integration do
       expect(queue_depth(callback_queue)).to eq(1)
     end
 
+    it "is left alone by a stalled-batch sweep that runs while the scope is still open" do
+      batch = nil
+      failed = []
+
+      Pgbus.coalesce(on_failure: ->(jobs, _error) { failed.concat(jobs) }) do
+        batch = open_batch(event_job, 2)
+        Pgbus::BatchEntry.where(batch_id: batch.batch_id).update_all(created_at: 10.minutes.ago)
+        Pgbus::Batch.sweep_stalled(stalled_for: 300)
+      end
+
+      expect(failed).to be_empty
+      expect(batch.reload).to have_attributes(total_jobs: 2, status: "processing")
+      expect(queue_depth(callback_queue)).to eq(0)
+    end
+
+    it "raises nothing when the batch's transaction rolls back" do
+      expect do
+        Pgbus.coalesce do
+          ActiveRecord::Base.transaction do
+            open_batch(event_job, 2)
+            raise ActiveRecord::Rollback
+          end
+        end
+      end.not_to raise_error
+    end
+
     it "counts members deferred to a commit inside the scope" do
       skip "Active Job #{ActiveJob.version} has no enqueue_after_transaction_commit" unless
         defined?(ActiveJob::EnqueueAfterTransactionCommit)
 
-      client.send_batch(work_queue, [{ "warm" => true }])
-      client.purge_queue(work_queue)
       batch = nil
-      statements = statements_during do
-        Pgbus.coalesce do
-          batch = ActiveRecord::Base.transaction { open_batch(deferring_job, 2) }
-        end
+      Pgbus.coalesce do
+        batch = ActiveRecord::Base.transaction { open_batch(deferring_job, 2) }
       end
 
-      expect(sends(statements)).to eq(send_batch: 1, send: 0)
       expect(batch.reload).to have_attributes(total_jobs: 2, status: "processing")
       expect(queue_depth(work_queue)).to eq(2)
       expect(Pgbus::BatchExecution.where(batch_id: batch.batch_id).where.not(msg_id: nil).count).to eq(2)
-    end
-
-    it "sends an add to a batch started outside the scope at once" do
-      batch = open_batch(event_job, 1)
-      depth_in_scope = nil
-
-      Pgbus.coalesce do
-        batch.add(event_job.new(:late))
-        depth_in_scope = queue_depth(work_queue)
-      end
-
-      expect(depth_in_scope).to eq(2)
-      expect(batch.reload.total_jobs).to eq(2)
     end
   end
 end

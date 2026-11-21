@@ -179,12 +179,34 @@ RSpec.describe Pgbus::ActiveJob::Coalesce do
       end
     end
 
-    it "sends a batch member at once when its batch is not held by the scope" do
+    it "sends a batch member at once, counted into its batch" do
       allow(Pgbus::Batch).to receive(:track_enqueue)
-      Thread.current[:pgbus_batch_id] = "started-elsewhere"
+      Thread.current[:pgbus_batch_id] = "open-batch"
 
       Pgbus.coalesce do
         plain_class.perform_later(1)
+
+        expect(Pgbus::Batch).to have_received(:track_enqueue).once
+        expect(mock_client).to have_received(:send_message)
+          .with("default", hash_including(Pgbus::Batch::METADATA_KEY => "open-batch"), delay: 0, priority: nil)
+      end
+    end
+
+    it "sends a job added to a batch (enqueue_batch_id) at once" do
+      allow(Pgbus::Batch).to receive(:track_enqueue)
+
+      Pgbus.coalesce do
+        job = plain_class.new(1)
+        Pgbus::ActiveJob::BatchId.capture([job], "added-batch")
+        adapter.enqueue(job)
+
+        expect(mock_client).to have_received(:send_message).once
+      end
+    end
+
+    it "sends a workflow step job at once, keeping its own enqueue-failure contract" do
+      Pgbus.coalesce do
+        adapter.enqueue(Pgbus::Workflow::StepJob.new(SecureRandom.uuid))
 
         expect(mock_client).to have_received(:send_message).once
       end
@@ -306,27 +328,9 @@ RSpec.describe Pgbus::ActiveJob::Coalesce do
     end
   end
 
-  describe "a retry that is live before its bookkeeping raised" do
-    it "counts it as retried, not failed" do
-      allow(mock_client).to receive(:send_batch).and_return([])
-      allow(Pgbus::Batch).to receive(:backfill_execution).and_raise(IOError, "backfill failed")
-      allow(Pgbus::Batch).to receive_messages(track_enqueue: nil, untrack_enqueue: nil)
-      results = []
-      allow(adapter).to(receive(:deliver_coalesced).and_wrap_original { |m, *args| m.call(*args).tap { |r| results << r } })
-
-      Pgbus.coalesce do
-        described_class.current.hold("held-batch")
-        Thread.current[:pgbus_batch_id] = "held-batch"
-        plain_class.perform_later(1)
-        Thread.current[:pgbus_batch_id] = nil
-      end
-
-      expect(results.first).to have_attributes(retried: 1, failed: [])
-    end
-
-    it "fails a retry that returns without enqueueing the job" do
-      allow(mock_client).to receive(:send_batch).and_return([])
-      allow(adapter).to receive(:enqueue_one_of_all)
+  describe "a retry that returns without enqueueing the job" do
+    it "fails it" do
+      allow(mock_client).to receive_messages(send_batch: [], send_message: nil)
       failed = []
 
       Pgbus.coalesce(on_failure: ->(jobs, _error) { failed.concat(jobs) }) { plain_class.perform_later(1) }
@@ -343,7 +347,7 @@ RSpec.describe Pgbus::ActiveJob::Coalesce do
         Pgbus::ActiveJob::Coalesce::Result.new(buffered: 1, sent: 0, retried: 0, failed: [job], error: nil)
       )
       scope = described_class.new
-      scope.push(stub, job, nil)
+      scope.push(stub, job, job.serialize)
 
       expect { scope.finish! }.to raise_error(Pgbus::EnqueueError) { |e| expect(e.cause).to be_nil }
     end
@@ -375,6 +379,112 @@ RSpec.describe Pgbus::ActiveJob::Coalesce do
       end.to raise_error(ArgumentError, "boom")
 
       expect(Pgbus::ErrorReporter).to have_received(:report).with(an_instance_of(Pgbus::EnqueueError), anything)
+    end
+  end
+
+  describe "the block raising, with a callable on_failure" do
+    before do
+      allow(mock_client).to receive(:send_batch).and_raise(IOError, "gone")
+      allow(mock_client).to receive(:send_message).and_raise(IOError, "gone")
+    end
+
+    it "still hands the failed jobs to the callable, then re-raises the block's error" do
+      received = []
+
+      expect do
+        Pgbus.coalesce(on_failure: ->(jobs, _error) { received.concat(jobs) }) do
+          plain_class.perform_later(1)
+          raise ArgumentError, "boom"
+        end
+      end.to raise_error(ArgumentError, "boom")
+
+      expect(received.size).to eq(1)
+    end
+
+    it "reports a callable that raises, and keeps the block's error" do
+      hide_const("Rails")
+      allow(Pgbus::ErrorReporter).to receive(:report)
+
+      expect do
+        Pgbus.coalesce(on_failure: ->(*) { raise "callable broke" }) do
+          plain_class.perform_later(1)
+          raise ArgumentError, "boom"
+        end
+      end.to raise_error(ArgumentError, "boom")
+
+      expect(Pgbus::ErrorReporter).to have_received(:report).with(an_instance_of(RuntimeError), anything)
+    end
+  end
+
+  describe "serialization at push" do
+    let(:sent) { [] }
+
+    before do
+      allow(mock_client).to receive(:send_batch) do |queue, payloads, **opts|
+        sent << [queue, opts[:priority], payloads]
+        payloads.map { take_id }
+      end
+    end
+
+    it "raises an unserializable argument at perform_later, as outside a scope" do
+      expect do
+        Pgbus.coalesce { plain_class.perform_later(Object.new) }
+      end.to raise_error(ActiveJob::SerializationError)
+
+      expect(mock_client).not_to have_received(:send_batch)
+    end
+
+    it "keeps the block's error when an argument cannot be serialized" do
+      expect do
+        Pgbus.coalesce do
+          plain_class.perform_later(1)
+          begin
+            plain_class.perform_later(Object.new)
+          rescue ActiveJob::SerializationError
+            nil
+          end
+          raise ArgumentError, "boom"
+        end
+      end.to raise_error(ArgumentError, "boom")
+
+      expect(sent.size).to eq(1)
+    end
+
+    it "sends the arguments as they were at perform_later" do
+      args = { "a" => 1 }
+
+      Pgbus.coalesce do
+        plain_class.perform_later(args)
+        args["a"] = 2
+      end
+
+      expect(sent.first[2].first["arguments"].first).to include("a" => 1)
+    end
+
+    it "sends to the queue and priority the job had at perform_later" do
+      Pgbus.coalesce do
+        job = plain_class.set(queue: "first", priority: 2).perform_later(1)
+        job.queue_name = "changed"
+        job.priority = 9
+      end
+
+      expect(sent.map { |queue, priority, _| [queue, priority] }).to eq([["first", 2]])
+    end
+
+    it "reports the payloads captured at push, never serializing again" do
+      allow(mock_client).to receive(:send_batch).and_raise(IOError, "gone")
+      allow(mock_client).to receive(:send_message).and_raise(IOError, "gone")
+      hide_const("Rails")
+      allow(Pgbus::ErrorReporter).to receive(:report)
+      job = nil
+
+      Pgbus.coalesce(on_failure: :report) do
+        job = plain_class.perform_later(1)
+        allow(job).to receive(:serialize).and_raise("serialized again")
+      end
+
+      expect(Pgbus::ErrorReporter).to have_received(:report)
+        .with(an_instance_of(Pgbus::EnqueueError), { pgbus_coalesce: [hash_including("job_id" => job.job_id)] })
     end
   end
 
@@ -417,123 +527,6 @@ RSpec.describe Pgbus::ActiveJob::Coalesce do
       expect(events.size).to eq(1)
       expect(events.first).to include(buffered: 2, sent: 0, retried: 2, failed: 0)
       expect(events.first[:duration]).to be_a(Float)
-    end
-  end
-
-  describe "batch tags" do
-    before do
-      allow(Pgbus::Batch).to receive(:track_enqueue)
-      allow(Pgbus::Batch).to receive(:backfill_execution)
-    end
-
-    it "sends a member of a batch the scope holds in the flush, tagged with the batch captured at push" do
-      payloads = []
-      allow(mock_client).to receive(:send_batch) do |_queue, batch, **|
-        payloads.concat(batch)
-        batch.map { take_id }
-      end
-
-      Pgbus.coalesce do
-        described_class.current.hold("held-batch")
-        Thread.current[:pgbus_batch_id] = "held-batch"
-        plain_class.perform_later(1)
-        Thread.current[:pgbus_batch_id] = nil
-        plain_class.perform_later(2)
-      end
-
-      expect(payloads.map { |p| p[Pgbus::Batch::METADATA_KEY] }).to contain_exactly("held-batch", nil)
-      expect(mock_client).not_to have_received(:send_message)
-    end
-
-    it "re-tags a member it retries on its own after the bulk send failed" do
-      allow(mock_client).to receive(:send_batch).and_raise(Pgbus::EnqueueError, "short")
-      allow(Pgbus::Batch).to receive(:untrack_enqueue)
-      sent = []
-      allow(mock_client).to receive(:send_message) do |_queue, payload, **|
-        sent << payload
-        take_id
-      end
-
-      Pgbus.coalesce do
-        described_class.current.hold("held-batch")
-        Thread.current[:pgbus_batch_id] = "held-batch"
-        plain_class.perform_later(1)
-        Thread.current[:pgbus_batch_id] = nil
-      end
-
-      expect(sent.map { |p| p[Pgbus::Batch::METADATA_KEY] }).to eq(["held-batch"])
-    end
-
-    it "does not count a member twice when the bulk send's outcome is unknown" do
-      allow(mock_client).to receive(:send_batch).and_raise(IOError, "gone")
-      allow(Pgbus::Batch).to receive(:track_retry)
-
-      Pgbus.coalesce do
-        described_class.current.hold("held-batch")
-        Thread.current[:pgbus_batch_id] = "held-batch"
-        plain_class.perform_later(1)
-        Thread.current[:pgbus_batch_id] = nil
-      end
-
-      expect(Pgbus::Batch).to have_received(:track_enqueue).once
-      expect(Pgbus::Batch).to have_received(:track_retry).once
-      expect(mock_client).to have_received(:send_message).once
-    end
-
-    it "runs a held batch's after_flush hook after the members are sent" do
-      order = []
-      allow(mock_client).to receive(:send_batch) do |_queue, batch, **|
-        order << :sent
-        batch.map { take_id }
-      end
-
-      Pgbus.coalesce do
-        described_class.current.hold("held-batch")
-        described_class.current.after_flush { order << :hook }
-        plain_class.perform_later(1)
-
-        expect(order).to be_empty
-      end
-
-      expect(order).to eq(%i[sent hook])
-    end
-
-    it "counts in once a member whose id a short send_batch returned, and retries the rest normally" do
-      allow(mock_client).to receive(:send_batch).and_return([1])
-      allow(Pgbus::Batch).to receive(:untrack_enqueue)
-      allow(Pgbus::Batch).to receive(:track_retry)
-
-      Pgbus.coalesce do
-        described_class.current.hold("held-batch")
-        Thread.current[:pgbus_batch_id] = "held-batch"
-        2.times { |i| plain_class.perform_later(i) }
-        Thread.current[:pgbus_batch_id] = nil
-      end
-
-      expect(Pgbus::Batch).to have_received(:untrack_enqueue).once
-      expect(Pgbus::Batch).to have_received(:track_retry).once
-      expect(Pgbus::Batch).to have_received(:track_enqueue).twice
-      expect(mock_client).to have_received(:send_message).twice
-    end
-
-    it "holds a batch only while a scope is open and not yet flushing" do
-      expect(described_class.hold("no-scope")).to be_nil
-
-      scope = described_class.new
-      scope.finish!
-
-      expect(scope.hold("late")).to be(false)
-      expect(scope.holds?("late")).to be(false)
-    end
-
-    it "runs an after_flush hook at once on a scope that has flushed" do
-      scope = nil
-      Pgbus.coalesce { scope = described_class.current }
-      ran = false
-
-      scope.after_flush { ran = true }
-
-      expect(ran).to be(true)
     end
   end
 

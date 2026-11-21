@@ -136,12 +136,8 @@ module Pgbus
         raise
       end
       @started = true
-      # Inside Pgbus.coalesce (issue #682) the members the block enqueues are
-      # buffered and counted in only by the flush, so the batch starts after
-      # it, never before: a batch started with nothing counted finishes empty.
-      scope = Pgbus::ActiveJob::Coalesce.hold(batch_id)
       count_jobs(&)
-      self.class.send(:after_transactions_commit) { after_coalesce_flush(scope) { start_processing } }
+      self.class.send(:after_transactions_commit) { start_processing }
       self
     end
 
@@ -704,22 +700,12 @@ module Pgbus
       reload
       raise AlreadyFinished, "Can't add jobs into an already finished batch" if finished?
 
-      scope = Pgbus::ActiveJob::Coalesce.current
-      scope = nil unless scope&.holds?(batch_id)
       count_jobs(&)
       self.class.send(:after_transactions_commit) do
-        after_coalesce_flush(scope) do
-          reload
-          self.class.send(:finish_if_needed, BatchEntry.check_finished!(batch_id))
-        end
+        reload
+        self.class.send(:finish_if_needed, BatchEntry.check_finished!(batch_id))
       end
       self
-    end
-
-    # Runs the block after +scope+ has flushed the members it holds for this
-    # batch, or now without one.
-    def after_coalesce_flush(scope, &)
-      scope ? scope.after_flush(&) : yield
     end
 
     def create_record
