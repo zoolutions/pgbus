@@ -272,8 +272,8 @@ class Views::Docs::Pages::Batches < DocsUI::Page
            is the ActiveJob `job_id`). The increment is guarded on an unfinished
            batch — that guard is what raises `AlreadyFinished`. A
            `perform_all_later` counts once per batch and send group: one
-           increment and one multi-row insert per batch per queue and
-           priority, one `send_batch` and one backfill per group. A batch
+           increment and one multi-row insert per batch per queue, priority
+           and delay, one `send_batch` and one backfill per group. A batch
            opened in a pgbus process (one with a `pgbus_processes` heartbeat)
            is created `building` with that process as its owner, and its
            block's bulk-eligible `perform_later` calls are held and counted

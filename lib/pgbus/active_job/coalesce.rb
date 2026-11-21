@@ -3,7 +3,7 @@
 module Pgbus
   module ActiveJob
     # A unit of work's enqueues, held at the adapter and sent together when
-    # the unit ends (issue #682): one send_batch per (queue, priority) group
+    # the unit ends (issue #682): one send_batch per (queue, priority, delay) group
     # instead of one send per perform_later. Opened by Pgbus.coalesce and the
     # Rack Middleware.
     #

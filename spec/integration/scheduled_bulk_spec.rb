@@ -131,9 +131,8 @@ RSpec.describe "Bulk scheduled sends (integration)", :integration do
     counted = sends { ActiveJob.perform_all_later(jobs) }
 
     expect(counted).to eq(send_batch: 3, send: 0)
-    slices = visible_in.group_by { |seconds| (seconds / 10.0).round * 10 }
-    expect(slices.transform_values(&:size)).to eq(0 => 10, 10 => 10, 20 => 10)
-    expect(visible_in.last).to be_within(1.5).of(20)
+    expected = [0, 10, 20].flat_map { |wait| [wait] * 10 }
+    visible_in.zip(expected).each { |seconds, wait| expect(seconds).to be_within(1).of(wait) }
   end
 
   it "sends 50 jobs that share one wait: as one send_batch" do
@@ -143,7 +142,7 @@ RSpec.describe "Bulk scheduled sends (integration)", :integration do
 
     expect(counted).to eq(send_batch: 1, send: 0)
     expect(visible_in.size).to eq(50)
-    expect(visible_in).to all(be_within(1.5).of(30))
+    expect(visible_in).to all(be_within(1).of(30))
   end
 
   it "holds a future job in Pgbus.coalesce and sends it with the delay left at the flush" do
@@ -157,7 +156,7 @@ RSpec.describe "Bulk scheduled sends (integration)", :integration do
     expect(counted).to eq(send_batch: 1, send: 0)
     # The message's clock is the database's, which did not travel: the delay
     # sent is what was left at the flush (40 s), not the original 60 s.
-    expect(visible_in.first).to be_within(1.5).of(40)
+    expect(visible_in.first).to be_within(1).of(40)
   end
 
   it "keeps the single path for uniqueness and concurrency jobs with wait:, their leases covering the delay" do
@@ -202,6 +201,9 @@ RSpec.describe "Bulk scheduled sends (integration)", :integration do
     end
 
     it "keeps the statement count constant in N for scheduled members" do
+      # Ruby's clock held still, so a slow runner cannot split 30 s into
+      # 29 s and 30 s groups (that split is right, but not this spec's point).
+      freeze_time
       counts = [10, 100, 1_000].map do |n|
         statements = 0
         callback = ->(*, payload) { statements += 1 unless payload[:name] == "SCHEMA" }

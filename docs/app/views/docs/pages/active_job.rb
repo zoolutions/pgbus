@@ -70,7 +70,7 @@ class Views::Docs::Pages::ActiveJob < DocsUI::Page
       md <<~'MD'
         Every `perform_later` is one send, so one database round trip. Inside
         `Pgbus.coalesce` the adapter holds the jobs it can send in bulk and sends
-        them when the block ends: one `send_batch` per queue and priority.
+        them when the block ends: one `send_batch` per queue, priority and delay.
       MD
       DocsUI::Code(<<~RUBY, filename: "app/controllers/orders_controller.rb")
         Pgbus.coalesce do                 # on_failure: :raise (default) | :report | ->(jobs, error) { }
@@ -102,7 +102,7 @@ class Views::Docs::Pages::ActiveJob < DocsUI::Page
         - **The return value:** `perform_later` returns the job with
           `successfully_enqueued?` true and `provider_job_id` nil until the flush,
           as Rails does for a job deferred to after commit.
-        - **The flush:** one `send_batch` per queue and priority, then each job
+        - **The flush:** one `send_batch` per queue, priority and delay, then each job
           left unsent is retried on its own; what still fails goes to
           `on_failure`. `:raise` raises `Pgbus::EnqueueError` naming each job.
           When the block raises, the buffer is still sent and the block's error

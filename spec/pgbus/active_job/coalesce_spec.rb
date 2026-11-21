@@ -163,6 +163,32 @@ RSpec.describe Pgbus::ActiveJob::Coalesce do
       travel_back
     end
 
+    it "resends a held future job on its own with the delay left at the retry" do
+      allow(mock_client).to receive(:send_batch).and_raise(IOError, "lost")
+      allow(mock_client).to receive(:send_message) { take_id }
+
+      Pgbus.coalesce do
+        plain_class.set(wait: 100).perform_later(1)
+        travel 30.seconds
+      end
+
+      expect(mock_client).to have_received(:send_message).with("default", anything, delay: a_value_within(1).of(70), priority: nil)
+    ensure
+      travel_back
+    end
+
+    it "sends a held job already due at the flush with the immediate group, without a delay" do
+      Pgbus.coalesce do
+        plain_class.set(wait: 5).perform_later(1)
+        plain_class.perform_later(2)
+        travel 10.seconds
+      end
+
+      expect(mock_client).to have_received(:send_batch).once.with("default", satisfy { |p| p.size == 2 }, priority: nil)
+    ensure
+      travel_back
+    end
+
     it "sends a retry re-enqueue (executions > 0) at once" do
       Pgbus.coalesce do
         job = plain_class.new(1)

@@ -318,7 +318,7 @@ module Pgbus
     end
 
     # Hold the block's enqueues and send them together when it ends (issue
-    # #682): one send_batch per (queue, priority) group instead of one send
+    # #682): one send_batch per (queue, priority, delay) group instead of one send
     # per perform_later. See Pgbus::ActiveJob::Coalesce for what is held, the
     # optimistic return value and the failure modes. on_failure: :raise
     # (default) raises Pgbus::EnqueueError for a job that could not be sent,

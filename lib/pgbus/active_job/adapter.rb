@@ -53,9 +53,10 @@ module Pgbus
         active_jobs.count(&:successfully_enqueued?)
       end
 
-      # Sends what a Coalesce scope held, as [job, payload] pairs with the
-      # payload serialized at perform_later (issue #682): one send_batch per
-      # (queue, priority) group, through the bulk path enqueue_all uses, then
+      # Sends what a Coalesce scope held, as [job, payload, due_at] entries
+      # with the payload serialized at perform_later (issue #682): one
+      # send_batch per (queue, priority, delay) group (issue #686), through
+      # the bulk path enqueue_all uses, then
       # each job left unsent on its own. Queue and priority are the payload's,
       # so a job changed after perform_later goes where it was sent. Never
       # raises: what still fails is the result's +failed+, for on_failure.
