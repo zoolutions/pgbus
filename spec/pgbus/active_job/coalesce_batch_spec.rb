@@ -6,7 +6,7 @@ require "active_job"
 # Issue #683: a scope flushes early every coalesce_chunk_size held jobs, and
 # Pgbus.batch opens a scope of its own for its block, holding its members and
 # sending them before the batch starts.
-RSpec.describe Pgbus::ActiveJob::Coalesce, "chunks and batch scopes" do
+RSpec.describe Pgbus::ActiveJob::Coalesce do
   let(:adapter) { Pgbus::ActiveJob::Adapter.new }
   let(:mock_client) { build_mock_client }
   let(:next_id) { [100] }

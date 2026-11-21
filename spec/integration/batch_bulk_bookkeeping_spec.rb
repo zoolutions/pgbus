@@ -75,11 +75,11 @@ RSpec.describe "Batch bulk bookkeeping (integration)", :integration do
   end
 
   # [ActiveRecord statements (name, sql), PGMQ send statements] the block ran.
-  def statements_during
+  def statements_during(&block)
     sql = []
     callback = ->(*, payload) { sql << [payload[:name], payload[:sql]] unless payload[:name] == "SCHEMA" }
     Thread.current[:batch_bulk_sends] = []
-    ActiveSupport::Notifications.subscribed(callback, "sql.active_record") { yield }
+    ActiveSupport::Notifications.subscribed(callback, "sql.active_record", &block)
     sends = Thread.current[:batch_bulk_sends].grep(/\Aprepared:pgbus_send|INSERT INTO pgmq\.|pgmq\.send/)
     [sql, sends]
   ensure
@@ -243,7 +243,6 @@ RSpec.describe "Batch bulk bookkeeping (integration)", :integration do
       allow(client).to receive(:send_message).and_raise(PG::ConnectionBad, "still lost")
       allow(Pgbus).to receive(:client).and_return(client)
       failed = []
-      batch = nil
 
       batch = Pgbus.batch(on_enqueue_failure: ->(jobs, _error) { failed.concat(jobs) }) do
         120.times { |i| work_job.perform_later(i) }

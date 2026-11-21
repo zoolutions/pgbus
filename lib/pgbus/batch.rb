@@ -93,6 +93,7 @@ module Pgbus
       unless VALID_CONFLICTS.include?(on_conflict)
         raise ArgumentError, "on_conflict must be one of #{VALID_CONFLICTS.join(", ")}, got #{on_conflict.inspect}"
       end
+
       Pgbus::ActiveJob::Coalesce.validate_on_failure!(on_enqueue_failure)
 
       if on_discard

@@ -96,7 +96,7 @@ module Pgbus
       # Holds +job+ for +adapter+ with the +payload+ serialized at
       # perform_later, and sends the buffer once it holds a chunk. Returns
       # false once the flush has started: the caller sends it itself.
-      def push(adapter, job, payload)
+      def push(adapter, job, payload) # rubocop:disable Naming/PredicateMethod -- holds; the result says whether
         return false if @mutex.synchronize { @closed }
 
         take_batch_hold

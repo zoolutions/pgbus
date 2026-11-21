@@ -966,7 +966,7 @@ RSpec.describe Pgbus::ActiveJob::Adapter do
       adapter.enqueue_all([job, job2])
 
       expect(Pgbus::BatchExecution).to have_received(:backfill_all!).once
-        .with([[job_id, 1, "#{Pgbus.configuration.queue_prefix}_default"]])
+                                                                    .with([[job_id, 1, "#{Pgbus.configuration.queue_prefix}_default"]])
     end
 
     it "never touches pgbus_batch_executions for a bulk of jobs in no batch (issue #603)" do

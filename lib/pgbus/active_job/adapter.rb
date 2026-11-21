@@ -121,7 +121,7 @@ module Pgbus
       # enqueue is, and uncounted when its send fails before any message can
       # exist; one the bulk counted keeps that count (its send's outcome is
       # unknown) and is only sent.
-      def resend_coalesced(job, payload, counted:)
+      def resend_coalesced(job, payload, counted:) # rubocop:disable Naming/PredicateMethod -- sends; the result says whether
         queue = payload["queue_name"] || Pgbus.configuration.default_queue
         priority = payload["priority"]
         member = payload[Batch::METADATA_KEY]
