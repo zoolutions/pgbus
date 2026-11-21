@@ -134,6 +134,8 @@ module Pgbus
         )
       end
 
+      # A subscriber that raises is reported: the flush's outcome, and the
+      # failed jobs on_failure must still see, do not depend on it.
       def instrument(result, started)
         duration = (::Process.clock_gettime(::Process::CLOCK_MONOTONIC) - started) * 1000.0
         Instrumentation.instrument(
@@ -141,6 +143,8 @@ module Pgbus
           buffered: result.buffered, sent: result.sent, retried: result.retried,
           failed: result.failed.size, duration: duration
         )
+      rescue StandardError => e
+        ErrorReporter.report(e, { pgbus_coalesce: :instrument })
       end
 
       def handle_failure(result, entries, block_error)
