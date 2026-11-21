@@ -317,6 +317,21 @@ module Pgbus
       Batch.start(**, &)
     end
 
+    # Hold the block's enqueues and send them together when it ends (issue
+    # #682): one send_batch per (queue, priority) group instead of one send
+    # per perform_later. See Pgbus::ActiveJob::Coalesce for what is held, the
+    # optimistic return value and the failure modes. on_failure: :raise
+    # (default) raises Pgbus::EnqueueError for a job that could not be sent,
+    # :report reports it, a callable receives (jobs, error).
+    #
+    #   Pgbus.coalesce do
+    #     EventJob.perform_later("a")
+    #     EventJob.perform_later("b")
+    #   end # one send here
+    def coalesce(on_failure: :raise, &)
+      Pgbus::ActiveJob::Coalesce.open(on_failure: on_failure, &)
+    end
+
     # Publish an event to the bus — the top-level shortcut for
     # `Pgbus::EventBus::Publisher.publish`, symmetric with `Pgbus.stream`.
     #

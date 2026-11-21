@@ -820,6 +820,37 @@ Uses PostgreSQL session-level advisory locks (`pg_try_advisory_lock`). The lock 
 
 How Pgbus integrates with your application's transactions and tracks groups of related work: outbox for atomic publish, batches for fan-out coordination, archive compaction for keeping the queue tables small.
 
+### Coalescing enqueues
+
+Every `perform_later` is one send, so one database round trip. A unit of work that enqueues several jobs (a request that records a few events, a job that fans out follow-ups) can send them together instead:
+
+```ruby
+Pgbus.coalesce do
+  EventJob.perform_later("a")
+  EventJob.perform_later("b")
+  EventJob.perform_later("c")
+end # one send_batch here, per (queue, priority)
+```
+
+Or for every request, through an opt-in Rack middleware that runs the request inside the scope and sends before it returns the response, never after it (a crash once the client has its answer cannot lose a job):
+
+```ruby
+# config/application.rb
+config.pgbus.coalesce_requests = true                 # inserted after ActionDispatch::Executor
+config.pgbus.coalesce_requests_on_failure = :raise    # the default; :report or a callable
+
+# or by hand
+config.middleware.insert_after ActionDispatch::Executor, Pgbus::ActiveJob::Coalesce::Middleware, on_failure: :report
+```
+
+- **What is held.** A job that the bulk path can send. These go out at once, as they do outside a scope: jobs with `ensures_uniqueness` or `limits_concurrency` (they take their lock or slot at enqueue), future jobs (`set(wait:)`), `retry_on` re-enqueues, deploy task runs, jobs enqueued on another thread or fiber, and jobs enqueued after the flush has started (for example while a streaming body is iterated). Rails' `enqueue_after_transaction_commit` runs first, so a job enqueued inside a transaction reaches the scope at commit, and a rolled-back one never does.
+- **What `perform_later` returns.** The job, with `successfully_enqueued?` true and `provider_job_id` nil until the flush, the same optimistic answer Rails gives a job deferred to after commit. The flush is where delivery is proved. `Current` attributes are snapshotted at `perform_later`; the arguments are serialized at the flush.
+- **The flush.** At the end of the block, before its value returns: `enqueue_all` for the buffer, then each job it left unsent is retried on its own. A send whose outcome is unknown (a connection lost mid-statement) may have written its messages, so the retry can deliver a job twice; jobs must be idempotent, as they already must be for at-least-once delivery. What still fails goes to `on_failure`: `:raise` (default) raises `Pgbus::EnqueueError` naming each job's class and id, `:report` sends it to `Rails.error.report` with the serialized jobs (`Pgbus::ErrorReporter` without Rails), and a callable receives `(jobs, error)`. If the block itself raised, the buffer is still sent, a failure is reported rather than raised, and the block's error propagates.
+- **Nesting and batches.** A nested `Pgbus.coalesce` joins the outer scope, whose `on_failure` applies; only the outermost sends. A `Pgbus.batch` opened inside a scope keeps its members in the scope and starts after the flush has counted them in, so it cannot finish early. A job added to a batch started outside the scope goes out at once.
+- **When not to use it.** An endpoint that must not answer 500 after committing its writes should pass `on_failure: :report` or a callable: with `:raise`, a job that cannot be sent fails the request after the transaction has committed.
+
+The scope emits `pgbus.coalesce` with `buffered`, `sent`, `retried`, `failed` and `duration` (ms).
+
 ### Batches
 
 Coordinate groups of jobs with callbacks when all complete:

@@ -5,7 +5,13 @@ require "active_job"
 module Pgbus
   module ActiveJob
     class Adapter
+      # Inside Pgbus.coalesce a bulk-eligible job is buffered and sent with the
+      # rest when the scope ends (issue #682); everything else is sent now.
+      # With no scope open this costs one fiber-local read.
       def enqueue(active_job)
+        scope = Coalesce.current
+        return active_job if scope && coalesce(scope, active_job)
+
         enqueue_job(active_job)
       end
 
@@ -19,6 +25,38 @@ module Pgbus
       # error raised. Returns the number marked, so the enqueue_all.active_job
       # notification's enqueued_count agrees with the jobs.
       def enqueue_all(active_jobs)
+        bulk_enqueue(active_jobs)
+      end
+
+      # Sends what a Coalesce scope buffered, as [job, batch_id] pairs with
+      # the batch each job joined at push (issue #682): enqueue_all first,
+      # then each job it left unsent on its own. A batch member the bulk
+      # counted in, but whose send's outcome is unknown, is resent without
+      # being counted again. Never raises: what still fails is in the
+      # result's +failed+, for the scope's on_failure.
+      def deliver_coalesced(entries)
+        previous_tag = Thread.current[:pgbus_batch_id]
+        # Only the tag captured at push counts: the block of a batch opened
+        # around the scope must not claim the scope's other jobs.
+        Thread.current[:pgbus_batch_id] = nil
+        jobs = entries.map(&:first)
+        counted = {}.compare_by_identity
+        error = nil
+        begin
+          bulk_enqueue(jobs, counted)
+        rescue StandardError => e
+          error = e
+        end
+        sent = jobs.count(&:successfully_enqueued?)
+        retried, failed, error = retry_coalesced(entries.reject { |job, _| job.successfully_enqueued? }, counted, error)
+        Coalesce::Result.new(buffered: jobs.size, sent: sent, retried: retried, failed: failed, error: error)
+      ensure
+        Thread.current[:pgbus_batch_id] = previous_tag
+      end
+
+      private
+
+      def bulk_enqueue(active_jobs, counted = nil)
         active_jobs.each do |j|
           j.successfully_enqueued = false
           j.enqueue_error = nil
@@ -34,14 +72,75 @@ module Pgbus
         bulk.group_by { |j| [j.queue_name || Pgbus.configuration.default_queue, j.try(:priority)] }
             .each do |(queue, priority), jobs|
           immediate, scheduled = jobs.partition { |j| !scheduled_in_future?(j) }
-          enqueue_immediate(queue, immediate, priority: priority)
+          enqueue_immediate(queue, immediate, priority: priority, counted: counted)
           scheduled.each { |j| enqueue_one_of_all(j) }
         end
 
         active_jobs.count(&:successfully_enqueued?)
       end
 
-      private
+      # Buffers +active_job+ in +scope+ when the bulk path can send it:
+      # uniqueness and concurrency need their lock or slot now, a future job
+      # its delay, a retry re-enqueue (#424) and a deploy task run's job
+      # (#660) the single path's bookkeeping, and a batch member is buffered
+      # only for a batch the scope holds (it starts after the flush; another
+      # could finish before the flush counted the member in). Current is
+      # snapshotted now, so the flush sends the context of the enqueue.
+      def coalesce(scope, active_job)
+        return false if Uniqueness.uniqueness_config(active_job) || concurrency_config(active_job)
+        return false if scheduled_in_future?(active_job) || active_job.executions.to_i.positive?
+        return false if active_job.is_a?(DeployTaskRunId) && active_job.deploy_task_run_id
+
+        batch_id = member_batch_id(active_job)
+        return false if batch_id && !(active_job.respond_to?(:enqueue_batch_id=) && scope.holds?(batch_id))
+
+        capture_current_attributes(active_job)
+        scope.push(self, active_job, batch_id)
+      end
+
+      def capture_current_attributes(active_job)
+        return unless active_job.respond_to?(:pgbus_current_attributes=) && active_job.pgbus_current_attributes.nil?
+
+        active_job.pgbus_current_attributes =
+          Pgbus::CurrentAttributes.capture(override: active_job.class.pgbus_persist_current_attributes)
+      end
+
+      # Each buffered job the bulk left unsent, on its own, with its batch
+      # re-applied (enqueue_immediate forgets it). Returns
+      # [retried count, failed jobs, the last error].
+      def retry_coalesced(entries, counted, error)
+        retried = 0
+        failed = []
+        entries.each do |job, batch_id|
+          job.enqueue_batch_id = batch_id if batch_id
+          counted.key?(job) ? resend_counted(job) : enqueue_one_of_all(job)
+          job.successfully_enqueued? ? retried += 1 : failed << job
+        rescue StandardError => e
+          # A job sent before its bookkeeping raised is live: not a failure.
+          next retried += 1 if job.successfully_enqueued?
+
+          error = e
+          failed << job
+        end
+        [retried, failed, error]
+      end
+
+      # A batch member the bulk counted in (count and execution row) whose
+      # send raised: it may or may not be live, so its count stands, as an
+      # ambiguous single send's does. Sent again without counting it twice;
+      # track_retry restores its execution row if an untrack removed it.
+      def resend_counted(active_job)
+        queue = active_job.queue_name || Pgbus.configuration.default_queue
+        priority = active_job.try(:priority)
+        payload = tag_bulk_member(FairShare.inject_metadata(active_job, Serializer.serialize_job_hash(active_job)), active_job)
+        Batch.track_retry(payload)
+        msg_id = Pgbus.client.send_message(queue, payload, delay: 0, priority: priority)
+        active_job.provider_job_id = msg_id
+        active_job.successfully_enqueued = true
+        Batch.backfill_execution(payload, msg_id, physical_queue(queue, priority))
+      ensure
+        forget_enqueue_batch_id(active_job)
+      end
 
       # One job of an enqueue_all that cannot take the bulk path.
       # enqueue_with_concurrency marks it once it is live, as enqueue_immediate
@@ -465,13 +564,17 @@ module Pgbus
         batch_id ? payload_hash.merge(Batch::METADATA_KEY => batch_id) : payload_hash
       end
 
-      def enqueue_immediate(queue, jobs, priority: nil)
+      # +counted+ (deliver_coalesced) collects the batch members whose count
+      # stands after a failure, so a retry does not count them again.
+      def enqueue_immediate(queue, jobs, priority: nil, counted: nil)
         return if jobs.empty?
 
         payloads = jobs.map do |j|
           tag_bulk_member(FairShare.inject_metadata(j, Serializer.serialize_job_hash(j)), j)
         end
+        tracked = false
         track_bulk(payloads)
+        tracked = true
         physical = physical_queue(queue, priority)
         msg_ids = nil
         msg_ids = Pgbus.client.send_batch(queue, payloads, priority: priority)
@@ -487,14 +590,25 @@ module Pgbus
         payloads.zip(msg_ids).each { |payload, id| Batch.backfill_execution(payload, id, physical) }
       rescue Pgbus::EnqueueError
         Array(payloads).each_with_index do |payload, index|
-          Batch.untrack_enqueue(payload) if msg_ids.nil? || msg_ids[index].nil?
+          if msg_ids.nil? || msg_ids[index].nil?
+            Batch.untrack_enqueue(payload)
+          elsif counted && payload[Batch::METADATA_KEY]
+            counted[jobs[index]] = true
+          end
         end
         raise
-      rescue Pgbus::SchemaNotReady => e
-        Pgbus.logger.error { "[Pgbus] #{e.message}" }
+      rescue StandardError => e
+        Pgbus.logger.error { "[Pgbus] #{e.message}" } if e.is_a?(Pgbus::SchemaNotReady)
+        note_counted(counted, jobs, payloads) if tracked
         raise
       ensure
         jobs.each { |j| forget_enqueue_batch_id(j) }
+      end
+
+      def note_counted(counted, jobs, payloads)
+        return unless counted
+
+        jobs.zip(payloads).each { |job, payload| counted[job] = true if payload[Batch::METADATA_KEY] }
       end
 
       # One guarded increment per batch for the whole bulk, not one per job.

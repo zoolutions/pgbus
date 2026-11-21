@@ -1,0 +1,43 @@
+module Pgbus
+  module ActiveJob
+    # A unit of work's enqueues, held at the adapter and sent together when
+    # the unit ends (issue #682). Opened by Pgbus.coalesce and Middleware.
+    class Coalesce
+      type on_failure = :raise | :report | ^(Array[untyped] jobs, Pgbus::EnqueueError error) -> void
+
+      KEY: Symbol
+      FAILURE_MODES: Array[Symbol]
+
+      class Result
+        attr_reader buffered: Integer
+        attr_reader sent: Integer
+        attr_reader retried: Integer
+        attr_reader failed: Array[untyped]
+        attr_reader error: StandardError?
+
+        def initialize: (buffered: Integer, sent: Integer, retried: Integer, failed: Array[untyped], error: StandardError?) -> void
+      end
+
+      def self.current: () -> Coalesce?
+      def self.open: [T] (?on_failure: on_failure) { () -> T } -> T
+      def self.hold: (String batch_id) -> Coalesce?
+      def self.validate_on_failure!: (untyped on_failure) -> void
+
+      attr_reader on_failure: on_failure
+
+      def initialize: (?on_failure: on_failure) -> void
+      def push: (Adapter adapter, untyped job, String? batch_id) -> bool
+      def hold: (String batch_id) -> bool
+      def holds?: (String batch_id) -> bool
+      def after_flush: () { () -> void } -> void
+      def finish!: (?block_error: Exception?) -> Result
+
+      # Runs the request inside Pgbus.coalesce; the buffer is sent before the
+      # response tuple is returned.
+      class Middleware
+        def initialize: (untyped app, ?on_failure: Coalesce::on_failure) -> void
+        def call: (Hash[String, untyped] env) -> untyped
+      end
+    end
+  end
+end
