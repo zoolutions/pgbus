@@ -29,8 +29,10 @@ module Pgbus
     # Atomically add n to total_jobs on an unfinished batch. Returns true.
     # Raises Batch::AlreadyFinished when the row is already finished (0 rows
     # updated) — the adder-before-insert contract open batches (#415) rely on.
-    def self.increment_total_jobs!(batch_id, count) # rubocop:disable Naming/PredicateMethod
-      updated = where(batch_id: batch_id, status: UNFINISHED)
+    # +statuses+: a batch scope counts a chunk into a batch still building
+    # only, never into one the sweep reaped (issue #683).
+    def self.increment_total_jobs!(batch_id, count, statuses: UNFINISHED) # rubocop:disable Naming/PredicateMethod
+      updated = where(batch_id: batch_id, status: statuses)
                 .update_all(["total_jobs = total_jobs + ?", count])
       raise Batch::AlreadyFinished, "Can't add jobs into an already finished batch" if updated.zero?
 

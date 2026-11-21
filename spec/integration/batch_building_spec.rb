@@ -194,6 +194,105 @@ RSpec.describe "Batch building (integration)", :integration do
     end
   end
 
+  describe "a chunk filled inside a transaction" do
+    around do |example|
+      Pgbus.configuration.coalesce_chunk_size = 1
+      example.run
+    ensure
+      Pgbus.configuration.coalesce_chunk_size = 1_000
+    end
+
+    it "is not sent until the transaction is gone, so a rollback cannot strand a counted-out member" do
+      depth_in_transaction = nil
+      batch = open_batch do
+        work_job.perform_later(1)
+        ActiveRecord::Base.transaction do
+          work_job.perform_later(2) # chunk 1 is full: it must not be counted in this transaction
+          depth_in_transaction = queue_depth(work_queue)
+          raise ActiveRecord::Rollback
+        end
+        work_job.perform_later(3)
+      end
+
+      expect(depth_in_transaction).to eq(0)
+      expect(batch.reload.total_jobs).to eq(queue_depth(work_queue))
+      run_all
+      expect(batch.reload).to have_attributes(status: "finished", completed_jobs: 3)
+      expect(queue_depth(work_queue)).to eq(0)
+    end
+  end
+
+  describe "a final count that fails on a transient error" do
+    it "still closes the build, so the batch is not left building" do
+      calls = 0
+      allow(Pgbus::Batch).to receive(:track_enqueue).and_wrap_original do |original, *args, **kwargs|
+        calls += 1
+        raise PG::ConnectionBad, "transient" if calls == 1
+
+        original.call(*args, **kwargs)
+      end
+      batch_id = nil
+      begin
+        Pgbus.batch(on_enqueue_failure: :report) do
+          batch_id = Thread.current[:pgbus_batch_id]
+          work_job.perform_later(1)
+        end
+      rescue Pgbus::EnqueueError
+        nil
+      end
+
+      expect(status_of(batch_id)).not_to eq("building")
+    end
+
+    it "still closes an empty build when the closing transaction fails" do
+      calls = 0
+      allow(Pgbus::BatchEntry).to receive(:close_build!).and_wrap_original do |original, *args|
+        calls += 1
+        raise PG::ConnectionBad, "transient" if calls == 1
+
+        original.call(*args)
+      end
+      batch_id = nil
+      begin
+        Pgbus.batch do |b|
+          batch_id = Thread.current[:pgbus_batch_id]
+          b.add(work_job.new(1))
+        end
+      rescue PG::ConnectionBad
+        nil
+      end
+
+      expect(status_of(batch_id)).not_to eq("building")
+    end
+  end
+
+  describe "a live owner the sweep took for dead" do
+    it "counts no later chunk into the reaped batch" do
+      Pgbus.configuration.coalesce_chunk_size = 1
+      error = nil
+      batch_id = nil
+      begin
+        open_batch do
+          batch_id = Thread.current[:pgbus_batch_id]
+          unique_job.perform_later(0) # counted at once: the reaped batch stays processing
+          work_job.perform_later(1)
+          Pgbus::ProcessEntry.where(id: owner.id).delete_all
+          sweep_elsewhere
+          work_job.perform_later(2) # flushes chunk 1 into a reaped batch
+          work_job.perform_later(3)
+        end
+      rescue Pgbus::EnqueueError => e
+        error = e
+      end
+
+      expect(error.cause).to be_a(Pgbus::Batch::AlreadyFinished)
+      # The member sent at once and the abandoned build, nothing held.
+      expect(Pgbus::BatchEntry.find_by(batch_id: batch_id).total_jobs).to eq(2)
+    ensure
+      Pgbus.configuration.coalesce_chunk_size = 1_000
+    end
+  end
+
   describe "an owner that stops heartbeating" do
     it "is reaped once its process row is gone: one failed job, on_complete and on_failure, never on_success" do
       error = nil

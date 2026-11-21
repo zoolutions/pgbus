@@ -430,7 +430,7 @@ RSpec.describe Pgbus::Batch do
       described_class.track_enqueue(payload)
 
       expect(Pgbus::BatchEntry).to have_received(:transaction).ordered
-      expect(Pgbus::BatchEntry).to have_received(:increment_total_jobs!).with("b-1", 1).ordered
+      expect(Pgbus::BatchEntry).to have_received(:increment_total_jobs!).with("b-1", 1, statuses: Pgbus::BatchEntry::UNFINISHED).ordered
       expect(Pgbus::BatchExecution).to have_received(:insert_all_for!)
         .with(batch_id: "b-1", rows: [%w[j-1 default]]).ordered
     end
@@ -440,7 +440,7 @@ RSpec.describe Pgbus::Batch do
 
       described_class.track_enqueue([payload, second])
 
-      expect(Pgbus::BatchEntry).to have_received(:increment_total_jobs!).with("b-1", 2).once
+      expect(Pgbus::BatchEntry).to have_received(:increment_total_jobs!).with("b-1", 2, statuses: Pgbus::BatchEntry::UNFINISHED).once
       expect(Pgbus::BatchExecution).to have_received(:insert_all_for!)
         .with(batch_id: "b-1", rows: [%w[j-1 default], %w[j-2 default]]).once
     end
@@ -450,7 +450,7 @@ RSpec.describe Pgbus::Batch do
 
       described_class.track_enqueue(payload)
 
-      expect(Pgbus::BatchEntry).to have_received(:increment_total_jobs!).with("b-1", 1)
+      expect(Pgbus::BatchEntry).to have_received(:increment_total_jobs!).with("b-1", 1, statuses: Pgbus::BatchEntry::UNFINISHED)
       expect(Pgbus::BatchExecution).not_to have_received(:insert_all_for!)
     end
 

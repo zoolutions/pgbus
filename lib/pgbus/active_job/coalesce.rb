@@ -105,8 +105,11 @@ module Pgbus
           return false if @closed
 
           # A full chunk goes when the next job arrives, so a block of
-          # exactly chunk_size jobs is still one flush, at its end.
-          full = drain if @entries.size >= @chunk_size
+          # exactly chunk_size jobs is still one flush, at its end. A batch
+          # scope keeps holding while a transaction is open on the batch's
+          # connection: a chunk counted in there and sent on PGMQ's own
+          # connection would lose its count, not its messages, on a rollback.
+          full = drain if @entries.size >= @chunk_size && !hold_for_transaction?
           @entries << [adapter, job, payload]
           full
         end
@@ -169,6 +172,15 @@ module Pgbus
           @results << result
           @failed_entries.concat(entries.select { |_, job, _| failed.include?(job.object_id) })
         end
+      end
+
+      def hold_for_transaction?
+        return false unless @count_in
+
+        connection = Pgbus::BatchEntry.connection_pool.active_connection?
+        connection ? connection.transaction_open? : false
+      rescue StandardError
+        true
       end
 
       # True when the chunk was counted in. A count that fails (a batch the

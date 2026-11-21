@@ -39,8 +39,9 @@ module Pgbus
 
     # Open a batch, yield a Pgbus::Batch::Builder, and start the batch when
     # the block returns. Every job the block enqueues (through +b.add+ or a
-    # plain +perform_later+) joins the batch, which stays pending, and so
-    # cannot finish, until the block is done. Keywords go to Batch.new.
+    # plain +perform_later+) joins the batch, which stays building (in a
+    # pgbus process, issue #683) or pending, and so cannot finish, until the
+    # block is done. Keywords go to Batch.new.
     # Membership is the block's own thread or fiber (the tag lives in
     # Thread.current): b.add raises anywhere else, and a plain perform_later
     # from a thread or fiber the block spawns does not join the batch.
@@ -400,7 +401,7 @@ module Pgbus
     # which is what lets a finish never race an add: the guarded increment
     # raises AlreadyFinished here — at perform_later, before send — when the
     # batch has already finished. Pass an Array to count a bulk send once.
-    def self.track_enqueue(payloads)
+    def self.track_enqueue(payloads, statuses: BatchEntry::UNFINISHED)
       payloads = payloads.is_a?(Hash) ? [payloads] : Array(payloads)
       batch_id = payloads.first&.fetch(METADATA_KEY, nil)
       return if payloads.empty? || batch_id.nil?
@@ -410,7 +411,7 @@ module Pgbus
         # list through the connection.
         migrated = executions_migrated?
         BatchEntry.transaction do
-          BatchEntry.increment_total_jobs!(batch_id, payloads.size)
+          BatchEntry.increment_total_jobs!(batch_id, payloads.size, statuses: statuses)
           next unless migrated
 
           # One multi-row INSERT for the whole bulk (issue #683).
@@ -789,15 +790,35 @@ module Pgbus
     # batch can finish only once every held member is counted. Raises
     # AlreadyFinished when the build is no longer open (the sweep reaped it
     # because its process stopped heartbeating).
+    #
+    # A chunk before the last counts only into a batch still building: one
+    # the sweep reaped (its owner looked dead) takes no more members. When
+    # the closing transaction fails, the build is closed on its own: the
+    # chunk was neither counted nor sent, so the counts stay right, and a
+    # pending batch is one the sweep can start, where a building one would
+    # wait for its owner to die.
     def count_in(payloads, final:)
-      return self.class.track_enqueue(payloads) unless final
+      return self.class.track_enqueue(payloads, statuses: %w[building]) unless final
 
-      BatchEntry.connection_pool.with_connection do
-        BatchEntry.transaction do
-          BatchEntry.close_build!(batch_id)
-          self.class.track_enqueue(payloads) if payloads.any?
+      begin
+        BatchEntry.connection_pool.with_connection do
+          BatchEntry.transaction do
+            BatchEntry.close_build!(batch_id)
+            self.class.track_enqueue(payloads) if payloads.any?
+          end
         end
+      rescue AlreadyFinished
+        raise
+      rescue StandardError
+        close_build_alone
+        raise
       end
+    end
+
+    def close_build_alone
+      BatchEntry.connection_pool.with_connection { BatchEntry.close_build!(batch_id) }
+    rescue StandardError => e
+      ErrorReporter.report(e, { pgbus_batch_close_build: batch_id })
     end
 
     def create_record

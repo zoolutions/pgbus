@@ -128,6 +128,7 @@ RSpec.describe Pgbus::ActiveJob::Coalesce do
       count_in = ->(payloads, final:) { calls << [payloads.size, final, batches.size] }
       original = Pgbus.configuration.coalesce_chunk_size
       Pgbus.configuration.coalesce_chunk_size = 2
+      allow_any_instance_of(described_class).to receive(:hold_for_transaction?).and_return(false)
 
       described_class.open(batch_id: "b-1", count_in: count_in) do
         Thread.current[:pgbus_batch_id] = "b-1"
@@ -136,6 +137,23 @@ RSpec.describe Pgbus::ActiveJob::Coalesce do
 
       expect(calls).to eq([[2, false, 0], [1, true, 1]])
       expect(Pgbus::Batch).not_to have_received(:track_enqueue)
+    ensure
+      Pgbus.configuration.coalesce_chunk_size = original
+    end
+
+    it "keeps holding a full chunk while a transaction is open on the batch's connection" do
+      calls = []
+      count_in = ->(payloads, final:) { calls << [payloads.size, final] }
+      original = Pgbus.configuration.coalesce_chunk_size
+      Pgbus.configuration.coalesce_chunk_size = 1
+      allow_any_instance_of(described_class).to receive(:hold_for_transaction?).and_return(true)
+
+      described_class.open(batch_id: "b-1", count_in: count_in) do
+        Thread.current[:pgbus_batch_id] = "b-1"
+        3.times { |i| plain_class.perform_later(i) }
+      end
+
+      expect(calls).to eq([[3, true]])
     ensure
       Pgbus.configuration.coalesce_chunk_size = original
     end
