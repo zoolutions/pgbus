@@ -6,6 +6,8 @@
 
 ### Changed
 
+- **PGMQ: vendored schema v1.13.2 (issue #676).** `pgmq.create()` on an existing queue no longer waits for the queue's open transactions: it ran `CREATE INDEX IF NOT EXISTS` on the queue and archive tables, which takes a `SHARE` lock before it checks for the index, so a process ensuring its queues at boot waited for every open transaction that had sent to one of them, and later sends queued behind it. The index DDL now runs only when `to_regclass()` finds the index missing, and the `pg_monitor` grants only when it lacks them. The fix covers `pgmq.create()` only: other DDL a starting process runs on a queue still waits for its open writers, among it re-arming a NOTIFY trigger (one missing or out of date, and a stream queue's on every cold start) and the `group_mode` FIFO and `fair_share` indexes. Under the default configuration, a job queue whose trigger is in place no longer waits. Fresh embedded installs get 1.13.2. Existing *embedded* installs: `rake pgbus:pgmq:status`, then `rails generate pgbus:upgrade_pgmq` + `rails db:migrate` (`rails db:migrate:pgbus` on a separate-database install); the hop changes functions only, so it carries no fixup. An `:extension` install gets 1.13.2 from `ALTER EXTENSION pgmq UPDATE`. Refs #676.
+
 ### Fixed
 
 ### Security

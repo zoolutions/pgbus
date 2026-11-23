@@ -16,6 +16,7 @@ class Views::Docs::Pages::UpgradingPgbus < DocsUI::Page
     v013x
     v021x
     v100_stub
+    v10x
   end
 
   private
@@ -424,15 +425,6 @@ class Views::Docs::Pages::UpgradingPgbus < DocsUI::Page
 
   def v100_stub
     DocsUI::Section("0.9.8 → 1.0.0", description: "The 1.0 API freeze: error hierarchy, config renames, and dead-surface removal.") do
-      DocsUI::Callout(:warning, title: "1.0.0 not yet released") do
-        plain "Everything below is "
-        strong { "implemented and lands in 1.0.0" }
-        plain " — the unified error hierarchy (issue "
-        a(href: "https://github.com/zoolutions/pgbus/issues/282", class: "link") { "#282" }
-        plain ") and the config renames, dead-surface removals, and new shortcuts (issue "
-        a(href: "https://github.com/zoolutions/pgbus/issues/283", class: "link") { "#283" }
-        plain "). It describes real behavior on the unreleased 1.0 line; only the release itself hasn't happened yet."
-      end
       md <<~'MD'
         ### The 1.0.0 commitment
 
@@ -552,6 +544,56 @@ class Views::Docs::Pages::UpgradingPgbus < DocsUI::Page
         `streams_presence_*`, `group_mode`, and `streams_falcon_streaming_body`
         are marked **experimental** and are exempt from the 1.0 stability
         promise.
+      MD
+    end
+  end
+
+  def v10x
+    DocsUI::Section("1.0.x → next release", description: "PGMQ 1.13.2: pgmq.create() no longer waits on an existing queue's writers.") do
+      md <<~'MD'
+        ### PGMQ vendored schema: 1.13.1 → 1.13.2
+
+        Another instance of step 5 in the [standard procedure](#the-standard-upgrade-procedure).
+        Upstream changes two functions, `pgmq.create_non_partitioned` (what
+        `pgmq.create` calls) and `pgmq.create_unlogged`:
+
+        - **`pgmq.create()` on an existing queue no longer waits for that
+          queue's open transactions.** It ran `CREATE INDEX IF NOT EXISTS` on
+          the queue and archive tables, and `CREATE INDEX` takes a `SHARE` lock
+          before it checks whether the index exists. A process ensuring its
+          queues at boot therefore waited for every open transaction that had
+          sent to one of them, and every send after it queued up behind the
+          wait. The index is now created only when `to_regclass()`, which takes
+          no lock, finds it missing.
+        - **`pg_monitor`'s grants are issued only when it lacks them,** so
+          `pgmq.create()` on an existing queue no longer rewrites catalog rows.
+
+        The fix covers `pgmq.create()` only. Other DDL a pgbus process runs
+        when it ensures a queue at startup still takes a table lock and still
+        waits for that queue's open writers. Among them: re-arming a NOTIFY
+        trigger that is missing or carries another throttle, a stream queue's
+        trigger (re-armed on every cold start), the FIFO index under
+        `group_mode`, and the fair-share index under `fair_share`. Under the
+        default configuration, a job queue whose trigger is already in place
+        no longer waits.
+
+        No table changes, so the migration carries no fixup for this hop: it
+        drops and re-creates the functions as on every upgrade. Run
+        `rake pgbus:pgmq:status` after updating the gem; it prints
+        `Vendored version:  1.13.2` and `Installed version: 1.13.1`, then
+        `Update available! Run: rails generate pgbus:upgrade_pgmq`. Run:
+      MD
+      DocsUI::Code(<<~SHELL, lexer: :shell)
+        rails generate pgbus:upgrade_pgmq
+        rails db:migrate            # single database
+        rails db:migrate:pgbus      # separate-database install
+      SHELL
+      md <<~'MD'
+        An install still on 1.13.0 or older gets every fixup on the way,
+        1.13.1's included; read the 0.21.x section above
+        first. An `:extension` install gets 1.13.2 from
+        `ALTER EXTENSION pgmq UPDATE TO '1.13.2'` once the server has 1.13.2
+        packaged, not from this migration.
       MD
     end
   end
