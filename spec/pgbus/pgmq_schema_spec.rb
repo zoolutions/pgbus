@@ -235,9 +235,19 @@ RSpec.describe Pgbus::PgmqSchema do
       # The function-set check below compares names only; a strip regex that
       # ate part of a body would pass it. The install SQL must differ from
       # 1.13.1's by exactly upstream's delta.
+      # Counted per line in both directions, so a line the strip deletes from
+      # one version's body (but not the other's) shows up as a difference.
       it "differs from v1.13.1's install SQL exactly as the vendored files do" do
-        upstream_delta = described_class.sql_for_version("1.13.2").lines - described_class.sql_for_version("1.13.1").lines
-        install_delta = sql.lines - described_class.install_sql("1.13.1").lines
+        line_delta = lambda do |newer, older|
+          newer_counts = newer.lines.tally
+          older_counts = older.lines.tally
+          (newer_counts.keys | older_counts.keys)
+            .to_h { |line| [line, newer_counts.fetch(line, 0) - older_counts.fetch(line, 0)] }
+            .reject { |_, delta| delta.zero? }
+        end
+
+        upstream_delta = line_delta.call(described_class.sql_for_version("1.13.2"), described_class.sql_for_version("1.13.1"))
+        install_delta = line_delta.call(sql, described_class.install_sql("1.13.1"))
 
         expect(install_delta).to eq(upstream_delta)
       end
