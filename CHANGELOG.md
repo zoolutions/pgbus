@@ -2,7 +2,7 @@
 
 ### Added
 
-- **`pgbus_coalesce false/true` and `config.coalesce_default`** (#689). A job class declares `pgbus_coalesce false` to be sent at its `perform_later` inside `Pgbus.coalesce` and the request middleware, so a caller that reads `successfully_enqueued?` or rescues the send sees the real outcome. `config.coalesce_default = false` holds only classes that declare `pgbus_coalesce true`, in a batch's own scope too. The setting is inherited by subclasses. `Workflow::StepJob` uses the macro in place of its `pgbus_coalesce?` override; a class that still defines `pgbus_coalesce?` itself keeps working.
+- **`pgbus_coalesce false/true` and `config.coalesce_default`** (#689). A job class declares `pgbus_coalesce false` to be sent at its `perform_later` inside `Pgbus.coalesce` and the request middleware, so a caller that reads `successfully_enqueued?` or rescues the send sees the real outcome. `config.coalesce_default = false` holds only classes that declare `pgbus_coalesce true`, in a batch's own scope too. The setting is inherited by subclasses. `Workflow::StepJob` uses the macro in place of its `pgbus_coalesce?` override; a class that still defines `pgbus_coalesce?` itself keeps working, and that override wins over the macro and the config for it and its subclasses, so remove it when adopting them.
 
 ### Changed
 

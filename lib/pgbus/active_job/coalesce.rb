@@ -11,7 +11,9 @@ module Pgbus
     # decide), serialized at perform_later; a future one with its scheduled
     # time, so its delay is what is left at the flush (issue #686). One with
     # uniqueness or concurrency, a retry re-enqueue, a deploy task run's job,
-    # a batch member outside its own batch's scope or a Workflow::StepJob
+    # a batch member outside its own batch's scope, a Workflow::StepJob or a
+    # class the scope may not hold (`pgbus_coalesce false`, or no
+    # `pgbus_coalesce true` under config.coalesce_default false, issue #689)
     # goes out at once, as it does outside a scope. Active Job's enqueue_after_transaction_commit runs before the
     # adapter, so a job that defers reaches the buffer at commit, and a rolled
     # back one never does.

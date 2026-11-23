@@ -316,6 +316,7 @@ RSpec.describe Pgbus::ActiveJob::Coalesce do
     end
 
     it "raises a pgbus_coalesce false job's send error from its perform_later" do
+      stub_const("PGMQ::Errors::ConnectionError", Class.new(StandardError)) unless defined?(PGMQ::Errors::ConnectionError)
       allow(mock_client).to receive(:send_message).and_raise(PGMQ::Errors::ConnectionError, "server closed")
 
       Pgbus.coalesce do
@@ -368,6 +369,18 @@ RSpec.describe Pgbus::ActiveJob::Coalesce do
 
         expect(mock_client).to have_received(:send_batch).once
       end
+    end
+
+    it "keeps a workflow step job sent at once when an app's base-class hook answers true" do
+      ActiveJob::Base.define_singleton_method(:pgbus_coalesce?) { true }
+
+      Pgbus.coalesce do
+        adapter.enqueue(Pgbus::Workflow::StepJob.new(SecureRandom.uuid))
+
+        expect(mock_client).to have_received(:send_message).once
+      end
+    ensure
+      ActiveJob::Base.singleton_class.send(:remove_method, :pgbus_coalesce?)
     end
 
     it "keeps an app's own pgbus_coalesce? override (the hook before #689)" do

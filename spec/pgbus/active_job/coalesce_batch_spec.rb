@@ -153,6 +153,8 @@ RSpec.describe Pgbus::ActiveJob::Coalesce do
         end
 
         expect(batches).to be_empty
+        expect(Pgbus::Batch).to have_received(:track_enqueue)
+          .with(hash_including(Pgbus::Batch::METADATA_KEY => "b-1")).once
       end
 
       it "holds a member whose class declares pgbus_coalesce true" do

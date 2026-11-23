@@ -28,6 +28,11 @@ module Pgbus
 
       pgbus_coalesce false
 
+      # Pinned like pgbus_visibility_heartbeat_enabled: an app's own
+      # pgbus_coalesce? on ActiveJob::Base (the hook before #689) would
+      # otherwise shadow the macro's reader here.
+      def self.pgbus_coalesce? = false
+
       def perform(step_id)
         StepExecution.new(step_id).call
       end
