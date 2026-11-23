@@ -114,8 +114,10 @@ module Pgbus
         scope.push(self, active_job, payload, due_at)
       end
 
-      # A class without Coalesce::JobMixin (or an app's own pgbus_coalesce?)
-      # follows config.coalesce_default, like one that declares nothing.
+      # A class with pgbus_coalesce? (Coalesce::JobMixin's, or an app's own
+      # hook from before #689, which then wins over the macro and the config)
+      # answers for itself; a class without it follows config.coalesce_default,
+      # like one that declares nothing.
       def coalesce_class?(klass)
         klass.respond_to?(:pgbus_coalesce?) ? klass.pgbus_coalesce? : Pgbus.configuration.coalesce_default
       end

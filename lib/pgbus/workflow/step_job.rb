@@ -28,10 +28,11 @@ module Pgbus
 
       pgbus_coalesce false
 
-      # Pinned like pgbus_visibility_heartbeat_enabled: an app's own
-      # pgbus_coalesce? on ActiveJob::Base (the hook before #689) would
-      # otherwise shadow the macro's reader here.
-      def self.pgbus_coalesce? = false
+      # The adapter reads pgbus_coalesce?. Defined on this class, like
+      # pgbus_visibility_heartbeat_enabled above, so an app's own
+      # pgbus_coalesce? on ActiveJob::Base (the hook before #689) cannot
+      # shadow the mixin's reader; it answers what the macro set.
+      def self.pgbus_coalesce? = pgbus_coalesce_enabled == true
 
       def perform(step_id)
         StepExecution.new(step_id).call

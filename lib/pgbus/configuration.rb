@@ -318,7 +318,9 @@ module Pgbus
     # (issue #689). true: every bulk-eligible job is held unless its class
     # declares `pgbus_coalesce false`. false: only classes that declare
     # `pgbus_coalesce true` are held; every other job is sent at its
-    # perform_later, so its caller sees the real outcome.
+    # perform_later, so its caller sees the real outcome. A class that
+    # defines pgbus_coalesce? itself (the hook before #689) answers for
+    # itself whatever this says.
     attr_accessor :coalesce_default
 
     # The MCP server's workflow write tools (issue #550): pgbus_workflow_resume,
