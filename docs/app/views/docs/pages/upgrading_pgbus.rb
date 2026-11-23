@@ -568,12 +568,14 @@ class Views::Docs::Pages::UpgradingPgbus < DocsUI::Page
         - **`pg_monitor`'s grants are issued only when it lacks them,** so
           `pgmq.create()` on an existing queue no longer rewrites catalog rows.
 
-        The fix covers `pgmq.create()` only. A pgbus process starting up still
-        takes a table lock, and still waits for a queue's open writers, in
-        three places: re-arming a NOTIFY trigger that is missing or carries
-        another throttle, the FIFO index under `group_mode`, and a stream
-        queue, whose trigger is re-armed on every cold start. A plain job
-        queue whose trigger is already in place no longer waits.
+        The fix covers `pgmq.create()` only. Other DDL a pgbus process runs
+        when it ensures a queue at startup still takes a table lock and still
+        waits for that queue's open writers. Among them: re-arming a NOTIFY
+        trigger that is missing or carries another throttle, a stream queue's
+        trigger (re-armed on every cold start), the FIFO index under
+        `group_mode`, and the fair-share index under `fair_share`. Under the
+        default configuration, a job queue whose trigger is already in place
+        no longer waits.
 
         No table changes, so the migration carries no fixup for this hop: it
         drops and re-creates the functions as on every upgrade. Run
