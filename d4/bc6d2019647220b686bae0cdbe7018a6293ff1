@@ -1,0 +1,35 @@
+spec/integration/pgmq_schema_upgrade_spec.rb
+  s_2e4b35eca2434d::t_9b6da0608ab650 20
+  s_2e4b35eca2434d::t_80e174da7be1c1 430-463
+lib/pgbus/pgmq_schema/pgmq_v1.13.2.sql
+  s_2e4b35eca2434d::t_3cd05c9268a8ee 1-2354
+CHANGELOG.md
+  s_2e4b35eca2434d::t_377ecda122b5e3 9-10
+spec/pgbus/pgmq_schema_spec.rb
+  s_2e4b35eca2434d::t_dfaa93c60508eb 8,56-57,386
+  s_2e4b35eca2434d::t_7bb21a60f788f7 213-245
+  s_2e4b35eca2434d::t_ebfa43f40787e9 307-317
+  s_2e4b35eca2434d::t_a232586ff9b33e 37-42
+spec/pgbus/pgmq_versions_task_spec.rb
+  s_2e4b35eca2434d::t_dfaa93c60508eb 20
+docs/app/views/docs/pages/upgrading_pgbus.rb
+  s_2e4b35eca2434d::t_cdf669b7c3ceab 550-588,590-595
+  s_2e4b35eca2434d::t_d330daace9b2c2 19
+  s_2e4b35eca2434d::t_fe644981d3f360 589
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "d4bc6d2019647220b686bae0cdbe7018a6293ff1",
+  "prompts": {},
+  "sessions": {
+    "s_2e4b35eca2434d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "501cccdd-b3d2-458a-b003-e3ba19adc423",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
