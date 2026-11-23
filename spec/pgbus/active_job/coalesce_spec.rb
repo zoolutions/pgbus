@@ -371,6 +371,12 @@ RSpec.describe Pgbus::ActiveJob::Coalesce do
       end
     end
 
+    it "pins a workflow step job's coalesce reader on the class itself, so no base-class hook shadows it" do
+      step_job = Pgbus::Workflow::StepJob
+
+      expect(step_job.singleton_class.instance_method(:pgbus_coalesce?).owner).to eq(step_job.singleton_class)
+    end
+
     it "keeps a workflow step job sent at once when an app's base-class hook answers true" do
       ActiveJob::Base.define_singleton_method(:pgbus_coalesce?) { true }
 
