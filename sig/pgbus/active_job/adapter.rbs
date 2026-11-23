@@ -43,6 +43,18 @@ module Pgbus
       end
     end
   end
+
+  module ActiveJob
+    class Coalesce
+      # `pgbus_coalesce false/true`, included on ActiveJob::Base by the engine (issue #689).
+      module JobMixin
+        module ClassMethods
+          def pgbus_coalesce: (?boolish enabled) -> bool
+          def pgbus_coalesce?: () -> bool
+        end
+      end
+    end
+  end
 end
 
 module ActiveJob

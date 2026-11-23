@@ -120,7 +120,26 @@ class Views::Docs::Pages::ActiveJob < DocsUI::Page
 
         An endpoint that must not answer 500 after committing its writes should use
         `on_failure: :report` or a callable that does not raise.
+
+        **Jobs whose caller reads the enqueue outcome.** A caller that checks
+        `successfully_enqueued?` or rescues around `perform_later` to undo its own
+        state needs the job sent at the call. Declare `pgbus_coalesce false` on its
+        class (subclasses inherit it; `pgbus_coalesce true` turns it back on). When
+        most jobs are like that, flip the default and hold only the jobs the scope
+        is for: with `config.coalesce_default = false` only classes that declare
+        `pgbus_coalesce true` are held, in a batch's own scope too.
       MD
+      DocsUI::Code(<<~RUBY, filename: "app/jobs/process_item_job.rb")
+        class ProcessItemJob < ApplicationJob
+          pgbus_coalesce false   # sent at its perform_later, inside a scope too
+        end
+
+        # Or hold only what you name:
+        Pgbus.configure { |c| c.coalesce_default = false }
+        class ClickEventJob < ApplicationJob
+          pgbus_coalesce true
+        end
+      RUBY
     end
   end
 
