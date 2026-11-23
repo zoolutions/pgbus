@@ -17,7 +17,7 @@ require_relative "../integration_helper"
 RSpec.describe "PGMQ schema upgrade path (integration)", :integration do
   let(:conn) { ActiveRecord::Base.connection }
   let(:from_version) { "1.13.0" }
-  let(:to_version)   { "1.13.1" }
+  let(:to_version)   { "1.13.2" }
   let(:queue_name)   { "pgbus_int_upgrade_probe" }
   # A stand-in for a partitioned queue. pg_partman is not installed in CI, so
   # the fixup is exercised against a plain table registered as partitioned in
@@ -424,6 +424,40 @@ RSpec.describe "PGMQ schema upgrade path (integration)", :integration do
       conn.execute("SELECT pgmq.send('#{mixed_queue}', '{\"probe\": 1}'::jsonb)")
 
       expect(notified?).to be(true)
+    end
+  end
+
+  # Up to 1.13.1, create() on an existing queue ran CREATE INDEX IF NOT EXISTS,
+  # which takes a SHARE lock before it checks whether the index exists, so it
+  # waited for every open transaction that had written to the queue (and every
+  # later send queued up behind it). 1.13.2 checks with to_regclass() first,
+  # which takes no lock. A writer holds a send open on another connection;
+  # create() must return without waiting for it.
+  describe "create() on an existing queue with an open writer (1.13.2)" do
+    def create_while_a_send_is_open
+      writer = PG.connect(PGBUS_DATABASE_URL)
+      writer.exec("BEGIN")
+      writer.exec("SELECT pgmq.send('#{queue_name}', '{\"probe\": 3}'::jsonb)")
+
+      conn.transaction do
+        conn.execute("SET LOCAL lock_timeout = '200ms'")
+        conn.execute("SELECT pgmq.create('#{queue_name}')")
+      end
+    ensure
+      writer&.exec("ROLLBACK")
+      writer&.close
+    end
+
+    it "waits for the writer under 1.13.1" do
+      install_pgmq("1.13.1")
+
+      expect { create_while_a_send_is_open }.to raise_error(ActiveRecord::LockWaitTimeout)
+    end
+
+    it "returns without waiting for the writer after the upgrade" do
+      run_upgrade_migration_sql(to_version)
+
+      expect { create_while_a_send_is_open }.not_to raise_error
     end
   end
 

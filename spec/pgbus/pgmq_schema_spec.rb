@@ -5,7 +5,7 @@ require "spec_helper"
 RSpec.describe Pgbus::PgmqSchema do
   describe ".latest_version" do
     it "returns the latest vendored PGMQ version" do
-      expect(described_class.latest_version).to eq("1.13.1")
+      expect(described_class.latest_version).to eq("1.13.2")
     end
   end
 
@@ -34,6 +34,12 @@ RSpec.describe Pgbus::PgmqSchema do
       expect(File.exist?(path)).to be true
     end
 
+    it "returns the path to the vendored SQL file for v1.13.2" do
+      path = described_class.sql_path("1.13.2")
+      expect(path).to end_with("pgmq_schema/pgmq_v1.13.2.sql")
+      expect(File.exist?(path)).to be true
+    end
+
     it "raises for unknown versions" do
       expect { described_class.sql_path("0.0.0") }
         .to raise_error(Pgbus::PgmqSchema::VersionNotFoundError, /0\.0\.0/)
@@ -47,8 +53,8 @@ RSpec.describe Pgbus::PgmqSchema do
       expect(versions).to eq(versions.sort_by { |v| Gem::Version.new(v) })
     end
 
-    it "lists 1.11.0, 1.11.1, 1.12.0, 1.13.0 and 1.13.1" do
-      expect(described_class.available_versions).to include("1.11.0", "1.11.1", "1.12.0", "1.13.0", "1.13.1")
+    it "lists 1.11.0, 1.11.1, 1.12.0, 1.13.0, 1.13.1 and 1.13.2" do
+      expect(described_class.available_versions).to include("1.11.0", "1.11.1", "1.12.0", "1.13.0", "1.13.1", "1.13.2")
     end
   end
 
@@ -204,6 +210,39 @@ RSpec.describe Pgbus::PgmqSchema do
       end
     end
 
+    context "when targeting v1.13.2" do
+      subject(:sql) { described_class.install_sql("1.13.2") }
+
+      # 1.13.2's whole delta is create_non_partitioned and create_unlogged:
+      # CREATE INDEX takes a SHARE lock before it checks IF NOT EXISTS, so
+      # create() on an existing queue waited for every open transaction that
+      # had written to it. The index DDL now runs only when to_regclass() (no
+      # lock) finds the index missing, and the pg_monitor grants only when
+      # pg_monitor lacks them.
+      it "creates a queue's indexes only when to_regclass finds them missing" do
+        expect(sql.scan("IF to_regclass(FORMAT('pgmq.%I', qtable || '_vt_idx')) IS NULL THEN").size).to eq(2)
+        expect(sql.scan("IF to_regclass(FORMAT('pgmq.%I', 'archived_at_idx_' || queue_name)) IS NULL THEN").size)
+          .to eq(2)
+      end
+
+      it "grants pg_monitor the metrics columns and sequence only when it lacks them" do
+        expect(sql.scan("has_column_privilege('pg_monitor', FORMAT('pgmq.%I', qtable), 'vt', 'SELECT')").size)
+          .to eq(2)
+        expect(sql.scan("IF NOT has_sequence_privilege('pg_monitor', FORMAT('pgmq.%I', qtable_seq), 'SELECT') THEN").size)
+          .to eq(2)
+      end
+
+      # The function-set check below compares names only; a strip regex that
+      # ate part of a body would pass it. The install SQL must differ from
+      # 1.13.1's by exactly upstream's delta.
+      it "differs from v1.13.1's install SQL exactly as the vendored files do" do
+        upstream_delta = described_class.sql_for_version("1.13.2").lines - described_class.sql_for_version("1.13.1").lines
+        install_delta = sql.lines - described_class.install_sql("1.13.1").lines
+
+        expect(install_delta).to eq(upstream_delta)
+      end
+    end
+
     # The extension-only strip is regex-based, so a change in how upstream
     # terminates a function can make it eat its neighbours (1.13.1 did). Every
     # vendored version must keep every function but _belongs_to_pgmq.
@@ -263,6 +302,17 @@ RSpec.describe Pgbus::PgmqSchema do
 
     it "returns nothing for a hop between versions that carry no fixup" do
       expect(described_class.fixups_sql(after: "1.11.1", upto: "1.12.0")).to eq("")
+    end
+
+    # 1.13.2 changes two function bodies and no table, so re-creating the
+    # functions carries it whole.
+    it "returns nothing for the 1.13.1 -> 1.13.2 hop" do
+      expect(described_class.fixups_sql(after: "1.13.1", upto: "1.13.2")).to eq("")
+    end
+
+    it "returns the 1.13.1 fixup alone for the 1.13.0 -> 1.13.2 hop" do
+      expect(described_class.fixups_sql(after: "1.13.0", upto: "1.13.2"))
+        .to eq(described_class.fixups_sql(after: "1.13.0", upto: "1.13.1"))
     end
 
     # An install with no tracking row has an unknown history, so every fixup
@@ -333,7 +383,7 @@ RSpec.describe Pgbus::PgmqSchema do
     end
 
     it "defaults to the latest version" do
-      expect(described_class.version_tracking_sql).to include("1.13.1")
+      expect(described_class.version_tracking_sql).to include("1.13.2")
     end
   end
 end
