@@ -279,7 +279,8 @@ class Views::Docs::Pages::Batches < DocsUI::Page
            is created `building` with that process as its owner, and its
            block's bulk-eligible `perform_later` calls are held and counted
            the same way every `config.coalesce_chunk_size` jobs; uniqueness,
-           concurrency, retry and opted-out calls are sent at once. While `building` the sweep ignores it and it cannot finish;
+           concurrency, retry and opted-out calls (`pgbus_coalesce false`, or no
+           `pgbus_coalesce true` under `config.coalesce_default = false`) are sent at once. While `building` the sweep ignores it and it cannot finish;
            the block's end counts the last chunk and moves it to `pending` in
            one transaction. If the owner stops heartbeating, the sweep reaps
            the build: `processing`, with the abandoned build counted as one

@@ -69,7 +69,9 @@ RSpec.describe "the RBS signatures in sig/" do # rubocop:disable RSpec/DescribeC
     "Pgbus::RetryBackoff::JobMixin::ClassMethods" =>
       -> { [Pgbus::RetryBackoff::JobMixin::ClassMethods.public_instance_methods(false).sort, :instance] },
     "Pgbus::VisibilityHeartbeat::JobMixin::ClassMethods" =>
-      -> { [Pgbus::VisibilityHeartbeat::JobMixin::ClassMethods.public_instance_methods(false).sort, :instance] }
+      -> { [Pgbus::VisibilityHeartbeat::JobMixin::ClassMethods.public_instance_methods(false).sort, :instance] },
+    "Pgbus::ActiveJob::Coalesce::JobMixin::ClassMethods" =>
+      -> { [Pgbus::ActiveJob::Coalesce::JobMixin::ClassMethods.public_instance_methods(false).sort, :instance] }
   }.each do |label, reflect|
     it "declares exactly the public methods of #{label}" do
       methods, kind = reflect.call

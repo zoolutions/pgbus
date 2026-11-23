@@ -151,6 +151,10 @@ RSpec.describe Pgbus::Configuration do
       expect(config.coalesce_chunk_size).to eq(1_000)
     end
 
+    it "lets a coalesce scope hold any job class by default (issue #689)" do
+      expect(config.coalesce_default).to be(true)
+    end
+
     it "has outbox disabled by default" do
       expect(config.outbox_enabled).to be false
       expect(config.outbox_poll_interval).to eq(1.0)
@@ -2091,6 +2095,13 @@ RSpec.describe Pgbus::Configuration do
       [0, -1, 2.5, nil, "100"].each do |value|
         config.web_queue_metrics_chunk_size = value
         expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /web_queue_metrics_chunk_size/)
+      end
+    end
+
+    it "rejects a coalesce_default that is not true or false" do
+      [nil, "false", 0].each do |value|
+        config.coalesce_default = value
+        expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /coalesce_default/)
       end
     end
 

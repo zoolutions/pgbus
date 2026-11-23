@@ -133,6 +133,49 @@ RSpec.describe Pgbus::ActiveJob::Coalesce do
       expect(mock_client).not_to have_received(:send_message)
     end
 
+    # Issue #689: coalesce_default applies to a batch's own scope too, so a
+    # fan-out job declares pgbus_coalesce true to be sent in bulk.
+    context "with coalesce_default = false" do
+      around do |example|
+        original = Pgbus.configuration.coalesce_default
+        Pgbus.configuration.coalesce_default = false
+        example.run
+      ensure
+        Pgbus.configuration.coalesce_default = original
+      end
+
+      it "sends a member that declares nothing at once, counted in as usual" do
+        described_class.open(batch_id: "b-1") do
+          Thread.current[:pgbus_batch_id] = "b-1"
+          plain_class.perform_later(1)
+
+          expect(mock_client).to have_received(:send_message).once
+        end
+
+        expect(batches).to be_empty
+        expect(Pgbus::Batch).to have_received(:track_enqueue)
+          .with(hash_including(Pgbus::Batch::METADATA_KEY => "b-1")).once
+      end
+
+      it "holds a member whose class declares pgbus_coalesce true" do
+        fan_out = Class.new(plain_class) do
+          include Pgbus::ActiveJob::Coalesce::JobMixin
+
+          pgbus_coalesce true
+        end
+
+        described_class.open(batch_id: "b-1") do
+          Thread.current[:pgbus_batch_id] = "b-1"
+          2.times { |i| fan_out.perform_later(i) }
+
+          expect(batches).to be_empty
+        end
+
+        expect(batches.size).to eq(1)
+        expect(mock_client).not_to have_received(:send_message)
+      end
+    end
+
     it "counts each chunk in before sending it, and closes with a final count even when empty" do
       calls = []
       count_in = ->(payloads, final:) { calls << [payloads.size, final, batches.size] }

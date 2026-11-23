@@ -275,6 +275,135 @@ RSpec.describe Pgbus::ActiveJob::Coalesce do
     end
   end
 
+  # Issue #689: a job class declares whether a scope may hold it
+  # (`pgbus_coalesce false/true`); without a declaration it follows
+  # config.coalesce_default.
+  describe "a job class's coalesce setting" do
+    let(:opted_out) do
+      job_class("CoalesceSpec::OptedOutJob") do
+        include Pgbus::ActiveJob::Coalesce::JobMixin
+
+        pgbus_coalesce false
+      end
+    end
+    let(:opted_in) do
+      job_class("CoalesceSpec::OptedInJob") do
+        include Pgbus::ActiveJob::Coalesce::JobMixin
+
+        pgbus_coalesce true
+      end
+    end
+    let(:undeclared) do
+      job_class("CoalesceSpec::UndeclaredJob") { include Pgbus::ActiveJob::Coalesce::JobMixin }
+    end
+
+    around do |example|
+      original = Pgbus.configuration.coalesce_default
+      example.run
+    ensure
+      Pgbus.configuration.coalesce_default = original
+    end
+
+    it "sends a pgbus_coalesce false job at its perform_later, with its provider_job_id" do
+      Pgbus.coalesce do
+        job = opted_out.perform_later(1)
+
+        expect(mock_client).to have_received(:send_message).once
+        expect(job.provider_job_id).to eq(101)
+      end
+
+      expect(mock_client).not_to have_received(:send_batch)
+    end
+
+    it "raises a pgbus_coalesce false job's send error from its perform_later" do
+      stub_const("PGMQ::Errors::ConnectionError", Class.new(StandardError)) unless defined?(PGMQ::Errors::ConnectionError)
+      allow(mock_client).to receive(:send_message).and_raise(PGMQ::Errors::ConnectionError, "server closed")
+
+      Pgbus.coalesce do
+        expect { opted_out.perform_later(1) }.to raise_error(PGMQ::Errors::ConnectionError)
+      end
+    end
+
+    it "lets a subclass of an opted-out class opt back in" do
+      subclass = Class.new(opted_out) { pgbus_coalesce true }
+
+      Pgbus.coalesce { subclass.perform_later(1) }
+
+      expect(mock_client).to have_received(:send_batch).once
+      expect(mock_client).not_to have_received(:send_message)
+    end
+
+    it "holds a job that declares nothing while coalesce_default is true" do
+      Pgbus.coalesce { undeclared.perform_later(1) }
+
+      expect(mock_client).to have_received(:send_batch).once
+      expect(mock_client).not_to have_received(:send_message)
+    end
+
+    context "with coalesce_default = false" do
+      before { Pgbus.configuration.coalesce_default = false }
+
+      it "sends a job that declares nothing at its perform_later" do
+        Pgbus.coalesce do
+          job = undeclared.perform_later(1)
+
+          expect(mock_client).to have_received(:send_message).once
+          expect(job.provider_job_id).to eq(101)
+        end
+      end
+
+      it "sends a job class without the mixin at its perform_later" do
+        Pgbus.coalesce do
+          plain_class.perform_later(1)
+
+          expect(mock_client).to have_received(:send_message).once
+        end
+      end
+
+      it "holds a pgbus_coalesce true job" do
+        Pgbus.coalesce do
+          opted_in.perform_later(1)
+
+          expect(mock_client).not_to have_received(:send_message)
+        end
+
+        expect(mock_client).to have_received(:send_batch).once
+      end
+    end
+
+    it "pins a workflow step job's coalesce reader on the class itself, so no base-class hook shadows it" do
+      step_job = Pgbus::Workflow::StepJob
+
+      expect(step_job.singleton_class.instance_method(:pgbus_coalesce?).owner).to eq(step_job.singleton_class)
+    end
+
+    it "keeps a workflow step job sent at once when an app's base-class hook answers true" do
+      ActiveJob::Base.define_singleton_method(:pgbus_coalesce?) { true }
+
+      Pgbus.coalesce do
+        adapter.enqueue(Pgbus::Workflow::StepJob.new(SecureRandom.uuid))
+
+        expect(mock_client).to have_received(:send_message).once
+      end
+    ensure
+      ActiveJob::Base.singleton_class.send(:remove_method, :pgbus_coalesce?)
+    end
+
+    it "keeps an app's own pgbus_coalesce? override (the hook before #689)" do
+      overriding = job_class("CoalesceSpec::OverridingJob") do
+        include Pgbus::ActiveJob::Coalesce::JobMixin
+
+        def self.pgbus_coalesce? = false
+      end
+
+      Pgbus.coalesce do
+        overriding.perform_later(1)
+
+        expect(mock_client).to have_received(:send_message).once
+      end
+    end
+  end
+
   describe "a send that leaves jobs unsent" do
     before do
       allow(mock_client).to receive(:send_batch).and_return([])

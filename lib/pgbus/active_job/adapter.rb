@@ -96,8 +96,10 @@ module Pgbus
       # single path's bookkeeping, a batch member outside its own batch's
       # scope (Pgbus.batch opens one for its block, issue #683; an outer
       # scope's flush could come after the sweep reads the batch as stalled),
-      # and a pgbus class that opts out (Workflow::StepJob, whose enqueue failure
-      # is reported and swept, never raised; pgbus_coalesce? is internal).
+      # and a class the scope may not hold: one that declares
+      # `pgbus_coalesce false` (Workflow::StepJob, whose enqueue failure is
+      # reported and swept, never raised), or, with config.coalesce_default
+      # false, one that does not declare `pgbus_coalesce true` (issue #689).
       # Serializing now raises an unserializable argument here, as outside a
       # scope, and keeps a later change to the job or its arguments out of
       # the message.
@@ -106,10 +108,18 @@ module Pgbus
         return false if active_job.executions.to_i.positive?
         return false if active_job.is_a?(DeployTaskRunId) && active_job.deploy_task_run_id
         return false if member_batch_id(active_job) != scope.batch_id
-        return false if active_job.class.respond_to?(:pgbus_coalesce?) && !active_job.class.pgbus_coalesce?
+        return false unless coalesce_class?(active_job.class)
 
         payload = tag_bulk_member(FairShare.inject_metadata(active_job, Serializer.serialize_job_hash(active_job)), active_job)
         scope.push(self, active_job, payload, due_at)
+      end
+
+      # A class with pgbus_coalesce? (Coalesce::JobMixin's, or an app's own
+      # hook from before #689, which then wins over the macro and the config)
+      # answers for itself; a class without it follows config.coalesce_default,
+      # like one that declares nothing.
+      def coalesce_class?(klass)
+        klass.respond_to?(:pgbus_coalesce?) ? klass.pgbus_coalesce? : Pgbus.configuration.coalesce_default
       end
 
       # Whole seconds until +job+ is due, 0 for a job due now.

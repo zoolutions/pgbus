@@ -103,6 +103,7 @@ module Pgbus
         include Pgbus::ActiveJob::DeployTaskRunId
         include Pgbus::ActiveJob::CurrentAttributes
         include Pgbus::VisibilityHeartbeat::JobMixin
+        include Pgbus::ActiveJob::Coalesce::JobMixin
       end
     end
 

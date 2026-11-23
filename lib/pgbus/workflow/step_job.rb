@@ -22,9 +22,17 @@ module Pgbus
 
       # Sent at once inside Pgbus.coalesce (issue #682): a step enqueue that
       # fails is reported and swept (WorkflowStep#enqueue_step_job), so it
-      # must not become the scope's on_failure. Internal to pgbus, not an
-      # opt-out for application jobs.
-      def self.pgbus_coalesce? = false
+      # must not become the scope's on_failure. Included here as well as on
+      # ActiveJob::Base, so the setting holds without the engine (issue #689).
+      include Pgbus::ActiveJob::Coalesce::JobMixin
+
+      pgbus_coalesce false
+
+      # The adapter reads pgbus_coalesce?. Defined on this class, like
+      # pgbus_visibility_heartbeat_enabled above, so an app's own
+      # pgbus_coalesce? on ActiveJob::Base (the hook before #689) cannot
+      # shadow the mixin's reader; it answers what the macro set.
+      def self.pgbus_coalesce? = pgbus_coalesce_enabled == true
 
       def perform(step_id)
         StepExecution.new(step_id).call

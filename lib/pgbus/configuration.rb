@@ -314,6 +314,15 @@ module Pgbus
     # holds past it while a transaction is open on the batch's connection.
     attr_accessor :coalesce_chunk_size
 
+    # Whether a Pgbus.coalesce scope holds a job class that declares nothing
+    # (issue #689). true: every bulk-eligible job is held unless its class
+    # declares `pgbus_coalesce false`. false: only classes that declare
+    # `pgbus_coalesce true` are held; every other job is sent at its
+    # perform_later, so its caller sees the real outcome. A class that
+    # defines pgbus_coalesce? itself (the hook before #689) answers for
+    # itself whatever this says.
+    attr_accessor :coalesce_default
+
     # The MCP server's workflow write tools (issue #550): pgbus_workflow_resume,
     # _cancel, _skip_step, _resume_at, _run_now and _signal. Off by default, and
     # then they are never built, so tools/list cannot show them. Read once, when
@@ -517,6 +526,7 @@ module Pgbus
       @web_filter_sensitive = true
       @web_queue_metrics_chunk_size = 100
       @coalesce_chunk_size = 1_000
+      @coalesce_default = true
       @deprecation_warned = Set.new
 
       # HTTP health endpoints — nil port disables the standalone server.
@@ -1144,6 +1154,7 @@ module Pgbus
         raise Pgbus::ConfigurationError, "coalesce_chunk_size must be a positive integer"
       end
 
+      raise Pgbus::ConfigurationError, "coalesce_default must be true or false" unless [true, false].include?(coalesce_default)
       raise Pgbus::ConfigurationError, "require_primary must be true or false" unless [true, false].include?(require_primary)
       raise Pgbus::ConfigurationError, "mcp_write_tools must be true or false" unless [true, false].include?(mcp_write_tools)
 
