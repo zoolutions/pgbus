@@ -1,0 +1,27 @@
+lib/pgbus/active_job/coalesce.rb
+  s_f41c0e321fd926::t_610b99b75ec13c 1-132,134-178,180-222
+spec/pgbus/active_job/coalesce_spec.rb
+  s_f41c0e321fd926::t_e2473dec3e967b 203,206-207,216,218
+  s_f41c0e321fd926::t_abcb5ff3b90ca2 1-194,196-202,204-205,208-215,217,219-223,225-236,238-246,248-252,254-267,269-272,274-364,368-467,469-540,546-547,556-569,574,581-586
+  s_f41c0e321fd926::t_3ac290fe3427c1 253
+spec/integration/coalesce_spec.rb
+  s_f41c0e321fd926::t_3ce72c32cab533 1-13,20-22,32-50,52-56,59-230
+spec/pgbus/engine_spec.rb
+  s_f41c0e321fd926::t_9bbf3bb0d45415 331-360
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "be99d8df00a61185b1ffcfd70d46d7b80dc7e649",
+  "prompts": {},
+  "sessions": {
+    "s_f41c0e321fd926": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "412fa30d-6104-4070-a691-16b4bf4f1626",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
