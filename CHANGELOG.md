@@ -2,15 +2,21 @@
 
 ### Added
 
+### Changed
+
+### Fixed
+
+### Security
+
+## [1.1.0] - 2026-11-24
+
+### Added
+
 - **`pgbus_coalesce false/true` and `config.coalesce_default`** (#689). A job class declares `pgbus_coalesce false` to be sent at its `perform_later` inside `Pgbus.coalesce` and the request middleware, so a caller that reads `successfully_enqueued?` or rescues the send sees the real outcome. `config.coalesce_default = false` holds only classes that declare `pgbus_coalesce true`, in a batch's own scope too. The setting is inherited by subclasses. `Workflow::StepJob` declares `pgbus_coalesce false` and defines its `pgbus_coalesce?` reader on itself, so an application's base-class hook cannot shadow it; a class that still defines `pgbus_coalesce?` itself keeps working, and that override wins over the macro and the config for it and its subclasses, so remove it when adopting them.
 
 ### Changed
 
 - **PGMQ: vendored schema v1.13.2 (issue #676).** `pgmq.create()` on an existing queue no longer waits for the queue's open transactions: it ran `CREATE INDEX IF NOT EXISTS` on the queue and archive tables, which takes a `SHARE` lock before it checks for the index, so a process ensuring its queues at boot waited for every open transaction that had sent to one of them, and later sends queued behind it. The index DDL now runs only when `to_regclass()` finds the index missing, and the `pg_monitor` grants only when it lacks them. The fix covers `pgmq.create()` only: other DDL a starting process runs on a queue still waits for its open writers, among it re-arming a NOTIFY trigger (one missing or out of date, and a stream queue's on every cold start) and the `group_mode` FIFO and `fair_share` indexes. Under the default configuration, a job queue whose trigger is in place no longer waits. Fresh embedded installs get 1.13.2. Existing *embedded* installs: `rake pgbus:pgmq:status`, then `rails generate pgbus:upgrade_pgmq` + `rails db:migrate` (`rails db:migrate:pgbus` on a separate-database install); the hop changes functions only, so it carries no fixup. An `:extension` install gets 1.13.2 from `ALTER EXTENSION pgmq UPDATE`. Refs #676.
-
-### Fixed
-
-### Security
 
 ## [1.0.0] - 2026-11-21
 
