@@ -120,9 +120,8 @@ RSpec.describe "Streams: durable broadcasts wait for a joinable transaction's co
       expect(Pgbus::StreamQueue.stream?(full_name)).to be(true)
     end
 
-    it "is memoized only at the commit of the transaction it rode" do
-      client = Pgbus.client
-      memo = client.instance_variable_get(:@stream_indexes_created)
+    it "is registered and memoized only after the commit of the caller's transaction" do
+      memo = Pgbus.client.instance_variable_get(:@streams_registered)
       ActiveRecord::Base.transaction do
         fresh.broadcast("<x/>", durable: true)
         expect(memo[fresh.name]).to be_nil
@@ -131,6 +130,32 @@ RSpec.describe "Streams: durable broadcasts wait for a joinable transaction's co
       expect(memo[fresh.name]).to be(true)
       Pgbus::StreamQueue.reset_cache!
       expect(Pgbus::StreamQueue.stream?(full_name)).to be(true)
+    end
+
+    # The row is not written inside the caller's transaction, so another
+    # thread recording the same stream does not wait for that commit.
+    it "does not make another thread's first broadcast wait for the caller's commit" do
+      inside = Queue.new
+      release = Queue.new
+      caller = Thread.new do # rubocop:disable ThreadSafety/NewThread -- joined below
+        ActiveRecord::Base.connection_pool.with_connection do
+          ActiveRecord::Base.transaction do
+            Pgbus.stream(fresh.name).broadcast("<a/>", durable: true)
+            inside << true
+            release.pop
+          end
+        end
+      end
+      inside.pop
+
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      Pgbus::StreamQueue.record!(full_name)
+      waited = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
+
+      expect(waited).to be < 1.0
+    ensure
+      release << true
+      caller&.join
     end
   end
 

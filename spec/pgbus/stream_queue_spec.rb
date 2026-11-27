@@ -126,43 +126,59 @@ RSpec.describe Pgbus::StreamQueue do
       expect(connection).to have_received(:execute).once
     end
 
-    # A write that rode the caller's open transaction is not durable yet: it
-    # rolls back with the caller. record! says so, and the memo (which other
-    # threads read) does not claim the name before the commit.
-    context "when the write rides the caller's open transaction" do
-      before { allow(connection).to receive(:transaction_open?).and_return(true) }
+    # Issue #695: inside the caller's open transaction nothing is written
+    # yet. The row is inserted after that commit (never on its rollback), so a
+    # rollback cannot take back a registration taken for done, and no other
+    # thread waits on the row's lock until the commit.
+    context "when the caller has a transaction open on the connection" do
+      let(:hooks) { [] }
 
-      it "returns :pending" do
-        allow(Pgbus::OpenTransaction).to receive(:after_commit)
-        expect(described_class.record!("pgbus_chat_42")).to eq(:pending)
+      let(:transaction) { double("transaction", joinable?: true) }
+
+      before do
+        allow(connection).to receive_messages(transaction_open?: true, current_transaction: transaction)
+        allow(Pgbus::OpenTransaction).to receive(:after_commit).with(connection) { |_conn, &hook| hooks << hook }
       end
 
-      it "adds the name to a warm memo and runs the block at the commit" do
-        hooks = []
-        allow(Pgbus::OpenTransaction).to receive(:after_commit).with(connection) { |_conn, &hook| hooks << hook }
+      # The fixture transaction of transactional tests never commits: the row
+      # is written into it at once, as OpenTransaction.defer runs work at once.
+      it "writes at once into a transaction that is not joinable" do
+        allow(transaction).to receive(:joinable?).and_return(false)
+        durable = false
+
+        expect(described_class.record!("pgbus_chat_42") { durable = true }).to be(true)
+        expect(connection).to have_received(:execute)
+        expect(durable).to be(true)
+        expect(hooks).to be_empty
+      end
+
+      it "returns :pending and writes nothing yet" do
+        expect(described_class.record!("pgbus_chat_42")).to eq(:pending)
+        expect(connection).not_to have_received(:execute)
+      end
+
+      it "writes after the commit, then adds the name to a warm memo and runs the block" do
         relation = instance_double(ActiveRecord::Relation, pluck: [])
         allow(described_class).to receive(:all).and_return(relation)
         described_class.all_names
         durable = false
 
         described_class.record!("pgbus_chat_42") { durable = true }
-        expect(durable).to be(false)
-        expect(described_class.stream?("pgbus_chat_42")).to be(false)
+        expect([durable, described_class.stream?("pgbus_chat_42")]).to eq([false, false])
 
+        allow(connection).to receive(:transaction_open?).and_return(false)
         hooks.each(&:call)
-        expect(durable).to be(true)
-        expect(described_class.stream?("pgbus_chat_42")).to be(true)
+        expect(connection).to have_received(:execute).with(a_string_matching(/INSERT INTO "pgbus_stream_queues"/))
+        expect([durable, described_class.stream?("pgbus_chat_42")]).to eq([true, true])
       end
 
-      it "leaves a warm memo without the name" do
-        allow(Pgbus::OpenTransaction).to receive(:after_commit)
-        relation = instance_double(ActiveRecord::Relation, pluck: [])
-        allow(described_class).to receive(:all).and_return(relation)
-        described_class.all_names
+      it "reports a failed deferred write instead of raising into the committing caller" do
+        allow(connection).to receive(:execute).and_raise(ActiveRecord::StatementInvalid, "db down")
+        durable = false
+        described_class.record!("pgbus_chat_42") { durable = true }
 
-        described_class.record!("pgbus_chat_42")
-
-        expect(described_class.stream?("pgbus_chat_42")).to be(false)
+        expect { hooks.each(&:call) }.not_to raise_error
+        expect(durable).to be(false)
       end
     end
 

@@ -46,11 +46,18 @@ module Pgbus
       # Errors are swallowed — a registry hiccup must never abort a broadcast.
       # Returns true on a successful write, false when the table is absent or
       # the insert failed (so callers like `backfill!` can report accurately),
-      # and :pending (truthy) when the write rode the caller's open
-      # transaction: it is visible at that commit and gone on its rollback
-      # (issue #695). The optional block runs once the row is durable: at
-      # once, or at that commit (never on a rollback or a failed write);
-      # `ensure_stream_queue` memoizes the stream in it.
+      # and :pending when the caller has a joinable transaction open on this
+      # connection (issue #695). Then nothing is written yet: the insert runs
+      # after that transaction commits, and never on its rollback. A
+      # transaction that is not joinable (the fixture transaction of
+      # transactional tests, which never commits) is written into at once, as
+      # OpenTransaction.defer runs work at once there. Writing it inside the
+      # caller's transaction would let a rollback take the row back after the
+      # stream was taken for registered, and would hold the row's lock, so
+      # another thread recording the same stream waited for that commit. The
+      # optional block runs once the row is written (at once, or after that
+      # commit; never on a rollback or a failed write); `ensure_stream_queue`
+      # memoizes the stream in it.
       #
       # Deliberately raw SQL rather than `upsert(unique_by:)` (issue #401):
       # Rails resolves `unique_by:` through the pool's schema cache, which
@@ -69,19 +76,12 @@ module Pgbus
         return false unless table_exists?
 
         connection_pool.with_connection do |conn|
-          conn.execute(
-            "INSERT INTO #{conn.quote_table_name(table_name)} (queue_name) " \
-            "VALUES (#{conn.quote(queue_name)}) ON CONFLICT (queue_name) DO NOTHING"
-          )
-          # Not durable until the caller commits: the memo, which other
-          # threads read, must not claim a name a rollback takes back.
-          if conn.transaction_open?
-            OpenTransaction.after_commit(conn) { registered(queue_name, &on_durable) }
+          if conn.transaction_open? && conn.current_transaction.joinable?
+            OpenTransaction.after_commit(conn) { insert(queue_name, &on_durable) }
             next :pending
           end
 
-          registered(queue_name, &on_durable)
-          true
+          insert_row(conn, queue_name, &on_durable)
         end
       rescue ActiveRecord::ActiveRecordError => e
         Pgbus.logger.debug { "[Pgbus] Failed to record stream queue #{queue_name}: #{e.message}" }
@@ -150,7 +150,7 @@ module Pgbus
         missing = fingerprint_matched_names - all_names
         return 0 if missing.empty?
 
-        registered = missing.count { |name| record!(name) }
+        registered = missing.count { |name| record!(name) == true }
         reset_cache! if registered.positive?
         registered
       end
@@ -185,6 +185,30 @@ module Pgbus
       end
 
       private
+
+      # The deferred write, after the caller's commit. It runs inside the
+      # committing caller's callbacks, so it reports and never raises. Inside
+      # a transaction that is still open here (a block committed inside a
+      # non-joinable one, the fixture transaction of transactional tests) it
+      # writes there.
+      def insert(queue_name, &)
+        connection_pool.with_connection { |conn| insert_row(conn, queue_name, &) }
+      rescue ActiveRecord::ActiveRecordError => e
+        Pgbus.logger.debug { "[Pgbus] Failed to record stream queue #{queue_name}: #{e.message}" }
+        false
+      rescue StandardError => e
+        log_record_failure(queue_name, e)
+        false
+      end
+
+      def insert_row(conn, queue_name, &)
+        conn.execute(
+          "INSERT INTO #{conn.quote_table_name(table_name)} (queue_name) " \
+          "VALUES (#{conn.quote(queue_name)}) ON CONFLICT (queue_name) DO NOTHING"
+        )
+        registered(queue_name, &)
+        true
+      end
 
       # The row is durable: keep the in-process cache consistent with it so a
       # subsequent stream? check reflects this registration without a

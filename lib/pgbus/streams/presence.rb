@@ -185,13 +185,6 @@ module Pgbus
           end
         end
 
-        # The PG::Connection under the adapter. Run SQL through exec_params,
-        # not on this: the adapter's lock and the lease are released once it
-        # is returned.
-        def connection
-          with_adapter(&:raw_connection)
-        end
-
         # Runs one statement on the adapter's PG::Connection while holding
         # the adapter's lock (issue #566). raw_connection takes that lock
         # only to hand the connection out; on a pinned pool (transactional

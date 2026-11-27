@@ -10,8 +10,8 @@ module Pgbus
       def name: () -> String
       def durable?: () -> bool
 
-      # The msg_id when sent at once; nil when deferred to after_commit, or
-      # when coalesced.
+      # The msg_id when sent at once; nil when deferred to the commit of the
+      # caller's open, joinable transaction, or when coalesced.
       def broadcast: (String payload, ?visible_to: Symbol?, ?durable: bool?, ?exclude: String?, ?event: String?,
                       ?coalesce: (bool | Numeric)?, ?target: String?) -> Integer?
       def broadcast_render: (target: String, ?action: Symbol, ?renderable: untyped, ?visible_to: Symbol?, ?durable: bool?,

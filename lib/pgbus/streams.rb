@@ -206,8 +206,8 @@ module Pgbus
       # `action` defaults to :replace. `target` is required. `exclude:`,
       # `visible_to:`, and `durable:` are forwarded to #broadcast unchanged,
       # so actor-echo suppression and audience filtering compose. Returns
-      # whatever #broadcast returns (msg_id, or nil when deferred to
-      # after_commit inside a transaction).
+      # whatever #broadcast returns (msg_id, or nil when deferred to the
+      # commit of the caller's open, joinable transaction).
       #
       # See Pgbus::Streams::Renderer for the renderable-resolution order.
       # Components that need URL helpers or a full view context should be

@@ -18,11 +18,10 @@ module Pgbus
     # Called from `Pgbus.stream(name).broadcast(...)` on first publish per
     # stream and from the streamer on first subscription per stream.
     #
-    # Returns true once the setup is settled and memoized, false when part of
-    # it rode the caller's open transaction (the index DDL on the shared
-    # ActiveRecord connection, or the registry row): a rollback can take that
-    # back, so it is not memoized before the commit and the next call runs it
-    # again, the rule `@queues_created` follows (issue #695).
+    # Returns true once the setup is settled and memoized, false while part of
+    # it waits on the caller's open transaction (issue #695): the index DDL
+    # rode it on the shared ActiveRecord connection, or the registry row is
+    # written after its commit. A rollback leaves that part to the next call.
     module EnsureStreamQueue
       def ensure_stream_queue(stream_name)
         full_name = config.queue_name(stream_name)
@@ -42,10 +41,23 @@ module Pgbus
         # requires a roundtrip and a brief ACCESS SHARE lock on the archive
         # table. Broadcast-per-after_commit loops can hit this 1000x/sec on
         # the same stream, so memoize per-process after the first success.
-        # The StreamQueue registration shares this memo — both are one-time
-        # per stream per process and must both survive a first-broadcast.
-        return true if @stream_indexes_created[stream_name]
+        # The StreamQueue registration has its own memo (issue #695): its row
+        # waits for the caller's commit, so it is memoized only once written.
+        ensure_stream_archive_index(full_name, stream_name) unless @stream_indexes_created[stream_name]
+        register_stream_queue(full_name, stream_name) unless @streams_registered[stream_name]
+        stream_queue_settled?(stream_name)
+      end
 
+      private
+
+      def stream_queue_settled?(stream_name)
+        @stream_indexes_created.key?(stream_name) && @streams_registered.key?(stream_name)
+      end
+
+      # Index DDL that rode the caller's transaction (the shared ActiveRecord
+      # connection) is not memoized: a rollback takes it back, the rule
+      # `@queues_created` follows.
+      def ensure_stream_archive_index(full_name, stream_name)
         rides_caller_transaction = queue_ddl_rides_caller_transaction?
         sanitized = QueueNameValidator.sanitize!(full_name)
         sql = <<~SQL
@@ -68,20 +80,19 @@ module Pgbus
           raise unless duplicate_relation_error?(e)
         end
 
-        # Record the physical queue name so maintenance (stream-archive prune,
-        # orphan sweep, compact_archives) and wildcard workers can tell this
-        # queue apart from a job queue. No-ops on unmigrated installs.
-        # Memoized once the registry row is durable: now, or at the caller's
-        # commit when the row rode its transaction (never on its rollback).
-        # Index DDL that rode the caller's transaction (the shared connection)
-        # is never memoized here.
-        Pgbus::StreamQueue.record!(full_name) do
-          @stream_indexes_created[stream_name] = true unless rides_caller_transaction
-        end
-        @stream_indexes_created.fetch(stream_name, false)
+        @stream_indexes_created[stream_name] = true unless rides_caller_transaction
       end
 
-      private
+      # Record the physical queue name so maintenance (stream-archive prune,
+      # orphan sweep, compact_archives) and wildcard workers can tell this
+      # queue apart from a job queue. Memoized once the row is written: now,
+      # or after the caller's commit (never on its rollback, so the next
+      # broadcast records it again). An unmigrated install or a failed insert
+      # (false) is memoized too, so it is not retried on every broadcast.
+      def register_stream_queue(full_name, stream_name)
+        result = Pgbus::StreamQueue.record!(full_name) { @streams_registered[stream_name] = true }
+        @streams_registered[stream_name] = true if result == false
+      end
 
       # Creates the bare stream queue + forces NOTIFY throttle 0. Retries once
       # when a process-local `@queues_created` memo is stale relative to the
@@ -122,6 +133,7 @@ module Pgbus
       def forget_stream_queue_memo!(full_name, stream_name)
         @queues_created.delete(full_name)
         @stream_indexes_created.delete(stream_name)
+        @streams_registered.delete(stream_name)
       end
 
       def missing_pgmq_queue_error?(error)

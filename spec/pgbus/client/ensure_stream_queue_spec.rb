@@ -76,11 +76,16 @@ RSpec.describe Pgbus::Client::EnsureStreamQueue do
 
     # A registration inside the caller's open transaction can still roll back,
     # so it is not memoized: the next ensure records it again.
-    # The memo is set by the block record! runs once the row is durable: at
-    # once, or at the caller's commit (never on its rollback).
-    it "memoizes only once record! reports the row durable" do
+    # Issue #695: the registry row is memoized by the block record! runs once
+    # it is written, at once or after the caller's commit (never on a
+    # rollback); the archive index has its own memo and is not redone.
+    it "records again until the registry row is written, without redoing the index" do
       hooks = []
-      allow(Pgbus::StreamQueue).to receive(:record!) { |_name, &on_durable| hooks << on_durable }
+      allow(Pgbus::StreamQueue).to receive(:record!) do |_name, &on_durable|
+        hooks << on_durable
+        :pending
+      end
+      allow(raw_conn).to receive(:exec)
 
       expect(client.ensure_stream_queue("chat")).to be(false)
       expect(client.ensure_stream_queue("chat")).to be(false)
@@ -88,18 +93,34 @@ RSpec.describe Pgbus::Client::EnsureStreamQueue do
       expect(client.ensure_stream_queue("chat")).to be(true)
 
       expect(Pgbus::StreamQueue).to have_received(:record!).with("pgbus_test_chat").twice
+      expect(raw_conn).to have_received(:exec).with(a_string_matching(/CREATE INDEX/)).once
+    end
+
+    # An unmigrated install (no pgbus_stream_queues) or a failing insert is
+    # memoized too, as before: not retried on every broadcast.
+    it "memoizes when record! returns false" do
+      allow(Pgbus::StreamQueue).to receive(:record!).and_return(false)
+      allow(raw_conn).to receive(:exec)
+
+      client.ensure_stream_queue("chat")
+      expect(client.ensure_stream_queue("chat")).to be(true)
+
+      expect(Pgbus::StreamQueue).to have_received(:record!).once
+      expect(raw_conn).to have_received(:exec).with(a_string_matching(/CREATE INDEX/)).once
     end
 
     # On the shared ActiveRecord connection the index DDL rides the caller's
     # transaction too (the @queues_created rule in Client).
-    it "does not memoize while the DDL rides the caller's transaction" do
+    it "redoes the index while its DDL rides the caller's transaction" do
       allow(client).to receive(:queue_ddl_rides_caller_transaction?).and_return(true, false)
-      allow(Pgbus::StreamQueue).to receive(:record!) { |_name, &on_durable| on_durable.call }
+      allow(raw_conn).to receive(:exec)
 
       expect(client.ensure_stream_queue("chat")).to be(false)
       expect(client.ensure_stream_queue("chat")).to be(true)
+      client.ensure_stream_queue("chat")
 
-      expect(Pgbus::StreamQueue).to have_received(:record!).twice
+      expect(raw_conn).to have_received(:exec).with(a_string_matching(/CREATE INDEX/)).twice
+      expect(Pgbus::StreamQueue).to have_received(:record!).once
     end
 
     it "records the registry entry only once per stream per process" do
