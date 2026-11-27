@@ -43,6 +43,16 @@ RSpec.describe Pgbus::Streams do
         expect(client).to have_received(:ensure_stream_queue).once
       end
 
+      # The client answers false while the stream's setup could still roll back
+      # with the caller's transaction (issue #695); the stream asks again.
+      it "ensures again while the client reports the setup as not settled" do
+        allow(client).to receive(:ensure_stream_queue).and_return(false, true)
+        stream.broadcast("A")
+        stream.broadcast("B")
+        stream.broadcast("C")
+        expect(client).to have_received(:ensure_stream_queue).twice
+      end
+
       it "carries exclude: in the wrapped payload for actor-echo suppression" do
         stream.broadcast("<turbo-stream>X</turbo-stream>", exclude: "conn-abc123")
         expect(client).to have_received(:send_stream_message)
@@ -181,6 +191,9 @@ RSpec.describe Pgbus::Streams do
         Class.new do
           def initialize = (@callbacks = [])
           def open? = true
+          def joinable? = @joinable != false
+          attr_writer :joinable
+
           def after_commit(&blk) = (@callbacks << blk)
           def run_callbacks! = @callbacks.each(&:call)
           attr_reader :callbacks
@@ -211,6 +224,18 @@ RSpec.describe Pgbus::Streams do
         stream.broadcast("x", coalesce: 50, target: "t")
         # No run_callbacks! → simulates rollback.
         expect(coalescer).not_to have_received(:submit)
+      end
+
+      # Issue #695: a transaction that is not joinable (the fixture
+      # transaction of an app's transactional tests) never commits, so a
+      # submit deferred to it never ran. It submits now, as Pgbus.signal does.
+      it "submits at once inside a transaction that is not joinable" do
+        transaction.joinable = false
+
+        stream.broadcast("x", coalesce: 50, target: "t")
+
+        expect(coalescer).to have_received(:submit).with(hash_including(target: "t"))
+        expect(transaction.callbacks).to be_empty
       end
 
       # Pins the ephemeral half of the gating contract (issue #391 Q&A):
@@ -382,8 +407,10 @@ RSpec.describe Pgbus::Streams do
           end
 
           attr_accessor :open
+          attr_writer :joinable
 
           def open?      = @open
+          def joinable?  = @joinable != false
           def closed?    = !@open
           def after_commit(&block) = @after_commit << block
           def after_rollback(&block) = @after_rollback << block
@@ -397,7 +424,7 @@ RSpec.describe Pgbus::Streams do
       end
 
       # The probe reads connection_pool.active_connection? — the existing
-      # lease, never a fresh checkout (see Stream#current_open_transaction).
+      # lease, never a fresh checkout (see Pgbus::OpenTransaction.current).
       let(:ar_pool) { double("ActiveRecord::ConnectionAdapters::ConnectionPool", active_connection?: ar_connection) }
       let(:ar_base) { double("ActiveRecord::Base", connection_pool: ar_pool) }
 
@@ -447,6 +474,19 @@ RSpec.describe Pgbus::Streams do
         expect(stream.broadcast("X")).to be_nil
       end
 
+      # Issue #695: the fixture transaction of an app's transactional tests is
+      # not joinable and never commits; a broadcast deferred to it was lost.
+      context "when the transaction is not joinable" do
+        it "sends at once and registers nothing on it" do
+          transaction.joinable = false
+
+          expect(stream.broadcast("X")).to eq(1248)
+          expect(client).to have_received(:send_stream_message).with("chat", { "html" => "X" })
+          transaction.commit!
+          expect(client).to have_received(:send_stream_message).once
+        end
+      end
+
       context "when the transaction is already closed" do
         it "falls back to synchronous send_stream_message" do
           transaction.open = false
@@ -477,6 +517,64 @@ RSpec.describe Pgbus::Streams do
           expect { transaction.commit! }.to raise_error("boom")
           expect(first).to eq(:ok)
         end
+      end
+    end
+
+    # Issue #695: Rails 7.1 transactions have no public after_commit. The
+    # broadcast registers a commit hook as a transaction record instead,
+    # which ActiveRecord calls committed! / rolledback! on.
+    describe "#broadcast inside a Rails 7.1 transaction (no after_commit)" do
+      subject(:stream) { described_class.new("chat", client: client) }
+
+      let(:client) do
+        double("Pgbus::Client", ensure_stream_queue: nil, send_stream_message: 1248,
+                                stream_current_msg_id: 1247, read_after: [])
+      end
+      let(:transaction) do
+        Class.new do
+          def open? = true
+          def joinable? = true
+        end.new
+      end
+      let(:records) { [] }
+
+      before do
+        tx = transaction
+        added = records
+        conn = Object.new
+        conn.define_singleton_method(:current_transaction) { tx }
+        conn.define_singleton_method(:add_transaction_record) { |record| added << record }
+        pool = Object.new
+        pool.define_singleton_method(:active_connection?) { conn }
+        ar_base = Class.new
+        ar_base.define_singleton_method(:connection_pool) { pool }
+        stub_const("ActiveRecord::Base", ar_base)
+      end
+
+      it "defers the send to the commit hook and sends on committed!" do
+        expect(stream.broadcast("X")).to be_nil
+        expect(client).not_to have_received(:send_stream_message)
+
+        records.each(&:committed!)
+        expect(client).to have_received(:send_stream_message).with("chat", { "html" => "X" })
+      end
+
+      it "sends nothing on rolledback!" do
+        stream.broadcast("X")
+        records.each { |record| record.rolledback!(force_restore_state: false) }
+
+        expect(client).not_to have_received(:send_stream_message)
+      end
+
+      it "defers a durable coalesced submit the same way" do
+        coalescer = instance_spy(Pgbus::Streams::Coalescer)
+        allow(Pgbus::Streams).to receive(:coalescer).and_return(coalescer)
+
+        stream.broadcast("X", coalesce: 50, target: "t")
+        expect(coalescer).not_to have_received(:submit)
+
+        records.each(&:committed!)
+        expect(coalescer).to have_received(:submit).with(hash_including(target: "t"))
       end
     end
 

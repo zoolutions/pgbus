@@ -16,6 +16,9 @@ RSpec.describe Pgbus::Streams::Presence do
   let(:ar_connection) do
     double("ActiveRecord::ConnectionAdapters::Connection", raw_connection: raw_connection, lock: Monitor.new)
   end
+  let(:ar_pool) do
+    double("ConnectionPool").tap { |pool| allow(pool).to receive(:with_connection).and_yield(ar_connection) }
+  end
 
   before do
     # Force the single-database path (Pgbus.configuration.connects_to == nil)
@@ -24,7 +27,8 @@ RSpec.describe Pgbus::Streams::Presence do
     # spec/pgbus/streams/presence_adapter_lock_spec.rb.
     allow(Pgbus.configuration).to receive(:connects_to).and_return(nil)
     stub_const("ActiveRecord::Base", Class.new)
-    allow(ActiveRecord::Base).to receive(:connection).and_return(ar_connection)
+    # Presence leases its adapter through connection_pool.with_connection (issue #695).
+    allow(ActiveRecord::Base).to receive(:connection_pool).and_return(ar_pool)
     # The member-keyed specs below describe a table without the seat columns
     # (pre-#515 schema); the seat specs flip this to true.
     allow(described_class).to receive_messages(seats_supported?: false, seats_supported_now?: false)

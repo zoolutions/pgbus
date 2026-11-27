@@ -90,9 +90,10 @@ RSpec.describe "Streams: presence statements hold the adapter lock", :integratio
   end
 
   it "gives every thread the same PG::Connection (the shape this guards)" do
-    main_raw = presence_class.connection
+    raw = -> { presence_class.send(:with_adapter, &:raw_connection) }
+    main_raw = raw.call
 
-    expect(spawn { presence_class.connection }.value).to equal(main_raw)
+    expect(spawn { raw.call }.value).to equal(main_raw)
   end
 
   it "keeps the adapter's lock until a sweep's statement has finished" do

@@ -105,9 +105,9 @@ RSpec.describe "Streams: the coalescer flush returns its connection lease", :int
 
     it "records the stream on the calling thread before broadcast returns" do
       recorded_on = []
-      allow(Pgbus::StreamQueue).to receive(:record!).and_wrap_original do |original, name|
+      allow(Pgbus::StreamQueue).to receive(:record!).and_wrap_original do |original, name, &on_durable|
         recorded_on << [name, Thread.current]
-        original.call(name)
+        original.call(name, &on_durable)
       end
 
       broadcast_coalesced

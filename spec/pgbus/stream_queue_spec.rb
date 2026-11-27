@@ -19,6 +19,7 @@ RSpec.describe Pgbus::StreamQueue do
       allow(connection).to receive(:quote_table_name) { |name| %("#{name}") }
       allow(connection).to receive(:quote) { |value| "'#{value}'" }
       allow(connection).to receive(:execute)
+      allow(connection).to receive(:transaction_open?).and_return(false)
     end
 
     it "hands out a frozen set" do
@@ -100,15 +101,103 @@ RSpec.describe Pgbus::StreamQueue do
       allow(connection).to receive(:quote_table_name) { |name| %("#{name}") }
       allow(connection).to receive(:quote) { |value| "'#{value}'" }
       allow(connection).to receive(:execute)
+      allow(connection).to receive(:transaction_open?).and_return(false)
     end
 
     # Issue #694: record! runs on the coalescer flush thread, which no Rails
     # executor wraps, so a bare `connection` there was never returned.
+    it "runs the block at once after a write outside any transaction" do
+      durable = false
+      described_class.record!("pgbus_chat_42") { durable = true }
+      expect(durable).to be(true)
+    end
+
+    it "does not run the block when the write fails" do
+      allow(connection).to receive(:execute).and_raise(ActiveRecord::StatementInvalid, "db down")
+      durable = false
+      described_class.record!("pgbus_chat_42") { durable = true }
+      expect(durable).to be(false)
+    end
+
     it "writes inside one connection_pool.with_connection" do
       expect(described_class.record!("pgbus_chat_42")).to be(true)
 
       expect(pool.leases).to eq(1)
       expect(connection).to have_received(:execute).once
+    end
+
+    # Issue #695: inside the caller's open transaction nothing is written
+    # yet. The row is inserted after that commit (never on its rollback), so a
+    # rollback cannot take back a registration taken for done, and no other
+    # thread waits on the row's lock until the commit.
+    context "when the caller has a transaction open on the connection" do
+      let(:hooks) { [] }
+
+      let(:transaction) { double("transaction", joinable?: true) }
+
+      before do
+        allow(connection).to receive_messages(transaction_open?: true, current_transaction: transaction)
+        allow(Pgbus::OpenTransaction).to receive(:after_commit).with(connection) { |_conn, &hook| hooks << hook }
+      end
+
+      # The fixture transaction of transactional tests never commits: the row
+      # is written into it at once, as OpenTransaction.defer runs work at once.
+      it "writes at once into a transaction that is not joinable" do
+        allow(transaction).to receive(:joinable?).and_return(false)
+        durable = false
+
+        expect(described_class.record!("pgbus_chat_42") { durable = true }).to be(true)
+        expect(connection).to have_received(:execute)
+        expect(durable).to be(true)
+        expect(hooks).to be_empty
+      end
+
+      it "returns :pending and writes nothing yet" do
+        expect(described_class.record!("pgbus_chat_42")).to eq(:pending)
+        expect(connection).not_to have_received(:execute)
+      end
+
+      it "writes after the commit, then adds the name to a warm memo and runs the block" do
+        relation = instance_double(ActiveRecord::Relation, pluck: [])
+        allow(described_class).to receive(:all).and_return(relation)
+        described_class.all_names
+        durable = false
+
+        described_class.record!("pgbus_chat_42") { durable = true }
+        expect([durable, described_class.stream?("pgbus_chat_42")]).to eq([false, false])
+
+        allow(connection).to receive(:transaction_open?).and_return(false)
+        hooks.each(&:call)
+        expect(connection).to have_received(:execute).with(a_string_matching(/INSERT INTO "pgbus_stream_queues"/))
+        expect([durable, described_class.stream?("pgbus_chat_42")]).to eq([true, true])
+      end
+
+      # Every broadcast of a fresh stream inside the transaction asks again
+      # (nothing is memoized before the commit); one insert at the commit
+      # is enough.
+      it "registers one deferred insert per transaction and name" do
+        3.times { described_class.record!("pgbus_chat_42") }
+        described_class.record!("pgbus_room_7")
+
+        expect(hooks.size).to eq(2)
+      end
+
+      it "registers again for the next transaction" do
+        described_class.record!("pgbus_chat_42")
+        allow(connection).to receive(:current_transaction).and_return(double("next transaction", joinable?: true))
+        described_class.record!("pgbus_chat_42")
+
+        expect(hooks.size).to eq(2)
+      end
+
+      it "reports a failed deferred write instead of raising into the committing caller" do
+        allow(connection).to receive(:execute).and_raise(ActiveRecord::StatementInvalid, "db down")
+        durable = false
+        described_class.record!("pgbus_chat_42") { durable = true }
+
+        expect { hooks.each(&:call) }.not_to raise_error
+        expect(durable).to be(false)
+      end
     end
 
     it "inserts the physical queue name with ON CONFLICT DO NOTHING (idempotent)" do

@@ -81,16 +81,25 @@ module Pgbus
     # commits, so a model's `after_commit { Pgbus.signal(...) }` would never
     # send. Inside it, a `transaction do … end` block is joinable and its
     # commit runs the callbacks, as a production commit does.
-    def defer(&block)
+    def defer(&)
       transaction = current
       return nil unless transaction&.joinable?
 
+      after_commit(::ActiveRecord::Base.connection_pool.active_connection?, &)
+      transaction
+    end
+
+    # Runs +block+ after the COMMIT of +connection+'s current transaction
+    # (never on its rollback), for work that already rode that transaction
+    # and must not be taken for done before it commits (the stream registry
+    # row, issue #695). The caller checked that a transaction is open.
+    def after_commit(connection, &block)
+      transaction = connection.current_transaction
       if transaction.respond_to?(:after_commit)
         transaction.after_commit(&block)
       else
-        ::ActiveRecord::Base.connection_pool.active_connection?.add_transaction_record(CommitHook.new(block))
+        connection.add_transaction_record(CommitHook.new(block))
       end
-      transaction
     end
   end
 end

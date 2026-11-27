@@ -53,8 +53,9 @@ module Pgbus
         key = [stream_name, target]
         schedule = false
 
+        entry = Entry.new(payload, opts)
         @mutex.synchronize do
-          @buffer[key] = Entry.new(payload, opts)
+          @buffer[key] = entry
           unless @pending[key]
             @pending[key] = true
             schedule = true
@@ -65,18 +66,28 @@ module Pgbus
 
         begin
           @scheduler.schedule(window_ms / 1000.0) { flush_key(key, stream_name, target) }
-        rescue StandardError
-          # Nothing will flush this window: free the key, or no later submit
-          # would schedule it again.
-          @mutex.synchronize do
-            @pending.delete(key)
-            @buffer.delete(key)
-          end
+        rescue StandardError => e
+          unschedule(key, entry, e, stream_name, target)
           raise
         end
       end
 
       private
+
+      # Nothing will flush this window: free the key, or no later submit would
+      # schedule it again. A frame another submit buffered meanwhile found the
+      # key pending and returned normally; this caller gets the error, that
+      # one would lose its frame without a trace, so it is reported.
+      def unschedule(key, entry, error, stream_name, target)
+        dropped = @mutex.synchronize do
+          @pending.delete(key)
+          waiting = @buffer.delete(key)
+          waiting && !waiting.equal?(entry)
+        end
+        return unless dropped
+
+        ErrorReporter.report(error, { component: "streams.coalescer", stream: stream_name, target: target, dropped: true })
+      end
 
       def flush_key(key, stream_name, target)
         entry = @mutex.synchronize do

@@ -39,13 +39,32 @@ module Pgbus
     # load publishes its snapshot only if no such change happened while it ran.
     @names_generation = 0
 
+    # Per open transaction, the names whose insert already waits for its
+    # commit (issue #695): every broadcast of a fresh stream inside it asks
+    # again, and one insert at the commit is enough. Keyed weakly by the
+    # transaction, so a committed or rolled-back one is forgotten with it.
+    @deferred_lock = Mutex.new
+    @deferred = ObjectSpace::WeakKeyMap.new
+
     class << self
       # Inserts the physical queue name. Idempotent and cheap to call on
       # every broadcast; the caller (`ensure_stream_queue`) also memoizes
       # per-process, so the DB write happens once per stream per process.
       # Errors are swallowed — a registry hiccup must never abort a broadcast.
       # Returns true on a successful write, false when the table is absent or
-      # the insert failed (so callers like `backfill!` can report accurately).
+      # the insert failed (so callers like `backfill!` can report accurately),
+      # and :pending when the caller has a joinable transaction open on this
+      # connection (issue #695). Then nothing is written yet: the insert runs
+      # after that transaction commits, and never on its rollback. A
+      # transaction that is not joinable (the fixture transaction of
+      # transactional tests, which never commits) is written into at once, as
+      # OpenTransaction.defer runs work at once there. Writing it inside the
+      # caller's transaction would let a rollback take the row back after the
+      # stream was taken for registered, and would hold the row's lock, so
+      # another thread recording the same stream waited for that commit. The
+      # optional block runs once the row is written (at once, or after that
+      # commit; never on a rollback or a failed write); `ensure_stream_queue`
+      # memoizes the stream in it.
       #
       # Deliberately raw SQL rather than `upsert(unique_by:)` (issue #401):
       # Rails resolves `unique_by:` through the pool's schema cache, which
@@ -58,31 +77,22 @@ module Pgbus
       # The write runs inside `connection_pool.with_connection` (issue #694):
       # the coalescer flushes on a Concurrent IO thread no Rails executor
       # wraps, so a bare `connection` there was a lease nobody returned. A
-      # caller that already holds one (a request, a job, an open
-      # transaction) keeps writing on it.
-      def record!(queue_name)
+      # caller that already holds one (a request, a job, an open transaction)
+      # keeps its connection, and an open, joinable transaction on it gets the
+      # insert after its commit (above).
+      def record!(queue_name, &on_durable)
         return false unless table_exists?
 
         connection_pool.with_connection do |conn|
-          conn.execute(
-            "INSERT INTO #{conn.quote_table_name(table_name)} (queue_name) " \
-            "VALUES (#{conn.quote(queue_name)}) ON CONFLICT (queue_name) DO NOTHING"
-          )
-          # Keep the in-process cache consistent with the write so a subsequent
-          # stream? check reflects this registration without a re-query. Only
-          # update an ALREADY-LOADED cache — if @all_names is still nil (this
-          # process hasn't queried the registry yet), seeding it here would
-          # fabricate a one-entry set and silently hide every other
-          # already-registered stream until the next reset_cache!. Leaving it
-          # nil lets the next all_names call do a real load, which already
-          # includes this row since the insert above has committed. Taken
-          # while the connection is held; all_names loads outside the lock.
-          @names_lock.synchronize do
-            @names_generation += 1
-            @all_names = (@all_names | [queue_name]).freeze if @all_names
+          transaction = conn.current_transaction if conn.transaction_open?
+          if transaction&.joinable?
+            defer_insert(conn, transaction, queue_name, &on_durable)
+            next :pending
           end
+
+          insert_row(conn, queue_name, &on_durable)
+          true
         end
-        true
       rescue ActiveRecord::ActiveRecordError => e
         Pgbus.logger.debug { "[Pgbus] Failed to record stream queue #{queue_name}: #{e.message}" }
         false
@@ -150,7 +160,7 @@ module Pgbus
         missing = fingerprint_matched_names - all_names
         return 0 if missing.empty?
 
-        registered = missing.count { |name| record!(name) }
+        registered = missing.count { |name| record!(name) == true }
         reset_cache! if registered.positive?
         registered
       end
@@ -185,6 +195,53 @@ module Pgbus
       end
 
       private
+
+      def defer_insert(conn, transaction, queue_name, &on_durable)
+        first = @deferred_lock.synchronize do
+          names = (@deferred[transaction] ||= Set.new)
+          !names.add?(queue_name).nil?
+        end
+        OpenTransaction.after_commit(conn) { insert(queue_name, &on_durable) } if first
+      end
+
+      # The deferred write, after the caller's commit. It runs inside the
+      # committing caller's callbacks, so it reports and never raises. Inside
+      # a transaction that is still open here (a block committed inside a
+      # non-joinable one, the fixture transaction of transactional tests) it
+      # writes there.
+      def insert(queue_name, &)
+        connection_pool.with_connection { |conn| insert_row(conn, queue_name, &) }
+      rescue ActiveRecord::ActiveRecordError => e
+        Pgbus.logger.debug { "[Pgbus] Failed to record stream queue #{queue_name}: #{e.message}" }
+        false
+      rescue StandardError => e
+        log_record_failure(queue_name, e)
+        false
+      end
+
+      def insert_row(conn, queue_name, &)
+        conn.execute(
+          "INSERT INTO #{conn.quote_table_name(table_name)} (queue_name) " \
+          "VALUES (#{conn.quote(queue_name)}) ON CONFLICT (queue_name) DO NOTHING"
+        )
+        registered(queue_name, &)
+      end
+
+      # The row is durable: keep the in-process cache consistent with it so a
+      # subsequent stream? check reflects this registration without a
+      # re-query. Only update an ALREADY-LOADED cache — if @all_names is still
+      # nil (this process hasn't queried the registry yet), seeding it here
+      # would fabricate a one-entry set and silently hide every other
+      # already-registered stream until the next reset_cache!. Leaving it nil
+      # lets the next all_names call do a real load, which already includes
+      # this row since it has committed. all_names loads outside the lock.
+      def registered(queue_name)
+        @names_lock.synchronize do
+          @names_generation += 1
+          @all_names = (@all_names | [queue_name]).freeze if @all_names
+        end
+        yield if block_given?
+      end
 
       # A non-ActiveRecord error out of a plain INSERT is a bug signal (the
       # old path's ArgumentError from index resolution was one), not a DB

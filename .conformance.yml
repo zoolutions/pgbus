@@ -114,6 +114,12 @@ main_only:
   - name: Pgbus::Signals.@started_pid
     reason: >-
       the pid whose streamer started for process signals (issue #674), read lock-free by request threads and set by the starter thread on the main Ractor
+  - name: Pgbus::StreamQueue.@deferred
+    reason: >-
+      per open transaction, the stream names whose registry insert already waits for its commit (issue #695), a weak map keyed by the transaction; read and written under @deferred_lock by broadcast threads on the main Ractor
+  - name: Pgbus::StreamQueue.@deferred_lock
+    reason: >-
+      guards the per-transaction deferred-insert map; taken by broadcast threads on the main Ractor
   - name: Pgbus::StreamQueue.@names_lock
     reason: >-
       guards the stream-queue name memo (a frozen Set replaced whole); taken by broadcast and dispatcher threads on the main Ractor

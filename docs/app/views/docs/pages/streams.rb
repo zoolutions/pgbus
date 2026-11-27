@@ -113,6 +113,15 @@ class Views::Docs::Pages::Streams < DocsUI::Page
         end
         # Rolled back? No client ever saw "shipped".
       RUBY
+      md <<~'MD'
+        A durable broadcast waits for the transaction the calling thread already
+        has open, on Rails 7.1 too, and a durable `coalesce:` broadcast waits the
+        same way; an ephemeral one submits at once. Nothing waits for a
+        `transaction(joinable: false)` block: the broadcast is published at once.
+        In transactional tests that is the fixture transaction, which never
+        commits, and a `transaction do ... end` inside it publishes when its
+        savepoint commits, as `Pgbus.signal` does.
+      MD
     end
   end
 

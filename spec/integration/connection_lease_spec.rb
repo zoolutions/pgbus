@@ -230,6 +230,23 @@ RSpec.describe "pgbus bookkeeping returns its connection lease (integration)", :
         end
       end
 
+      # Presence runs on request threads and on the streamer's own threads
+      # (connection-driven presence, the seat heartbeat), which no Rails
+      # executor wraps (issue #695).
+      describe "Presence" do
+        it "returns the lease after join, touch, members, count and leave" do
+          presence = Pgbus.stream("lease_presence_#{kind}").presence
+
+          expect_no_lease_left(kind) do
+            presence.join(member_id: "7", metadata: { "name" => "Ada" })
+            presence.touch(member_id: "7")
+            presence.members
+            presence.count
+            presence.leave(member_id: "7")
+          end
+        end
+      end
+
       describe "StreamStat" do
         it "returns the lease after table_exists?, record! and cleanup!" do
           Pgbus::StreamStat.remove_instance_variable(:@table_exists) if Pgbus::StreamStat.instance_variable_defined?(:@table_exists)
@@ -332,14 +349,16 @@ RSpec.describe "pgbus bookkeeping returns its connection lease (integration)", :
       end
     end
 
-    # Issue #694: StreamQueue.record! inside the caller's transaction writes on
-    # the caller's connection, so a rollback takes the registration with it.
-    it "keeps StreamQueue.record! inside the caller's open transaction" do
+    # Issues #694, #695: StreamQueue.record! inside the caller's transaction
+    # keeps the caller's connection and waits for its commit, so a rollback
+    # leaves nothing registered.
+    it "keeps StreamQueue.record! on the caller's connection and off a rolled-back transaction" do
       Pgbus::StreamQueue.reset_cache!
       name = "pgbus_int_lease_rolled_back"
       Pgbus::BusRecord.transaction do
         conn = pool.active_connection?
-        expect(Pgbus::StreamQueue.record!(name)).to be(true)
+        # Not durable before the commit (issue #695).
+        expect(Pgbus::StreamQueue.record!(name)).to eq(:pending)
         expect(pool.active_connection?).to be(conn)
         raise ActiveRecord::Rollback
       end

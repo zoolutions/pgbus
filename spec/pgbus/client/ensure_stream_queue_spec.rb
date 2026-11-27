@@ -24,7 +24,7 @@ RSpec.describe Pgbus::Client::EnsureStreamQueue do
     allow(client).to receive(:ensure_single_queue)
     # Stub notify trigger check — runs raw SQL which needs a real PG connection.
     allow(client).to receive(:notify_trigger_current?).and_return(false)
-    allow(Pgbus::StreamQueue).to receive(:record!)
+    allow(Pgbus::StreamQueue).to receive(:record!) { |_name, &on_durable| on_durable&.call || true }
   end
 
   let(:config) do
@@ -72,6 +72,55 @@ RSpec.describe Pgbus::Client::EnsureStreamQueue do
       client.ensure_stream_queue("chat")
 
       expect(Pgbus::StreamQueue).to have_received(:record!).with("pgbus_test_chat")
+    end
+
+    # A registration inside the caller's open transaction can still roll back,
+    # so it is not memoized: the next ensure records it again.
+    # Issue #695: the registry row is memoized by the block record! runs once
+    # it is written, at once or after the caller's commit (never on a
+    # rollback); the archive index has its own memo and is not redone.
+    it "records again until the registry row is written, without redoing the index" do
+      hooks = []
+      allow(Pgbus::StreamQueue).to receive(:record!) do |_name, &on_durable|
+        hooks << on_durable
+        :pending
+      end
+      allow(raw_conn).to receive(:exec)
+
+      expect(client.ensure_stream_queue("chat")).to be(false)
+      expect(client.ensure_stream_queue("chat")).to be(false)
+      hooks.first.call
+      expect(client.ensure_stream_queue("chat")).to be(true)
+
+      expect(Pgbus::StreamQueue).to have_received(:record!).with("pgbus_test_chat").twice
+      expect(raw_conn).to have_received(:exec).with(a_string_matching(/CREATE INDEX/)).once
+    end
+
+    # An unmigrated install (no pgbus_stream_queues) or a failing insert is
+    # memoized too, as before: not retried on every broadcast.
+    it "memoizes when record! returns false" do
+      allow(Pgbus::StreamQueue).to receive(:record!).and_return(false)
+      allow(raw_conn).to receive(:exec)
+
+      client.ensure_stream_queue("chat")
+      expect(client.ensure_stream_queue("chat")).to be(true)
+
+      expect(Pgbus::StreamQueue).to have_received(:record!).once
+      expect(raw_conn).to have_received(:exec).with(a_string_matching(/CREATE INDEX/)).once
+    end
+
+    # On the shared ActiveRecord connection the index DDL rides the caller's
+    # transaction too (the @queues_created rule in Client).
+    it "redoes the index while its DDL rides the caller's transaction" do
+      allow(client).to receive(:queue_ddl_rides_caller_transaction?).and_return(true, false)
+      allow(raw_conn).to receive(:exec)
+
+      expect(client.ensure_stream_queue("chat")).to be(false)
+      expect(client.ensure_stream_queue("chat")).to be(true)
+      client.ensure_stream_queue("chat")
+
+      expect(raw_conn).to have_received(:exec).with(a_string_matching(/CREATE INDEX/)).twice
+      expect(Pgbus::StreamQueue).to have_received(:record!).once
     end
 
     it "records the registry entry only once per stream per process" do
@@ -186,6 +235,7 @@ RSpec.describe Pgbus::Client::EnsureStreamQueue do
         real_pgmq_connection_error
         client.instance_variable_get(:@queues_created)[full_name] = true
         client.instance_variable_get(:@stream_indexes_created)["chat"] = true
+        client.instance_variable_get(:@streams_registered)["chat"] = true
       end
 
       it "clears the memo and recreates the queue when enable_notify reports it missing" do
@@ -203,6 +253,8 @@ RSpec.describe Pgbus::Client::EnsureStreamQueue do
         expect(client.instance_variable_get(:@queues_created)[full_name]).to be_nil
         expect(client.instance_variable_get(:@stream_indexes_created)["chat"]).to be(true)
         expect(calls).to eq(2)
+        # The dropped queue's registry row may be gone with it: recorded again.
+        expect(Pgbus::StreamQueue).to have_received(:record!).with(full_name)
       end
 
       it "re-raises unrelated ConnectionErrors without clearing the memo or retrying" do

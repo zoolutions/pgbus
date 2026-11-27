@@ -91,4 +91,34 @@ RSpec.describe Pgbus::OpenTransaction do
       expect(ran).to be(true)
     end
   end
+
+  # Issue #695: work that rode a given connection's open transaction (the
+  # stream registry row) runs its follow-up at that transaction's commit.
+  describe ".after_commit" do
+    it "registers the block on the connection's transaction when it has after_commit" do
+      callbacks = []
+      transaction = double(open?: true)
+      allow(transaction).to receive(:after_commit) { |&block| callbacks << block }
+      ran = false
+
+      described_class.after_commit(connection_with(transaction)) { ran = true }
+      expect(ran).to be(false)
+
+      callbacks.each(&:call)
+      expect(ran).to be(true)
+    end
+
+    it "adds a commit hook record on Rails 7.1" do
+      connection = connection_with(double(open?: true))
+      hooks = []
+      allow(connection).to receive(:add_transaction_record) { |hook| hooks << hook }
+      ran = false
+
+      described_class.after_commit(connection) { ran = true }
+      expect([hooks.size, ran]).to eq([1, false])
+
+      hooks.first.committed!
+      expect(ran).to be(true)
+    end
+  end
 end

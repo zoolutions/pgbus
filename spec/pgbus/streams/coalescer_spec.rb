@@ -174,6 +174,45 @@ RSpec.describe Pgbus::Streams::Coalescer do
     end
   end
 
+  # Another submit of the same key while this one's schedule raises finds the
+  # key pending and returns normally: its frame would be dropped without a
+  # trace. It is reported instead, and the key is still freed.
+  describe "a concurrent submit while the schedule raises" do
+    let(:failure) { RuntimeError.new("executor is shut down") }
+
+    before do
+      calls = 0
+      allow(Pgbus::ErrorReporter).to receive(:report)
+      allow(scheduler).to receive(:schedule).and_wrap_original do |original, *args, &block|
+        calls += 1
+        if calls == 1
+          submit(payload: "from another thread")
+          raise failure
+        end
+
+        original.call(*args, &block)
+      end
+    end
+
+    it "reports the dropped frame and frees the key" do
+      expect { submit(payload: "a") }.to raise_error(failure)
+
+      expect(Pgbus::ErrorReporter).to have_received(:report).with(
+        failure, hash_including(component: "streams.coalescer", stream: "chat", target: "cursor", dropped: true)
+      )
+      submit(payload: "b")
+      scheduler.run_all
+      expect(flushed.map { |f| f[:payload] }).to eq(["b"])
+    end
+
+    it "does not report when no other frame was waiting" do
+      allow(scheduler).to receive(:schedule).and_raise(failure)
+
+      expect { submit(payload: "a") }.to raise_error(failure)
+      expect(Pgbus::ErrorReporter).not_to have_received(:report)
+    end
+  end
+
   # Issue #694: the default scheduler reads config.streams_coalesce_scheduler
   # at every schedule, so a scheduler set after the coalescer was built (an
   # initializer, Pgbus::Testing) still takes effect.

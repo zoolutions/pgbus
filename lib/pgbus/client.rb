@@ -179,6 +179,7 @@ module Pgbus
 
       @queues_created = Concurrent::Map.new
       @stream_indexes_created = Concurrent::Map.new
+      @streams_registered = Concurrent::Map.new
       # Per physical queue: its native statements, or false (issue #605).
       @native_statements = Concurrent::Map.new
       @native_unprepared = config.native_statements && ar_disables_prepared_statements?
