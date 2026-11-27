@@ -213,6 +213,23 @@ RSpec.describe "pgbus bookkeeping returns its connection lease (integration)", :
         end
       end
 
+      # Issue #694: the coalescer flush records a stream on a Concurrent IO
+      # thread, and the dispatcher reads the registry off-request.
+      describe "StreamQueue" do
+        it "returns the lease after table_exists?, record!, all_names and fingerprint_matched_names" do
+          Pgbus::StreamQueue.remove_instance_variable(:@table_exists) if Pgbus::StreamQueue.instance_variable_defined?(:@table_exists)
+          Pgbus::StreamQueue.reset_cache!
+
+          expect_no_lease_left(kind) do
+            Pgbus::StreamQueue.table_exists?
+            Pgbus::StreamQueue.record!("pgbus_int_lease_stream_#{kind}")
+            Pgbus::StreamQueue.all_names
+            Pgbus::StreamQueue.fingerprint_matched_names
+          end
+          expect(Pgbus::StreamQueue.stream?("pgbus_int_lease_stream_#{kind}")).to be(true)
+        end
+      end
+
       describe "Executor#execute" do
         it "takes no lease for a plain job, the stat table's first probe included" do
           # The memoized probe runs once per process; forget it so this
@@ -275,6 +292,22 @@ RSpec.describe "pgbus bookkeeping returns its connection lease (integration)", :
         Pgbus::FailedEventRecorder.clear!(queue_name: queue, msg_id: 1, source_queue: queue)
         expect(pool.active_connection?).to be(conn)
       end
+    end
+
+    # Issue #694: StreamQueue.record! inside the caller's transaction writes on
+    # the caller's connection, so a rollback takes the registration with it.
+    it "keeps StreamQueue.record! inside the caller's open transaction" do
+      Pgbus::StreamQueue.reset_cache!
+      name = "pgbus_int_lease_rolled_back"
+      Pgbus::BusRecord.transaction do
+        conn = pool.active_connection?
+        expect(Pgbus::StreamQueue.record!(name)).to be(true)
+        expect(pool.active_connection?).to be(conn)
+        raise ActiveRecord::Rollback
+      end
+
+      Pgbus::StreamQueue.reset_cache!
+      expect(Pgbus::StreamQueue.stream?(name)).to be(false)
     end
   end
 end

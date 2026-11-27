@@ -363,6 +363,14 @@ module Pgbus
                   :streams_pool_autoscale_interval, :streams_application_name
     attr_reader :streams_default_broadcast_mode # rubocop:disable Style/AccessorGrouping
 
+    # What runs a coalesced broadcast's flush (`broadcast(..., coalesce:)`):
+    # any object with `schedule(delay_seconds) { ... }`. nil (default) is the
+    # coalescer's Concurrent::ScheduledTask timer. Read at each flush, so it
+    # can change after boot. Pgbus::Testing.fake! / inline! set
+    # Pgbus::Streams::Coalescer::InlineScheduler, which flushes on the
+    # calling thread (issue #694); disabled! sets nil again.
+    attr_accessor :streams_coalesce_scheduler
+
     # NOTIFY-gated worker wakeups. When true, workers are woken by a
     # NotifyListener PG connection that LISTENs on their queues' INSERT
     # channels instead of blind-polling. Defaults to the value of
@@ -693,6 +701,7 @@ module Pgbus
       # usually want job stats on and stream stats off, or vice versa.
       @streams_stats_enabled = false
       @streams_test_mode = false
+      @streams_coalesce_scheduler = nil
       @streams_default_broadcast_mode = :ephemeral
       @streams_orphan_sweep_interval = 3600    # 1 hour
       @streams_orphan_threshold = 86_400       # 24 hours

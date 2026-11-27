@@ -2715,6 +2715,10 @@ RSpec.describe Pgbus::Configuration do
     it "has streams_test_mode disabled by default" do
       expect(config.streams_test_mode).to be false
     end
+
+    it "has no streams_coalesce_scheduler by default (the coalescer's timer)" do
+      expect(config.streams_coalesce_scheduler).to be_nil
+    end
   end
 
   describe "#validate! with streams settings" do

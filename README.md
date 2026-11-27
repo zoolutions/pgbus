@@ -1895,6 +1895,8 @@ Superseded frames never hit the bus at all — no PGMQ insert, no NOTIFY, no fan
 
 Semantics: the first submit for a `(stream, target)` schedules the flush one window later; every subsequent submit within that window only overwrites the buffered payload. Latency is bounded to one window (trailing-edge-with-max-wait, not a resettable debounce). The flush re-enters the normal broadcast path, so a coalesced frame still composes with `visible_to:`, `exclude:`, `event:`, and `durable:`. Coalescing is process-wide and in-memory — behind multiple Puma workers or Falcon processes, each process debounces its own submissions independently.
 
+In tests, `Pgbus::Testing.fake!` and `.inline!` flush every coalesced broadcast at once, on the calling thread, so it writes inside the test's own connection and transaction (and no frame is held back: each submit is broadcast). `disabled!` restores the timer. Outside those modes, `config.streams_coalesce_scheduler` takes any object with `schedule(delay_seconds) { ... }`, such as `Pgbus::Streams::Coalescer::InlineScheduler.new`; `nil` (the default) is the timer. A scheduler you set yourself is left alone by the test modes.
+
 ### Presence
 
 Pgbus tracks who is currently subscribed to a stream via a `pgbus_presence_members` table. This is the standard "X people are in this room" feature that chat apps and collaboration tools need:
@@ -2645,6 +2647,7 @@ Curated headline options for the README. The full operator reference (with types
 | `streams_database_url` / `streams_host` / `streams_port` | `nil` | Override the streamer's LISTEN connection target (e.g. direct primary port when workers use a pooler) |
 | `streams_pool_database_url` / `streams_pool_host` / `streams_pool_port` | `nil` | Override the streams **pool** target independently of LISTEN (so pool traffic can stay on the pooler while LISTEN stays direct) |
 | `streams_test_mode` | `false` | Return a stub SSE response without hijack or background threads. Auto-enabled by `Pgbus::Testing.fake!`/`.inline!`. See [SSE streams in tests](#sse-streams-in-tests). |
+| `streams_coalesce_scheduler` | `nil` | What runs a `coalesce:` broadcast's flush: an object with `schedule(delay_seconds) { ... }`. `nil` is the timer; `Pgbus::Testing.fake!`/`.inline!` select `Pgbus::Streams::Coalescer::InlineScheduler`, which flushes on the calling thread. See [`coalesce:`](#coalesce--publish-side-debounce). |
 | `streams_stats_enabled` | `false` | Record stream broadcast/connect/disconnect stats (opt-in, can be high volume) |
 | `streams_path` | `nil` | Custom URL path for the SSE endpoint (nil = auto-detected from engine mount) |
 | `execution_mode` | `:threads` | Global execution mode (`:threads` or `:async`). Per-worker override via capsule config. |

@@ -34,12 +34,13 @@ module Pgbus
       Entry = Struct.new(:payload, :opts)
 
       # scheduler: responds to `schedule(delay_seconds) { ... }`. Defaults
-      #   to a Concurrent::ScheduledTask-backed scheduler.
+      #   to `config.streams_coalesce_scheduler`, read at each schedule, else
+      #   a Concurrent::ScheduledTask-backed timer.
       # flush: ->(stream_name:, target:, payload:, opts:) called once per
       #   window per key with the latest buffered frame.
       def initialize(flush:, scheduler: nil)
         @flush = flush
-        @scheduler = scheduler || ScheduledTaskScheduler.new
+        @scheduler = scheduler || ConfiguredScheduler.new
         @mutex = Mutex.new
         @buffer = {}  # key => Entry (latest)
         @pending = {} # key => true while a flush is scheduled
@@ -81,12 +82,34 @@ module Pgbus
         ErrorReporter.report(e, { component: "streams.coalescer", stream: stream_name, target: target })
       end
 
-      # Default scheduler backed by Concurrent::ScheduledTask. Kept as a
-      # tiny adapter so the Coalescer can be unit-tested with a synchronous
-      # fake scheduler (no real timers, no sleeps).
+      # The timer: a Concurrent::ScheduledTask on the global IO executor.
+      # Kept as a tiny adapter so the Coalescer can be unit-tested with a
+      # synchronous fake scheduler (no real timers, no sleeps).
       class ScheduledTaskScheduler
         def schedule(delay_seconds, &)
           Concurrent::ScheduledTask.execute(delay_seconds, &)
+        end
+      end
+
+      # Runs the flush at once, on the thread that submitted it (issue #694).
+      # For tests: the flush then writes inside the test's own connection and
+      # transaction, with no IO thread sharing a pinned connection across the
+      # test boundary. Pgbus::Testing.fake! / inline! select it. It removes
+      # the coalescing itself: every submit is broadcast.
+      class InlineScheduler
+        def schedule(_delay_seconds) = yield
+      end
+
+      # The default: `config.streams_coalesce_scheduler`, read at each
+      # schedule so a scheduler set after boot (an initializer, a test mode)
+      # takes effect on the process-wide coalescer, else the timer.
+      class ConfiguredScheduler
+        def initialize
+          @timer = ScheduledTaskScheduler.new
+        end
+
+        def schedule(delay_seconds, &)
+          (Pgbus.configuration.streams_coalesce_scheduler || @timer).schedule(delay_seconds, &)
         end
       end
     end
