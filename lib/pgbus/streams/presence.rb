@@ -186,9 +186,10 @@ module Pgbus
         end
 
         # The PG::Connection under the adapter. Run SQL through exec_params,
-        # not on this: the adapter's lock is released once it is returned.
+        # not on this: the adapter's lock and the lease are released once it
+        # is returned.
         def connection
-          adapter.raw_connection
+          with_adapter(&:raw_connection)
         end
 
         # Runs one statement on the adapter's PG::Connection while holding
@@ -198,10 +199,15 @@ module Pgbus
         # that keeps a second thread's statement off the libpq connection
         # while this one is in flight. Unpinned, the lock is a NullLock. The
         # lock is reentrant, so a thread already holding it (a request
-        # inside a transaction) re-enters it.
+        # inside a transaction) re-enters it. The adapter is leased through
+        # connection_pool.with_connection (issue #695): presence also runs on
+        # the streamer's threads, which no Rails executor wraps, and a bare
+        # `connection` there was a lease nobody returned. A caller's own
+        # lease (a request, an open transaction) is reused.
         def exec_params(sql, binds)
-          adapter = self.adapter
-          adapter.lock.synchronize { adapter.raw_connection.exec_params(sql, binds) }
+          with_adapter do |adapter|
+            adapter.lock.synchronize { adapter.raw_connection.exec_params(sql, binds) }
+          end
         end
 
         # Reports a seat join/leave to streams_presence_on_change (issue #515).
@@ -229,13 +235,13 @@ module Pgbus
         # the default path uses ActiveRecord::Base. Matches the
         # canonical pattern in Pgbus::Process::QueueLock#connection
         # and Pgbus::Configuration's connection probe.
-        def adapter
+        def with_adapter(&)
           unless defined?(::ActiveRecord::Base)
             raise Pgbus::ConfigurationError,
                   "Pgbus::Streams::Presence requires ActiveRecord (no AR connection available)"
           end
 
-          record_base.connection
+          record_base.connection_pool.with_connection(&)
         end
 
         def record_base

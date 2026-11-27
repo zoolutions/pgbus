@@ -49,10 +49,11 @@ Pgbus/DashboardTimeFormatting:
 
 # Custom cop: pgbus's own ActiveRecord work on the job path runs inside
 # connection_pool.with_connection, so it returns the lease it took (issue
-# #649). The files the executor and the adapter reach, and the stream
-# registry and stats models the coalescer flush and the dispatcher reach
-# (issue #694); the dashboard (the Rails executor returns a web request's
-# lease), the workflow models and runner and recurring tasks are later sweeps.
+# #649). The files the executor and the adapter reach, the stream registry
+# and stats models the coalescer flush and the dispatcher reach (issue #694),
+# and the streams publish path with presence (issue #695); the dashboard (the
+# Rails executor returns a web request's lease), the workflow models and
+# runner and recurring tasks are later sweeps.
 Pgbus/BareConnectionLease:
   Enabled: true
   Include:
@@ -68,6 +69,9 @@ Pgbus/BareConnectionLease:
     - "lib/pgbus/batch.rb"
     - "lib/pgbus/concurrency/**/*.rb"
     - "lib/pgbus/failed_event_recorder.rb"
+    - "lib/pgbus/open_transaction.rb"
+    - "lib/pgbus/streams.rb"
+    - "lib/pgbus/streams/**/*.rb"
 
 Style/StringLiterals:
   EnforcedStyle: double_quotes

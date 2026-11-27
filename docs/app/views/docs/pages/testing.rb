@@ -140,9 +140,10 @@ class Views::Docs::Pages::Testing < DocsUI::Page
         which could take the test's pinned connection. Unless you set
         `config.streams_coalesce_scheduler` yourself, `Pgbus::Testing.fake!` and
         `.inline!` flush each coalesced broadcast at once, on the thread that
-        submits it, so every submit is broadcast. With no transaction open that
-        happens before `broadcast` returns; a durable coalesced broadcast made
-        inside an open transaction is submitted at its commit and flushes then.
+        submits it, so every submit is broadcast. With no joinable transaction
+        open (the fixture transaction is not one) that happens before `broadcast`
+        returns; a durable coalesced broadcast made inside a `transaction do`
+        block is submitted at its commit and flushes then.
         `disabled!` restores the timer.
       MD
     end

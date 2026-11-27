@@ -29,6 +29,9 @@ RSpec.describe Pgbus::Streams::Presence do
       allow(adapter).to receive(:raw_connection) { adapter_lock.synchronize { raw_connection } }
     end
   end
+  let(:ar_pool) do
+    double("ConnectionPool").tap { |pool| allow(pool).to receive(:with_connection).and_yield(ar_connection) }
+  end
   let(:seat_row) do
     { "member_id" => "7", "metadata" => "{}", "joined_at" => "t", "last_seen_at" => "t",
       "connection_id" => "c1", "seat" => "s1", "state" => "{}", "n" => "1", "stream_name" => "room:42" }
@@ -37,7 +40,8 @@ RSpec.describe Pgbus::Streams::Presence do
   before do
     allow(Pgbus.configuration).to receive(:connects_to).and_return(nil)
     stub_const("ActiveRecord::Base", Class.new)
-    allow(ActiveRecord::Base).to receive(:connection).and_return(ar_connection)
+    # Presence leases its adapter through connection_pool.with_connection (issue #695).
+    allow(ActiveRecord::Base).to receive(:connection_pool).and_return(ar_pool)
     allow(described_class).to receive_messages(seats_supported?: true, seats_supported_now?: true)
   end
 
@@ -114,7 +118,9 @@ RSpec.describe Pgbus::Streams::Presence do
     before do
       allow(Pgbus.configuration).to receive(:connects_to).and_return({ database: { writing: :pgbus } })
       stub_const("Pgbus::BusRecord", Class.new)
-      allow(Pgbus::BusRecord).to receive(:connection).and_return(bus_adapter)
+      bus_pool = double("BusRecord pool")
+      allow(bus_pool).to receive(:with_connection).and_yield(bus_adapter)
+      allow(Pgbus::BusRecord).to receive(:connection_pool).and_return(bus_pool)
     end
 
     it "runs the statement on Pgbus::BusRecord's connection while holding that adapter's lock" do

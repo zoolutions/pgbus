@@ -5,7 +5,7 @@ require "rails_helper"
 # Regression for the durable-broadcast connection leak (Zazu incident:
 # fan-out spec pool exhaustion, 2026-08-05).
 #
-# `Stream#current_open_transaction` used to probe via
+# `Stream#current_open_transaction` (now Pgbus::OpenTransaction.current) used to probe via
 # `ActiveRecord::Base.connection`, which on Rails 7.2+ takes a STICKY,
 # executor-scoped lease:
 #
@@ -36,7 +36,7 @@ RSpec.describe Pgbus::Streams::Stream do
 
   it "does not lease an AR connection when the probing thread holds none" do
     leaked = Thread.new do
-      stream.send(:current_open_transaction)
+      Pgbus::OpenTransaction.current
       pool.active_connection?
     end.value
 
@@ -44,7 +44,7 @@ RSpec.describe Pgbus::Streams::Stream do
   end
 
   it "returns nil (broadcast immediately) when the probing thread holds no connection" do
-    expect(Thread.new { stream.send(:current_open_transaction) }.value).to be_nil
+    expect(Thread.new { Pgbus::OpenTransaction.current }.value).to be_nil
   end
 
   it "does not defeat with_connection's release when broadcasting from a worker thread" do
@@ -60,7 +60,7 @@ RSpec.describe Pgbus::Streams::Stream do
     probe = Thread.new do
       pool.with_connection do
         ActiveRecord::Base.transaction do
-          seen = stream.send(:current_open_transaction)
+          seen = Pgbus::OpenTransaction.current
           { present: !seen.nil?, open: seen&.open? }
         end
       end

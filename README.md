@@ -1713,9 +1713,9 @@ end
 # atomic with respect to each other.
 ```
 
-ActionCable can't do this because its broadcast path goes through Redis pub/sub, which has no concept of your application's transaction boundary. Pgbus detects the open AR transaction via `ActiveRecord::Base.connection.current_transaction.after_commit`, which is a first-class Rails API — no outbox table, no background worker, no extra storage.
+ActionCable can't do this because its broadcast path goes through Redis pub/sub, which has no concept of your application's transaction boundary. Pgbus waits for the commit of the transaction the calling thread already has open, through ActiveRecord's own commit callbacks (`Transaction#after_commit` on Rails 7.2+, a transaction record on Rails 7.1) — no outbox table, no background worker, no extra storage. A `coalesce:` broadcast waits the same way before it is submitted.
 
-Outside an open transaction, broadcasts are synchronous and return the assigned `msg_id` as before. Inside a transaction, they return `nil` (the id isn't known until commit time).
+Outside an open transaction, broadcasts are synchronous and return the assigned `msg_id` as before. Inside a transaction, they return `nil` (the id isn't known until commit time). The exception, as for `Pgbus.signal`, is a `transaction(joinable: false)` block, such as the fixture transaction transactional tests open around each example, which never commits: there the broadcast is published at once. A `transaction do ... end` block inside it is joinable, and its commit publishes, as a production commit does.
 
 ### Replaying history on connect (`replay:`)
 
@@ -1895,7 +1895,7 @@ Superseded frames never hit the bus at all — no PGMQ insert, no NOTIFY, no fan
 
 Semantics: the first submit for a `(stream, target)` schedules the flush one window later; every subsequent submit within that window only overwrites the buffered payload. Latency is bounded to one window (trailing-edge-with-max-wait, not a resettable debounce). The flush re-enters the normal broadcast path, so a coalesced frame still composes with `visible_to:`, `exclude:`, `event:`, and `durable:`. Coalescing is process-wide and in-memory — behind multiple Puma workers or Falcon processes, each process debounces its own submissions independently.
 
-In tests, unless you set `config.streams_coalesce_scheduler` yourself, `Pgbus::Testing.fake!` and `.inline!` flush every coalesced broadcast at once, on the thread that submits it, so it writes on that thread's own connection and no IO thread takes a connection (and no frame is held back: each submit is broadcast). With no transaction open the flush runs before `broadcast` returns; a durable coalesced broadcast made inside an open transaction is submitted at its commit, as outside the test modes, and flushes then. `disabled!` restores the timer. `config.streams_coalesce_scheduler` takes any object with `schedule(delay_seconds) { ... }`, such as `Pgbus::Streams::Coalescer::InlineScheduler.new`, read when a window's flush is scheduled; `nil` (the default) is the timer. A scheduler you set yourself is left alone by the test modes, so its own threading applies in tests too.
+In tests, unless you set `config.streams_coalesce_scheduler` yourself, `Pgbus::Testing.fake!` and `.inline!` flush every coalesced broadcast at once, on the thread that submits it, so it writes on that thread's own connection and no IO thread takes a connection (and no frame is held back: each submit is broadcast). With no joinable transaction open (the fixture transaction of transactional tests is not one) the flush runs before `broadcast` returns; a durable coalesced broadcast made inside an open, joinable transaction is submitted at its commit, as outside the test modes, and flushes then. `disabled!` restores the timer. `config.streams_coalesce_scheduler` takes any object with `schedule(delay_seconds) { ... }`, such as `Pgbus::Streams::Coalescer::InlineScheduler.new`, read when a window's flush is scheduled; `nil` (the default) is the timer. A scheduler you set yourself is left alone by the test modes, so its own threading applies in tests too.
 
 ### Presence
 

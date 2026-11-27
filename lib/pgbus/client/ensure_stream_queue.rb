@@ -17,6 +17,12 @@ module Pgbus
     #
     # Called from `Pgbus.stream(name).broadcast(...)` on first publish per
     # stream and from the streamer on first subscription per stream.
+    #
+    # Returns true once the setup is settled and memoized, false when part of
+    # it rode the caller's open transaction (the index DDL on the shared
+    # ActiveRecord connection, or the registry row): a rollback can take that
+    # back, so it is not memoized before the commit and the next call runs it
+    # again, the rule `@queues_created` follows (issue #695).
     module EnsureStreamQueue
       def ensure_stream_queue(stream_name)
         full_name = config.queue_name(stream_name)
@@ -38,8 +44,9 @@ module Pgbus
         # the same stream, so memoize per-process after the first success.
         # The StreamQueue registration shares this memo — both are one-time
         # per stream per process and must both survive a first-broadcast.
-        return if @stream_indexes_created[stream_name]
+        return true if @stream_indexes_created[stream_name]
 
+        rides_caller_transaction = queue_ddl_rides_caller_transaction?
         sanitized = QueueNameValidator.sanitize!(full_name)
         sql = <<~SQL
           CREATE INDEX IF NOT EXISTS a_#{sanitized}_msg_id_idx
@@ -64,9 +71,14 @@ module Pgbus
         # Record the physical queue name so maintenance (stream-archive prune,
         # orphan sweep, compact_archives) and wildcard workers can tell this
         # queue apart from a job queue. No-ops on unmigrated installs.
-        Pgbus::StreamQueue.record!(full_name)
-
-        @stream_indexes_created[stream_name] = true
+        # Memoized once the registry row is durable: now, or at the caller's
+        # commit when the row rode its transaction (never on its rollback).
+        # Index DDL that rode the caller's transaction (the shared connection)
+        # is never memoized here.
+        Pgbus::StreamQueue.record!(full_name) do
+          @stream_indexes_created[stream_name] = true unless rides_caller_transaction
+        end
+        @stream_indexes_created.fetch(stream_name, false)
       end
 
       private

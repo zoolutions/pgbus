@@ -24,7 +24,7 @@ RSpec.describe Pgbus::Client::EnsureStreamQueue do
     allow(client).to receive(:ensure_single_queue)
     # Stub notify trigger check — runs raw SQL which needs a real PG connection.
     allow(client).to receive(:notify_trigger_current?).and_return(false)
-    allow(Pgbus::StreamQueue).to receive(:record!)
+    allow(Pgbus::StreamQueue).to receive(:record!) { |_name, &on_durable| on_durable&.call || true }
   end
 
   let(:config) do
@@ -72,6 +72,34 @@ RSpec.describe Pgbus::Client::EnsureStreamQueue do
       client.ensure_stream_queue("chat")
 
       expect(Pgbus::StreamQueue).to have_received(:record!).with("pgbus_test_chat")
+    end
+
+    # A registration inside the caller's open transaction can still roll back,
+    # so it is not memoized: the next ensure records it again.
+    # The memo is set by the block record! runs once the row is durable: at
+    # once, or at the caller's commit (never on its rollback).
+    it "memoizes only once record! reports the row durable" do
+      hooks = []
+      allow(Pgbus::StreamQueue).to receive(:record!) { |_name, &on_durable| hooks << on_durable }
+
+      expect(client.ensure_stream_queue("chat")).to be(false)
+      expect(client.ensure_stream_queue("chat")).to be(false)
+      hooks.first.call
+      expect(client.ensure_stream_queue("chat")).to be(true)
+
+      expect(Pgbus::StreamQueue).to have_received(:record!).with("pgbus_test_chat").twice
+    end
+
+    # On the shared ActiveRecord connection the index DDL rides the caller's
+    # transaction too (the @queues_created rule in Client).
+    it "does not memoize while the DDL rides the caller's transaction" do
+      allow(client).to receive(:queue_ddl_rides_caller_transaction?).and_return(true, false)
+      allow(Pgbus::StreamQueue).to receive(:record!) { |_name, &on_durable| on_durable.call }
+
+      expect(client.ensure_stream_queue("chat")).to be(false)
+      expect(client.ensure_stream_queue("chat")).to be(true)
+
+      expect(Pgbus::StreamQueue).to have_received(:record!).twice
     end
 
     it "records the registry entry only once per stream per process" do

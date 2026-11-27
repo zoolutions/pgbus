@@ -45,7 +45,12 @@ module Pgbus
       # per-process, so the DB write happens once per stream per process.
       # Errors are swallowed — a registry hiccup must never abort a broadcast.
       # Returns true on a successful write, false when the table is absent or
-      # the insert failed (so callers like `backfill!` can report accurately).
+      # the insert failed (so callers like `backfill!` can report accurately),
+      # and :pending (truthy) when the write rode the caller's open
+      # transaction: it is visible at that commit and gone on its rollback
+      # (issue #695). The optional block runs once the row is durable: at
+      # once, or at that commit (never on a rollback or a failed write);
+      # `ensure_stream_queue` memoizes the stream in it.
       #
       # Deliberately raw SQL rather than `upsert(unique_by:)` (issue #401):
       # Rails resolves `unique_by:` through the pool's schema cache, which
@@ -60,7 +65,7 @@ module Pgbus
       # wraps, so a bare `connection` there was a lease nobody returned. A
       # caller that already holds one (a request, a job, an open
       # transaction) keeps writing on it.
-      def record!(queue_name)
+      def record!(queue_name, &on_durable)
         return false unless table_exists?
 
         connection_pool.with_connection do |conn|
@@ -68,21 +73,16 @@ module Pgbus
             "INSERT INTO #{conn.quote_table_name(table_name)} (queue_name) " \
             "VALUES (#{conn.quote(queue_name)}) ON CONFLICT (queue_name) DO NOTHING"
           )
-          # Keep the in-process cache consistent with the write so a subsequent
-          # stream? check reflects this registration without a re-query. Only
-          # update an ALREADY-LOADED cache — if @all_names is still nil (this
-          # process hasn't queried the registry yet), seeding it here would
-          # fabricate a one-entry set and silently hide every other
-          # already-registered stream until the next reset_cache!. Leaving it
-          # nil lets the next all_names call do a real load, which already
-          # includes this row since the insert above has committed. Taken
-          # while the connection is held; all_names loads outside the lock.
-          @names_lock.synchronize do
-            @names_generation += 1
-            @all_names = (@all_names | [queue_name]).freeze if @all_names
+          # Not durable until the caller commits: the memo, which other
+          # threads read, must not claim a name a rollback takes back.
+          if conn.transaction_open?
+            OpenTransaction.after_commit(conn) { registered(queue_name, &on_durable) }
+            next :pending
           end
+
+          registered(queue_name, &on_durable)
+          true
         end
-        true
       rescue ActiveRecord::ActiveRecordError => e
         Pgbus.logger.debug { "[Pgbus] Failed to record stream queue #{queue_name}: #{e.message}" }
         false
@@ -185,6 +185,22 @@ module Pgbus
       end
 
       private
+
+      # The row is durable: keep the in-process cache consistent with it so a
+      # subsequent stream? check reflects this registration without a
+      # re-query. Only update an ALREADY-LOADED cache — if @all_names is still
+      # nil (this process hasn't queried the registry yet), seeding it here
+      # would fabricate a one-entry set and silently hide every other
+      # already-registered stream until the next reset_cache!. Leaving it nil
+      # lets the next all_names call do a real load, which already includes
+      # this row since it has committed. all_names loads outside the lock.
+      def registered(queue_name)
+        @names_lock.synchronize do
+          @names_generation += 1
+          @all_names = (@all_names | [queue_name]).freeze if @all_names
+        end
+        yield if block_given?
+      end
 
       # A non-ActiveRecord error out of a plain INSERT is a bug signal (the
       # old path's ArgumentError from index resolution was one), not a DB

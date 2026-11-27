@@ -67,7 +67,7 @@ module Pgbus
       # `clear_all_connections!` would yank sockets out from under sibling
       # consumers sharing the process, turning one recoverable drop into many.
       # `active_connection?` returns the lease or nil, and is the accessor this
-      # gem uses everywhere (Streams#current_open_transaction documents why we
+      # gem uses everywhere (Pgbus::OpenTransaction.current documents why we
       # never reach for `ActiveRecord::Base.connection`). Its `active_connection`
       # alias is `:nodoc:` and does not exist at all before Rails 7.2 — below
       # our floor, so calling it would raise NoMethodError on the one path that

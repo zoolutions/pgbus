@@ -4,7 +4,14 @@
 
 ### Changed
 
+- **Durable broadcasts in transactional tests are published** (#695). A durable `broadcast` (or `broadcast(..., coalesce:)`) made directly inside a `transaction(joinable: false)` block, which is what Rails' transactional tests open around each example, was deferred to a commit that never comes and silently dropped. It is now published at once, as `Pgbus.signal` is; a `transaction do ... end` block inside it publishes at its commit. A test that relied on such broadcasts never arriving now sees them.
+
 ### Fixed
+
+- **Durable broadcasts wait for the commit through `OpenTransaction.defer`** (#695). `Stream#broadcast` and the coalesced submit called `Transaction#after_commit` directly, which Rails 7.1 transactions lack: a durable broadcast inside an open transaction raised `NoMethodError` there. Both now go through `Pgbus::OpenTransaction.defer`, which registers a commit hook on Rails 7.1 and skips a transaction that is not joinable. `pgbus.stream.broadcast` reports `deferred:` from it.
+- **A stream's first broadcast inside a rolled-back transaction registers it again** (#695). The first durable broadcast of a stream records it in `pgbus_stream_queues`. Inside the caller's transaction that row rides the transaction, but the client memoized the stream as set up before the commit, so a rollback left the stream unregistered for the life of the process (maintenance then treated its queue as a job queue). `StreamQueue.record!` now returns `:pending` for such a write and runs its follow-up at the commit: the registry memo and the client's per-stream memo are set then, never on a rollback, and the next broadcast records it again. Index DDL that rides the caller's transaction on the shared ActiveRecord connection is not memoized either, as `@queues_created` already was not.
+- **Presence returns its ActiveRecord lease** (#695). Every presence statement leased its adapter through a bare `connection`, a sticky lease on Rails 7.2+ that nothing returned on the streamer's threads (connection-driven presence and the seat heartbeat run there, outside any Rails executor). It now runs inside `connection_pool.with_connection`, holding the adapter's lock as before. `Pgbus/BareConnectionLease` covers `lib/pgbus/streams/**` and `lib/pgbus/open_transaction.rb`.
+- **A coalesced frame lost to a failing scheduler is reported** (#695). When the scheduler raised for one submit while another thread submitted the same key, that other frame was dropped without a trace. It is now reported through `ErrorReporter` (`dropped: true`); the key is freed as before.
 
 ### Security
 

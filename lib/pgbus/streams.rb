@@ -105,15 +105,16 @@ module Pgbus
       # Callers pass a plain HTML string; the wrapping is an implementation
       # detail.
       #
-      # Transactional semantics: if this call is made inside an open
-      # ActiveRecord transaction, the PGMQ insert is deferred to an
-      # after_commit callback. If the transaction rolls back, the broadcast
-      # silently drops — clients never see the change that the database
+      # Transactional semantics: if this call is made inside an open, joinable
+      # ActiveRecord transaction, the PGMQ insert is deferred to its COMMIT
+      # (OpenTransaction.defer; a transaction that is not joinable, such as
+      # the fixture transaction of transactional tests, publishes at once).
+      # If the transaction rolls back, the broadcast silently drops — clients never see the change that the database
       # never persisted. This is the feature no other Rails real-time stack
       # (including turbo-rails over ActionCable) can offer: the broadcast
       # and the data mutation are atomic with respect to each other.
       # Returns the assigned msg_id when sent synchronously, nil when
-      # deferred (the id isn't known until the after_commit callback runs).
+      # deferred (the id isn't known until the commit runs it).
       #
       # Audience filtering: pass `visible_to:` with a filter label (a
       # Symbol previously registered via Pgbus::Streams.filters.register)
@@ -171,20 +172,21 @@ module Pgbus
         return broadcast_ephemeral(wrapped) unless use_durable
 
         ensure_queue!
-        transaction = current_open_transaction
+        send_now = -> { @client.send_stream_message(@name, wrapped) }
+        # The COMMIT of the caller's open, joinable transaction, as
+        # Pgbus.signal waits for it (issue #695): OpenTransaction.defer skips a
+        # transaction that is not joinable (the fixture transaction of an
+        # app's transactional tests, which never commits) and registers a
+        # commit hook on Rails 7.1, whose transactions have no after_commit.
+        deferred_to = OpenTransaction.defer(&send_now)
         instrument_payload = {
           stream: @name,
           visible_to: visible_to,
-          deferred: !transaction.nil?,
+          deferred: !deferred_to.nil?,
           bytes: wrapped["html"].bytesize
         }
         Instrumentation.instrument("pgbus.stream.broadcast", instrument_payload) do
-          if transaction
-            transaction.after_commit { @client.send_stream_message(@name, wrapped) }
-            nil
-          else
-            @client.send_stream_message(@name, wrapped)
-          end
+          deferred_to ? nil : send_now.call
         end
       end
 
@@ -356,15 +358,11 @@ module Pgbus
         end
 
         # Transaction gating: a coalesced DURABLE broadcast made inside an
-        # open transaction must not flush if the transaction rolls back, so
-        # defer the submission to after_commit (mirrors the non-coalesced
-        # path). Ephemeral coalescing is fire-and-forget, so it submits now.
-        transaction = resolved_durable ? current_open_transaction : nil
-        if transaction
-          transaction.after_commit { submit.call }
-        else
-          submit.call
-        end
+        # open, joinable transaction must not flush if the transaction rolls
+        # back, so the submission waits for its COMMIT through
+        # OpenTransaction.defer, like the non-coalesced path (issue #695).
+        # Ephemeral coalescing is fire-and-forget, so it submits now.
+        submit.call unless resolved_durable && OpenTransaction.defer(&submit)
         nil
       end
 
@@ -386,15 +384,10 @@ module Pgbus
         @ensure_mutex.synchronize do
           return if @ensured
 
-          @client.ensure_stream_queue(@name)
-          @ensured = true
+          # false: the setup rode the caller's open transaction and could
+          # still roll back (issue #695), so the next broadcast ensures again.
+          @ensured = @client.ensure_stream_queue(@name) != false
         end
-      end
-
-      # The caller's open AR transaction, or nil (Pgbus::OpenTransaction.current
-      # explains the lease-safe probe).
-      def current_open_transaction
-        OpenTransaction.current
       end
     end
   end
