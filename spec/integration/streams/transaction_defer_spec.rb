@@ -146,7 +146,8 @@ RSpec.describe "Streams: durable broadcasts wait for a joinable transaction's co
           end
         end
       end
-      inside.pop
+      # Bounded, so a caller thread that raised before signalling fails here.
+      raise "the caller thread never opened its transaction: #{caller.join(0)&.value.inspect}" unless inside.pop(timeout: 5)
 
       # In a thread of its own, so a regression fails here instead of hanging.
       other = Thread.new { Pgbus::StreamQueue.record!(full_name) } # rubocop:disable ThreadSafety/NewThread -- joined below

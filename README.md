@@ -1713,9 +1713,9 @@ end
 # atomic with respect to each other.
 ```
 
-ActionCable can't do this because its broadcast path goes through Redis pub/sub, which has no concept of your application's transaction boundary. Pgbus waits for the commit of the transaction the calling thread already has open, through ActiveRecord's own commit callbacks (`Transaction#after_commit` on Rails 7.2+, a transaction record on Rails 7.1) — no outbox table, no background worker, no extra storage. A `coalesce:` broadcast waits the same way before it is submitted.
+ActionCable can't do this because its broadcast path goes through Redis pub/sub, which has no concept of your application's transaction boundary. Pgbus waits for the commit of the transaction the calling thread already has open, through ActiveRecord's own commit callbacks (`Transaction#after_commit` on Rails 7.2+, a transaction record on Rails 7.1) — no outbox table, no background worker, no extra storage. A durable `coalesce:` broadcast waits the same way before it is submitted; an ephemeral one is fire-and-forget and submits at once.
 
-Outside an open transaction, broadcasts are synchronous and return the assigned `msg_id` as before. Inside a transaction, they return `nil` (the id isn't known until commit time). The exception, as for `Pgbus.signal`, is a `transaction(joinable: false)` block, such as the fixture transaction transactional tests open around each example, which never commits: there the broadcast is published at once. A `transaction do ... end` block inside it is joinable, and its commit publishes, as a production commit does.
+Outside an open transaction, broadcasts are synchronous and return the assigned `msg_id` as before. Inside a transaction, they return `nil` (the id isn't known until commit time). The exception, as for `Pgbus.signal`, is a `transaction(joinable: false)` block: nothing waits for it, so the broadcast is published at once. That is the fixture transaction transactional tests open around each example, which never commits. A `transaction do ... end` block inside it is joinable and publishes when that block commits its savepoint, so a test sees the broadcast; the enclosing transaction can still roll back afterwards, as the fixture transaction always does.
 
 ### Replaying history on connect (`replay:`)
 

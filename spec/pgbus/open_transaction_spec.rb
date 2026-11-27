@@ -110,11 +110,14 @@ RSpec.describe Pgbus::OpenTransaction do
 
     it "adds a commit hook record on Rails 7.1" do
       connection = connection_with(double(open?: true))
+      hooks = []
+      allow(connection).to receive(:add_transaction_record) { |hook| hooks << hook }
       ran = false
 
       described_class.after_commit(connection) { ran = true }
+      expect([hooks.size, ran]).to eq([1, false])
 
-      expect(connection).to have_received(:add_transaction_record, &:committed!)
+      hooks.first.committed!
       expect(ran).to be(true)
     end
   end
