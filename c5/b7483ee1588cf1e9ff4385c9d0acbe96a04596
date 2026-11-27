@@ -1,0 +1,21 @@
+CHANGELOG.md
+  s_2e4b35eca2434d::t_c6c04f6004766c 9
+docs/app/views/docs/pages/upgrading_pgbus.rb
+  s_2e4b35eca2434d::t_7c3b7775086e81 571-578
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "c5b7483ee1588cf1e9ff4385c9d0acbe96a04596",
+  "prompts": {},
+  "sessions": {
+    "s_2e4b35eca2434d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "501cccdd-b3d2-458a-b003-e3ba19adc423",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
