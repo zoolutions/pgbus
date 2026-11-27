@@ -1,0 +1,19 @@
+spec/integration/streams/coalescer_lease_spec.rb
+  s_43e8d904fa606e::t_77211cdbe7a82d 1-30,32,34-53,59-80,82-124
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "1ae51f1da534819faede514234b25a91ce88e899",
+  "prompts": {},
+  "sessions": {
+    "s_43e8d904fa606e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e9c6e443-4691-442b-adb3-df7981817964",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
