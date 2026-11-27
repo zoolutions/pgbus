@@ -2,6 +2,16 @@
 
 ### Added
 
+### Changed
+
+### Fixed
+
+### Security
+
+## [1.1.1] - 2026-11-27
+
+### Added
+
 - **`config.streams_coalesce_scheduler` and `Pgbus::Streams::Coalescer::InlineScheduler`** (#694). The coalescer reads the scheduler when a window's flush is scheduled: any object with `schedule(delay_seconds) { ... }`, or `nil` (the default) for its `Concurrent::ScheduledTask` timer. `InlineScheduler` runs the flush at once on the thread that submits it. When none is configured, `Pgbus::Testing.fake!` and `.inline!` select it, so a `broadcast(..., coalesce:)` in a test writes on the test thread's own connection, before it returns when no transaction is open (a durable one inside an open transaction is still submitted at its commit); `disabled!` restores the timer. A scheduler without `#schedule` fails `validate!`. A scheduler the application configured is left alone. This replaces prepending `Coalescer::ScheduledTaskScheduler#schedule` in a test suite.
 
 ### Changed
@@ -11,8 +21,6 @@
 ### Fixed
 
 - **The stream registry and stream stats return their ActiveRecord lease** (#694). `StreamQueue.record!`, `table_exists?`, the registry load and `fingerprint_matched_names`, and `StreamStat.record!` and `table_exists?`, reached the database through a bare `connection`, a lease nothing returned on Rails 7.2+ (and `StreamStat.cleanup!` / `JobStat.cleanup!`, the dispatcher's prunes, through a relation, which leases the same way on Rails 7.1). The first durable broadcast of a stream records it, and for a coalesced broadcast that ran on a Concurrent IO thread no Rails executor wraps: each such thread kept a `BusRecord` connection checked out for its life. Under a pinned pool (Rails 7.2+ transactional tests) that lease was the test's pinned connection and outlived the test, so the next test's setup and the IO thread could drive one `PG::Connection` at once and hang. They now run inside `connection_pool.with_connection`, as the job path does since #649: a caller's own lease (a request, a job, an open transaction) is reused, and one taken is returned. The `Pgbus/BareConnectionLease` cop covers both models.
-
-### Security
 
 ## [1.1.0] - 2026-11-24
 
