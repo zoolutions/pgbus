@@ -244,6 +244,30 @@ RSpec.describe "pgbus bookkeeping returns its connection lease (integration)", :
         end
       end
 
+      describe "JobStat" do
+        # The suite's bootstrap leaves this table to the stat specs; the same
+        # shape as spec/integration/stat_buffer_spec.rb's.
+        before do
+          ActiveRecord::Base.connection.execute(<<~SQL)
+            CREATE TABLE IF NOT EXISTS pgbus_job_stats (
+              id BIGSERIAL PRIMARY KEY,
+              job_class VARCHAR NOT NULL,
+              queue_name VARCHAR NOT NULL,
+              status VARCHAR NOT NULL,
+              duration_ms INTEGER NOT NULL DEFAULT 0,
+              enqueue_latency_ms BIGINT,
+              retry_count INTEGER DEFAULT 0,
+              created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+          SQL
+          pool.release_connection
+        end
+
+        it "returns the lease after cleanup! (the dispatcher's prune)" do
+          expect_no_lease_left(kind) { Pgbus::JobStat.cleanup!(older_than: Time.current - 3600) }
+        end
+      end
+
       describe "Executor#execute" do
         it "takes no lease for a plain job, the stat table's first probe included" do
           # The memoized probe runs once per process; forget it so this

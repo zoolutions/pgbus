@@ -170,6 +170,9 @@ def bootstrap_integration_tables(conn)
         fanout INTEGER,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
+      CREATE INDEX idx_pgbus_stream_stats_time ON pgbus_stream_stats (created_at);
+      CREATE INDEX idx_pgbus_stream_stats_stream_time ON pgbus_stream_stats (stream_name, created_at);
+      CREATE INDEX idx_pgbus_stream_stats_type_time ON pgbus_stream_stats (event_type, created_at);
     SQL
   end
 
