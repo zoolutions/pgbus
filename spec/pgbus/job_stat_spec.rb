@@ -9,6 +9,19 @@ RSpec.describe Pgbus::JobStat do
     allow(described_class).to receive_messages(create!: nil, table_exists?: true)
   end
 
+  # The dispatcher prunes off-request: the delete takes its own lease and
+  # returns it, as record! does (issues #649, #694).
+  describe ".cleanup!" do
+    it "deletes inside one connection_pool.with_connection" do
+      pool = stub_bus_record_pool
+      relation = instance_double(ActiveRecord::Relation, delete_all: 2)
+      allow(described_class).to receive(:where).and_return(relation)
+
+      expect(described_class.cleanup!(older_than: Time.now)).to eq(2)
+      expect(pool.leases).to eq(1)
+    end
+  end
+
   describe ".record!" do
     # Issue #649: the executor writes the stat after the job's own lease went
     # back, so record! must take its own and return it.

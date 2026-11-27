@@ -363,6 +363,16 @@ module Pgbus
                   :streams_pool_autoscale_interval, :streams_application_name
     attr_reader :streams_default_broadcast_mode # rubocop:disable Style/AccessorGrouping
 
+    # What runs a coalesced broadcast's flush (`broadcast(..., coalesce:)`):
+    # any object with `schedule(delay_seconds) { ... }`. nil (default) is the
+    # coalescer's Concurrent::ScheduledTask timer. Read when a window's flush
+    # is scheduled (its first submit), so it can change after boot. When it is
+    # nil, Pgbus::Testing.fake! / inline! set
+    # Pgbus::Streams::Coalescer::InlineScheduler, which flushes on the calling
+    # thread (issue #694), and disabled! clears that again; a scheduler the
+    # application set is left alone.
+    attr_accessor :streams_coalesce_scheduler
+
     # NOTIFY-gated worker wakeups. When true, workers are woken by a
     # NotifyListener PG connection that LISTENs on their queues' INSERT
     # channels instead of blind-polling. Defaults to the value of
@@ -693,6 +703,7 @@ module Pgbus
       # usually want job stats on and stream stats off, or vice versa.
       @streams_stats_enabled = false
       @streams_test_mode = false
+      @streams_coalesce_scheduler = nil
       @streams_default_broadcast_mode = :ephemeral
       @streams_orphan_sweep_interval = 3600    # 1 hour
       @streams_orphan_threshold = 86_400       # 24 hours
@@ -1415,6 +1426,13 @@ module Pgbus
 
       validate_presence_settings!
       validate_stream_authorization!
+
+      # Coalescer#submit marks the key pending before it schedules, so a
+      # scheduler that cannot schedule would leave that key stuck for good.
+      if !streams_coalesce_scheduler.nil? && !streams_coalesce_scheduler.respond_to?(:schedule)
+        raise Pgbus::ConfigurationError,
+              "streams_coalesce_scheduler must respond to #schedule(delay_seconds) { ... } or be nil"
+      end
 
       return if streams_orphan_threshold.nil?
       return if streams_orphan_threshold.is_a?(Numeric) && streams_orphan_threshold.positive?

@@ -3,15 +3,18 @@
 require "spec_helper"
 
 RSpec.describe Pgbus::StreamQueue do
+  # The registry reaches the database only through connection_pool.with_connection
+  # (issue #694), so every example gets the no-database pool stub.
+  let(:connection) { instance_double(ActiveRecord::ConnectionAdapters::AbstractAdapter) }
+  let!(:pool) { stub_bus_record_pool(connection) }
+
   before { described_class.reset_cache! }
 
   # record! runs on broadcast threads while the dispatcher iterates the set it
   # got from all_names (issue #527): the memo is a frozen Set, replaced whole.
   describe ".all_names memo" do
-    let(:connection) { instance_double(ActiveRecord::ConnectionAdapters::AbstractAdapter) }
-
     before do
-      allow(described_class).to receive_messages(connection: connection, table_exists?: true)
+      allow(described_class).to receive_messages(table_exists?: true)
       allow(described_class).to receive(:load_names).and_return(Set["pgbus_chat_1"])
       allow(connection).to receive(:quote_table_name) { |name| %("#{name}") }
       allow(connection).to receive(:quote) { |value| "'#{value}'" }
@@ -91,14 +94,21 @@ RSpec.describe Pgbus::StreamQueue do
   end
 
   describe ".record!" do
-    let(:connection) { instance_double(ActiveRecord::ConnectionAdapters::AbstractAdapter) }
-
     before do
       described_class.instance_variable_set(:@record_failure_warned, false)
-      allow(described_class).to receive_messages(connection: connection, table_exists?: true)
+      allow(described_class).to receive_messages(table_exists?: true)
       allow(connection).to receive(:quote_table_name) { |name| %("#{name}") }
       allow(connection).to receive(:quote) { |value| "'#{value}'" }
       allow(connection).to receive(:execute)
+    end
+
+    # Issue #694: record! runs on the coalescer flush thread, which no Rails
+    # executor wraps, so a bare `connection` there was never returned.
+    it "writes inside one connection_pool.with_connection" do
+      expect(described_class.record!("pgbus_chat_42")).to be(true)
+
+      expect(pool.leases).to eq(1)
+      expect(connection).to have_received(:execute).once
     end
 
     it "inserts the physical queue name with ON CONFLICT DO NOTHING (idempotent)" do
@@ -218,6 +228,7 @@ RSpec.describe Pgbus::StreamQueue do
       allow(described_class).to receive(:all).and_return(relation)
 
       expect(described_class.all_names).to eq(Set.new(%w[pgbus_chat_42 pgbus_room_1]))
+      expect(pool.leases).to eq(1)
     end
 
     it "returns an empty set when the table does not exist" do
@@ -267,10 +278,20 @@ RSpec.describe Pgbus::StreamQueue do
   end
 
   describe ".table_exists?" do
+    after { described_class.remove_instance_variable(:@table_exists) if described_class.instance_variable_defined?(:@table_exists) }
+
     it "returns false (and does not raise) when the connection is unavailable" do
-      allow(described_class).to receive(:connection).and_raise(StandardError, "no db")
+      allow(pool).to receive(:with_connection).and_raise(StandardError, "no db")
 
       expect(described_class.table_exists?).to be(false)
+    end
+
+    it "probes inside connection_pool.with_connection, never a bare lease (issue #694)" do
+      described_class.remove_instance_variable(:@table_exists) if described_class.instance_variable_defined?(:@table_exists)
+      allow(connection).to receive(:table_exists?).with("pgbus_stream_queues").and_return(true)
+
+      expect(described_class.table_exists?).to be(true)
+      expect(pool.leases).to eq(1)
     end
   end
 
@@ -278,12 +299,6 @@ RSpec.describe Pgbus::StreamQueue do
   # again, so they stay unregistered. The archive msg_id index created by
   # ensure_stream_queue is a fingerprint no job queue has.
   describe ".fingerprint_matched_names (issue #366)" do
-    let(:connection) { instance_double(ActiveRecord::ConnectionAdapters::AbstractAdapter) }
-
-    before do
-      allow(described_class).to receive(:connection).and_return(connection)
-    end
-
     it "returns physical queue names that carry the stream archive msg_id index" do
       allow(connection).to receive(:select_values)
         .with(a_string_matching(/pg_indexes/))
@@ -291,6 +306,7 @@ RSpec.describe Pgbus::StreamQueue do
 
       expect(described_class.fingerprint_matched_names)
         .to eq(Set.new(%w[pgbus_chat_42 pgbus_checkout_9]))
+      expect(pool.leases).to eq(1)
     end
 
     it "returns an empty set when the query fails (unreadable / no pgmq schema)" do
@@ -300,7 +316,7 @@ RSpec.describe Pgbus::StreamQueue do
     end
 
     it "does not raise when the connection is unavailable" do
-      allow(described_class).to receive(:connection).and_raise(StandardError, "no db")
+      allow(pool).to receive(:with_connection).and_raise(StandardError, "no db")
 
       expect(described_class.fingerprint_matched_names).to eq(Set.new)
     end

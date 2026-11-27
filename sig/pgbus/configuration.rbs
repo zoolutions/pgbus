@@ -218,6 +218,8 @@ module Pgbus
     def streams_authorize=: (untyped) -> untyped
     def streams_broadcast_queue: () -> untyped
     def streams_broadcast_queue=: (untyped) -> untyped
+    def streams_coalesce_scheduler: () -> untyped
+    def streams_coalesce_scheduler=: (untyped) -> untyped
     def streams_connection_options: () -> untyped
     def streams_database_url: () -> untyped
     def streams_database_url=: (untyped) -> untyped

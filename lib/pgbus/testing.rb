@@ -92,6 +92,9 @@ module Pgbus
     @mode_lock = Mutex.new
     @default_mode = nil
 
+    # The scheduler fake/inline select for the coalescer (issue #694).
+    INLINE_COALESCE_SCHEDULER = Pgbus::Streams::Coalescer::InlineScheduler.new.freeze
+
     class << self
       def mode!(mode, &block)
         raise ArgumentError, "Unknown mode: #{mode}. Valid modes: #{MODES.join(", ")}" unless MODES.include?(mode)
@@ -169,11 +172,27 @@ module Pgbus
       def sync_streams_test_mode!(mode)
         return unless defined?(Pgbus.configuration)
 
+        sync_coalesce_scheduler!(mode)
         if mode == :disabled
           Pgbus.configuration.streams_test_mode = false
           reset_streamer!
         else
           Pgbus.configuration.streams_test_mode = true
+        end
+      end
+
+      # Fake/inline flush coalesced broadcasts on the calling thread (issue
+      # #694): the coalescer's timer runs them on a Concurrent IO thread,
+      # which could take the test's pinned connection and keep it past the
+      # test. Only Testing's own inline scheduler is swapped in and out, so a
+      # scheduler the application configured stays as it is.
+      def sync_coalesce_scheduler!(mode)
+        config = Pgbus.configuration
+        current = config.streams_coalesce_scheduler
+        if mode == :disabled
+          config.streams_coalesce_scheduler = nil if current.equal?(INLINE_COALESCE_SCHEDULER)
+        elsif current.nil?
+          config.streams_coalesce_scheduler = INLINE_COALESCE_SCHEDULER
         end
       end
 

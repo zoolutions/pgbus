@@ -118,6 +118,62 @@ RSpec.describe Pgbus::Testing do
     end
   end
 
+  # Issue #694: fake/inline flush coalesced broadcasts on the calling thread,
+  # inside the test's own connection, instead of on a Concurrent IO thread.
+  describe "coalescer scheduler sync" do
+    let(:config) { Pgbus.configuration }
+
+    after { config.streams_coalesce_scheduler = nil }
+
+    it "selects the inline scheduler in fake mode" do
+      described_class.fake!
+      expect(config.streams_coalesce_scheduler).to be_a(Pgbus::Streams::Coalescer::InlineScheduler)
+    end
+
+    it "selects the inline scheduler in inline mode" do
+      described_class.inline!
+      expect(config.streams_coalesce_scheduler).to be_a(Pgbus::Streams::Coalescer::InlineScheduler)
+    end
+
+    it "restores the timer when entering disabled mode" do
+      described_class.fake!
+      described_class.disabled!
+      expect(config.streams_coalesce_scheduler).to be_nil
+    end
+
+    it "selects the inline scheduler inside a scoped block and restores afterward" do
+      described_class.fake! do
+        expect(config.streams_coalesce_scheduler).to be_a(Pgbus::Streams::Coalescer::InlineScheduler)
+      end
+      expect(config.streams_coalesce_scheduler).to be_nil
+    end
+
+    it "leaves a scheduler the application configured alone" do
+      custom = Object.new
+      config.streams_coalesce_scheduler = custom
+
+      described_class.fake!
+      expect(config.streams_coalesce_scheduler).to be(custom)
+      described_class.disabled!
+      expect(config.streams_coalesce_scheduler).to be(custom)
+    end
+
+    it "flushes a coalesced broadcast before broadcast returns in fake mode" do
+      described_class.fake!
+      flushed = []
+      allow(Pgbus).to receive(:stream).and_call_original
+      allow(Pgbus).to receive(:stream).with("chat") do
+        instance_double(Pgbus::Streams::Stream).tap do |stream|
+          allow(stream).to receive(:broadcast) { |payload, **| flushed << [payload, Thread.current] }
+        end
+      end
+
+      Pgbus::Streams.coalescer.submit(stream_name: "chat", target: "t", payload: "<turbo-stream/>", opts: {})
+
+      expect(flushed).to eq([["<turbo-stream/>", Thread.current]])
+    end
+  end
+
   describe ".store" do
     it "returns a EventStore instance" do
       expect(described_class.store).to be_a(Pgbus::Testing::EventStore)

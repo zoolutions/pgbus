@@ -178,9 +178,11 @@ module Pgbus
         .map { |q, avg, p95, count| { queue_name: q, avg_ms: avg.to_i, p95_ms: p95.to_i, count: count.to_i } }
     end
 
-    # Cleanup old stats
+    # Cleanup old stats. Off-request (the dispatcher), so the delete takes its
+    # own lease and returns it; delete_all leases through `connection` on
+    # Rails 7.1 (issue #694).
     def self.cleanup!(older_than:)
-      where("created_at < ?", older_than).delete_all
+      connection_pool.with_connection { where("created_at < ?", older_than).delete_all }
     end
   end
 end

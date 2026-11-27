@@ -26,15 +26,20 @@ module Pgbus
     # Records a stream event. Called from the Dispatcher when the
     # `streams_stats_enabled` flag is set. Errors are swallowed so a
     # missing table or a connection blip cannot kill the dispatcher.
+    # The dispatcher records off-request, where no Rails executor returns a
+    # lease, so the write takes its own through `with_connection` and gives
+    # it back (issue #694); create! leases through `connection` on Rails 7.1.
     def self.record!(stream_name:, event_type:, duration_ms: 0, fanout: nil)
       return unless table_exists?
 
-      create!(
-        stream_name: stream_name,
-        event_type: event_type,
-        duration_ms: duration_ms.to_i,
-        fanout: fanout
-      )
+      connection_pool.with_connection do
+        create!(
+          stream_name: stream_name,
+          event_type: event_type,
+          duration_ms: duration_ms.to_i,
+          fanout: fanout
+        )
+      end
     rescue StandardError => e
       Pgbus.logger.debug { "[Pgbus] Failed to record stream stat: #{e.message}" }
     end
@@ -55,7 +60,7 @@ module Pgbus
     def self.table_exists?
       return @table_exists if defined?(@table_exists)
 
-      @table_exists = connection.table_exists?(table_name)
+      @table_exists = connection_pool.with_connection { |conn| conn.table_exists?(table_name) }
     rescue StandardError => e
       Pgbus.logger.debug { "[Pgbus] Failed to check stream stat table: #{e.message}" }
       false
@@ -119,8 +124,10 @@ module Pgbus
 
     # Cleanup old stats. Called from Pgbus::Process::Dispatcher on the
     # same cadence as JobStat.cleanup! using the shared stats_retention.
+    # Off-request, so the delete takes its own lease and returns it (issue
+    # #694); delete_all leases through `connection` on Rails 7.1.
     def self.cleanup!(older_than:)
-      where("created_at < ?", older_than).delete_all
+      connection_pool.with_connection { where("created_at < ?", older_than).delete_all }
     end
   end
 end

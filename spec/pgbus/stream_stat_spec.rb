@@ -4,8 +4,19 @@ require "spec_helper"
 
 RSpec.describe Pgbus::StreamStat do
   describe ".record!" do
+    let!(:pool) { stub_bus_record_pool }
+
     before do
       allow(described_class).to receive_messages(create!: nil, table_exists?: true)
+    end
+
+    # Issue #694: the dispatcher records off-request, where no Rails executor
+    # returns a lease, so the write takes its own and gives it back.
+    it "creates inside one connection_pool.with_connection" do
+      described_class.record!(stream_name: "chat_42", event_type: "broadcast", duration_ms: 1)
+
+      expect(pool.leases).to eq(1)
+      expect(described_class).to have_received(:create!)
     end
 
     it "creates a broadcast stat with fanout" do
@@ -65,6 +76,19 @@ RSpec.describe Pgbus::StreamStat do
       expect(described_class).to have_received(:create!).with(
         hash_including(duration_ms: 4)
       )
+    end
+  end
+
+  # The dispatcher prunes off-request (issue #694): the delete takes its own
+  # lease and returns it.
+  describe ".cleanup!" do
+    it "deletes inside one connection_pool.with_connection" do
+      pool = stub_bus_record_pool
+      relation = instance_double(ActiveRecord::Relation, delete_all: 3)
+      allow(described_class).to receive(:where).and_return(relation)
+
+      expect(described_class.cleanup!(older_than: Time.now)).to eq(3)
+      expect(pool.leases).to eq(1)
     end
   end
 
@@ -138,7 +162,8 @@ RSpec.describe Pgbus::StreamStat do
     end
 
     it "returns false on connection error without poisoning the memo" do
-      allow(described_class).to receive(:connection).and_raise(StandardError, "no db")
+      pool = stub_bus_record_pool
+      allow(pool).to receive(:with_connection).and_raise(StandardError, "no db")
 
       expect(described_class.table_exists?).to be false
       # The failed probe must NOT set @table_exists — otherwise a
@@ -150,12 +175,14 @@ RSpec.describe Pgbus::StreamStat do
     it "memoizes a successful probe" do
       fake_connection = instance_double(ActiveRecord::ConnectionAdapters::AbstractAdapter)
       allow(fake_connection).to receive(:table_exists?).with(described_class.table_name).and_return(true)
-      allow(described_class).to receive(:connection).and_return(fake_connection)
+      pool = stub_bus_record_pool(fake_connection)
 
       expect(described_class.table_exists?).to be true
       # Second call hits the memo, not the connection.
       expect(described_class.table_exists?).to be true
       expect(fake_connection).to have_received(:table_exists?).once
+      # The probe leases through with_connection (issue #694).
+      expect(pool.leases).to eq(1)
     end
   end
 end

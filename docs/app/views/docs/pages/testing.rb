@@ -1,7 +1,8 @@
 # frozen_string_literal: true
 
 # Testing apps that use pgbus: the opt-in test helpers, the fake/inline/disabled
-# modes, the event-bus assertions and matchers, and the SSE test caveat.
+# modes, the event-bus assertions and matchers, the SSE test caveat and
+# coalesced broadcasts in tests.
 class Views::Docs::Pages::Testing < DocsUI::Page
   title "Testing"
   eyebrow "Testing"
@@ -14,6 +15,7 @@ class Views::Docs::Pages::Testing < DocsUI::Page
     assertions
     matchers
     sse
+    coalesced_broadcasts
   end
 
   private
@@ -127,6 +129,21 @@ class Views::Docs::Pages::Testing < DocsUI::Page
         streamer's threads then outlive the bounded shutdown, `disabled!` raises
         `Pgbus::Testing::StreamerLeakError` naming them and the `append_after` fix,
         instead of letting the suite hang.
+      MD
+    end
+  end
+
+  def coalesced_broadcasts
+    DocsUI::Section("Coalesced broadcasts in tests") do
+      md <<~'MD'
+        `broadcast(..., coalesce:)` normally flushes on a background timer thread,
+        which could take the test's pinned connection. Unless you set
+        `config.streams_coalesce_scheduler` yourself, `Pgbus::Testing.fake!` and
+        `.inline!` flush each coalesced broadcast at once, on the thread that
+        submits it, so every submit is broadcast. With no transaction open that
+        happens before `broadcast` returns; a durable coalesced broadcast made
+        inside an open transaction is submitted at its commit and flushes then.
+        `disabled!` restores the timer.
       MD
     end
   end

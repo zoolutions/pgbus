@@ -54,25 +54,33 @@ module Pgbus
       # `table_exists?` guard above passes) poisons every subsequent record!
       # in the process with "No unique index found". The unique index is owned
       # by this gem's own migration, so there is nothing to resolve.
+      #
+      # The write runs inside `connection_pool.with_connection` (issue #694):
+      # the coalescer flushes on a Concurrent IO thread no Rails executor
+      # wraps, so a bare `connection` there was a lease nobody returned. A
+      # caller that already holds one (a request, a job, an open
+      # transaction) keeps writing on it.
       def record!(queue_name)
         return false unless table_exists?
 
-        conn = connection
-        conn.execute(
-          "INSERT INTO #{conn.quote_table_name(table_name)} (queue_name) " \
-          "VALUES (#{conn.quote(queue_name)}) ON CONFLICT (queue_name) DO NOTHING"
-        )
-        # Keep the in-process cache consistent with the write so a subsequent
-        # stream? check reflects this registration without a re-query. Only
-        # update an ALREADY-LOADED cache — if @all_names is still nil (this
-        # process hasn't queried the registry yet), seeding it here would
-        # fabricate a one-entry set and silently hide every other
-        # already-registered stream until the next reset_cache!. Leaving it
-        # nil lets the next all_names call do a real load, which already
-        # includes this row since the insert above has committed.
-        @names_lock.synchronize do
-          @names_generation += 1
-          @all_names = (@all_names | [queue_name]).freeze if @all_names
+        connection_pool.with_connection do |conn|
+          conn.execute(
+            "INSERT INTO #{conn.quote_table_name(table_name)} (queue_name) " \
+            "VALUES (#{conn.quote(queue_name)}) ON CONFLICT (queue_name) DO NOTHING"
+          )
+          # Keep the in-process cache consistent with the write so a subsequent
+          # stream? check reflects this registration without a re-query. Only
+          # update an ALREADY-LOADED cache — if @all_names is still nil (this
+          # process hasn't queried the registry yet), seeding it here would
+          # fabricate a one-entry set and silently hide every other
+          # already-registered stream until the next reset_cache!. Leaving it
+          # nil lets the next all_names call do a real load, which already
+          # includes this row since the insert above has committed. Taken
+          # while the connection is held; all_names loads outside the lock.
+          @names_lock.synchronize do
+            @names_generation += 1
+            @all_names = (@all_names | [queue_name]).freeze if @all_names
+          end
         end
         true
       rescue ActiveRecord::ActiveRecordError => e
@@ -117,13 +125,16 @@ module Pgbus
       # (`a_<queue>_msg_id_idx`). Job queues never get this index. Safe to call
       # when pgmq is absent — returns an empty set rather than raising.
       def fingerprint_matched_names
-        Set.new(connection.select_values(<<~SQL.squish))
-          SELECT m.queue_name
-          FROM pgmq.meta m
-          INNER JOIN pg_indexes i
-            ON i.schemaname = 'pgmq'
-           AND i.indexname = 'a_' || m.queue_name || '_msg_id_idx'
-        SQL
+        names = connection_pool.with_connection do |conn|
+          conn.select_values(<<~SQL.squish)
+            SELECT m.queue_name
+            FROM pgmq.meta m
+            INNER JOIN pg_indexes i
+              ON i.schemaname = 'pgmq'
+             AND i.indexname = 'a_' || m.queue_name || '_msg_id_idx'
+          SQL
+        end
+        Set.new(names)
       rescue StandardError => e
         Pgbus.logger.debug { "[Pgbus] Failed to discover stream queue fingerprints: #{e.message}" }
         Set.new
@@ -167,7 +178,7 @@ module Pgbus
       def table_exists?
         return @table_exists if defined?(@table_exists) && @table_exists
 
-        @table_exists = connection.table_exists?(table_name)
+        @table_exists = connection_pool.with_connection { |conn| conn.table_exists?(table_name) }
       rescue StandardError => e
         Pgbus.logger.debug { "[Pgbus] Failed to check stream queue table: #{e.message}" }
         false
@@ -190,7 +201,8 @@ module Pgbus
       def load_names
         return Set.new unless table_exists?
 
-        Set.new(all.pluck(:queue_name))
+        # pluck leases through `connection` on Rails 7.1 (issue #694).
+        Set.new(connection_pool.with_connection { all.pluck(:queue_name) })
       rescue StandardError => e
         Pgbus.logger.debug { "[Pgbus] Failed to load stream queues: #{e.message}" }
         Set.new

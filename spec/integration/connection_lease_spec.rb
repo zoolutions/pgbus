@@ -213,6 +213,61 @@ RSpec.describe "pgbus bookkeeping returns its connection lease (integration)", :
         end
       end
 
+      # Issue #694: the coalescer flush records a stream on a Concurrent IO
+      # thread, and the dispatcher reads the registry off-request.
+      describe "StreamQueue" do
+        it "returns the lease after table_exists?, record!, all_names and fingerprint_matched_names" do
+          Pgbus::StreamQueue.remove_instance_variable(:@table_exists) if Pgbus::StreamQueue.instance_variable_defined?(:@table_exists)
+          Pgbus::StreamQueue.reset_cache!
+
+          expect_no_lease_left(kind) do
+            Pgbus::StreamQueue.table_exists?
+            Pgbus::StreamQueue.record!("pgbus_int_lease_stream_#{kind}")
+            Pgbus::StreamQueue.all_names
+            Pgbus::StreamQueue.fingerprint_matched_names
+          end
+          expect(Pgbus::StreamQueue.stream?("pgbus_int_lease_stream_#{kind}")).to be(true)
+        end
+      end
+
+      describe "StreamStat" do
+        it "returns the lease after table_exists?, record! and cleanup!" do
+          Pgbus::StreamStat.remove_instance_variable(:@table_exists) if Pgbus::StreamStat.instance_variable_defined?(:@table_exists)
+          name = "lease_stat_#{kind}"
+
+          expect_no_lease_left(kind) do
+            Pgbus::StreamStat.table_exists?
+            Pgbus::StreamStat.record!(stream_name: name, event_type: "broadcast", duration_ms: 2, fanout: 1)
+            Pgbus::StreamStat.cleanup!(older_than: Time.current - 3600)
+          end
+          expect(Pgbus::StreamStat.where(stream_name: name).count).to eq(1)
+        end
+      end
+
+      describe "JobStat" do
+        # The suite's bootstrap leaves this table to the stat specs; the same
+        # shape as spec/integration/stat_buffer_spec.rb's.
+        before do
+          ActiveRecord::Base.connection.execute(<<~SQL)
+            CREATE TABLE IF NOT EXISTS pgbus_job_stats (
+              id BIGSERIAL PRIMARY KEY,
+              job_class VARCHAR NOT NULL,
+              queue_name VARCHAR NOT NULL,
+              status VARCHAR NOT NULL,
+              duration_ms INTEGER NOT NULL DEFAULT 0,
+              enqueue_latency_ms BIGINT,
+              retry_count INTEGER DEFAULT 0,
+              created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+          SQL
+          pool.release_connection
+        end
+
+        it "returns the lease after cleanup! (the dispatcher's prune)" do
+          expect_no_lease_left(kind) { Pgbus::JobStat.cleanup!(older_than: Time.current - 3600) }
+        end
+      end
+
       describe "Executor#execute" do
         it "takes no lease for a plain job, the stat table's first probe included" do
           # The memoized probe runs once per process; forget it so this
@@ -275,6 +330,22 @@ RSpec.describe "pgbus bookkeeping returns its connection lease (integration)", :
         Pgbus::FailedEventRecorder.clear!(queue_name: queue, msg_id: 1, source_queue: queue)
         expect(pool.active_connection?).to be(conn)
       end
+    end
+
+    # Issue #694: StreamQueue.record! inside the caller's transaction writes on
+    # the caller's connection, so a rollback takes the registration with it.
+    it "keeps StreamQueue.record! inside the caller's open transaction" do
+      Pgbus::StreamQueue.reset_cache!
+      name = "pgbus_int_lease_rolled_back"
+      Pgbus::BusRecord.transaction do
+        conn = pool.active_connection?
+        expect(Pgbus::StreamQueue.record!(name)).to be(true)
+        expect(pool.active_connection?).to be(conn)
+        raise ActiveRecord::Rollback
+      end
+
+      Pgbus::StreamQueue.reset_cache!
+      expect(Pgbus::StreamQueue.stream?(name)).to be(false)
     end
   end
 end

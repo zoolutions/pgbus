@@ -150,4 +150,78 @@ RSpec.describe Pgbus::Streams::Coalescer do
       expect(scheduler.scheduled.size).to eq(1)
     end
   end
+
+  # A scheduler that raises (a shut-down executor, a misconfigured object)
+  # must not leave the key pending: no later submit would schedule it again.
+  describe "a scheduler that raises" do
+    before do
+      calls = 0
+      allow(scheduler).to receive(:schedule).and_wrap_original do |original, *args, &block|
+        calls += 1
+        raise "executor is shut down" if calls == 1
+
+        original.call(*args, &block)
+      end
+    end
+
+    it "re-raises and leaves the key free for the next submit" do
+      expect { submit(payload: "a") }.to raise_error(RuntimeError, /shut down/)
+
+      submit(payload: "b")
+      scheduler.run_all
+
+      expect(flushed.map { |f| f[:payload] }).to eq(["b"])
+    end
+  end
+
+  # Issue #694: the default scheduler reads config.streams_coalesce_scheduler
+  # at every schedule, so a scheduler set after the coalescer was built (an
+  # initializer, Pgbus::Testing) still takes effect.
+  describe "the configured scheduler" do
+    subject(:coalescer) { described_class.new(flush: flush) }
+
+    after { Pgbus.configuration.streams_coalesce_scheduler = nil }
+
+    it "flushes on the calling thread, before submit returns, with InlineScheduler" do
+      Pgbus.configuration.streams_coalesce_scheduler = described_class::InlineScheduler.new
+      flush_threads = []
+      allow(flush).to receive(:call).and_wrap_original do |original, **kwargs|
+        flush_threads << Thread.current
+        original.call(**kwargs)
+      end
+
+      submit(payload: "a")
+
+      expect(flushed.map { |f| f[:payload] }).to eq(["a"])
+      expect(flush_threads).to eq([Thread.current])
+    end
+
+    it "uses a scheduler configured after the coalescer was built" do
+      coalescer # built before the setting changes
+      custom = scheduler
+      Pgbus.configuration.streams_coalesce_scheduler = custom
+
+      submit(payload: "a")
+
+      expect(custom.scheduled.size).to eq(1)
+    end
+
+    it "falls back to a Concurrent::ScheduledTask timer when none is configured" do
+      allow(Concurrent::ScheduledTask).to receive(:execute)
+
+      submit(payload: "a", window_ms: 250)
+
+      expect(Concurrent::ScheduledTask).to have_received(:execute).with(0.25)
+      expect(flushed).to be_empty
+    end
+  end
+
+  describe Pgbus::Streams::Coalescer::InlineScheduler do
+    it "runs the block at once and ignores the delay" do
+      ran_on = nil
+      described_class.new.schedule(5) { ran_on = Thread.current }
+
+      expect(ran_on).to eq(Thread.current)
+    end
+  end
 end
