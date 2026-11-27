@@ -34,8 +34,8 @@ module Pgbus
       Entry = Struct.new(:payload, :opts)
 
       # scheduler: responds to `schedule(delay_seconds) { ... }`. Defaults
-      #   to `config.streams_coalesce_scheduler`, read at each schedule, else
-      #   a Concurrent::ScheduledTask-backed timer.
+      #   to `config.streams_coalesce_scheduler`, read when a window's flush
+      #   is scheduled, else a Concurrent::ScheduledTask-backed timer.
       # flush: ->(stream_name:, target:, payload:, opts:) called once per
       #   window per key with the latest buffered frame.
       def initialize(flush:, scheduler: nil)
@@ -61,7 +61,19 @@ module Pgbus
           end
         end
 
-        @scheduler.schedule(window_ms / 1000.0) { flush_key(key, stream_name, target) } if schedule
+        return unless schedule
+
+        begin
+          @scheduler.schedule(window_ms / 1000.0) { flush_key(key, stream_name, target) }
+        rescue StandardError
+          # Nothing will flush this window: free the key, or no later submit
+          # would schedule it again.
+          @mutex.synchronize do
+            @pending.delete(key)
+            @buffer.delete(key)
+          end
+          raise
+        end
       end
 
       private
@@ -92,17 +104,18 @@ module Pgbus
       end
 
       # Runs the flush at once, on the thread that submitted it (issue #694).
-      # For tests: the flush then writes inside the test's own connection and
-      # transaction, with no IO thread sharing a pinned connection across the
-      # test boundary. Pgbus::Testing.fake! / inline! select it. It removes
-      # the coalescing itself: every submit is broadcast.
+      # For tests: the flush then writes on that thread's own connection, with
+      # no IO thread sharing a pinned connection across the test boundary.
+      # Pgbus::Testing.fake! / inline! select it. It removes the coalescing
+      # itself: every submit is broadcast.
       class InlineScheduler
         def schedule(_delay_seconds) = yield
       end
 
-      # The default: `config.streams_coalesce_scheduler`, read at each
-      # schedule so a scheduler set after boot (an initializer, a test mode)
-      # takes effect on the process-wide coalescer, else the timer.
+      # The default: `config.streams_coalesce_scheduler`, read when a window's
+      # flush is scheduled (its first submit) so a scheduler set after boot (an
+      # initializer, a test mode) takes effect on the process-wide coalescer,
+      # else the timer.
       class ConfiguredScheduler
         def initialize
           @timer = ScheduledTaskScheduler.new

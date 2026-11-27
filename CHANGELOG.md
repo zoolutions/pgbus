@@ -2,7 +2,7 @@
 
 ### Added
 
-- **`config.streams_coalesce_scheduler` and `Pgbus::Streams::Coalescer::InlineScheduler`** (#694). The coalescer reads the scheduler at each flush: any object with `schedule(delay_seconds) { ... }`, or `nil` (the default) for its `Concurrent::ScheduledTask` timer. `InlineScheduler` runs the flush at once on the thread that submits it. `Pgbus::Testing.fake!` and `.inline!` select it, so a `broadcast(..., coalesce:)` in a test writes on the test thread's own connection, before it returns when no transaction is open (a durable one inside an open transaction is still submitted at its commit); `disabled!` restores the timer. A scheduler without `#schedule` fails `validate!`. A scheduler the application configured is left alone. This replaces prepending `Coalescer::ScheduledTaskScheduler#schedule` in a test suite.
+- **`config.streams_coalesce_scheduler` and `Pgbus::Streams::Coalescer::InlineScheduler`** (#694). The coalescer reads the scheduler when a window's flush is scheduled: any object with `schedule(delay_seconds) { ... }`, or `nil` (the default) for its `Concurrent::ScheduledTask` timer. `InlineScheduler` runs the flush at once on the thread that submits it. When none is configured, `Pgbus::Testing.fake!` and `.inline!` select it, so a `broadcast(..., coalesce:)` in a test writes on the test thread's own connection, before it returns when no transaction is open (a durable one inside an open transaction is still submitted at its commit); `disabled!` restores the timer. A scheduler without `#schedule` fails `validate!`. A scheduler the application configured is left alone. This replaces prepending `Coalescer::ScheduledTaskScheduler#schedule` in a test suite.
 
 ### Changed
 

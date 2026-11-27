@@ -151,6 +151,29 @@ RSpec.describe Pgbus::Streams::Coalescer do
     end
   end
 
+  # A scheduler that raises (a shut-down executor, a misconfigured object)
+  # must not leave the key pending: no later submit would schedule it again.
+  describe "a scheduler that raises" do
+    before do
+      calls = 0
+      allow(scheduler).to receive(:schedule).and_wrap_original do |original, *args, &block|
+        calls += 1
+        raise "executor is shut down" if calls == 1
+
+        original.call(*args, &block)
+      end
+    end
+
+    it "re-raises and leaves the key free for the next submit" do
+      expect { submit(payload: "a") }.to raise_error(RuntimeError, /shut down/)
+
+      submit(payload: "b")
+      scheduler.run_all
+
+      expect(flushed.map { |f| f[:payload] }).to eq(["b"])
+    end
+  end
+
   # Issue #694: the default scheduler reads config.streams_coalesce_scheduler
   # at every schedule, so a scheduler set after the coalescer was built (an
   # initializer, Pgbus::Testing) still takes effect.

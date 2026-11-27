@@ -365,10 +365,12 @@ module Pgbus
 
     # What runs a coalesced broadcast's flush (`broadcast(..., coalesce:)`):
     # any object with `schedule(delay_seconds) { ... }`. nil (default) is the
-    # coalescer's Concurrent::ScheduledTask timer. Read at each flush, so it
-    # can change after boot. Pgbus::Testing.fake! / inline! set
-    # Pgbus::Streams::Coalescer::InlineScheduler, which flushes on the
-    # calling thread (issue #694); disabled! sets nil again.
+    # coalescer's Concurrent::ScheduledTask timer. Read when a window's flush
+    # is scheduled (its first submit), so it can change after boot. When it is
+    # nil, Pgbus::Testing.fake! / inline! set
+    # Pgbus::Streams::Coalescer::InlineScheduler, which flushes on the calling
+    # thread (issue #694), and disabled! clears that again; a scheduler the
+    # application set is left alone.
     attr_accessor :streams_coalesce_scheduler
 
     # NOTIFY-gated worker wakeups. When true, workers are woken by a
