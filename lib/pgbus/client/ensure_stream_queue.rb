@@ -45,14 +45,10 @@ module Pgbus
         # waits for the caller's commit, so it is memoized only once written.
         ensure_stream_archive_index(full_name, stream_name) unless @stream_indexes_created[stream_name]
         register_stream_queue(full_name, stream_name) unless @streams_registered[stream_name]
-        stream_queue_settled?(stream_name)
+        @stream_indexes_created.key?(stream_name) && @streams_registered.fetch(stream_name, false)
       end
 
       private
-
-      def stream_queue_settled?(stream_name)
-        @stream_indexes_created.key?(stream_name) && @streams_registered.key?(stream_name)
-      end
 
       # Index DDL that rode the caller's transaction (the shared ActiveRecord
       # connection) is not memoized: a rollback takes it back, the rule

@@ -82,6 +82,7 @@ module Pgbus
           end
 
           insert_row(conn, queue_name, &on_durable)
+          true
         end
       rescue ActiveRecord::ActiveRecordError => e
         Pgbus.logger.debug { "[Pgbus] Failed to record stream queue #{queue_name}: #{e.message}" }
@@ -207,7 +208,6 @@ module Pgbus
           "VALUES (#{conn.quote(queue_name)}) ON CONFLICT (queue_name) DO NOTHING"
         )
         registered(queue_name, &)
-        true
       end
 
       # The row is durable: keep the in-process cache consistent with it so a
