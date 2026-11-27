@@ -87,6 +87,7 @@ RSpec.describe "Streams: the coalescer flush returns its connection lease", :int
 
         expect(lease).not_to be(pinned), "the flush thread kept the test's pinned connection"
         expect(lease).to be_falsey
+        expect(registered?).to be(true)
       ensure
         pool.unpin_connection!
       end

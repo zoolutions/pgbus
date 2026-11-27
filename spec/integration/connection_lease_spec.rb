@@ -230,6 +230,20 @@ RSpec.describe "pgbus bookkeeping returns its connection lease (integration)", :
         end
       end
 
+      describe "StreamStat" do
+        it "returns the lease after table_exists?, record! and cleanup!" do
+          Pgbus::StreamStat.remove_instance_variable(:@table_exists) if Pgbus::StreamStat.instance_variable_defined?(:@table_exists)
+          name = "lease_stat_#{kind}"
+
+          expect_no_lease_left(kind) do
+            Pgbus::StreamStat.table_exists?
+            Pgbus::StreamStat.record!(stream_name: name, event_type: "broadcast", duration_ms: 2, fanout: 1)
+            Pgbus::StreamStat.cleanup!(older_than: Time.current - 3600)
+          end
+          expect(Pgbus::StreamStat.where(stream_name: name).count).to eq(1)
+        end
+      end
+
       describe "Executor#execute" do
         it "takes no lease for a plain job, the stat table's first probe included" do
           # The memoized probe runs once per process; forget it so this

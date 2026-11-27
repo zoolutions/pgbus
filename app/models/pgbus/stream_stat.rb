@@ -124,8 +124,10 @@ module Pgbus
 
     # Cleanup old stats. Called from Pgbus::Process::Dispatcher on the
     # same cadence as JobStat.cleanup! using the shared stats_retention.
+    # Off-request, so the delete takes its own lease and returns it (issue
+    # #694); delete_all leases through `connection` on Rails 7.1.
     def self.cleanup!(older_than:)
-      where("created_at < ?", older_than).delete_all
+      connection_pool.with_connection { where("created_at < ?", older_than).delete_all }
     end
   end
 end

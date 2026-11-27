@@ -113,6 +113,11 @@ class Views::Docs::Pages::Testing < DocsUI::Page
         `Pgbus::Testing.fake!`/`.inline!`, auto-enables `streams_test_mode`: the
         streams endpoint returns a stub response with no hijack and no background
         threads, so your suite stays green without connection-pool surprises.
+
+        The same modes flush `broadcast(..., coalesce:)` at once, on the thread
+        that submits it, instead of on a background timer thread that could take
+        the test's pinned connection; `disabled!` restores the timer, and a
+        `config.streams_coalesce_scheduler` you set yourself is left alone.
       MD
       DocsUI::Callout(:note) do
         plain "You rarely set "

@@ -1425,6 +1425,13 @@ module Pgbus
       validate_presence_settings!
       validate_stream_authorization!
 
+      # Coalescer#submit marks the key pending before it schedules, so a
+      # scheduler that cannot schedule would leave that key stuck for good.
+      if !streams_coalesce_scheduler.nil? && !streams_coalesce_scheduler.respond_to?(:schedule)
+        raise Pgbus::ConfigurationError,
+              "streams_coalesce_scheduler must respond to #schedule(delay_seconds) { ... } or be nil"
+      end
+
       return if streams_orphan_threshold.nil?
       return if streams_orphan_threshold.is_a?(Numeric) && streams_orphan_threshold.positive?
 

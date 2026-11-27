@@ -93,7 +93,7 @@ module Pgbus
     @default_mode = nil
 
     # The scheduler fake/inline select for the coalescer (issue #694).
-    INLINE_COALESCE_SCHEDULER = Pgbus::Streams::Coalescer::InlineScheduler.new
+    INLINE_COALESCE_SCHEDULER = Pgbus::Streams::Coalescer::InlineScheduler.new.freeze
 
     class << self
       def mode!(mode, &block)

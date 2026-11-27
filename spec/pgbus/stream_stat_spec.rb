@@ -79,6 +79,19 @@ RSpec.describe Pgbus::StreamStat do
     end
   end
 
+  # The dispatcher prunes off-request (issue #694): the delete takes its own
+  # lease and returns it.
+  describe ".cleanup!" do
+    it "deletes inside one connection_pool.with_connection" do
+      pool = stub_bus_record_pool
+      relation = instance_double(ActiveRecord::Relation, delete_all: 3)
+      allow(described_class).to receive(:where).and_return(relation)
+
+      expect(described_class.cleanup!(older_than: Time.now)).to eq(3)
+      expect(pool.leases).to eq(1)
+    end
+  end
+
   describe "scope names" do
     # Regression for issue #92 — `turbo-rails` auto-includes
     # Turbo::Broadcastable into every ActiveRecord::Base descendant,

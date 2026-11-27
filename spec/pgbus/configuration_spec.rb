@@ -2719,6 +2719,18 @@ RSpec.describe Pgbus::Configuration do
     it "has no streams_coalesce_scheduler by default (the coalescer's timer)" do
       expect(config.streams_coalesce_scheduler).to be_nil
     end
+
+    it "accepts a streams_coalesce_scheduler that responds to #schedule" do
+      config.streams_coalesce_scheduler = Pgbus::Streams::Coalescer::InlineScheduler.new
+      expect { config.validate! }.not_to raise_error
+    end
+
+    # A scheduler without #schedule would raise inside Coalescer#submit after
+    # it marked the key pending, so that key would never flush again.
+    it "rejects a streams_coalesce_scheduler without #schedule at boot" do
+      config.streams_coalesce_scheduler = -> {}
+      expect { config.validate! }.to raise_error(Pgbus::ConfigurationError, /streams_coalesce_scheduler/)
+    end
   end
 
   describe "#validate! with streams settings" do

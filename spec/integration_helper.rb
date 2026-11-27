@@ -158,6 +158,21 @@ def bootstrap_integration_tables(conn)
     SQL
   end
 
+  # Stream stats — mirrors add_stream_stats.rb.erb (issue #694's lease spec
+  # writes a row from a fresh owner).
+  unless conn.table_exists?("pgbus_stream_stats")
+    conn.execute(<<~SQL)
+      CREATE TABLE pgbus_stream_stats (
+        id BIGSERIAL PRIMARY KEY,
+        stream_name VARCHAR NOT NULL,
+        event_type VARCHAR NOT NULL,
+        duration_ms INTEGER NOT NULL DEFAULT 0,
+        fanout INTEGER,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+    SQL
+  end
+
   # Pause/resume state — mirrors add_queue_states.rb.erb (issue #633's fold
   # migration and QueueState's lower-case names run against it).
   unless conn.table_exists?("pgbus_queue_states")
@@ -576,7 +591,7 @@ def cleanup_tables
     pgbus_semaphores pgbus_blocked_executions pgbus_uniqueness_keys
     pgbus_processes pgbus_recurring_executions pgbus_failed_events
     pgbus_presence_members pgbus_outbox_entries pgbus_processed_events
-    pgbus_batch_executions pgbus_batches pgbus_stream_queues pgbus_queue_states
+    pgbus_batch_executions pgbus_batches pgbus_stream_queues pgbus_stream_stats pgbus_queue_states
     pgbus_deploy_tasks pgbus_deploy_task_runs
     pgbus_workflow_signals pgbus_workflow_events pgbus_workflow_steps pgbus_workflows
   ]
