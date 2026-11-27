@@ -1,0 +1,19 @@
+spec/integration/streams/transaction_defer_spec.rb
+  s_43e8d904fa606e::t_969aaef1b86779 1-26,31-146
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "d27b487929a7d5d6051dcb0c78d9819f912d68d6",
+  "prompts": {},
+  "sessions": {
+    "s_43e8d904fa606e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e9c6e443-4691-442b-adb3-df7981817964",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
