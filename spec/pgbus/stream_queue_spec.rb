@@ -172,6 +172,24 @@ RSpec.describe Pgbus::StreamQueue do
         expect([durable, described_class.stream?("pgbus_chat_42")]).to eq([true, true])
       end
 
+      # Every broadcast of a fresh stream inside the transaction asks again
+      # (nothing is memoized before the commit); one insert at the commit
+      # is enough.
+      it "registers one deferred insert per transaction and name" do
+        3.times { described_class.record!("pgbus_chat_42") }
+        described_class.record!("pgbus_room_7")
+
+        expect(hooks.size).to eq(2)
+      end
+
+      it "registers again for the next transaction" do
+        described_class.record!("pgbus_chat_42")
+        allow(connection).to receive(:current_transaction).and_return(double("next transaction", joinable?: true))
+        described_class.record!("pgbus_chat_42")
+
+        expect(hooks.size).to eq(2)
+      end
+
       it "reports a failed deferred write instead of raising into the committing caller" do
         allow(connection).to receive(:execute).and_raise(ActiveRecord::StatementInvalid, "db down")
         durable = false

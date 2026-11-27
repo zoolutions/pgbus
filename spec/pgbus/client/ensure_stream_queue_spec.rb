@@ -235,6 +235,7 @@ RSpec.describe Pgbus::Client::EnsureStreamQueue do
         real_pgmq_connection_error
         client.instance_variable_get(:@queues_created)[full_name] = true
         client.instance_variable_get(:@stream_indexes_created)["chat"] = true
+        client.instance_variable_get(:@streams_registered)["chat"] = true
       end
 
       it "clears the memo and recreates the queue when enable_notify reports it missing" do
@@ -252,6 +253,8 @@ RSpec.describe Pgbus::Client::EnsureStreamQueue do
         expect(client.instance_variable_get(:@queues_created)[full_name]).to be_nil
         expect(client.instance_variable_get(:@stream_indexes_created)["chat"]).to be(true)
         expect(calls).to eq(2)
+        # The dropped queue's registry row may be gone with it: recorded again.
+        expect(Pgbus::StreamQueue).to have_received(:record!).with(full_name)
       end
 
       it "re-raises unrelated ConnectionErrors without clearing the memo or retrying" do

@@ -39,6 +39,13 @@ module Pgbus
     # load publishes its snapshot only if no such change happened while it ran.
     @names_generation = 0
 
+    # Per open transaction, the names whose insert already waits for its
+    # commit (issue #695): every broadcast of a fresh stream inside it asks
+    # again, and one insert at the commit is enough. Keyed weakly by the
+    # transaction, so a committed or rolled-back one is forgotten with it.
+    @deferred_lock = Mutex.new
+    @deferred = ObjectSpace::WeakKeyMap.new
+
     class << self
       # Inserts the physical queue name. Idempotent and cheap to call on
       # every broadcast; the caller (`ensure_stream_queue`) also memoizes
@@ -70,14 +77,16 @@ module Pgbus
       # The write runs inside `connection_pool.with_connection` (issue #694):
       # the coalescer flushes on a Concurrent IO thread no Rails executor
       # wraps, so a bare `connection` there was a lease nobody returned. A
-      # caller that already holds one (a request, a job, an open
-      # transaction) keeps writing on it.
+      # caller that already holds one (a request, a job, an open transaction)
+      # keeps its connection, and an open, joinable transaction on it gets the
+      # insert after its commit (above).
       def record!(queue_name, &on_durable)
         return false unless table_exists?
 
         connection_pool.with_connection do |conn|
-          if conn.transaction_open? && conn.current_transaction.joinable?
-            OpenTransaction.after_commit(conn) { insert(queue_name, &on_durable) }
+          transaction = conn.current_transaction if conn.transaction_open?
+          if transaction&.joinable?
+            defer_insert(conn, transaction, queue_name, &on_durable)
             next :pending
           end
 
@@ -186,6 +195,14 @@ module Pgbus
       end
 
       private
+
+      def defer_insert(conn, transaction, queue_name, &on_durable)
+        first = @deferred_lock.synchronize do
+          names = (@deferred[transaction] ||= Set.new)
+          !names.add?(queue_name).nil?
+        end
+        OpenTransaction.after_commit(conn) { insert(queue_name, &on_durable) } if first
+      end
 
       # The deferred write, after the caller's commit. It runs inside the
       # committing caller's callbacks, so it reports and never raises. Inside

@@ -148,11 +148,10 @@ RSpec.describe "Streams: durable broadcasts wait for a joinable transaction's co
       end
       inside.pop
 
-      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-      Pgbus::StreamQueue.record!(full_name)
-      waited = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
+      # In a thread of its own, so a regression fails here instead of hanging.
+      other = Thread.new { Pgbus::StreamQueue.record!(full_name) } # rubocop:disable ThreadSafety/NewThread -- joined below
 
-      expect(waited).to be < 1.0
+      expect(other.join(2)&.value).to be(true), "the other thread's record! waited for the caller's commit"
     ensure
       release << true
       caller&.join

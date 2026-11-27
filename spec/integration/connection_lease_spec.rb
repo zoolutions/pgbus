@@ -349,9 +349,10 @@ RSpec.describe "pgbus bookkeeping returns its connection lease (integration)", :
       end
     end
 
-    # Issue #694: StreamQueue.record! inside the caller's transaction writes on
-    # the caller's connection, so a rollback takes the registration with it.
-    it "keeps StreamQueue.record! inside the caller's open transaction" do
+    # Issues #694, #695: StreamQueue.record! inside the caller's transaction
+    # keeps the caller's connection and waits for its commit, so a rollback
+    # leaves nothing registered.
+    it "keeps StreamQueue.record! on the caller's connection and off a rolled-back transaction" do
       Pgbus::StreamQueue.reset_cache!
       name = "pgbus_int_lease_rolled_back"
       Pgbus::BusRecord.transaction do
